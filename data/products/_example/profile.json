@@ -1,0 +1,59 @@
+{
+  "id": "prod_example_001",
+  "version": 1,
+  "created_at": "2026-07-09T14:00:00Z",
+  "updated_at": "2026-07-09T14:00:00Z",
+  "status": "ready",
+  "readiness": {
+    "score": 85,
+    "missing_fields": [],
+    "warnings": []
+  },
+  "company": {
+    "name": "示例阀门科技有限公司",
+    "website": "https://example-valves.com",
+    "country": "CN",
+    "description": "专业从事工业阀门研发制造，拥有 ISO9001 与 CE 认证",
+    "certifications": ["ISO9001", "CE"]
+  },
+  "products": [
+    {
+      "name": "不锈钢球阀",
+      "name_en": "Stainless Steel Ball Valve",
+      "category": "工业阀门",
+      "hs_code": "84818040",
+      "materials": ["不锈钢304", "不锈钢316"],
+      "specs": ["DN15-DN200", "PN16-PN40"],
+      "moq": "100 pcs",
+      "price_range": "$5-$50",
+      "use_cases": ["水处理", "石油化工", "暖通空调"],
+      "differentiators": ["自有工厂", "15天快速交付", "OEM/ODM"]
+    }
+  ],
+  "buyer_personas": [
+    {
+      "role": "procurement_manager",
+      "company_types": ["distributor", "OEM", "engineering_company"],
+      "regions": ["EU", "NA", "SEA"],
+      "pain_points": ["供应商交期不稳定", "质量一致性差"]
+    }
+  ],
+  "target_markets": {
+    "regions": ["EU", "NA"],
+    "excluded_regions": [],
+    "languages": ["en", "de"]
+  },
+  "competitors": [
+    {
+      "name": "ValveCorp International",
+      "website": "https://valvecorp-example.com"
+    }
+  ],
+  "source_inputs": [
+    {
+      "type": "example",
+      "note": "此为示例数据，供开发参考",
+      "created_at": "2026-07-09T14:00:00Z"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+# 环境
+.env
+node_modules/
+__pycache__/
+*.pyc
+dist/
+.venv/
+*.egg-info/
+
+# 运行时数据（保留 _example）
+data/products/*
+!data/products/_example/
+data/leads/
+data/emails/
+data/keywords/
+data/exploration/
+data/cache/
+
+# 日志
+logs/
+
+# IDE
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# 测试与构建
+coverage/
+*.log
