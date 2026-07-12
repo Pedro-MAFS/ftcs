@@ -80,3 +80,19 @@ export function getExplorationRunPath(root: string, productId: string, runId: st
 export function getScoredLeadsPath(root: string, productId: string): string {
   return join(getLeadsDir(root, productId), "scored.json");
 }
+
+export function getEmailsDir(root: string): string {
+  return join(getDataDir(root), "emails");
+}
+
+export function getEmailDraftDir(root: string, leadId: string): string {
+  return join(getEmailsDir(root), leadId);
+}
+
+export function getEmailDraftPath(root: string, leadId: string): string {
+  return join(getEmailDraftDir(root, leadId), "draft.json");
+}
+
+export function getEmailDraftMarkdownPath(root: string, leadId: string): string {
+  return join(getEmailDraftDir(root, leadId), "draft.md");
+}

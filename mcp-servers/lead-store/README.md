@@ -25,6 +25,10 @@
 | `exploration_get` / `exploration_list` | 读取探索记录 |
 | `leads_score_and_dedupe` | 原始线索去重、评分、写入 scored.json |
 | `leads_get_scored` | 读取评分后的线索 |
+| `email_draft_generate` | 为高意向线索生成邮件草稿（json + md） |
+| `email_draft_get` | 读取单条邮件草稿 |
+| `email_draft_save` | 保存/更新邮件草稿（智能体润色后） |
+| `email_draft_list` | 列出邮件草稿 |
 
 ## 开发
 
@@ -58,6 +62,7 @@ npm test
 - 关键词：`data/keywords/{product_id}/expansion.json`
 - 原始线索：`data/leads/{product_id}/raw/{round}.jsonl`
 - 评分线索：`data/leads/{product_id}/scored.json`
+- 邮件草稿：`data/emails/{lead_id}/draft.json`、`draft.md`
 - 探索记录：`data/exploration/{product_id}/runs/{run_id}.json`
 - 输入归档：`data/products/{product_id}/inputs/`
 - 就绪度阈值：`config/scoring-rules.yaml` → `profile_readiness_threshold`

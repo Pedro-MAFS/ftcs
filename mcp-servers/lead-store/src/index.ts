@@ -34,6 +34,14 @@ import {
   updateExplorationRun,
 } from "./lead-storage.js";
 import { generateLeadId } from "./lead-id.js";
+import { EmailDraftInputSchema } from "./email-types.js";
+import {
+  buildDraftSummary,
+  generateEmailDraftsForProduct,
+  listEmailDrafts,
+  loadEmailDraft,
+  saveEmailDraft,
+} from "./email-storage.js";
 
 const server = new McpServer({
   name: "lead-store",
@@ -699,6 +707,163 @@ server.tool(
     }
     return {
       content: [{ type: "text", text: JSON.stringify(scored, null, 2) }],
+    };
+  }
+);
+
+server.tool(
+  "email_draft_generate",
+  "Generate outreach email drafts for high-tier leads (default top 5). Saves draft.json, draft.md, and updates lead status to email_drafted.",
+  {
+    product_id: z.string(),
+    lead_ids: z.array(z.string()).optional(),
+    limit: z.number().int().min(1).max(20).default(5),
+    write_markdown: z.boolean().default(true),
+  },
+  async ({ product_id, lead_ids, limit, write_markdown }) => {
+    const root = getProjectRoot();
+    try {
+      const result = generateEmailDraftsForProduct(root, product_id, {
+        lead_ids,
+        limit,
+        write_markdown,
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                success: true,
+                product_id,
+                generated: result.drafts.length,
+                skipped: result.skipped,
+                drafts: result.drafts.map((draft) => ({
+                  ...buildDraftSummary(draft),
+                  draft_path: `data/emails/${draft.lead_id}/draft.json`,
+                  markdown_path: write_markdown
+                    ? `data/emails/${draft.lead_id}/draft.md`
+                    : null,
+                  personalization_evidence: draft.personalization_evidence,
+                })),
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ error: true, code: "EMAIL_DRAFT_FAILED", message }),
+          },
+        ],
+      };
+    }
+  }
+);
+
+server.tool(
+  "email_draft_get",
+  "Load an email draft by lead ID.",
+  {
+    lead_id: z.string(),
+  },
+  async ({ lead_id }) => {
+    const root = getProjectRoot();
+    const draft = loadEmailDraft(root, lead_id);
+    if (!draft) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              code: "NOT_FOUND",
+              message: `Email draft not found for lead: ${lead_id}`,
+            }),
+          },
+        ],
+      };
+    }
+    return {
+      content: [{ type: "text", text: JSON.stringify(draft, null, 2) }],
+    };
+  }
+);
+
+server.tool(
+  "email_draft_save",
+  "Save or update an email draft manually (e.g. after agent refinement).",
+  {
+    lead_id: z.string(),
+    draft: EmailDraftInputSchema.omit({ lead_id: true }),
+    write_markdown: z.boolean().default(true),
+  },
+  async ({ lead_id, draft, write_markdown }) => {
+    const root = getProjectRoot();
+    const saved = saveEmailDraft(
+      root,
+      lead_id,
+      {
+        ...draft,
+        lead_id,
+      },
+      write_markdown
+    );
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              success: true,
+              lead_id,
+              draft_path: `data/emails/${lead_id}/draft.json`,
+              markdown_path: write_markdown ? `data/emails/${lead_id}/draft.md` : null,
+              draft: saved,
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  "email_draft_list",
+  "List email drafts, optionally filtered by product ID.",
+  {
+    product_id: z.string().optional(),
+  },
+  async ({ product_id }) => {
+    const root = getProjectRoot();
+    const drafts = listEmailDrafts(root, product_id);
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              product_id: product_id ?? null,
+              total: drafts.length,
+              drafts: drafts.map((draft) => buildDraftSummary(draft)),
+            },
+            null,
+            2
+          ),
+        },
+      ],
     };
   }
 );
