@@ -7,7 +7,19 @@ import {
   getExplorationRunPath,
   getExplorationRunsDir,
   getRawLeadsPath,
+  getScoredLeadsPath,
 } from "./paths.js";
+import type { ScoredLead, ScoredLeadsFile } from "./lead-types.js";
+import { ScoredLeadsFileSchema } from "./lead-types.js";
+import {
+  buildScoredStats,
+  dedupeRawLeads,
+  getDedupeKey,
+  rawLeadToScoredLead,
+  sortScoredLeads,
+} from "./lead-scorer.js";
+import { loadScoringConfig } from "./scoring-config.js";
+import { loadProfile } from "./storage.js";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -153,4 +165,72 @@ export function updateExplorationRun(
   });
 
   return saveExplorationRun(root, productId, updated);
+}
+
+export function loadScoredLeads(root: string, productId: string): ScoredLeadsFile | null {
+  const scoredPath = getScoredLeadsPath(root, productId);
+  if (!existsSync(scoredPath)) {
+    return null;
+  }
+  return ScoredLeadsFileSchema.parse(JSON.parse(readFileSync(scoredPath, "utf8")));
+}
+
+export function saveScoredLeads(root: string, file: ScoredLeadsFile): ScoredLeadsFile {
+  const parsed = ScoredLeadsFileSchema.parse(file);
+  const scoredPath = getScoredLeadsPath(root, parsed.product_id);
+  mkdirSync(dirname(scoredPath), { recursive: true });
+  writeFileSync(scoredPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+  return parsed;
+}
+
+export function scoreAndDedupeLeads(root: string, productId: string): {
+  scored: ScoredLeadsFile;
+  raw_total: number;
+  deduped_total: number;
+} {
+  const profile = loadProfile(root, productId);
+  if (!profile) {
+    throw new Error(`Product not found: ${productId}`);
+  }
+
+  const rawLeads = listRawLeads(root, productId);
+  if (rawLeads.length === 0) {
+    throw new Error(`No raw leads found for product: ${productId}`);
+  }
+
+  const config = loadScoringConfig(root);
+  const deduped = dedupeRawLeads(rawLeads);
+  const existing = loadScoredLeads(root, productId);
+
+  const preservedStatusByKey = new Map<string, ScoredLead["status"]>();
+  const preservedStatusById = new Map<string, ScoredLead["status"]>();
+  for (const lead of existing?.leads ?? []) {
+    preservedStatusByKey.set(lead.dedupe_key, lead.status);
+    preservedStatusById.set(lead.id, lead.status);
+  }
+
+  const scoredLeads = sortScoredLeads(
+    deduped.map((lead) => {
+      const dedupeKey = getDedupeKey(lead);
+      const preserved =
+        preservedStatusById.get(lead.id) ??
+        preservedStatusByKey.get(dedupeKey);
+      return rawLeadToScoredLead(profile, lead, config, preserved);
+    })
+  );
+
+  const scored: ScoredLeadsFile = {
+    product_id: productId,
+    updated_at: nowIso(),
+    leads: scoredLeads,
+    stats: buildScoredStats(scoredLeads),
+  };
+
+  saveScoredLeads(root, scored);
+
+  return {
+    scored,
+    raw_total: rawLeads.length,
+    deduped_total: deduped.length,
+  };
 }

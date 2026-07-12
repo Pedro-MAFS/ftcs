@@ -29,6 +29,8 @@ import {
   listExplorationRuns,
   listRawLeads,
   loadExplorationRun,
+  loadScoredLeads,
+  scoreAndDedupeLeads,
   updateExplorationRun,
 } from "./lead-storage.js";
 import { generateLeadId } from "./lead-id.js";
@@ -616,6 +618,87 @@ server.tool(
     const runs = listExplorationRuns(root, product_id);
     return {
       content: [{ type: "text", text: JSON.stringify({ product_id, runs }, null, 2) }],
+    };
+  }
+);
+
+server.tool(
+  "leads_score_and_dedupe",
+  "Score and dedupe raw leads, then save to data/leads/{product_id}/scored.json",
+  {
+    product_id: z.string(),
+  },
+  async ({ product_id }) => {
+    const root = getProjectRoot();
+    try {
+      const result = scoreAndDedupeLeads(root, product_id);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                success: true,
+                product_id,
+                scored_path: `data/leads/${product_id}/scored.json`,
+                raw_total: result.raw_total,
+                deduped_total: result.deduped_total,
+                stats: result.scored.stats,
+                top_leads: result.scored.leads.slice(0, 5).map((lead) => ({
+                  id: lead.id,
+                  company: lead.company.name,
+                  score: lead.score,
+                  tier: lead.tier,
+                  dedupe_key: lead.dedupe_key,
+                })),
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ error: true, code: "SCORING_FAILED", message }),
+          },
+        ],
+      };
+    }
+  }
+);
+
+server.tool(
+  "leads_get_scored",
+  "Load scored leads for a product.",
+  {
+    product_id: z.string(),
+  },
+  async ({ product_id }) => {
+    const root = getProjectRoot();
+    const scored = loadScoredLeads(root, product_id);
+    if (!scored) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              code: "NOT_FOUND",
+              message: `Scored leads not found: ${product_id}`,
+            }),
+          },
+        ],
+      };
+    }
+    return {
+      content: [{ type: "text", text: JSON.stringify(scored, null, 2) }],
     };
   }
 );

@@ -71,3 +71,62 @@ export const ExplorationRunInputSchema = ExplorationRunSchema.partial({
 });
 
 export type ExplorationRunInput = z.infer<typeof ExplorationRunInputSchema>;
+
+export const ScoreBreakdownSchema = z.object({
+  product_match: z.number(),
+  purchase_intent: z.number(),
+  size_fit: z.number(),
+  geo_match: z.number(),
+  reachability: z.number(),
+  competition: z.number(),
+});
+
+export type ScoreBreakdown = z.infer<typeof ScoreBreakdownSchema>;
+
+export const LeadStatusSchema = z.enum([
+  "new",
+  "reviewed",
+  "email_drafted",
+  "email_approved",
+  "contacted",
+  "replied",
+  "converted",
+  "rejected",
+]);
+
+export type LeadStatus = z.infer<typeof LeadStatusSchema>;
+
+export const LeadTierSchema = z.enum(["high", "medium", "low"]);
+
+export type LeadTier = z.infer<typeof LeadTierSchema>;
+
+export const ScoredLeadSchema = z.object({
+  id: z.string(),
+  company: LeadCompanySchema,
+  score: z.number(),
+  score_breakdown: ScoreBreakdownSchema,
+  tier: LeadTierSchema,
+  status: LeadStatusSchema,
+  dedupe_key: z.string(),
+  source_url: z.string(),
+  match_reason: z.string(),
+  contacts: z.array(LeadContactSchema).default([]),
+  round: z.enum(["R1", "R2", "R3", "R4"]).optional(),
+  query_id: z.string().optional(),
+  discovered_at: z.string().optional(),
+});
+
+export type ScoredLead = z.infer<typeof ScoredLeadSchema>;
+
+export const ScoredLeadsFileSchema = z.object({
+  product_id: z.string(),
+  updated_at: z.string(),
+  leads: z.array(ScoredLeadSchema),
+  stats: z.object({
+    total: z.number().int().nonnegative(),
+    by_tier: z.record(z.string(), z.number()),
+    by_status: z.record(z.string(), z.number()),
+  }),
+});
+
+export type ScoredLeadsFile = z.infer<typeof ScoredLeadsFileSchema>;

@@ -76,3 +76,7 @@ export function getExplorationRunsDir(root: string, productId: string): string {
 export function getExplorationRunPath(root: string, productId: string, runId: string): string {
   return join(getExplorationRunsDir(root, productId), `${runId}.json`);
 }
+
+export function getScoredLeadsPath(root: string, productId: string): string {
+  return join(getLeadsDir(root, productId), "scored.json");
+}

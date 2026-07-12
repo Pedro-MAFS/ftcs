@@ -23,6 +23,8 @@
 | `exploration_update` | 更新探索进度与 API 用量 |
 | `exploration_finish` | 完成探索运行 |
 | `exploration_get` / `exploration_list` | 读取探索记录 |
+| `leads_score_and_dedupe` | 原始线索去重、评分、写入 scored.json |
+| `leads_get_scored` | 读取评分后的线索 |
 
 ## 开发
 
@@ -55,6 +57,7 @@ npm test
 - 画像：`data/products/{product_id}/profile.json`
 - 关键词：`data/keywords/{product_id}/expansion.json`
 - 原始线索：`data/leads/{product_id}/raw/{round}.jsonl`
+- 评分线索：`data/leads/{product_id}/scored.json`
 - 探索记录：`data/exploration/{product_id}/runs/{run_id}.json`
 - 输入归档：`data/products/{product_id}/inputs/`
 - 就绪度阈值：`config/scoring-rules.yaml` → `profile_readiness_threshold`
