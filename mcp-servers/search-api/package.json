@@ -1,17 +1,17 @@
 {
-  "name": "@ftcs/lead-store",
+  "name": "@ftcs/search-api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "MCP server for product profiles and lead data storage",
+  "description": "MCP server for web search via Tavily",
   "bin": {
-    "lead-store": "./dist/index.js"
+    "search-api": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
-    "test": "npm run build && node --test dist/readiness.test.js dist/storage.test.js dist/keyword-expander.test.js dist/lead-storage.test.js"
+    "test": "npm run build && node --test dist/tavily.test.js dist/cache.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

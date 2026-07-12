@@ -56,3 +56,23 @@ export function getKeywordsDir(root: string, productId: string): string {
 export function getKeywordsPath(root: string, productId: string): string {
   return join(getKeywordsDir(root, productId), "expansion.json");
 }
+
+export function getLeadsDir(root: string, productId: string): string {
+  return join(getDataDir(root), "leads", productId);
+}
+
+export function getRawLeadsDir(root: string, productId: string): string {
+  return join(getLeadsDir(root, productId), "raw");
+}
+
+export function getRawLeadsPath(root: string, productId: string, round: string): string {
+  return join(getRawLeadsDir(root, productId), `${round}.jsonl`);
+}
+
+export function getExplorationRunsDir(root: string, productId: string): string {
+  return join(getDataDir(root), "exploration", productId, "runs");
+}
+
+export function getExplorationRunPath(root: string, productId: string, runId: string): string {
+  return join(getExplorationRunsDir(root, productId), `${runId}.json`);
+}

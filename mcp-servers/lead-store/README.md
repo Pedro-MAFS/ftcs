@@ -16,6 +16,13 @@
 | `keywords_expand` | 基于 ready 画像生成五维关键词与搜索查询并保存 |
 | `keywords_get` | 读取关键词扩展结果 |
 | `keywords_save` | 手动保存/更新关键词扩展（智能体补充后） |
+| `lead_generate_id` | 生成线索 ID |
+| `lead_append_raw` | 追加原始线索至 `raw/{round}.jsonl` |
+| `lead_list_raw` | 列出原始线索 |
+| `exploration_start` | 创建探索运行记录 |
+| `exploration_update` | 更新探索进度与 API 用量 |
+| `exploration_finish` | 完成探索运行 |
+| `exploration_get` / `exploration_list` | 读取探索记录 |
 
 ## 开发
 
@@ -47,5 +54,7 @@ npm test
 
 - 画像：`data/products/{product_id}/profile.json`
 - 关键词：`data/keywords/{product_id}/expansion.json`
+- 原始线索：`data/leads/{product_id}/raw/{round}.jsonl`
+- 探索记录：`data/exploration/{product_id}/runs/{run_id}.json`
 - 输入归档：`data/products/{product_id}/inputs/`
 - 就绪度阈值：`config/scoring-rules.yaml` → `profile_readiness_threshold`

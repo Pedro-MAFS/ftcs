@@ -119,7 +119,7 @@ mcp-servers/
 
 ### Tools
 
-#### `search.web`
+#### `search_web`
 
 ```json
 {
