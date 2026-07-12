@@ -23,12 +23,13 @@
 | 05 | [智能体技能规范](docs/05-智能体技能规范.md) | Skills 定义与调用流程 |
 | 06 | [MCP 工具规范](docs/06-MCP工具规范.md) | 工具接口与实现优先级 |
 | 07 | [目录结构约定](docs/07-目录结构约定.md) | 仓库目录与文件命名规范 |
+| 08 | [产品架构决策：Electron + OpenCode](docs/08-产品架构决策-Electron-OpenCode.md) | Phase 2 桌面产品形态与集成方案 |
 
 ## 当前阶段
 
-**Phase 1.5：意向邮件生成** — 开发完成，待验收。完成后进行 Phase 1 总验收。
+**Phase 1：MVP 闭环 ✅ 已完成** — 全部子章节（1.1–1.5）已验收通过。
 
-详见 [04-实施计划.md](docs/04-实施计划.md) 的 1.5 节。
+下一步：**Phase 2** — **Electron + OpenCode CLI** 桌面 App + 外贸 Web UI。架构见 [docs/08-产品架构决策-Electron-OpenCode.md](docs/08-产品架构决策-Electron-OpenCode.md)，复盘见 [docs/retrospective/phase-1.md](docs/retrospective/phase-1.md)。
 
 ## 技术原则
 
@@ -47,4 +48,6 @@
 - [x] Phase 1.2 关键词扩展（已验收）
 - [x] Phase 1.3 获客探索（已验收）
 - [x] Phase 1.4 线索评分与去重（已验收）
-- [x] Phase 1.5 意向邮件生成（开发完成，待验收）
+- [x] Phase 1.5 意向邮件生成（已验收）
+- [x] **Phase 1 MVP 闭环（已全部验收）**
+- [ ] Phase 2 桌面产品化（Electron + OpenCode）与自动化触达
