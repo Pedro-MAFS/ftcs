@@ -13,9 +13,13 @@ import {
   findProjectRoot,
   getConfigPath,
   getInputsDir,
+  getKeywordsPath,
   getProductDir,
   getProfilePath,
 } from "./paths.js";
+import type { KeywordExpansion, KeywordExpansionInput } from "./keyword-types.js";
+import { KeywordExpansionSchema } from "./keyword-types.js";
+import { assertProfileReadyForExpansion, expandKeywords } from "./keyword-expander.js";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -120,6 +124,70 @@ export function ensureInputsDir(root: string, productId: string): string {
   const inputsDir = getInputsDir(root, productId);
   mkdirSync(inputsDir, { recursive: true });
   return inputsDir;
+}
+
+export function loadKeywords(root: string, productId: string): KeywordExpansion | null {
+  const keywordsPath = getKeywordsPath(root, productId);
+  if (!existsSync(keywordsPath)) {
+    return null;
+  }
+  const raw = JSON.parse(readFileSync(keywordsPath, "utf8"));
+  return KeywordExpansionSchema.parse(raw);
+}
+
+export function saveKeywords(
+  root: string,
+  productId: string,
+  input: KeywordExpansionInput
+): KeywordExpansion {
+  const timestamp = input.generated_at ?? nowIso();
+  const search_queries = input.search_queries.map((query, index) => ({
+    ...query,
+    id: query.id || `q_${String(index + 1).padStart(3, "0")}`,
+  }));
+
+  const expansion: KeywordExpansion = KeywordExpansionSchema.parse({
+    product_id: productId,
+    generated_at: timestamp,
+    dimensions: input.dimensions,
+    search_queries,
+    stats: input.stats ?? {
+      total_queries: search_queries.length,
+      by_round: search_queries.reduce<Record<string, number>>((acc, query) => {
+        acc[query.round] = (acc[query.round] ?? 0) + 1;
+        return acc;
+      }, {}),
+      by_dimension: search_queries.reduce<Record<string, number>>((acc, query) => {
+        acc[query.dimension] = (acc[query.dimension] ?? 0) + 1;
+        return acc;
+      }, {}),
+    },
+  });
+
+  const keywordsPath = getKeywordsPath(root, productId);
+  mkdirSync(dirname(keywordsPath), { recursive: true });
+  writeFileSync(keywordsPath, `${JSON.stringify(expansion, null, 2)}\n`, "utf8");
+  return expansion;
+}
+
+export function expandAndSaveKeywords(root: string, productId: string): {
+  expansion: KeywordExpansion;
+  created: boolean;
+} {
+  const profile = loadProfile(root, productId);
+  if (!profile) {
+    throw new Error(`Product not found: ${productId}`);
+  }
+
+  const readinessError = assertProfileReadyForExpansion(profile);
+  if (readinessError) {
+    throw new Error(readinessError);
+  }
+
+  const existing = loadKeywords(root, productId);
+  const expansion = expandKeywords(profile);
+  saveKeywords(root, productId, expansion);
+  return { expansion, created: !existing };
 }
 
 export function getProjectRoot(): string {

@@ -12,11 +12,15 @@ import { computeReadiness, resolveStatus } from "./readiness.js";
 import { generateProductId } from "./product-id.js";
 import {
   ensureInputsDir,
+  expandAndSaveKeywords,
   getProjectRoot,
   listProfiles,
+  loadKeywords,
   loadProfile,
+  saveKeywords,
   saveProfile,
 } from "./storage.js";
+import { KeywordExpansionInputSchema } from "./keyword-types.js";
 
 const server = new McpServer({
   name: "lead-store",
@@ -181,6 +185,134 @@ server.tool(
         {
           type: "text",
           text: JSON.stringify({ product_id, inputs_dir }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  "keywords_expand",
+  "Generate keyword expansion and search queries from a ready product profile, then save to data/keywords/{product_id}/expansion.json.",
+  {
+    product_id: z.string().describe("Ready product ID"),
+  },
+  async ({ product_id }) => {
+    const root = getProjectRoot();
+    try {
+      const result = expandAndSaveKeywords(root, product_id);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                success: true,
+                created: result.created,
+                product_id,
+                expansion_path: `data/keywords/${product_id}/expansion.json`,
+                stats: result.expansion.stats,
+                dimensions_covered: Object.entries(result.expansion.stats.by_dimension ?? {})
+                  .filter(([, count]) => count > 0)
+                  .map(([dimension]) => dimension),
+                sample_queries: result.expansion.search_queries.slice(0, 5),
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ error: true, code: "EXPANSION_FAILED", message }),
+          },
+        ],
+      };
+    }
+  }
+);
+
+server.tool(
+  "keywords_get",
+  "Load keyword expansion for a product.",
+  {
+    product_id: z.string(),
+  },
+  async ({ product_id }) => {
+    const root = getProjectRoot();
+    const expansion = loadKeywords(root, product_id);
+    if (!expansion) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              code: "NOT_FOUND",
+              message: `Keyword expansion not found: ${product_id}`,
+            }),
+          },
+        ],
+      };
+    }
+    return {
+      content: [{ type: "text", text: JSON.stringify(expansion, null, 2) }],
+    };
+  }
+);
+
+server.tool(
+  "keywords_save",
+  "Save or overwrite keyword expansion manually (e.g. after agent refinement).",
+  {
+    product_id: z.string(),
+    expansion: KeywordExpansionInputSchema.omit({ product_id: true }),
+  },
+  async ({ product_id, expansion }) => {
+    const root = getProjectRoot();
+    const profile = loadProfile(root, product_id);
+    if (!profile) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              code: "NOT_FOUND",
+              message: `Product not found: ${product_id}`,
+            }),
+          },
+        ],
+      };
+    }
+
+    const saved = saveKeywords(root, product_id, {
+      ...expansion,
+      product_id,
+    });
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              success: true,
+              product_id,
+              expansion_path: `data/keywords/${product_id}/expansion.json`,
+              stats: saved.stats,
+            },
+            null,
+            2
+          ),
         },
       ],
     };

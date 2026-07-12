@@ -13,6 +13,9 @@
 | `profile_compute_readiness` | 预览就绪度（不保存） |
 | `file_classify` | 判断输入文件是否支持 |
 | `inputs_ensure_dir` | 创建 `inputs/` 归档目录 |
+| `keywords_expand` | 基于 ready 画像生成五维关键词与搜索查询并保存 |
+| `keywords_get` | 读取关键词扩展结果 |
+| `keywords_save` | 手动保存/更新关键词扩展（智能体补充后） |
 
 ## 开发
 
@@ -43,5 +46,6 @@ npm test
 ## 数据路径
 
 - 画像：`data/products/{product_id}/profile.json`
+- 关键词：`data/keywords/{product_id}/expansion.json`
 - 输入归档：`data/products/{product_id}/inputs/`
 - 就绪度阈值：`config/scoring-rules.yaml` → `profile_readiness_threshold`

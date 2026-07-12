@@ -48,3 +48,11 @@ export function getInputsDir(root: string, productId: string): string {
 export function getConfigPath(root: string): string {
   return join(root, "config", "scoring-rules.yaml");
 }
+
+export function getKeywordsDir(root: string, productId: string): string {
+  return join(getDataDir(root), "keywords", productId);
+}
+
+export function getKeywordsPath(root: string, productId: string): string {
+  return join(getKeywordsDir(root, productId), "expansion.json");
+}
