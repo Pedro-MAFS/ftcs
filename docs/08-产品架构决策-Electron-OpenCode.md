@@ -1,6 +1,6 @@
 # 08 - 产品架构决策：Electron + OpenCode CLI
 
-> **决策日期**：2026-07-12  
+> **决策日期**：2026-07-12（修订：2026-07-15）  
 > **状态**：已确认  
 > **替代方案**：纯 Web SaaS、Cursor 绑定、自研独立 Agent 引擎（暂不采用）
 
@@ -8,9 +8,20 @@
 
 ## 1. 决策摘要
 
-**产品形态**：桌面应用（Electron）+ 内嵌 OpenCode CLI（Sidecar Server）+ 自研外贸业务 Web UI。
+**产品形态**：桌面应用（Electron）+ **OpenCode JS SDK（`createOpencode` Server + Client）** + 自研外贸业务 Web UI（Vue 3）。
 
-业务用户通过**安装一个桌面 App** 完成全流程，无需安装 Cursor、无需手动配置 MCP、无需在 IDE 里对话。
+业务用户通过桌面 App 完成全流程，无需安装 Cursor、无需在 IDE 里对话。
+
+### 1.1 2026-07-15 集成方式修订
+
+| 项 | 决定 |
+|----|------|
+| 集成 API | 官方 `@opencode-ai/sdk` 的 **Server + Client**（`createOpencode`） |
+| 前端 | Vue 3（Electron Renderer） |
+| OpenCode 二进制 | **暂不内嵌**；开发/试用期要求本机 PATH 已安装 `opencode` |
+| 内嵌二进制 | 延后（产品安装包优化阶段再做） |
+
+SDK 仍会本机 `spawn opencode serve`；与手动 Sidecar 的差别是生命周期由 SDK 托管，Client 类型安全。
 
 ---
 
@@ -33,32 +44,34 @@
 ```mermaid
 flowchart TB
     subgraph ElectronApp["Electron 桌面应用"]
-        subgraph Renderer["渲染进程：外贸 Web UI"]
+        subgraph Renderer["渲染进程：Vue3 外贸 UI"]
             Pages["产品录入 │ 线索库 │ 邮件审核 │ 设置"]
         end
         subgraph Main["主进程"]
             Lifecycle["应用生命周期 / 窗口"]
-            Sidecar["OpenCode CLI Sidecar 管理"]
+            SDK["@opencode-ai/sdk createOpencode"]
             Config["本地配置 / API Key"]
         end
-        Renderer -->|HTTP / SDK| OCServer
-        Main -->|spawn| Sidecar
-        Sidecar --> OCServer
+        Renderer -->|IPC| SDK
+        SDK -->|client| OCServer
+        SDK -->|spawn PATH 上的 opencode| OCServer
     end
 
-    subgraph OCServer["OpenCode Server（opencode serve）"]
+    subgraph OCServer["OpenCode Server"]
         Agent["Agent 调度 / LLM"]
         MCP["MCP 客户端"]
         Skills["Skills 加载"]
     end
 
     subgraph Local["本机资源"]
+        CLI["本机已安装 opencode CLI"]
         LS["lead-store MCP"]
         SA["search-api MCP"]
         CD["chrome-devtools MCP（可选）"]
         Data["data/ 工作区"]
     end
 
+    SDK -.-> CLI
     MCP --> LS
     MCP --> SA
     MCP --> CD
@@ -71,9 +84,9 @@ flowchart TB
 
 | 层 | 职责 | 技术 |
 |----|------|------|
-| **外贸 Web UI** | 产品录入、探索触发、线索展示、邮件审核 | React/Vite/Solid（待定），跑在 Electron Renderer |
-| **Electron 主进程** | 启动/停止 OpenCode、读写配置、系统对话框、自动更新 | Electron Main |
-| **OpenCode CLI** | Agent 循环、LLM 调用、MCP 连接、Skill 执行 | `opencode serve`（Sidecar 子进程） |
+| **外贸 Web UI** | 产品录入、探索触发、线索展示、邮件审核 | Vue 3 + Vite（Electron Renderer） |
+| **Electron 主进程** | `createOpencode` 启停、IPC、配置、健康检查 | Electron Main + `@opencode-ai/sdk` |
+| **OpenCode Server** | Agent 循环、LLM、MCP、Skill | SDK 拉起的本机 `opencode serve` |
 | **MCP 服务** | lead-store、search-api 等确定性工具 | Phase 1 已有 `mcp-servers/` |
 | **Skills** | 业务流程编排说明 | Phase 1 已有 `skills/` |
 | **data/** | 画像、线索、邮件持久化 | JSON 文件（Phase 2 可迁 SQLite） |
@@ -98,11 +111,13 @@ OpenCode 官方桌面版也是：**Electron + 内嵌 CLI Server + Web UI**。
 
 ```
 1. 用户双击 App
-2. Electron Main 启动 opencode serve（指定 port、workspace、MCP 配置）
-3. 等待 Server 就绪
-4. Renderer 加载 Web UI，连接 http://127.0.0.1:{port}
-5. UI 显示「就绪」
+2. Electron Main：检测 PATH 上的 opencode → createOpencode({ port, config })
+3. SDK 拉起 Server 并返回 client
+4. Renderer 经 IPC 查询状态；业务调用后续可走 Main 持有的 client
+5. UI 显示「就绪」；退出时 server.close()
 ```
+
+> 当前阶段若本机未安装 OpenCode，启动失败并给出安装指引（不自动下载二进制）。
 
 ### 4.2 用户点击「提取产品画像」
 
@@ -132,7 +147,7 @@ OpenCode 官方桌面版也是：**Electron + 内嵌 CLI Server + Web UI**。
 
 | 组件 | 运行位置 |
 |------|---------|
-| OpenCode Server | 本机（Electron Sidecar） |
+| OpenCode Server | 本机（SDK `createOpencode` 拉起） |
 | lead-store / search-api | 本机（MCP 子进程） |
 | chrome-devtools | 本机（用户 Chrome） |
 | LLM API | 云端（OpenAI / Anthropic 等，由 OpenCode 配置） |
@@ -156,31 +171,39 @@ foreign-trade-customer-search/
 ├── desktop/              # 新增：Electron 应用
 │   ├── package.json
 │   ├── electron/
-│   │   ├── main.ts       # 主进程：Sidecar、配置
-│   │   └── preload.ts
-│   ├── src/              # 外贸 Web UI
-│   │   ├── pages/
-│   │   └── api/          # 封装 OpenCode HTTP / lead-store 调用
-│   └── resources/
-│       └── opencode-cli/ # 打包的 opencode 二进制（按平台）
+│   │   ├── main.ts              # 主进程
+│   │   ├── preload.ts
+│   │   └── opencode/runtime.ts  # createOpencode 封装
+│   ├── src/                     # Vue 3 渲染进程
+│   └── resources/opencode-cli/  # 预留捆绑目录（当前未用）
 └── config/
-    └── opencode/         # OpenCode MCP 配置模板
-        └── mcp.json
+    └── opencode/
+        └── opencode.json        # MCP / Skills 配置
 ```
 
 ---
 
 ## 7. OpenCode 集成要点
 
-### 7.1 Sidecar 启动参数（示例）
+### 7.1 SDK Server + Client（当前方案）
 
-```bash
-opencode serve \
-  --port 4096 \
-  --workspace /path/to/workspace
+```ts
+import { createOpencode } from '@opencode-ai/sdk'
+
+// Main 进程：先 chdir 到仓库根，再：
+const { client, server } = await createOpencode({
+  hostname: '127.0.0.1',
+  port: 4096,
+  timeout: 60_000,
+  config: /* config/opencode/opencode.json */,
+})
+
+// 退出时
+server.close()
 ```
 
-工作区（workspace）指向含 `data/`、`config/`、`skills/` 的项目根目录。
+工作区为含 `data/`、`config/`、`skills/`、`mcp-servers/` 的项目根目录。  
+前提：本机 PATH 可执行 `opencode`（暂不捆绑二进制）。
 
 ### 7.2 MCP 配置
 
@@ -212,11 +235,12 @@ Phase 2 MVP 推荐 **C**：列表与表单直接读 `lead-store`；「一键探�
 
 | # | 任务 | 说明 |
 |---|------|------|
-| 2.0.1 | 初始化 `desktop/` Electron 项目 | Vite + React 或 Solid |
-| 2.0.2 | Main 进程：Sidecar 启停 opencode serve | 参考 OpenCode Desktop |
-| 2.0.3 | 打包/捆绑 opencode CLI（win/mac） | 或安装时检测 + 引导 |
-| 2.0.4 | OpenCode MCP 配置模板 | lead-store、search-api |
-| 2.0.5 | Skills 同步至 OpenCode 可加载路径 | 复用 sync-skills 脚本 |
+| 2.0.1 | 初始化 `desktop/` Electron 项目 | Vite + Vue 3 |
+| 2.0.2 | Main：`createOpencode` Server+Client 启停 | `@opencode-ai/sdk` |
+| 2.0.3 | 本机 OpenCode CLI 检测（暂不捆绑） | PATH / `FTCS_OPENCODE_PATH` |
+| 2.0.4 | OpenCode MCP 配置模板 | `config/opencode/opencode.json` |
+| 2.0.5 | Skills 同步至 OpenCode 可加载路径 | `scripts/sync-skills.ps1` |
+| 2.0.6 | （延后）安装包内嵌 opencode 二进制 | 产品化打包阶段 |
 
 ### 2.1 外贸 Web UI（P0）
 
@@ -241,7 +265,7 @@ Phase 2 MVP 推荐 **C**：列表与表单直接读 `lead-store`；「一键探�
 |------|------|
 | OpenCode 版本升级 breaking change | 锁定 CLI 版本；抽象 UI 与 Server 的 API 层 |
 | Sidecar 启动失败 | Main 进程健康检查 + 用户可读错误提示 |
-| 安装包体积大 | 分平台打包；CLI 按需下载 |
+| 本机未装 OpenCode | UI 明确错误提示与安装命令；后续再做内嵌 |
 | chrome-devtools 依赖用户 Chrome | 探索页检测环境；Phase 2 备选 Playwright MCP |
 | Windows 防火墙拦截本地端口 | 固定 localhost + 文档说明 |
 
@@ -252,6 +276,7 @@ Phase 2 MVP 推荐 **C**：列表与表单直接读 `lead-store`；「一键探�
 - 不做纯浏览器 SaaS（无本地 Server）
 - 不要求用户安装 Cursor
 - 不自研完整 Agent 引擎（复用 OpenCode）
+- **暂不**在安装包内嵌 OpenCode 二进制（开发期用本机安装）
 - 不在 Phase 2 做移动端
 
 ---

@@ -50,4 +50,5 @@
 - [x] Phase 1.4 线索评分与去重（已验收）
 - [x] Phase 1.5 意向邮件生成（已验收）
 - [x] **Phase 1 MVP 闭环（已全部验收）**
-- [ ] Phase 2 桌面产品化（Electron + OpenCode）与自动化触达
+- [x] Phase 2.0 Electron + OpenCode 集成（desktop/ 骨架）
+- [ ] Phase 2.1 外贸 Web UI
