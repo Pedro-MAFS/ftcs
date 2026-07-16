@@ -390,11 +390,11 @@ Cursor MCP 配置示例（`.cursor/mcp.json`）：
   "mcpServers": {
     "lead-store": {
       "command": "node",
-      "args": ["workspace/mcp-servers/lead-store/dist/index.js"]
+      "args": ["workspace/mcp-servers/lead-store/dist/mcp.js"]
     },
     "search-api": {
       "command": "node",
-      "args": ["workspace/mcp-servers/search-api/dist/index.js"],
+      "args": ["workspace/mcp-servers/search-api/dist/mcp.js"],
       "env": {
         "TAVILY_API_KEY": "${TAVILY_API_KEY}"
       }

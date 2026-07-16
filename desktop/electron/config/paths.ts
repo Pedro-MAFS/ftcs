@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readUserPrefs } from './user-prefs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -20,24 +21,35 @@ export function getRepoRoot(): string {
 }
 
 /**
- * OpenCode / MCP 运行时工作区（纯净目录：data、config、.env、skills 副本）。
- * 开发默认：<repo>/workspace
- * 打包默认：userData/workspace
+ * 运行时工作区（用户数据目录，与仓库模板分离）。
+ * 优先级：环境变量 FTCS_WORKSPACE > 用户偏好 > `<userData>/workspace`
+ *
+ * 开发与打包行为一致：都不使用仓库根下的 `workspace/` 作为工作目录。
+ * 仓库 `workspace/` 仅作标准模板，由 initializeWorkspace 同步进来。
  */
 export function getWorkspaceRoot(): string {
   if (process.env.FTCS_WORKSPACE) {
     return path.resolve(process.env.FTCS_WORKSPACE)
   }
 
-  if (app.isPackaged) {
-    return path.join(app.getPath('userData'), 'workspace')
+  const prefs = readUserPrefs()
+  if (prefs.workspaceRoot) {
+    return path.resolve(prefs.workspaceRoot)
   }
 
-  return path.join(getRepoRoot(), 'workspace')
+  return path.join(app.getPath('userData'), 'workspace')
 }
 
 export function getOpenCodeConfigPath(workspaceRoot: string): string {
   return path.join(workspaceRoot, 'config', 'opencode', 'opencode.json')
+}
+
+/**
+ * OpenCode 全局配置隔离目录（作为 XDG_CONFIG_HOME）。
+ * 当前 CLI 仍会合并 ~/.config/opencode；指向空目录可避免本机全局 MCP 渗入。
+ */
+export function getOpenCodeXdgConfigHome(): string {
+  return path.join(app.getPath('userData'), 'opencode-xdg')
 }
 
 export function getDefaultOpenCodePort(): number {

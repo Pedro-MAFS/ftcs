@@ -15,6 +15,7 @@ export interface OpenCodeRuntimeStatus {
 export interface McpServerStatus {
   name: string
   status: string
+  error?: string
 }
 
 export interface AppStatus {

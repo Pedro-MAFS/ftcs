@@ -1,15 +1,180 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { SECTION_META } from '../types/workspace'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import Icon from '../components/shared/Icon.vue'
 import { useAppStatus } from '../composables/useAppStatus'
+import { useSettingsNav } from '../composables/useSettingsNav'
+import { SECTION_META } from '../types/workspace'
+import type { ModelProviderId, SettingsSnapshot } from '../types/settings'
+import { MODEL_CATALOG } from '../types/settings'
 
 const meta = SECTION_META.settings
-const { status, runtimeHealthy, runtimeLabel, loading, restartOpenCode, refresh } = useAppStatus()
+const { status, runtimeHealthy, runtimeLabel, loading, restartOpenCode, refresh } =
+  useAppStatus()
+const { activeCategory, setCategory } = useSettingsNav()
 
-const workspaceRoot = computed(() => status.value?.workspaceRoot ?? '—')
-const baseUrl = computed(() => status.value?.opencode?.baseUrl ?? '—')
-const version = computed(() => status.value?.opencode?.version ?? '—')
+const saving = ref(false)
+const message = ref('')
+const error = ref('')
+const showApiKey = ref(false)
+const showTavilyKey = ref(false)
+const snapshot = ref<SettingsSnapshot | null>(null)
+
+const form = reactive({
+  providerId: 'anthropic' as ModelProviderId,
+  apiKey: '',
+  baseUrl: '',
+  model: 'anthropic/claude-sonnet-4-5',
+  smallModel: 'anthropic/claude-haiku-4-5',
+  customModelId: '',
+  customSmallModelId: '',
+  searchProvider: 'tavily',
+  tavilyApiKey: '',
+  searchDailyLimit: 50,
+})
+
+const providers: Array<{ id: ModelProviderId; label: string }> = [
+  { id: 'anthropic', label: 'Anthropic' },
+  { id: 'openai', label: 'OpenAI' },
+  { id: 'google', label: 'Google' },
+  { id: 'custom', label: '自定义兼容' },
+]
+
+const categories: Array<{ id: typeof activeCategory.value; label: string }> = [
+  { id: 'model', label: '模型与提供商' },
+  { id: 'search', label: '搜索服务' },
+  { id: 'workspace', label: '工作区' },
+  { id: 'opencode', label: 'OpenCode 运行时' },
+  { id: 'about', label: '关于与隐私' },
+]
+
+const isCustom = computed(() => form.providerId === 'custom')
+const usagePct = computed(() => {
+  const limit = form.searchDailyLimit || 1
+  const used = snapshot.value?.searchUsedToday ?? 0
+  return Math.min(100, Math.round((used / limit) * 100))
+})
+
+const modelOptions = computed(() => MODEL_CATALOG[form.providerId].models)
+const smallModelOptions = computed(() => MODEL_CATALOG[form.providerId].small)
+
+function applySnapshot(data: SettingsSnapshot): void {
+  snapshot.value = data
+  form.providerId = data.providerId
+  form.apiKey = data.apiKeyMasked
+  form.baseUrl = data.baseUrl
+  form.model = data.model
+  form.smallModel = data.smallModel
+  form.searchProvider = data.searchProvider
+  form.tavilyApiKey = data.tavilyApiKeyMasked
+  form.searchDailyLimit = data.searchDailyLimit
+  if (data.providerId === 'custom') {
+    form.customModelId = data.model.includes('/')
+      ? data.model.split('/').slice(1).join('/')
+      : data.model
+    form.customSmallModelId = data.smallModel.includes('/')
+      ? data.smallModel.split('/').slice(1).join('/')
+      : data.smallModel
+  }
+}
+
+async function loadSettings(): Promise<void> {
+  if (!window.ftcs?.getSettings) {
+    error.value = '未检测到设置 API（请在桌面应用中运行）'
+    return
+  }
+  try {
+    const data = await window.ftcs.getSettings()
+    applySnapshot(data)
+    error.value = ''
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
+watch(
+  () => form.providerId,
+  (id) => {
+    if (id === 'custom') return
+    const models = MODEL_CATALOG[id].models
+    if (models.length && !models.some((m) => m.id === form.model)) {
+      form.model = models[0].id
+    }
+    const smalls = MODEL_CATALOG[id].small
+    if (smalls.length && !smalls.some((m) => m.id === form.smallModel)) {
+      form.smallModel = smalls[0].id
+    }
+  },
+)
+
+async function onSave(): Promise<void> {
+  if (!window.ftcs?.saveSettings) return
+  saving.value = true
+  message.value = ''
+  error.value = ''
+  try {
+    const model =
+      form.providerId === 'custom'
+        ? form.customModelId.trim() || 'default'
+        : form.model
+    const smallModel =
+      form.providerId === 'custom'
+        ? form.customSmallModelId.trim() || form.customModelId.trim() || 'default'
+        : form.smallModel
+
+    const result = await window.ftcs.saveSettings({
+      providerId: form.providerId,
+      apiKey: form.apiKey,
+      baseUrl: form.baseUrl,
+      model,
+      smallModel,
+      searchProvider: form.searchProvider,
+      tavilyApiKey: form.tavilyApiKey,
+      searchDailyLimit: form.searchDailyLimit,
+    })
+    applySnapshot(result.settings)
+    message.value = result.message
+    await refresh()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function onReset(): Promise<void> {
+  await loadSettings()
+  message.value = '已从磁盘重新加载配置'
+}
+
+async function onPickWorkspace(): Promise<void> {
+  if (!window.ftcs?.pickWorkspace) return
+  try {
+    const result = await window.ftcs.pickWorkspace()
+    if (result.path && 'settings' in result && result.settings) {
+      applySnapshot(result.settings as SettingsSnapshot)
+      const initReason =
+        result && 'init' in result && result.init && typeof result.init === 'object'
+          ? String((result.init as { reason?: string }).reason ?? '')
+          : ''
+      message.value = initReason
+        ? `工作区已切换并初始化：${initReason}`
+        : `工作区已切换为 ${result.path}，OpenCode 已重启`
+      await refresh()
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
+function scrollTo(category: typeof activeCategory.value): void {
+  setCategory(category)
+  const el = document.getElementById(`settings-${category}`)
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+onMounted(() => {
+  void loadSettings()
+})
 </script>
 
 <template>
@@ -20,56 +185,262 @@ const version = computed(() => status.value?.opencode?.version ?? '—')
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
-        <button type="button" class="btn-secondary" :disabled="loading" @click="refresh">刷新</button>
-        <button type="button" class="btn-primary" :disabled="loading" @click="restartOpenCode">
+        <button type="button" class="btn-secondary" :disabled="saving || loading" @click="onReset">
+          重置
+        </button>
+        <button type="button" class="btn-primary" :disabled="saving || loading" @click="onSave">
           <Icon name="save" :size="12" />
-          {{ loading ? '重启中…' : '重启 OpenCode' }}
+          {{ saving ? '保存中…' : '保存配置' }}
         </button>
       </div>
     </header>
 
-    <div class="settings-form">
-      <section class="settings-block">
-        <h3>搜索 API</h3>
-        <p class="muted">TAVILY_API_KEY · 后续可在此编辑并写入 workspace/.env</p>
-        <div class="input-skeleton">tvly-••••••••••••••••••••</div>
-      </section>
+    <p v-if="message" class="settings-banner is-ok">{{ message }}</p>
+    <p v-if="error" class="settings-banner is-err">{{ error }}</p>
 
-      <section class="settings-block">
-        <h3>模型提供商</h3>
-        <p class="muted">OPENAI_API_KEY / 兼容端点（由 OpenCode 读取）</p>
-        <div class="input-skeleton">sk-••••••••••••••••••••</div>
-      </section>
+    <div class="settings-layout">
+      <nav class="settings-nav" aria-label="设置分类">
+        <button
+          v-for="cat in categories"
+          :key="cat.id"
+          type="button"
+          class="settings-nav__item"
+          :class="{ 'is-active': activeCategory === cat.id }"
+          @click="scrollTo(cat.id)"
+        >
+          {{ cat.label }}
+        </button>
+      </nav>
 
-      <section class="settings-block">
-        <h3>工作区</h3>
-        <div class="input-skeleton input-skeleton--row">
-          <code>{{ workspaceRoot }}</code>
-        </div>
-      </section>
+      <div class="settings-form">
+        <!-- 模型与提供商 -->
+        <section id="settings-model" class="settings-block">
+          <div class="settings-block__head">
+            <h3>模型与提供商</h3>
+            <span class="muted mono">opencode.json · model / provider</span>
+          </div>
 
-      <section class="settings-block">
-        <h3>OpenCode</h3>
-        <div class="oc-banner" :class="{ 'is-ready': runtimeHealthy }">
-          <i class="oc-status__dot" />
-          <span>
-            {{ runtimeLabel }}
-            · {{ baseUrl }}
-            · v{{ version }}
-          </span>
-        </div>
-        <ul v-if="status?.mcpServers?.length" class="mcp-list">
-          <li v-for="item in status.mcpServers" :key="item.name">
-            <span>{{ item.name }}</span>
-            <span>{{ item.status }}</span>
-          </li>
-        </ul>
-      </section>
+          <label class="field-label">提供商</label>
+          <div class="provider-row">
+            <button
+              v-for="p in providers"
+              :key="p.id"
+              type="button"
+              class="provider-chip"
+              :class="{ 'is-active': form.providerId === p.id }"
+              @click="form.providerId = p.id"
+            >
+              {{ p.label }}
+            </button>
+          </div>
 
-      <p class="settings-foot">
-        <Icon name="info" :size="14" />
-        密钥仅写入本地 workspace/.env，不会上传
-      </p>
+          <label class="field-label">API Key</label>
+          <div class="input-row">
+            <input
+              v-model="form.apiKey"
+              class="text-input"
+              :type="showApiKey ? 'text' : 'password'"
+              :placeholder="snapshot?.apiKeySet ? '已配置（修改则覆盖）' : '粘贴 API Key'"
+              autocomplete="off"
+            />
+            <button type="button" class="icon-btn" @click="showApiKey = !showApiKey">
+              <Icon :name="showApiKey ? 'eye' : 'eye-off'" :size="14" />
+            </button>
+          </div>
+
+          <label class="field-label">Base URL（自定义兼容时填写）</label>
+          <input
+            v-model="form.baseUrl"
+            class="text-input"
+            :disabled="!isCustom"
+            :class="{ 'is-disabled': !isCustom }"
+            placeholder="https://api.example.com/v1"
+            autocomplete="off"
+          />
+
+          <div class="field-grid">
+            <div>
+              <label class="field-label">默认模型</label>
+              <select v-if="!isCustom" v-model="form.model" class="text-input">
+                <option v-for="m in modelOptions" :key="m.id" :value="m.id">
+                  {{ m.label }} ({{ m.id }})
+                </option>
+              </select>
+              <input
+                v-else
+                v-model="form.customModelId"
+                class="text-input"
+                placeholder="模型 ID，如 gpt-4o"
+                autocomplete="off"
+              />
+            </div>
+            <div>
+              <label class="field-label">轻量模型（small_model）</label>
+              <select v-if="!isCustom" v-model="form.smallModel" class="text-input">
+                <option v-for="m in smallModelOptions" :key="m.id" :value="m.id">
+                  {{ m.label }} ({{ m.id }})
+                </option>
+              </select>
+              <input
+                v-else
+                v-model="form.customSmallModelId"
+                class="text-input"
+                placeholder="轻量模型 ID"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <div class="active-banner">
+            <Icon name="info" :size="14" />
+            <span>
+              当前生效
+              <code>{{ isCustom ? `custom/${form.customModelId || '…'}` : form.model }}</code>
+              · 保存后自动重启 OpenCode
+            </span>
+          </div>
+        </section>
+
+        <hr class="settings-divider" />
+
+        <!-- 搜索 -->
+        <section id="settings-search" class="settings-block">
+          <div class="settings-block__head">
+            <h3>搜索服务</h3>
+            <span class="muted mono">workspace/.env · SEARCH_*</span>
+          </div>
+
+          <div class="field-grid">
+            <div>
+              <label class="field-label">搜索提供商</label>
+              <select v-model="form.searchProvider" class="text-input">
+                <option value="tavily">Tavily</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">日限额 SEARCH_DAILY_LIMIT</label>
+              <input
+                v-model.number="form.searchDailyLimit"
+                class="text-input"
+                type="number"
+                min="1"
+                max="10000"
+              />
+            </div>
+          </div>
+
+          <label class="field-label">TAVILY_API_KEY</label>
+          <div class="input-row">
+            <input
+              v-model="form.tavilyApiKey"
+              class="text-input"
+              :type="showTavilyKey ? 'text' : 'password'"
+              :placeholder="snapshot?.tavilyApiKeySet ? '已配置（修改则覆盖）' : 'tvly-…'"
+              autocomplete="off"
+            />
+            <button type="button" class="icon-btn" @click="showTavilyKey = !showTavilyKey">
+              <Icon :name="showTavilyKey ? 'eye' : 'eye-off'" :size="14" />
+            </button>
+          </div>
+
+          <div class="usage-row">
+            <span class="mono">
+              今日用量 {{ snapshot?.searchUsedToday ?? 0 }} / {{ form.searchDailyLimit }}
+            </span>
+            <div class="usage-bar">
+              <i :style="{ width: `${usagePct}%` }" />
+            </div>
+            <span class="mono muted">{{ usagePct }}%</span>
+          </div>
+        </section>
+
+        <hr class="settings-divider" />
+
+        <!-- 工作区 -->
+        <section id="settings-workspace" class="settings-block">
+          <div class="settings-block__head">
+            <h3>工作区</h3>
+            <span class="muted mono">FTCS_WORKSPACE</span>
+          </div>
+          <div class="input-row">
+            <input
+              class="text-input"
+              :value="snapshot?.workspaceRoot ?? '—'"
+              readonly
+            />
+            <button type="button" class="btn-secondary" @click="onPickWorkspace">更改…</button>
+          </div>
+          <p class="hint-line">
+            <Icon name="info" :size="12" />
+            包含 skills / mcp-servers / config / data · 切换后会重启 OpenCode
+          </p>
+        </section>
+
+        <hr class="settings-divider" />
+
+        <!-- OpenCode -->
+        <section id="settings-opencode" class="settings-block">
+          <div class="settings-block__head">
+            <h3>OpenCode 运行时</h3>
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              :disabled="loading"
+              @click="restartOpenCode"
+            >
+              {{ loading ? '重启中…' : '重启' }}
+            </button>
+          </div>
+
+          <div class="oc-banner" :class="{ 'is-ready': runtimeHealthy }">
+            <i class="oc-status__dot" />
+            <div>
+              <div>{{ runtimeLabel }}</div>
+              <div class="mono muted">
+                {{ status?.opencode?.baseUrl ?? '—' }}
+                · v{{ status?.opencode?.version ?? '—' }}
+              </div>
+            </div>
+          </div>
+
+          <label class="field-label">MCP 服务</label>
+          <ul v-if="status?.mcpServers?.length" class="mcp-list">
+            <li v-for="item in status.mcpServers" :key="item.name">
+              <span class="mono">{{ item.name }}</span>
+              <span class="mcp-badge" :class="{ ok: item.status === 'connected' }">
+                {{ item.status }}
+              </span>
+              <span v-if="item.error" class="muted mcp-error" :title="item.error">
+                {{ item.error }}
+              </span>
+            </li>
+          </ul>
+          <p v-else class="muted">OpenCode 未就绪或 MCP 尚未连接</p>
+        </section>
+
+        <hr class="settings-divider" />
+
+        <!-- 关于 -->
+        <section id="settings-about" class="settings-block">
+          <h3>关于与隐私</h3>
+          <div class="about-row">
+            <span class="muted">应用</span>
+            <span class="mono">FTCS Desktop 0.1.0</span>
+          </div>
+          <div class="about-row">
+            <span class="muted">架构</span>
+            <span class="mono">Electron + Vue3 + OpenCode SDK</span>
+          </div>
+          <div class="about-row">
+            <span class="muted">配置路径</span>
+            <span class="mono">{{ snapshot?.opencodeConfigPath ?? '—' }}</span>
+          </div>
+          <p class="settings-foot">
+            <Icon name="info" :size="14" />
+            API Key 写入本地 workspace/.env；模型选择写入 opencode.json。均不上传。
+          </p>
+        </section>
+      </div>
     </div>
   </section>
 </template>

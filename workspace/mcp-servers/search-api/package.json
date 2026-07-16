@@ -5,13 +5,14 @@
   "type": "module",
   "description": "MCP server for web search via Tavily",
   "bin": {
-    "search-api": "./dist/index.js"
+    "search-api": "./dist/mcp.js"
   },
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc && node dist/index.js",
-    "test": "npm run build && node --test dist/tavily.test.js dist/cache.test.js"
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/mcp.js",
+    "build:tsc": "tsc",
+    "start": "node dist/mcp.js",
+    "dev": "npm run build && node dist/mcp.js",
+    "test": "npm run build:tsc && node --test dist/tavily.test.js dist/cache.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
+    "esbuild": "^0.25.5",
     "typescript": "^5.8.2"
   }
 }

@@ -48,7 +48,7 @@ npm test
   "mcpServers": {
     "lead-store": {
       "command": "node",
-      "args": ["mcp-servers/lead-store/dist/index.js"]
+      "args": ["mcp-servers/lead-store/dist/mcp.js"]
     }
   }
 }

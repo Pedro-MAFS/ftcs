@@ -12,6 +12,14 @@ import { IPC } from './ipc/types'
 import type { AppStatus } from './ipc/types'
 import { getWorkspaceRoot } from './config/paths'
 import { OpenCodeRuntime } from './opencode/runtime'
+import {
+  getSettingsSnapshot,
+  pickWorkspaceDirectory,
+  saveSettings,
+  type SettingsSaveInput,
+} from './settings/settings-service'
+import { writeUserPrefs } from './config/user-prefs'
+import { initializeWorkspace, ensureMcpServersReady } from './config/workspace-init'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -118,6 +126,42 @@ function registerIpcHandlers(): void {
     return buildAppStatus()
   })
   ipcMain.handle(IPC.OPENCODE_GET_LOGS, () => runtime?.getLogs() ?? [])
+
+  ipcMain.handle(IPC.SETTINGS_GET, () => getSettingsSnapshot())
+  ipcMain.handle(IPC.SETTINGS_SAVE, async (_event, input: SettingsSaveInput) => {
+    const result = saveSettings(input)
+    if (!runtime) {
+      runtime = new OpenCodeRuntime()
+    }
+    await runtime.restart()
+    return {
+      ...result,
+      status: await buildAppStatus(),
+    }
+  })
+  ipcMain.handle(IPC.SETTINGS_PICK_WORKSPACE, async () => {
+    const dir = await pickWorkspaceDirectory()
+    if (!dir) return { path: null, restarted: false }
+
+    const init = initializeWorkspace(dir, { forceManaged: true })
+    writeUserPrefs({ workspaceRoot: dir })
+    process.env.FTCS_WORKSPACE = dir
+
+    // 新工作区通常需安装/构建 MCP 依赖
+    await ensureMcpServersReady(dir)
+
+    if (!runtime) {
+      runtime = new OpenCodeRuntime()
+    }
+    await runtime.restart()
+    return {
+      path: dir,
+      restarted: true,
+      init,
+      settings: getSettingsSnapshot(),
+      status: await buildAppStatus(),
+    }
+  })
 }
 
 async function bootstrapOpenCode(): Promise<void> {

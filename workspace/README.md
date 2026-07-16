@@ -15,7 +15,7 @@
 应用壳（`desktop/`）、文档（`docs/`）不在此目录。
 
 ```powershell
-# 构建 MCP
+# 构建 MCP 预打包产物（自包含 dist/mcp.js）
 cd mcp-servers/lead-store; npm i; npm run build
 cd ../search-api; npm i; npm run build
 ```

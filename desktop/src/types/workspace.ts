@@ -72,7 +72,7 @@ export const SECTION_META: Record<
   settings: {
     label: '设置',
     title: '设置',
-    subtitle: 'API Key · OpenCode · 工作区路径',
+    subtitle: '模型 · 提供商 · 搜索 API · 工作区 · OpenCode',
   },
 }
 

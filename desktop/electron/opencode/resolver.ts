@@ -160,14 +160,18 @@ export async function killProcessTree(pid: number): Promise<void> {
 
 export async function fetchMcpStatus(
   baseUrl: string,
-): Promise<Array<{ name: string; status: string }>> {
+): Promise<Array<{ name: string; status: string; error?: string }>> {
   try {
     const res = await fetch(`${baseUrl.replace(/\/$/, '')}/mcp`)
     if (!res.ok) return []
-    const data = (await res.json()) as Record<string, { status?: string }>
+    const data = (await res.json()) as Record<
+      string,
+      { status?: string; error?: string }
+    >
     return Object.entries(data).map(([name, info]) => ({
       name,
       status: info.status ?? 'unknown',
+      ...(info.error ? { error: info.error } : {}),
     }))
   } catch {
     return []

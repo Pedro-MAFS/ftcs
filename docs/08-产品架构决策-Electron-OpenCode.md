@@ -202,8 +202,8 @@ server.close()
 
 OpenCode 读取 `workspace/config/opencode/opencode.json`，cwd 为 `workspace/`，指向：
 
-- `mcp-servers/lead-store/dist/index.js`
-- `mcp-servers/search-api/dist/index.js`
+- `mcp-servers/lead-store/dist/mcp.js`（esbuild 自包含）
+- `mcp-servers/search-api/dist/mcp.js`（esbuild 自包含）
 - `user-chrome-devtools`（可选）
 
 ### 7.3 Skills 加载

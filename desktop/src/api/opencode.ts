@@ -20,9 +20,10 @@ export async function fetchOpenCodeHealth(baseUrl: string): Promise<boolean> {
 export async function fetchOpenCodeMcp(baseUrl: string): Promise<AppStatus['mcpServers']> {
   const res = await fetch(`${baseUrl}/mcp`)
   if (!res.ok) return []
-  const data = (await res.json()) as Record<string, { status?: string }>
+  const data = (await res.json()) as Record<string, { status?: string; error?: string }>
   return Object.entries(data).map(([name, info]) => ({
     name,
     status: info.status ?? 'unknown',
+    ...(info.error ? { error: info.error } : {}),
   }))
 }

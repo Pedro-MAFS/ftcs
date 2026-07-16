@@ -770,11 +770,215 @@ button:focus-visible {
   background: var(--bg-elevated);
 }
 
+.settings-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+}
+
+.settings-nav {
+  display: none;
+}
+
+.settings-layout .settings-form {
+  flex: 1;
+}
+
 .settings-block h3 {
-  margin: 0 0 4px;
-  font-size: 12px;
+  margin: 0;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
+}
+
+.settings-block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.settings-block__head .muted {
+  margin: 0;
+}
+
+.settings-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+
+.field-label {
+  display: block;
+  margin: 10px 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.provider-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.provider-chip {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.provider-chip.is-active {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.text-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  outline: none;
+}
+
+.text-input:focus {
+  border-color: var(--border-focus);
+}
+
+.text-input.is-disabled,
+.text-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+select.text-input {
+  font-family: var(--font-sans);
+}
+
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-row .text-input {
+  flex: 1;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+
+.active-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-muted);
+  font-size: 11px;
+  color: var(--text);
+}
+
+.active-banner code {
+  margin: 0 4px;
+}
+
+.usage-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  font-size: 11px;
+}
+
+.usage-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-active);
+  overflow: hidden;
+}
+
+.usage-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.hint-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.about-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.settings-banner {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.settings-banner.is-ok {
+  color: var(--success);
+  background: var(--success-bg);
+  border: 1px solid rgb(74 222 128 / 22%);
+}
+
+.settings-banner.is-err {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid rgb(248 113 113 / 22%);
+}
+
+.mcp-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.mcp-badge.ok {
+  background: var(--success-bg);
+  color: var(--success);
 }
 
 .settings-block .muted {
@@ -803,9 +1007,8 @@ button:focus-visible {
   border-radius: var(--radius-sm);
   background: var(--bg-input);
   border: 1px solid var(--border);
-  font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text);
 }
 
 .oc-banner.is-ready .oc-status__dot {
@@ -820,8 +1023,9 @@ button:focus-visible {
 
 .mcp-list li {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 12px;
@@ -832,11 +1036,19 @@ button:focus-visible {
   font-family: var(--font-mono);
 }
 
+.mcp-error {
+  flex: 1 1 100%;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-foot {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: auto;
+  margin-top: 16px;
   font-size: 11px;
   color: var(--text-muted);
 }

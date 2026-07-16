@@ -1,11 +1,13 @@
-import { createOpencode, createOpencodeClient } from '@opencode-ai/sdk/v2'
+import { createOpencode } from '@opencode-ai/sdk/v2'
 import type { Config, OpencodeClient } from '@opencode-ai/sdk/v2'
 import fs from 'node:fs'
 import type { OpenCodeRuntimeStatus } from '../ipc/types'
 import { ensureWorkspaceDataDirs, loadWorkspaceEnv } from '../config/env-loader'
+import { initializeWorkspace, ensureMcpServersReady } from '../config/workspace-init'
 import {
   getDefaultOpenCodePort,
   getOpenCodeConfigPath,
+  getOpenCodeXdgConfigHome,
   getWorkspaceRoot,
 } from '../config/paths'
 import {
@@ -77,7 +79,25 @@ export class OpenCodeRuntime {
 
     try {
       const workspaceRoot = getWorkspaceRoot()
+      const init = initializeWorkspace(workspaceRoot)
+      this.appendLog(`工作区初始化: ${init.reason}`)
+      if (init.syncedManaged.length) {
+        this.appendLog(`已同步: ${init.syncedManaged.join(', ')}`)
+      }
+      if (init.createdBootstrap.length) {
+        this.appendLog(`已创建: ${init.createdBootstrap.join(', ')}`)
+      }
       ensureWorkspaceDataDirs(workspaceRoot)
+
+      const mcpReady = await ensureMcpServersReady(workspaceRoot, (line) =>
+        this.appendLog(line),
+      )
+      if (mcpReady.built.length) {
+        this.appendLog(`MCP 已构建: ${mcpReady.built.join(', ')}`)
+      }
+      if (mcpReady.errors.length) {
+        this.appendLog(`MCP 构建告警: ${mcpReady.errors.join(' | ')}`)
+      }
 
       const env = loadWorkspaceEnv(workspaceRoot)
       Object.assign(process.env, env)
@@ -98,14 +118,10 @@ export class OpenCodeRuntime {
       this.appendLog(`配置: ${configPath}`)
 
       process.chdir(workspaceRoot)
-      process.env.OPENCODE_CONFIG = configPath
+      this.applyIsolatedOpenCodeEnv(configPath)
 
-      // 1) 优先复用健康实例（并接管所有权，退出时负责清理）
-      const existing = await this.tryAttachExisting(this.preferredPort, binaryPath, true)
-      if (existing) return existing
-
-      // 2) 僵尸占端口但 health 不通：先清掉再启动
-      await this.reclaimStalePort(this.preferredPort)
+      // 不复用端口上已有实例（旧进程可能带着本机全局 MCP）
+      await this.reclaimPort(this.preferredPort, true)
 
       return await this.spawnOrFallback(binaryPath, config)
     } catch (err) {
@@ -165,8 +181,7 @@ export class OpenCodeRuntime {
 
   async restart(): Promise<OpenCodeRuntimeStatus> {
     await this.stop()
-    // 重启策略：杀掉旧实例后重新 spawn，不复用
-    await this.reclaimStalePort(this.preferredPort)
+    await this.reclaimPort(this.preferredPort, true)
     return this.start()
   }
 
@@ -193,12 +208,11 @@ export class OpenCodeRuntime {
     let lastError = ''
 
     for (const port of portsToTry) {
-      const attached = await this.tryAttachExisting(port, binaryPath, true)
-      if (attached) return attached
+      await this.reclaimPort(port, true)
 
       const available = await findAvailablePort(port)
       if (available == null) {
-        this.appendLog(`端口 ${port} 被占用且不可复用，跳过`)
+        this.appendLog(`端口 ${port} 仍被占用，跳过`)
         continue
       }
 
@@ -246,9 +260,7 @@ export class OpenCodeRuntime {
         this.appendLog(`端口 ${available} 启动失败: ${lastError.split('\n')[0]}`)
 
         if (this.isPortConflictError(lastError)) {
-          const reused = await this.tryAttachExisting(available, binaryPath, true)
-          if (reused) return reused
-          await this.reclaimStalePort(available)
+          await this.reclaimPort(available, true)
         }
 
         this.abort = null
@@ -261,6 +273,19 @@ export class OpenCodeRuntime {
     )
   }
 
+  /** 隔离本机 ~/.config/opencode，只认工作区 OPENCODE_CONFIG + SDK 内联配置 */
+  private applyIsolatedOpenCodeEnv(configPath: string): void {
+    const xdgHome = getOpenCodeXdgConfigHome()
+    fs.mkdirSync(xdgHome, { recursive: true })
+
+    process.env.OPENCODE_CONFIG = configPath
+    // 新版 CLI 若支持则生效；当前稳定版尚未合入，靠 XDG 隔离兜底
+    process.env.OPENCODE_DISABLE_GLOBAL_CONFIG = '1'
+    process.env.XDG_CONFIG_HOME = xdgHome
+
+    this.appendLog(`OpenCode 配置隔离: XDG_CONFIG_HOME=${xdgHome}`)
+  }
+
   private createIdleStatus(): OpenCodeRuntimeStatus {
     return {
       state: 'idle',
@@ -270,49 +295,16 @@ export class OpenCodeRuntime {
     }
   }
 
-  private async tryAttachExisting(
-    port: number,
-    binaryPath?: string,
-    takeOwnership = true,
-  ): Promise<OpenCodeRuntimeStatus | null> {
-    const health = await fetchHealth(`http://127.0.0.1:${port}`)
-    if (!health.ok) return null
-
-    const pid = (await findPidOnPort(port)) ?? undefined
-    this.activePort = port
-    this.client = createOpencodeClient({ baseUrl: `http://127.0.0.1:${port}` })
-    this.server = {
-      url: `http://127.0.0.1:${port}`,
-      owned: takeOwnership,
-      pid,
-      close: () => {
-        // attach 场景无 SDK server 句柄；stop() 会用 pid/taskkill
-      },
-    }
-    this.status = {
-      state: 'running',
-      mode: 'sdk-server-client',
-      port,
-      baseUrl: `http://127.0.0.1:${port}`,
-      binaryPath,
-      pid,
-      version: health.version,
-      startedAt: new Date().toISOString(),
-      error: undefined,
-    }
-    this.appendLog(
-      `检测到端口 ${port} 已有健康 OpenCode，已接管（退出时将清理）${pid ? ` pid=${pid}` : ''}`,
-    )
-    return this.getStatus()
-  }
-
-  /** 端口占用但 health 不通（僵尸）时强制清理 */
-  private async reclaimStalePort(port: number): Promise<void> {
+  /**
+   * 清理端口占用。
+   * force=true：健康实例也杀掉（避免复用带全局 MCP 的旧进程）。
+   */
+  private async reclaimPort(port: number, force = false): Promise<void> {
     const available = await findAvailablePort(port)
     if (available != null) return
 
     const health = await fetchHealth(`http://127.0.0.1:${port}`)
-    if (health.ok) return
+    if (health.ok && !force) return
 
     const pid = await findPidOnPort(port)
     if (!pid) {
@@ -320,9 +312,10 @@ export class OpenCodeRuntime {
       return
     }
 
-    this.appendLog(`端口 ${port} 被僵尸进程占用(pid=${pid})，正在清理…`)
+    this.appendLog(
+      `端口 ${port} 被占用(pid=${pid}${health.ok ? ', 健康' : ', 无响应'})，正在清理…`,
+    )
     await killProcessTree(pid)
-    // 给系统一点时间释放端口
     await new Promise((r) => setTimeout(r, 400))
   }
 
@@ -373,10 +366,22 @@ export class OpenCodeRuntime {
   }
 }
 
-/** 确保 opencode.json 里每个 MCP 都带上绝对 FTCS_WORKSPACE */
+/** 确保 MCP 子进程带上绝对 FTCS_WORKSPACE，并注入搜索相关密钥 */
 function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
   const mcp = (config as { mcp?: Record<string, { environment?: Record<string, string> }> }).mcp
   if (!mcp || typeof mcp !== 'object') return config
+
+  const searchEnv = {
+    FTCS_WORKSPACE: workspaceRoot,
+    SEARCH_PROVIDER: process.env.SEARCH_PROVIDER ?? 'tavily',
+    SEARCH_DAILY_LIMIT: process.env.SEARCH_DAILY_LIMIT ?? '50',
+    ...(process.env.TAVILY_API_KEY
+      ? { TAVILY_API_KEY: process.env.TAVILY_API_KEY }
+      : {}),
+    ...(process.env.SERPAPI_API_KEY
+      ? { SERPAPI_API_KEY: process.env.SERPAPI_API_KEY }
+      : {}),
+  }
 
   const nextMcp: Record<string, unknown> = {}
   for (const [name, server] of Object.entries(mcp)) {
@@ -384,11 +389,15 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
       nextMcp[name] = server
       continue
     }
+    const extra =
+      name === 'search-api'
+        ? searchEnv
+        : { FTCS_WORKSPACE: workspaceRoot }
     nextMcp[name] = {
       ...server,
       environment: {
         ...(server.environment ?? {}),
-        FTCS_WORKSPACE: workspaceRoot,
+        ...extra,
       },
     }
   }
