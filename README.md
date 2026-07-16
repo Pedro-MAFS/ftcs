@@ -31,6 +31,8 @@
 
 下一步：**Phase 2** — **Electron + OpenCode CLI** 桌面 App + 外贸 Web UI。架构见 [docs/08-产品架构决策-Electron-OpenCode.md](docs/08-产品架构决策-Electron-OpenCode.md)，复盘见 [docs/retrospective/phase-1.md](docs/retrospective/phase-1.md)。
 
+**标准工作流目录**：[`workspace/`](workspace/) — Skills、MCP、配置、`data/`、`.env` 的**唯一维护位置**。应用壳在 `desktop/`。`.cursor/`、`.opencode/` 为本机 IDE/工具临时目录（**不进 Git**）。
+
 ## 技术原则
 
 1. **智能体负责判断，工具负责执行** — 存储、搜索、定时、发送由 MCP/服务完成；网站浏览用 chrome-devtools-mcp

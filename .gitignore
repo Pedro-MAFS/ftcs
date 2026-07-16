@@ -1,5 +1,6 @@
 # 环境
 .env
+workspace/.env
 node_modules/
 __pycache__/
 *.pyc
@@ -7,19 +8,26 @@ dist/
 .venv/
 *.egg-info/
 
-# 运行时数据（保留 _example）
-data/products/*
-!data/products/_example/
-data/leads/
-data/emails/
-data/keywords/
-data/exploration/
-data/cache/
+# 标准工作流目录 workspace/：业务数据 gitignore；skills/mcp/config 可纳入版本库
+workspace/data/products/*
+!workspace/data/products/_example/
+workspace/data/leads/
+workspace/data/emails/
+workspace/data/keywords/
+workspace/data/exploration/
+workspace/data/cache/
+workspace/logs/
 
-# 日志
-logs/
+# 仓库根不再放置 skills/ mcp-servers/ 运行时副本
+/skills/
+/mcp-servers/
+/data/
+/logs/
 
-# IDE
+# IDE / 工具本地目录（不进仓库）
+.cursor/                 # Cursor 本机临时接线
+.opencode/               # OpenCode 本机缓存/插件（跑 serve 时自动生成）
+workspace/.opencode/     # 不再使用；Skills 只用 workspace/skills
 .idea/
 *.swp
 .DS_Store

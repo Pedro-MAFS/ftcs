@@ -82,10 +82,15 @@ export class OpenCodeRuntime {
       const env = loadWorkspaceEnv(workspaceRoot)
       Object.assign(process.env, env)
       delete process.env.OPENCODE_SERVER_PASSWORD
+      // 强制 MCP 子进程认准纯净工作区（勿落到仓库根）
+      process.env.FTCS_WORKSPACE = workspaceRoot
 
       const binaryPath = await ensureOpenCodeOnPath()
       const configPath = getOpenCodeConfigPath(workspaceRoot)
-      const config = readOpenCodeConfig(configPath) as Config
+      const config = rewriteMcpWorkspaceEnv(
+        readOpenCodeConfig(configPath) as Config,
+        workspaceRoot,
+      )
 
       this.appendLog(`启动 OpenCode（SDK Server+Client）`)
       this.appendLog(`工作区: ${workspaceRoot}`)
@@ -366,4 +371,27 @@ export class OpenCodeRuntime {
       this.logs.splice(0, this.logs.length - MAX_LOG_LINES)
     }
   }
+}
+
+/** 确保 opencode.json 里每个 MCP 都带上绝对 FTCS_WORKSPACE */
+function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
+  const mcp = (config as { mcp?: Record<string, { environment?: Record<string, string> }> }).mcp
+  if (!mcp || typeof mcp !== 'object') return config
+
+  const nextMcp: Record<string, unknown> = {}
+  for (const [name, server] of Object.entries(mcp)) {
+    if (!server || typeof server !== 'object') {
+      nextMcp[name] = server
+      continue
+    }
+    nextMcp[name] = {
+      ...server,
+      environment: {
+        ...(server.environment ?? {}),
+        FTCS_WORKSPACE: workspaceRoot,
+      },
+    }
+  }
+
+  return { ...config, mcp: nextMcp } as Config
 }

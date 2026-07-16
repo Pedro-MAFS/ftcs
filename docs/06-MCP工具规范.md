@@ -5,7 +5,7 @@ MCP（Model Context Protocol）是智能体访问外部能力的统一接口。�
 ## 1. 服务总览
 
 ```
-mcp-servers/
+workspace/mcp-servers/
 ├── lead-store/       # P0 - 数据读写
 ├── search-api/       # P0 - 搜索
 ├── web-crawler/      # P2 - headless 批量爬取（Phase 2）
@@ -168,7 +168,7 @@ SEARCH_DAILY_LIMIT=50
 
 **职责**：在 Cursor 等支持该 MCP 的环境中，通过真实 Chrome 浏览器浏览网站并提取页面内容。
 
-**来源**：用户环境已配置的 `chrome-devtools` / `user-chrome-devtools` MCP，**无需在 `mcp-servers/` 自研**。
+**来源**：用户环境已配置的 `chrome-devtools` / `user-chrome-devtools` MCP，**无需在 `workspace/mcp-servers/` 自研**。
 
 ### 常用 Tools
 
@@ -359,7 +359,7 @@ DAILY_SEND_LIMIT=20
 ### 10.1 项目结构（单个服务）
 
 ```
-mcp-servers/lead-store/
+workspace/mcp-servers/lead-store/
 ├── package.json
 ├── src/
 │   ├── index.ts          # MCP Server 入口
@@ -390,11 +390,11 @@ Cursor MCP 配置示例（`.cursor/mcp.json`）：
   "mcpServers": {
     "lead-store": {
       "command": "node",
-      "args": ["mcp-servers/lead-store/dist/index.js"]
+      "args": ["workspace/mcp-servers/lead-store/dist/index.js"]
     },
     "search-api": {
       "command": "node",
-      "args": ["mcp-servers/search-api/dist/index.js"],
+      "args": ["workspace/mcp-servers/search-api/dist/index.js"],
       "env": {
         "TAVILY_API_KEY": "${TAVILY_API_KEY}"
       }
@@ -403,7 +403,7 @@ Cursor MCP 配置示例（`.cursor/mcp.json`）：
 }
 ```
 
-> **说明**：`chrome-devtools-mcp` 由用户在 Cursor 设置中单独配置（如 `user-chrome-devtools`），不在 `mcp-servers/` 自研。Phase 2 再加入自研 `web-crawler`。
+> **说明**：`chrome-devtools-mcp` 由用户在 Cursor 设置中单独配置（如 `user-chrome-devtools`），不在 `workspace/mcp-servers/` 自研。Phase 2 再加入自研 `web-crawler`。
 
 ---
 

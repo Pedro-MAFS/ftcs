@@ -87,8 +87,8 @@ flowchart TB
 | **外贸 Web UI** | 产品录入、探索触发、线索展示、邮件审核 | Vue 3 + Vite（Electron Renderer） |
 | **Electron 主进程** | `createOpencode` 启停、IPC、配置、健康检查 | Electron Main + `@opencode-ai/sdk` |
 | **OpenCode Server** | Agent 循环、LLM、MCP、Skill | SDK 拉起的本机 `opencode serve` |
-| **MCP 服务** | lead-store、search-api 等确定性工具 | Phase 1 已有 `mcp-servers/` |
-| **Skills** | 业务流程编排说明 | Phase 1 已有 `skills/` |
+| **MCP 服务** | lead-store、search-api 等确定性工具 | `workspace/mcp-servers/` |
+| **Skills** | 业务流程编排说明 | `workspace/skills/`（唯一源） |
 | **data/** | 画像、线索、邮件持久化 | JSON 文件（Phase 2 可迁 SQLite） |
 
 ### 3.2 与 OpenCode Desktop 的关系
@@ -164,21 +164,14 @@ OpenCode 官方桌面版也是：**Electron + 内嵌 CLI Server + Web UI**。
 
 ```
 foreign-trade-customer-search/
-├── mcp-servers/          # 不变
-├── skills/               # 不变
-├── data/                 # 运行时工作区（App 可配置路径）
 ├── docs/
-├── desktop/              # 新增：Electron 应用
-│   ├── package.json
-│   ├── electron/
-│   │   ├── main.ts              # 主进程
-│   │   ├── preload.ts
-│   │   └── opencode/runtime.ts  # createOpencode 封装
-│   ├── src/                     # Vue 3 渲染进程
-│   └── resources/opencode-cli/  # 预留捆绑目录（当前未用）
-└── config/
-    └── opencode/
-        └── opencode.json        # MCP / Skills 配置
+├── desktop/                 # Electron 应用壳
+└── workspace/               # ★ 标准工作流（Skills/MCP/config/data）
+    ├── skills/
+    ├── mcp-servers/
+    ├── config/opencode/opencode.json
+    ├── data/
+    └── .env
 ```
 
 ---
@@ -202,20 +195,20 @@ const { client, server } = await createOpencode({
 server.close()
 ```
 
-工作区为含 `data/`、`config/`、`skills/`、`mcp-servers/` 的项目根目录。  
+工作区为仓库下 `workspace/`（含 `data/`、`config/`、`skills/`、`mcp-servers/`）。  
 前提：本机 PATH 可执行 `opencode`（暂不捆绑二进制）。
 
 ### 7.2 MCP 配置
 
-OpenCode 读取 workspace 下的 MCP 配置，指向：
+OpenCode 读取 `workspace/config/opencode/opencode.json`，cwd 为 `workspace/`，指向：
 
 - `mcp-servers/lead-store/dist/index.js`
 - `mcp-servers/search-api/dist/index.js`
-- `user-chrome-devtools`（本机已安装的 MCP，或 App 引导安装）
+- `user-chrome-devtools`（可选）
 
 ### 7.3 Skills 加载
 
-将 `skills/` 同步或链接至 OpenCode 可识别的 Skills 目录（具体路径依 OpenCode 版本配置而定）。
+只维护 `workspace/skills/`；`opencode.json` 的 `skills.paths` 指向同目录。
 
 ### 7.4 UI 与 Agent 的协作方式
 
@@ -239,7 +232,7 @@ Phase 2 MVP 推荐 **C**：列表与表单直接读 `lead-store`；「一键探�
 | 2.0.2 | Main：`createOpencode` Server+Client 启停 | `@opencode-ai/sdk` |
 | 2.0.3 | 本机 OpenCode CLI 检测（暂不捆绑） | PATH / `FTCS_OPENCODE_PATH` |
 | 2.0.4 | OpenCode MCP 配置模板 | `config/opencode/opencode.json` |
-| 2.0.5 | Skills 同步至 OpenCode 可加载路径 | `scripts/sync-skills.ps1` |
+| 2.0.5 | Skills 位于 `workspace/skills/`，由 OpenCode 直接加载 | 已完成 |
 | 2.0.6 | （延后）安装包内嵌 opencode 二进制 | 产品化打包阶段 |
 
 ### 2.1 外贸 Web UI（P0）

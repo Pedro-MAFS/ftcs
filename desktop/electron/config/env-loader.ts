@@ -41,7 +41,7 @@ export function ensureWorkspaceDataDirs(workspaceRoot: string): void {
     'data/exploration',
     'data/cache/search',
     'logs/exploration',
-    '.opencode/skills',
+    'skills',
   ]
 
   for (const dir of dirs) {
