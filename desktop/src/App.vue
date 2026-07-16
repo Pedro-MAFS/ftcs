@@ -11,18 +11,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-shell" :data-platform="platform">
-    <header class="app-header" aria-label="窗口标题栏">
-      <div class="brand">
-        <span class="brand-mark">FT</span>
-        <div>
-          <h1>外贸获客智能体</h1>
-          <p>Electron + OpenCode SDK（Server + Client）</p>
-        </div>
-      </div>
-    </header>
-    <main class="app-main">
-      <RouterView />
-    </main>
+  <div class="app-root" :data-platform="platform">
+    <RouterView />
   </div>
 </template>
