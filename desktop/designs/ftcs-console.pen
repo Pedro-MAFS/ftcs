@@ -3527,7 +3527,8 @@
                       "fill": "$text-muted",
                       "content": "线索",
                       "fontFamily": "$font-ui",
-                      "fontSize": 12
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -4215,7 +4216,7 @@
                           "type": "text",
                           "id": "odKTS",
                           "fill": "$text-muted",
-                          "content": "粘贴公司网站或导入文本，生成外贸产品画像",
+                          "content": "维护公司网站与产品资料，再从资料库生成画像",
                           "fontFamily": "$font-ui",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -4232,7 +4233,7 @@
                         {
                           "type": "frame",
                           "id": "SbvCT",
-                          "name": "BtnScore",
+                          "name": "BtnUpload",
                           "height": 30,
                           "cornerRadius": 6,
                           "stroke": "$border",
@@ -4247,7 +4248,7 @@
                               "type": "text",
                               "id": "aFgzU",
                               "fill": "$text-secondary",
-                              "content": "导入文件",
+                              "content": "上传文件",
                               "fontFamily": "$font-ui",
                               "fontSize": 12,
                               "fontWeight": "normal"
@@ -4257,7 +4258,7 @@
                         {
                           "type": "frame",
                           "id": "LTq5p",
-                          "name": "BtnExplore",
+                          "name": "BtnGenerate",
                           "height": 30,
                           "fill": "$accent",
                           "cornerRadius": 6,
@@ -4281,7 +4282,7 @@
                               "type": "text",
                               "id": "Fuslt",
                               "fill": "#FFFFFF",
-                              "content": "提取画像",
+                              "content": "生成画像",
                               "fontFamily": "$font-ui",
                               "fontSize": 12,
                               "fontWeight": "600"
@@ -4348,41 +4349,429 @@
                               "fontWeight": "normal"
                             }
                           ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "A8eCv",
+                          "name": "BtnAddLibrary",
+                          "height": 36,
+                          "fill": "$accent-muted",
+                          "cornerRadius": 6,
+                          "stroke": "$border",
+                          "strokeWidth": 1,
+                          "gap": 6,
+                          "padding": [
+                            0,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon",
+                              "id": "MN3mm",
+                              "name": "AddIcon",
+                              "width": 14,
+                              "height": 14,
+                              "icon": "plus",
+                              "library": "lucide",
+                              "fill": "$accent"
+                            },
+                            {
+                              "type": "text",
+                              "id": "RLRZA",
+                              "name": "AddLabel",
+                              "fill": "$accent",
+                              "content": "加入资料库",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
                         }
                       ]
                     },
                     {
-                      "type": "text",
-                      "id": "o3Rtb",
-                      "fill": "$text-secondary",
-                      "content": "或粘贴产品说明文本",
-                      "fontFamily": "$font-ui",
-                      "fontSize": 12,
-                      "fontWeight": "600"
-                    },
-                    {
                       "type": "frame",
-                      "id": "EPxgY",
-                      "name": "TextArea",
+                      "id": "V5dcJ",
+                      "name": "Library",
                       "width": "fill_container",
                       "height": "fill_container",
-                      "fill": "$bg-input",
-                      "cornerRadius": 6,
-                      "stroke": "$border",
-                      "strokeWidth": 1,
                       "layout": "vertical",
-                      "padding": 12,
+                      "gap": 10,
                       "children": [
                         {
-                          "type": "text",
-                          "id": "V2tJz7",
-                          "fill": "$text-muted",
-                          "textGrowth": "fixed-width",
+                          "type": "frame",
+                          "id": "RpLOC",
+                          "name": "LibHead",
                           "width": "fill_container",
-                          "content": "产品名称、规格、应用场景、目标市场、认证信息…",
-                          "fontFamily": "$font-ui",
-                          "fontSize": 12,
-                          "fontWeight": "normal"
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "yeXVV",
+                              "name": "LibHeadLeft",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "NqNae",
+                                  "name": "LibTitle",
+                                  "fill": "$text-secondary",
+                                  "content": "资料库",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "nVERY",
+                                  "name": "LibPath",
+                                  "fill": "$text-muted",
+                                  "content": "data/library/",
+                                  "fontFamily": "$font-mono",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "SrTA2",
+                              "name": "LibCount",
+                              "fill": "$bg-input",
+                              "cornerRadius": 4,
+                              "padding": [
+                                4,
+                                8
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "DMwZ6",
+                                  "name": "LibCountText",
+                                  "fill": "$text-muted",
+                                  "content": "3 项 · 已选 2",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "GauqK",
+                          "name": "LibList",
+                          "clip": true,
+                          "width": "fill_container",
+                          "height": "fill_container",
+                          "fill": "$bg-input",
+                          "cornerRadius": 6,
+                          "stroke": "$border",
+                          "strokeWidth": 1,
+                          "layout": "vertical",
+                          "gap": 6,
+                          "padding": 8,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "QzxeN",
+                              "name": "RowWebsite",
+                              "width": "fill_container",
+                              "fill": "$bg-active",
+                              "cornerRadius": 6,
+                              "gap": 10,
+                              "padding": 10,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "f0imI",
+                                  "name": "Check",
+                                  "width": 16,
+                                  "height": 16,
+                                  "fill": "$accent",
+                                  "cornerRadius": 4,
+                                  "stroke": "$border",
+                                  "strokeWidth": 1,
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "GNnFi",
+                                      "name": "CheckIcon",
+                                      "width": 10,
+                                      "height": 10,
+                                      "icon": "check",
+                                      "library": "lucide",
+                                      "fill": "#FFFFFF"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "DJ6i6",
+                                  "name": "TypeIcon",
+                                  "width": 14,
+                                  "height": 14,
+                                  "icon": "globe",
+                                  "library": "lucide",
+                                  "fill": "$text-secondary"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "m2sErD",
+                                  "name": "Meta",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "bXzFb",
+                                      "name": "Title",
+                                      "fill": "$text",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "example-valves.com",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "BWpOb",
+                                      "name": "Sub",
+                                      "fill": "$text-muted",
+                                      "content": "website · 今天加入",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "NmKw6",
+                                  "name": "BtnDelete",
+                                  "width": 28,
+                                  "height": 28,
+                                  "cornerRadius": 6,
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "XjXTM",
+                                      "name": "Trash",
+                                      "width": 13,
+                                      "height": 13,
+                                      "icon": "trash-2",
+                                      "library": "lucide",
+                                      "fill": "$text-muted"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "PUUAe",
+                              "name": "RowFile1",
+                              "width": "fill_container",
+                              "fill": "$bg-active",
+                              "cornerRadius": 6,
+                              "gap": 10,
+                              "padding": 10,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "SXOdF",
+                                  "name": "Check",
+                                  "width": 16,
+                                  "height": 16,
+                                  "fill": "$accent",
+                                  "cornerRadius": 4,
+                                  "stroke": "$border",
+                                  "strokeWidth": 1,
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "vAfFr",
+                                      "name": "CheckIcon",
+                                      "width": 10,
+                                      "height": 10,
+                                      "icon": "check",
+                                      "library": "lucide",
+                                      "fill": "#FFFFFF"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "Gx78a",
+                                  "name": "TypeIcon",
+                                  "width": 14,
+                                  "height": 14,
+                                  "icon": "file-text",
+                                  "library": "lucide",
+                                  "fill": "$text-secondary"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "qmfkT",
+                                  "name": "Meta",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "hgJR6",
+                                      "name": "Title",
+                                      "fill": "$text",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "valve-intro.md",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 12,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "QIA8Z",
+                                      "name": "Sub",
+                                      "fill": "$text-muted",
+                                      "content": "file · 12 KB",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "nkFkN",
+                                  "name": "BtnDelete",
+                                  "width": 28,
+                                  "height": 28,
+                                  "cornerRadius": 6,
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "E96xS",
+                                      "name": "Trash",
+                                      "width": 13,
+                                      "height": 13,
+                                      "icon": "trash-2",
+                                      "library": "lucide",
+                                      "fill": "$text-muted"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ImOvk",
+                              "name": "RowFile2",
+                              "width": "fill_container",
+                              "fill": "#00000000",
+                              "cornerRadius": 6,
+                              "gap": 10,
+                              "padding": 10,
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "Qqrve",
+                                  "name": "Check",
+                                  "width": 16,
+                                  "height": 16,
+                                  "fill": "#00000000",
+                                  "cornerRadius": 4,
+                                  "stroke": "$border",
+                                  "strokeWidth": 1,
+                                  "justifyContent": "center",
+                                  "alignItems": "center"
+                                },
+                                {
+                                  "type": "icon",
+                                  "id": "MBBCw",
+                                  "name": "TypeIcon",
+                                  "width": 14,
+                                  "height": 14,
+                                  "icon": "file-text",
+                                  "library": "lucide",
+                                  "fill": "$text-secondary"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "ffm7f",
+                                  "name": "Meta",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 2,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "IZ0dN",
+                                      "name": "Title",
+                                      "fill": "$text",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "catalog-specs.json",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "PNyt3",
+                                      "name": "Sub",
+                                      "fill": "$text-muted",
+                                      "content": "file · 4 KB",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 10,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "VpWNm",
+                                  "name": "BtnDelete",
+                                  "width": 28,
+                                  "height": 28,
+                                  "cornerRadius": 6,
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "ZRmYj",
+                                      "name": "Trash",
+                                      "width": 13,
+                                      "height": 13,
+                                      "icon": "trash-2",
+                                      "library": "lucide",
+                                      "fill": "$text-muted"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
                         }
                       ]
                     },
@@ -4406,7 +4795,7 @@
                           "type": "text",
                           "id": "UodB6",
                           "fill": "$text-muted",
-                          "content": "支持 .txt / .md / .json / .csv；提取后可在「画像」中编辑并计算就绪度",
+                          "content": "资料保存在 data/library/；生成画像时再分配产品 ID，并复制快照到 products/{id}/inputs/",
                           "fontFamily": "$font-ui",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -4522,7 +4911,7 @@
                           "type": "text",
                           "id": "qrM4v",
                           "fill": "$text",
-                          "content": "—",
+                          "content": "待生成",
                           "fontFamily": "$font-mono",
                           "fontSize": 13,
                           "fontWeight": "600"
@@ -4555,7 +4944,7 @@
                           "type": "text",
                           "id": "EeaPy",
                           "fill": "$text",
-                          "content": "0/8",
+                          "content": "2 选中",
                           "fontFamily": "$font-mono",
                           "fontSize": 13,
                           "fontWeight": "600"
@@ -4588,7 +4977,7 @@
                           "type": "text",
                           "id": "kzEGY",
                           "fill": "$text",
-                          "content": "URL",
+                          "content": "资料库",
                           "fontFamily": "$font-mono",
                           "fontSize": 13,
                           "fontWeight": "600"
@@ -4639,7 +5028,7 @@
                               "type": "text",
                               "id": "IG9bu",
                               "fill": "$accent",
-                              "content": "搜索",
+                              "content": "资料库",
                               "fontFamily": "$font-ui",
                               "fontSize": 10,
                               "fontWeight": "600"
@@ -4652,7 +5041,7 @@
                           "fill": "$text-secondary",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "industrial valve distributor Europe",
+                          "content": "已加入 website · example-valves.com",
                           "fontFamily": "$font-ui",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -4687,7 +5076,7 @@
                               "type": "text",
                               "id": "w4HljY",
                               "fill": "$accent",
-                              "content": "验证",
+                              "content": "资料库",
                               "fontFamily": "$font-ui",
                               "fontSize": 10,
                               "fontWeight": "600"
@@ -4700,7 +5089,7 @@
                           "fill": "$text-secondary",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "nordicflow.se — 判定为目标客户",
+                          "content": "已上传 valve-intro.md",
                           "fontFamily": "$font-ui",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -4735,7 +5124,7 @@
                               "type": "text",
                               "id": "Y06m2P",
                               "fill": "$success",
-                              "content": "写入",
+                              "content": "提取",
                               "fontFamily": "$font-ui",
                               "fontSize": 10,
                               "fontWeight": "600"
@@ -4748,103 +5137,7 @@
                           "fill": "$text-secondary",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "lead_a8f2 · A 候选",
-                          "fontFamily": "$font-ui",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "g90Cl",
-                      "name": "Log",
-                      "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 2,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "Xlxqj",
-                          "width": "fill_container",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "vxuUM",
-                              "fill": "$text-muted",
-                              "content": "12:04:41",
-                              "fontFamily": "$font-mono",
-                              "fontSize": 10,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "F6qjR",
-                              "fill": "$accent",
-                              "content": "搜索",
-                              "fontFamily": "$font-ui",
-                              "fontSize": 10,
-                              "fontWeight": "600"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "text",
-                          "id": "rsenU",
-                          "fill": "$text-secondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "ball valve importer Middle East",
-                          "fontFamily": "$font-ui",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "n0TWwJ",
-                      "name": "Log",
-                      "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 2,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "ormOq",
-                          "width": "fill_container",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "D2fJ1",
-                              "fill": "$text-muted",
-                              "content": "12:05:02",
-                              "fontFamily": "$font-mono",
-                              "fontSize": 10,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "brvWO",
-                              "fill": "$accent",
-                              "content": "验证",
-                              "fontFamily": "$font-ui",
-                              "fontSize": 10,
-                              "fontWeight": "600"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "text",
-                          "id": "lAWrU",
-                          "fill": "$text-secondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "gulfvalve.ae — 有询盘入口",
+                          "content": "已选 2 项，开始提取画像",
                           "fontFamily": "$font-ui",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -4879,7 +5172,7 @@
                               "type": "text",
                               "id": "WnTyJ",
                               "fill": "$success",
-                              "content": "写入",
+                              "content": "归档",
                               "fontFamily": "$font-ui",
                               "fontSize": 10,
                               "fontWeight": "600"
@@ -4892,103 +5185,7 @@
                           "fill": "$text-secondary",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "lead_b3c1 · A 候选",
-                          "fontFamily": "$font-ui",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "HZWx8",
-                      "name": "Log",
-                      "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 2,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "rY68O",
-                          "width": "fill_container",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "aDsLr",
-                              "fill": "$text-muted",
-                              "content": "12:05:33",
-                              "fontFamily": "$font-mono",
-                              "fontSize": 10,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "NPjLK",
-                              "fill": "$warning",
-                              "content": "跳过",
-                              "fontFamily": "$font-ui",
-                              "fontSize": 10,
-                              "fontWeight": "600"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "text",
-                          "id": "B9rpg0",
-                          "fill": "$text-secondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "alibaba.com — 平台页",
-                          "fontFamily": "$font-ui",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "ExVQc",
-                      "name": "Log",
-                      "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 2,
-                      "children": [
-                        {
-                          "type": "frame",
-                          "id": "xw2oa",
-                          "width": "fill_container",
-                          "gap": 8,
-                          "alignItems": "center",
-                          "children": [
-                            {
-                              "type": "text",
-                              "id": "TOuDi",
-                              "fill": "$text-muted",
-                              "content": "12:05:51",
-                              "fontFamily": "$font-mono",
-                              "fontSize": 10,
-                              "fontWeight": "normal"
-                            },
-                            {
-                              "type": "text",
-                              "id": "o88y1w",
-                              "fill": "$accent",
-                              "content": "搜索",
-                              "fontFamily": "$font-ui",
-                              "fontSize": 10,
-                              "fontWeight": "600"
-                            }
-                          ]
-                        },
-                        {
-                          "type": "text",
-                          "id": "Svpvj",
-                          "fill": "$text-secondary",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "steam valve wholesale USA",
+                          "content": "快照已复制到 products/.../inputs/",
                           "fontFamily": "$font-ui",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -5033,7 +5230,7 @@
                           "fill": "$text-muted",
                           "textGrowth": "fixed-width",
                           "width": "fill_container",
-                          "content": "继续探索剩余关键词，优先中东与欧洲市场…",
+                          "content": "请基于资料库中已选资料提取产品画像",
                           "fontFamily": "$font-ui",
                           "fontSize": 12,
                           "fontWeight": "normal"
@@ -5117,7 +5314,7 @@
                   "type": "text",
                   "id": "DCw3n",
                   "fill": "$text-muted",
-                  "content": "workspace/",
+                  "content": "data/library/",
                   "fontFamily": "$font-mono",
                   "fontSize": 10,
                   "fontWeight": "normal"
@@ -5336,7 +5533,8 @@
                       "fill": "$text-muted",
                       "content": "线索",
                       "fontFamily": "$font-ui",
-                      "fontSize": 12
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -6189,7 +6387,8 @@
                               "width": "fill_container",
                               "content": "Gulf Valve Trading",
                               "fontFamily": "$font-ui",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -6223,7 +6422,8 @@
                               "width": "fill_container",
                               "content": "Pacific Steam Parts",
                               "fontFamily": "$font-ui",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -6257,7 +6457,8 @@
                               "width": "fill_container",
                               "content": "Rhine Industrial",
                               "fontFamily": "$font-ui",
-                              "fontSize": 12
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             },
                             {
                               "type": "text",
@@ -7317,7 +7518,8 @@
                       "fill": "$text-muted",
                       "content": "线索",
                       "fontFamily": "$font-ui",
-                      "fontSize": 12
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -7650,7 +7852,8 @@
                       "fill": "$text-secondary",
                       "content": "搜索服务",
                       "fontFamily": "$font-ui",
-                      "fontSize": 12
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -7673,7 +7876,8 @@
                       "fill": "$text-secondary",
                       "content": "工作区",
                       "fontFamily": "$font-ui",
-                      "fontSize": 12
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -7696,7 +7900,8 @@
                       "fill": "$text-secondary",
                       "content": "OpenCode 运行时",
                       "fontFamily": "$font-ui",
-                      "fontSize": 12
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -7719,7 +7924,8 @@
                       "fill": "$text-secondary",
                       "content": "关于与隐私",
                       "fontFamily": "$font-ui",
-                      "fontSize": 12
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -7952,7 +8158,8 @@
                                   "fill": "$text-secondary",
                                   "content": "OpenAI",
                                   "fontFamily": "$font-ui",
-                                  "fontSize": 12
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
                                 }
                               ]
                             },
@@ -7976,7 +8183,8 @@
                                   "fill": "$text-secondary",
                                   "content": "Google",
                                   "fontFamily": "$font-ui",
-                                  "fontSize": 12
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
                                 }
                               ]
                             },
@@ -8000,7 +8208,8 @@
                                   "fill": "$text-secondary",
                                   "content": "自定义兼容",
                                   "fontFamily": "$font-ui",
-                                  "fontSize": 12
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
                                 }
                               ]
                             }
@@ -9651,7 +9860,8 @@
                       "fill": "$text-muted",
                       "content": "录入",
                       "fontFamily": "$font-ui",
-                      "fontSize": 12
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -9721,7 +9931,8 @@
                       "fill": "$text-muted",
                       "content": "线索",
                       "fontFamily": "$font-ui",
-                      "fontSize": 12
+                      "fontSize": 12,
+                      "fontWeight": "normal"
                     }
                   ]
                 },

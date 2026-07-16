@@ -5,6 +5,15 @@ export const IPC = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_SAVE: 'settings:save',
   SETTINGS_PICK_WORKSPACE: 'settings:pick-workspace',
+  LIBRARY_LIST: 'library:list',
+  LIBRARY_ADD_WEBSITE: 'library:add-website',
+  LIBRARY_DELETE_WEBSITE: 'library:delete-website',
+  LIBRARY_LIST_DIR: 'library:list-dir',
+  LIBRARY_MKDIR: 'library:mkdir',
+  LIBRARY_UPLOAD_FILES: 'library:upload-files',
+  LIBRARY_IMPORT_PATHS: 'library:import-paths',
+  LIBRARY_PASTE_CLIPBOARD: 'library:paste-clipboard',
+  LIBRARY_DELETE_ENTRY: 'library:delete-entry',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_GET_LOGS */
@@ -83,4 +92,36 @@ export interface SettingsSaveResult {
   ok: boolean
   message: string
   settings: SettingsSnapshot
+}
+
+export interface WebsiteItem {
+  id: string
+  title: string
+  url: string
+  relativePath: string
+  createdAt?: string
+  subtitle: string
+}
+
+export interface FileEntry {
+  name: string
+  kind: 'dir' | 'file'
+  relativePath: string
+  sizeBytes?: number
+  modifiedAt?: string
+}
+
+export interface LibrarySnapshot {
+  websites: WebsiteItem[]
+  cwd: string
+  entries: FileEntry[]
+  filesRootLabel: string
+}
+
+export interface LibraryMutationResult {
+  ok: boolean
+  message: string
+  snapshot: LibrarySnapshot
+  imported?: number
+  skipped?: string[]
 }

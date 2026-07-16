@@ -47,7 +47,7 @@ export const SECTION_META: Record<
   input: {
     label: '录入',
     title: '产品录入',
-    subtitle: '粘贴公司网站或导入文本，生成外贸产品画像',
+    subtitle: '维护公司网站与产品资料，再从资料库生成画像',
   },
   profile: {
     label: '画像',

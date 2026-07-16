@@ -11,6 +11,7 @@ dist/
 # 标准工作流目录 workspace/：业务数据 gitignore；skills/mcp/config 可纳入版本库
 workspace/data/products/*
 !workspace/data/products/_example/
+workspace/data/library/
 workspace/data/leads/
 workspace/data/emails/
 workspace/data/keywords/
@@ -36,3 +37,4 @@ Thumbs.db
 # 测试与构建
 coverage/
 *.log
+tsconfig.node.tsbuildinfo

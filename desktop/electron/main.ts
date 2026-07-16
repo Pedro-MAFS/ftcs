@@ -20,6 +20,19 @@ import {
 } from './settings/settings-service'
 import { writeUserPrefs } from './config/user-prefs'
 import { initializeWorkspace, ensureMcpServersReady } from './config/workspace-init'
+import {
+  addWebsite,
+  createFolder,
+  deleteFilesEntry,
+  deleteWebsite,
+  ensureLibraryDirs,
+  importFilesFromPaths,
+  listFilesDir,
+  listWebsites,
+  pasteClipboardFiles,
+  pickAndImportFiles,
+} from './library/library-service'
+import type { LibrarySnapshot } from './ipc/types'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -116,6 +129,35 @@ async function buildAppStatus(): Promise<AppStatus> {
   }
 }
 
+function buildLibrarySnapshot(cwd = ''): LibrarySnapshot {
+  const workspaceRoot = getWorkspaceRoot()
+  ensureLibraryDirs(workspaceRoot)
+  const listed = listFilesDir(cwd, workspaceRoot)
+  return {
+    websites: listWebsites(workspaceRoot),
+    cwd: listed.cwd,
+    entries: listed.entries,
+    filesRootLabel: listed.cwd ? `data/library/files/${listed.cwd}` : 'data/library/files',
+  }
+}
+
+function libraryOk(message: string, cwd = '', extra?: Partial<{ imported: number; skipped: string[] }>) {
+  return {
+    ok: true,
+    message,
+    snapshot: buildLibrarySnapshot(cwd),
+    ...extra,
+  }
+}
+
+function libraryFail(err: unknown, cwd = '') {
+  return {
+    ok: false,
+    message: err instanceof Error ? err.message : String(err),
+    snapshot: buildLibrarySnapshot(cwd),
+  }
+}
+
 function registerIpcHandlers(): void {
   ipcMain.handle(IPC.APP_GET_STATUS, async () => buildAppStatus())
   ipcMain.handle(IPC.OPENCODE_RESTART, async () => {
@@ -162,6 +204,131 @@ function registerIpcHandlers(): void {
       status: await buildAppStatus(),
     }
   })
+
+  ipcMain.handle(IPC.LIBRARY_LIST, (_event, cwd?: string) => buildLibrarySnapshot(cwd ?? ''))
+
+  ipcMain.handle(IPC.LIBRARY_ADD_WEBSITE, (_event, url: string, cwd?: string) => {
+    try {
+      addWebsite(url)
+      return libraryOk('已保存公司网站', cwd ?? '')
+    } catch (err) {
+      return libraryFail(err, cwd ?? '')
+    }
+  })
+
+  ipcMain.handle(IPC.LIBRARY_DELETE_WEBSITE, (_event, relativePath: string, cwd?: string) => {
+    try {
+      deleteWebsite(relativePath)
+      return libraryOk('已删除网站', cwd ?? '')
+    } catch (err) {
+      return libraryFail(err, cwd ?? '')
+    }
+  })
+
+  ipcMain.handle(IPC.LIBRARY_LIST_DIR, (_event, cwd?: string) => {
+    try {
+      return { ok: true, message: '', snapshot: buildLibrarySnapshot(cwd ?? '') }
+    } catch (err) {
+      return libraryFail(err, '')
+    }
+  })
+
+  ipcMain.handle(
+    IPC.LIBRARY_MKDIR,
+    (_event, payload: { cwd?: string; name: string }) => {
+      const cwd = payload.cwd ?? ''
+      try {
+        createFolder(cwd, payload.name)
+        return libraryOk('已创建目录', cwd)
+      } catch (err) {
+        return libraryFail(err, cwd)
+      }
+    },
+  )
+
+  ipcMain.handle(IPC.LIBRARY_UPLOAD_FILES, async (_event, cwd?: string) => {
+    const dir = cwd ?? ''
+    try {
+      const { imported, skipped } = await pickAndImportFiles(dir, mainWindow)
+      if (imported === 0 && skipped.length === 0) {
+        return libraryOk('', dir, { imported: 0, skipped: [] })
+      }
+      const parts: string[] = []
+      if (imported) parts.push(`已导入 ${imported} 个文件`)
+      if (skipped.length) parts.push(`跳过：${skipped.join('；')}`)
+      return {
+        ok: imported > 0,
+        message: parts.join('。'),
+        snapshot: buildLibrarySnapshot(dir),
+        imported,
+        skipped,
+      }
+    } catch (err) {
+      return libraryFail(err, dir)
+    }
+  })
+
+  ipcMain.handle(
+    IPC.LIBRARY_IMPORT_PATHS,
+    (_event, payload: { cwd?: string; paths: string[] }) => {
+      const dir = payload.cwd ?? ''
+      try {
+        const { imported, skipped } = importFilesFromPaths(dir, payload.paths ?? [])
+        const parts: string[] = []
+        if (imported) parts.push(`已粘贴/导入 ${imported} 个文件`)
+        if (skipped.length) parts.push(`跳过：${skipped.join('；')}`)
+        return {
+          ok: imported > 0,
+          message: parts.join('。') || '没有可导入的文件',
+          snapshot: buildLibrarySnapshot(dir),
+          imported,
+          skipped,
+        }
+      } catch (err) {
+        return libraryFail(err, dir)
+      }
+    },
+  )
+
+  ipcMain.handle(IPC.LIBRARY_PASTE_CLIPBOARD, (_event, cwd?: string) => {
+    const dir = cwd ?? ''
+    try {
+      const { imported, skipped } = pasteClipboardFiles(dir)
+      if (imported === 0) {
+        return {
+          ok: false,
+          message: skipped[0] || '剪贴板中没有可粘贴的文件',
+          snapshot: buildLibrarySnapshot(dir),
+          imported: 0,
+          skipped,
+        }
+      }
+      const parts = [`已粘贴 ${imported} 个文件`]
+      if (skipped.length) parts.push(`跳过：${skipped.join('；')}`)
+      return {
+        ok: true,
+        message: parts.join('。'),
+        snapshot: buildLibrarySnapshot(dir),
+        imported,
+        skipped,
+      }
+    } catch (err) {
+      return libraryFail(err, dir)
+    }
+  })
+
+  ipcMain.handle(
+    IPC.LIBRARY_DELETE_ENTRY,
+    (_event, payload: { relativePath: string; cwd?: string }) => {
+      const cwd = payload.cwd ?? ''
+      try {
+        deleteFilesEntry(payload.relativePath)
+        return libraryOk('已删除', cwd)
+      } catch (err) {
+        return libraryFail(err, cwd)
+      }
+    },
+  )
 }
 
 async function bootstrapOpenCode(): Promise<void> {

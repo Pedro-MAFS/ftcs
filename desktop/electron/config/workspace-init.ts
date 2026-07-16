@@ -105,6 +105,8 @@ function copyDirFiltered(src: string, dest: string): void {
 function ensureDataSkeleton(workspaceRoot: string): string[] {
   const created: string[] = []
   const dirs = [
+    'data/library/websites',
+    'data/library/files',
     'data/products/_example/inputs',
     'data/keywords',
     'data/leads',

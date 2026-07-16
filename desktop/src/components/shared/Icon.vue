@@ -18,6 +18,11 @@ defineProps<{
     | 'info'
     | 'eye'
     | 'eye-off'
+    | 'globe'
+    | 'trash'
+    | 'folder'
+    | 'folder-plus'
+    | 'chevron-left'
   size?: number
 }>()
 </script>
@@ -122,6 +127,29 @@ defineProps<{
       <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
       <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
       <path d="m2 2 20 20" />
+    </template>
+    <template v-else-if="name === 'globe'">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+      <path d="M2 12h20" />
+    </template>
+    <template v-else-if="name === 'trash'">
+      <path d="M3 6h18" />
+      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+      <line x1="10" x2="10" y1="11" y2="17" />
+      <line x1="14" x2="14" y1="11" y2="17" />
+    </template>
+    <template v-else-if="name === 'folder'">
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9l-.81-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+    </template>
+    <template v-else-if="name === 'folder-plus'">
+      <path d="M12 10v6" />
+      <path d="M9 13h6" />
+      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9l-.81-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+    </template>
+    <template v-else-if="name === 'chevron-left'">
+      <path d="m15 18-6-6 6-6" />
     </template>
   </svg>
 </template>
