@@ -69,6 +69,10 @@ npm run dev
 
 > 说明：`OPENCODE_DISABLE_GLOBAL_CONFIG` 尚未进入当前 OpenCode 正式版，故以 XDG 隔离为准。
 
+## 后续优化（待办）
+
+- **OpenCode 会话管理**：当前每次画像任务 `session.create` 临时会话，结束后仅丢弃句柄（不持久化、不复用、不主动 delete）。后续可考虑：按产品绑定 session、历史回放、任务结束清理与会话列表。
+
 ## 工作流维护约定
 
 - **只改** 仓库 `workspace/skills/`、`workspace/mcp-servers/`、`workspace/config/`（模板源）
