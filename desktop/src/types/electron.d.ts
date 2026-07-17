@@ -43,6 +43,7 @@ export interface ProfileSummary {
   readinessScore?: number
   companyName?: string
   productName?: string
+  productNames?: string[]
   missingFields: string[]
   profilePath: string
   updatedAt?: string

@@ -7,7 +7,10 @@ export interface ProductProfileSummary {
   status: string
   readinessScore?: number
   companyName?: string
+  /** 首个产品名（兼容旧字段） */
   productName?: string
+  /** 全部产品名，侧栏副标题 / tooltip 用 */
+  productNames: string[]
   missingFields: string[]
   profilePath: string
   updatedAt?: string
@@ -22,6 +25,16 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>
 }
 
+function extractProductNames(products: unknown[]): string[] {
+  const names: string[] = []
+  for (const item of products) {
+    const row = asRecord(item)
+    const name = row?.name ? String(row.name).trim() : ''
+    if (name) names.push(name)
+  }
+  return names
+}
+
 function summarizeProfile(
   raw: Record<string, unknown>,
   profilePath: string,
@@ -29,7 +42,7 @@ function summarizeProfile(
   const company = asRecord(raw.company)
   const readiness = asRecord(raw.readiness)
   const products = Array.isArray(raw.products) ? raw.products : []
-  const firstProduct = asRecord(products[0])
+  const productNames = extractProductNames(products)
   const missing = Array.isArray(readiness?.missing_fields)
     ? (readiness!.missing_fields as unknown[]).map(String)
     : []
@@ -40,7 +53,8 @@ function summarizeProfile(
     readinessScore:
       typeof readiness?.score === 'number' ? readiness.score : undefined,
     companyName: company?.name ? String(company.name) : undefined,
-    productName: firstProduct?.name ? String(firstProduct.name) : undefined,
+    productName: productNames[0],
+    productNames,
     missingFields: missing,
     profilePath,
     updatedAt: raw.updated_at ? String(raw.updated_at) : undefined,

@@ -48,20 +48,69 @@ const SECTION_SKILL: Partial<Record<WorkspaceSection, string>> = {
 let agentBound = false
 let productsLoaded = false
 
+const PRODUCT_PREVIEW_COUNT = 3
+
+function formatProductsLabel(names: string[]): { label: string; tooltip: string } {
+  const tooltip = names.length > 0 ? names.join('\n') : '暂无产品'
+  if (names.length === 0) return { label: '暂无产品', tooltip }
+  if (names.length <= PRODUCT_PREVIEW_COUNT) {
+    return { label: names.join(' · '), tooltip }
+  }
+  const visible = names.slice(0, PRODUCT_PREVIEW_COUNT)
+  const rest = names.length - PRODUCT_PREVIEW_COUNT
+  return { label: `${visible.join(' · ')} · +${rest}`, tooltip }
+}
+
+function statusPresentation(status: string): {
+  label: string
+  tone: ProductSummary['statusTone']
+} {
+  const key = status.trim().toLowerCase()
+  if (key === 'ready') return { label: '就绪', tone: 'success' }
+  if (key === 'draft') return { label: '草稿', tone: 'warning' }
+  if (key === 'exploring' || key === 'running') return { label: '探索中', tone: 'accent' }
+  if (!key) return { label: '未知', tone: 'muted' }
+  return { label: status, tone: 'muted' }
+}
+
+function formatUpdatedLabel(updatedAt?: string): string {
+  if (!updatedAt) return '—'
+  const t = Date.parse(updatedAt)
+  if (!Number.isFinite(t)) return '—'
+  const d = new Date(t)
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${mm}-${dd} 更新`
+}
+
 function toProductSummary(profile: {
   id: string
   status: string
   readinessScore?: number
   companyName?: string
   productName?: string
+  productNames?: string[]
+  updatedAt?: string
 }): ProductSummary {
-  const name = profile.productName || profile.companyName || profile.id
-  const score =
-    profile.readinessScore != null ? `就绪度 ${profile.readinessScore}` : profile.status
+  const companyName = profile.companyName?.trim() || profile.id
+  const names =
+    profile.productNames && profile.productNames.length > 0
+      ? profile.productNames
+      : profile.productName
+        ? [profile.productName]
+        : []
+  const { label: productsLabel, tooltip: productsTooltip } = formatProductsLabel(names)
+  const status = statusPresentation(profile.status)
   return {
     id: profile.id,
-    name,
-    meta: `${profile.status} · ${score}`,
+    name: companyName,
+    companyName,
+    productsLabel,
+    productsTooltip,
+    status: profile.status,
+    statusLabel: status.label,
+    statusTone: status.tone,
+    updatedLabel: formatUpdatedLabel(profile.updatedAt),
   }
 }
 

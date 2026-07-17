@@ -15,10 +15,21 @@ export type PipelineStepId =
 
 export type PipelineStepStatus = 'done' | 'running' | 'pending'
 
+export type ProductStatusTone = 'success' | 'accent' | 'warning' | 'muted'
+
 export interface ProductSummary {
   id: string
+  /** 顶栏 / 兼容旧用法：优先公司名 */
   name: string
-  meta: string
+  companyName: string
+  /** 侧栏副标题（已截断，如「A · B · C · +4」） */
+  productsLabel: string
+  /** 悬停完整产品列表 */
+  productsTooltip: string
+  status: string
+  statusLabel: string
+  statusTone: ProductStatusTone
+  updatedLabel: string
 }
 
 export interface PipelineStep {

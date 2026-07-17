@@ -6,6 +6,7 @@ import { useSettingsNav } from '../../composables/useSettingsNav'
 import {
   PIPELINE_TO_SECTION,
   type PipelineStepStatus,
+  type ProductStatusTone,
   type WorkspaceSection,
 } from '../../types/workspace'
 import type { SettingsCategory } from '../../types/settings'
@@ -30,6 +31,10 @@ function statusClass(status: PipelineStepStatus): string {
   return `is-${status}`
 }
 
+function productToneClass(tone: ProductStatusTone): string {
+  return `is-${tone}`
+}
+
 function onPipelineClick(stepId: string): void {
   const target = PIPELINE_TO_SECTION[stepId as keyof typeof PIPELINE_TO_SECTION]
   if (target) void router.push({ name: target })
@@ -52,7 +57,7 @@ function onSettingsCat(id: SettingsCategory): void {
         v-for="cat in settingsCats"
         :key="cat.id"
         type="button"
-        class="product-item"
+        class="product-item product-item--simple"
         :class="{ 'is-active': activeCategory === cat.id }"
         @click="onSettingsCat(cat.id)"
       >
@@ -74,10 +79,19 @@ function onSettingsCat(id: SettingsCategory): void {
         type="button"
         class="product-item"
         :class="{ 'is-active': product.id === activeProductId }"
+        :title="product.productsTooltip"
         @click="selectProduct(product.id)"
       >
-        <span class="product-item__name">{{ product.name }}</span>
-        <span class="product-item__meta">{{ product.meta }}</span>
+        <span class="product-item__name">{{ product.companyName }}</span>
+        <span class="product-item__products">{{ product.productsLabel }}</span>
+        <span class="product-item__meta">
+          <span
+            class="product-item__status"
+            :class="productToneClass(product.statusTone)"
+          >{{ product.statusLabel }}</span>
+          <span class="product-item__sep">·</span>
+          <span class="product-item__date">{{ product.updatedLabel }}</span>
+        </span>
       </button>
 
       <div class="sidebar__gap" />

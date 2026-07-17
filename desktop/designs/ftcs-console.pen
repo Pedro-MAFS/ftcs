@@ -73,7 +73,7 @@
                   "id": "fzu9v",
                   "name": "ProductName",
                   "fill": "$text-secondary",
-                  "content": "Industrial Valve Series A",
+                  "content": "山东绿森塑木复合材料有限公司",
                   "fontFamily": "$font-ui",
                   "fontSize": 13,
                   "fontWeight": "normal"
@@ -433,7 +433,7 @@
               "type": "frame",
               "id": "wWb7I",
               "name": "Sidebar",
-              "width": 220,
+              "width": 236,
               "height": "fill_container",
               "fill": "$bg-panel",
               "stroke": "$border",
@@ -489,7 +489,7 @@
                   "fill": "$bg-active",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -497,23 +497,64 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "jKDKC",
+                      "id": "QXrLA",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Industrial Valve Series A",
+                      "content": "山东绿森塑木复合材料有限公司",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "600"
                     },
                     {
                       "type": "text",
-                      "id": "XOi24",
-                      "fill": "$text-muted",
-                      "content": "就绪 · 42 线索",
+                      "id": "Bka0h",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "木塑地板 · 木塑围栏 · 拼接地板 · +4",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "DY4PM",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "pk9sF",
+                          "fill": "$success",
+                          "content": "就绪",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "d2wevF",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Wt8jG",
+                          "fill": "$text-muted",
+                          "content": "07-16 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -524,7 +565,7 @@
                   "width": "fill_container",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -532,23 +573,64 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "zleUY",
+                      "id": "etU0c",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "LED Grow Light Pro",
+                      "content": "华北阀门进出口有限公司",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     },
                     {
                       "type": "text",
-                      "id": "l15xxy",
-                      "fill": "$text-muted",
-                      "content": "探索中 · R1",
+                      "id": "fCRj1",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "工业阀门 · 球阀 · 闸阀",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "cCDWF",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "SulXS",
+                          "fill": "$accent",
+                          "content": "探索中",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "c1s6J6",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "dswXE",
+                          "fill": "$text-muted",
+                          "content": "07-15 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -559,7 +641,7 @@
                   "width": "fill_container",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -567,23 +649,64 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "iMgB2",
+                      "id": "I3clB5",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Ceramic Mug Set",
+                      "content": "景德镇陶瓷礼品工坊",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     },
                     {
                       "type": "text",
-                      "id": "JGwmm",
-                      "fill": "$text-muted",
-                      "content": "草稿 · 未就绪",
+                      "id": "xNBPs",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "陶瓷马克杯套装",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "MKVZ0",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "FcnkO",
+                          "fill": "$warning",
+                          "content": "草稿",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "VFJjL",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "jZfUA",
+                          "fill": "$text-muted",
+                          "content": "07-10 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -3417,7 +3540,7 @@
                   "id": "K7mIqG",
                   "name": "ProductName",
                   "fill": "$text-secondary",
-                  "content": "Industrial Valve Series A",
+                  "content": "山东绿森塑木复合材料有限公司",
                   "fontFamily": "$font-ui",
                   "fontSize": 13,
                   "fontWeight": "normal"
@@ -3779,7 +3902,7 @@
               "type": "frame",
               "id": "BA7Eu",
               "name": "Sidebar",
-              "width": 220,
+              "width": 236,
               "height": "fill_container",
               "fill": "$bg-panel",
               "stroke": "$border",
@@ -3835,7 +3958,7 @@
                   "fill": "$bg-active",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -3843,23 +3966,64 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "uLuO2",
+                      "id": "pwuAZ",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Industrial Valve Series A",
+                      "content": "山东绿森塑木复合材料有限公司",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "600"
                     },
                     {
                       "type": "text",
-                      "id": "B5lg9E",
-                      "fill": "$text-muted",
-                      "content": "就绪 · 42 线索",
+                      "id": "lQBJw",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "木塑地板 · 木塑围栏 · 拼接地板 · +4",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "QD9lA",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "UG6fI",
+                          "fill": "$success",
+                          "content": "就绪",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "vHCTb",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "qdZk6",
+                          "fill": "$text-muted",
+                          "content": "07-16 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -3870,7 +4034,7 @@
                   "width": "fill_container",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -3878,23 +4042,64 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "h9zPla",
+                      "id": "R8Ugye",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "LED Grow Light Pro",
+                      "content": "华北阀门进出口有限公司",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     },
                     {
                       "type": "text",
-                      "id": "fctPA",
-                      "fill": "$text-muted",
-                      "content": "探索中 · R1",
+                      "id": "jc2t9",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "工业阀门 · 球阀 · 闸阀",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "HDcNV",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "K1z7lY",
+                          "fill": "$accent",
+                          "content": "探索中",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "rdZD3",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "u5RZy",
+                          "fill": "$text-muted",
+                          "content": "07-15 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -3905,7 +4110,7 @@
                   "width": "fill_container",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -3913,23 +4118,64 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "SRAAG",
+                      "id": "GExwr",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Ceramic Mug Set",
+                      "content": "景德镇陶瓷礼品工坊",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     },
                     {
                       "type": "text",
-                      "id": "lNv2T",
-                      "fill": "$text-muted",
-                      "content": "草稿 · 未就绪",
+                      "id": "xnEXV",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "陶瓷马克杯套装",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Bfmtt",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "MmZ6V",
+                          "fill": "$warning",
+                          "content": "草稿",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "D47JDE",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "od9nC",
+                          "fill": "$text-muted",
+                          "content": "07-10 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -5424,7 +5670,7 @@
                   "id": "HZ7q3",
                   "name": "ProductName",
                   "fill": "$text-secondary",
-                  "content": "Industrial Valve Series A",
+                  "content": "山东绿森塑木复合材料有限公司",
                   "fontFamily": "$font-ui",
                   "fontSize": 13,
                   "fontWeight": "normal"
@@ -5786,7 +6032,7 @@
               "type": "frame",
               "id": "nftpT",
               "name": "Sidebar",
-              "width": 220,
+              "width": 236,
               "height": "fill_container",
               "fill": "$bg-panel",
               "stroke": "$border",
@@ -5842,7 +6088,7 @@
                   "fill": "$bg-active",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -5850,23 +6096,64 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "qgYd8",
+                      "id": "AJLhn",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Industrial Valve Series A",
+                      "content": "山东绿森塑木复合材料有限公司",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "600"
                     },
                     {
                       "type": "text",
-                      "id": "Tkwsn",
-                      "fill": "$text-muted",
-                      "content": "就绪 · 42 线索",
+                      "id": "tXdey",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "木塑地板 · 木塑围栏 · 拼接地板 · +4",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "KQogz",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "BRyFe",
+                          "fill": "$success",
+                          "content": "就绪",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "aHNsX",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "frLsd",
+                          "fill": "$text-muted",
+                          "content": "07-16 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -5877,7 +6164,7 @@
                   "width": "fill_container",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -5885,23 +6172,64 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "dQFhl",
+                      "id": "C988Y",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "LED Grow Light Pro",
+                      "content": "华北阀门进出口有限公司",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     },
                     {
                       "type": "text",
-                      "id": "XySsh",
-                      "fill": "$text-muted",
-                      "content": "探索中 · R1",
+                      "id": "Fn8Qa",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "工业阀门 · 球阀 · 闸阀",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "A4xcDL",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "rOc5i",
+                          "fill": "$accent",
+                          "content": "探索中",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "AFq4S",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "PHJR2",
+                          "fill": "$text-muted",
+                          "content": "07-15 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -5912,7 +6240,7 @@
                   "width": "fill_container",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -5920,23 +6248,64 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "tCnnu",
+                      "id": "k5J8T",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Ceramic Mug Set",
+                      "content": "景德镇陶瓷礼品工坊",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     },
                     {
                       "type": "text",
-                      "id": "o7HjH",
-                      "fill": "$text-muted",
-                      "content": "草稿 · 未就绪",
+                      "id": "DOXVK",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "陶瓷马克杯套装",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ohFyv",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "YmwHJ",
+                          "fill": "$warning",
+                          "content": "草稿",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "LoSZN",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "J92s6",
+                          "fill": "$text-muted",
+                          "content": "07-10 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -7409,7 +7778,7 @@
                   "id": "vINom",
                   "name": "ProductName",
                   "fill": "$text-secondary",
-                  "content": "Industrial Valve Series A",
+                  "content": "山东绿森塑木复合材料有限公司",
                   "fontFamily": "$font-ui",
                   "fontSize": 13,
                   "fontWeight": "normal"
@@ -9820,7 +10189,7 @@
                   "id": "HGCKc",
                   "name": "ProductName",
                   "fill": "$text-secondary",
-                  "content": "Industrial Valve Series A",
+                  "content": "山东绿森塑木复合材料有限公司",
                   "fontFamily": "$font-ui",
                   "fontSize": 13,
                   "fontWeight": "normal"
@@ -10184,7 +10553,7 @@
               "type": "frame",
               "id": "YcIyx",
               "name": "Sidebar",
-              "width": 220,
+              "width": 236,
               "height": "fill_container",
               "fill": "$bg-panel",
               "stroke": "$border",
@@ -10240,7 +10609,7 @@
                   "fill": "$bg-active",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -10248,23 +10617,67 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "n98MnL",
+                      "id": "BEvHC",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Industrial Valve Series A",
+                      "content": "山东绿森塑木复合材料有限公司",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "600"
                     },
                     {
                       "type": "text",
-                      "id": "z1k16z",
-                      "fill": "$text-muted",
-                      "content": "就绪 · 42 线索",
+                      "id": "K19r5H",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "木塑地板 · 木塑围栏 · 拼接地板 · +4",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "qNEOw",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ga3Qo",
+                          "name": "Status",
+                          "fill": "$success",
+                          "content": "就绪",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "JHGQH",
+                          "name": "Dot",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "o66es7",
+                          "name": "Date",
+                          "fill": "$text-muted",
+                          "content": "07-16 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -10275,7 +10688,7 @@
                   "width": "fill_container",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -10283,23 +10696,67 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "gSiKb",
+                      "id": "V6cUje",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "LED Grow Light Pro",
+                      "content": "华北阀门进出口有限公司",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     },
                     {
                       "type": "text",
-                      "id": "aVqMk",
-                      "fill": "$text-muted",
-                      "content": "探索中 · R1",
+                      "id": "lMCOQ",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "工业阀门 · 球阀 · 闸阀",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "XCDEY",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ItDBk",
+                          "name": "Status",
+                          "fill": "$accent",
+                          "content": "探索中",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "EMqW4",
+                          "name": "Dot",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Z4eLBU",
+                          "name": "Date",
+                          "fill": "$text-muted",
+                          "content": "07-15 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -10310,7 +10767,7 @@
                   "width": "fill_container",
                   "cornerRadius": 6,
                   "layout": "vertical",
-                  "gap": 2,
+                  "gap": 4,
                   "padding": [
                     8,
                     10
@@ -10318,23 +10775,67 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "wR6hu",
+                      "id": "FUE67",
+                      "name": "Company",
                       "fill": "$text",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Ceramic Mug Set",
+                      "content": "景德镇陶瓷礼品工坊",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     },
                     {
                       "type": "text",
-                      "id": "ISZr1",
-                      "fill": "$text-muted",
-                      "content": "草稿 · 未就绪",
+                      "id": "nzaGv",
+                      "name": "Products",
+                      "fill": "$text-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "陶瓷马克杯套装",
                       "fontFamily": "$font-ui",
                       "fontSize": 11,
                       "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "gI0Oc",
+                      "name": "Meta",
+                      "width": "fill_container",
+                      "gap": 6,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Y5AGY",
+                          "name": "Status",
+                          "fill": "$warning",
+                          "content": "草稿",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "v6KWY",
+                          "name": "Dot",
+                          "fill": "$text-muted",
+                          "content": "·",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "yAKQ2",
+                          "name": "Date",
+                          "fill": "$text-muted",
+                          "content": "07-10 更新",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 10,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
@@ -11875,6 +12376,58 @@
               "fontWeight": "normal"
             }
           ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "MSybu",
+      "x": 4836,
+      "y": 92,
+      "name": "HoverTooltip · Products",
+      "width": 260,
+      "fill": "$bg-elevated",
+      "cornerRadius": 8,
+      "stroke": "$border",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "gap": 6,
+      "padding": [
+        10,
+        12
+      ],
+      "children": [
+        {
+          "type": "text",
+          "id": "Q3OcTe",
+          "fill": "$text-muted",
+          "content": "完整产品列表",
+          "fontFamily": "$font-ui",
+          "fontSize": 10,
+          "fontWeight": "600",
+          "letterSpacing": 0.4
+        },
+        {
+          "type": "text",
+          "id": "d2XGUB",
+          "fill": "$text",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "木塑地板（WPC Decking）\n木塑围栏（WPC Fence）\n拼接地板（Interlocking Deck Tiles）\n木塑墙板（WPC Wall Cladding）\n木塑护栏（WPC Railing）\n凉亭花架（Pergola & Trellis）\n…共 7 个产品",
+          "fontFamily": "$font-ui",
+          "fontSize": 11,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "usUhB",
+          "fill": "$text-muted",
+          "textGrowth": "fixed-width",
+          "width": "fill_container",
+          "content": "交互说明：副标题过长时省略，悬停显示完整列表",
+          "fontFamily": "$font-ui",
+          "fontSize": 10,
+          "fontWeight": "normal"
         }
       ]
     }
