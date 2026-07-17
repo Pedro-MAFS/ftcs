@@ -28,6 +28,16 @@
         "SEARCH_PROVIDER": "tavily",
         "SEARCH_DAILY_LIMIT": "50"
       }
+    },
+    "chrome-devtools": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--isolated"
+      ],
+      "enabled": true
     }
   }
 }

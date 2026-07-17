@@ -1,13 +1,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
+import { readEnvFile, upsertEnvFile } from './env-file'
 import { getRepoRoot } from './paths'
 
 /**
  * 模板版本：改动标准 workspace 中 skills/mcp/config 结构时递增，
  * 启动时若目标区标记版本落后，会重新同步托管目录。
  */
-export const WORKSPACE_TEMPLATE_VERSION = '2026.07.16-mcp-bundle'
+export const WORKSPACE_TEMPLATE_VERSION = '2026.07.17-env-model-prefs'
 
 /** 始终从模板覆盖同步（用户业务数据不在此列） */
 export const MANAGED_WORKSPACE_DIRS = ['skills', 'mcp-servers', 'config'] as const
@@ -139,55 +140,82 @@ function copyExampleProductIfMissing(templateRoot: string, workspaceRoot: string
 
 function bootstrapEnvExample(templateRoot: string, workspaceRoot: string): string[] {
   const created: string[] = []
-  for (const name of ['.env.example', 'README.md']) {
-    const src = path.join(templateRoot, name)
-    const dest = path.join(workspaceRoot, name)
-    if (!fs.existsSync(src)) continue
-    if (fs.existsSync(dest)) continue
-    fs.copyFileSync(src, dest)
-    created.push(name)
+  // .env.example 始终与模板对齐（不含密钥）；.env / README 仅首次创建
+  const exampleSrc = path.join(templateRoot, '.env.example')
+  const exampleDest = path.join(workspaceRoot, '.env.example')
+  if (fs.existsSync(exampleSrc)) {
+    fs.copyFileSync(exampleSrc, exampleDest)
+    created.push('.env.example')
+  }
+
+  const readmeSrc = path.join(templateRoot, 'README.md')
+  const readmeDest = path.join(workspaceRoot, 'README.md')
+  if (fs.existsSync(readmeSrc) && !fs.existsSync(readmeDest)) {
+    fs.copyFileSync(readmeSrc, readmeDest)
+    created.push('README.md')
   }
 
   const envPath = path.join(workspaceRoot, '.env')
-  const examplePath = path.join(workspaceRoot, '.env.example')
-  if (!fs.existsSync(envPath) && fs.existsSync(examplePath)) {
-    fs.copyFileSync(examplePath, envPath)
+  if (!fs.existsSync(envPath) && fs.existsSync(exampleDest)) {
+    fs.copyFileSync(exampleDest, envPath)
     created.push('.env')
   }
   return created
 }
 
 /**
- * 同步 opencode.json：模板结构为准，保留用户已选 model / small_model / provider。
+ * 一次性迁移：旧版把 model 写在 opencode.json，模板同步前先落到 .env，避免被覆盖丢失。
+ */
+function migrateModelPrefsToEnv(workspaceRoot: string): string[] {
+  const configPath = path.join(workspaceRoot, 'config', 'opencode', 'opencode.json')
+  const envPath = path.join(workspaceRoot, '.env')
+  if (!fs.existsSync(configPath)) return []
+
+  let config: Record<string, unknown>
+  try {
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>
+  } catch {
+    return []
+  }
+
+  const env = readEnvFile(envPath)
+  const updates: Record<string, string> = {}
+
+  if (!env.FTCS_MODEL && typeof config.model === 'string' && config.model.trim()) {
+    updates.FTCS_MODEL = config.model.trim()
+  }
+  if (
+    !env.FTCS_SMALL_MODEL &&
+    typeof config.small_model === 'string' &&
+    config.small_model.trim()
+  ) {
+    updates.FTCS_SMALL_MODEL = config.small_model.trim()
+  }
+  if (!env.FTCS_PROVIDER_ID && updates.FTCS_MODEL) {
+    const model = updates.FTCS_MODEL
+    if (model.startsWith('anthropic/')) updates.FTCS_PROVIDER_ID = 'anthropic'
+    else if (model.startsWith('openai/')) updates.FTCS_PROVIDER_ID = 'openai'
+    else if (model.startsWith('google/') || model.startsWith('gemini/')) {
+      updates.FTCS_PROVIDER_ID = 'google'
+    } else if (model.startsWith('custom/')) updates.FTCS_PROVIDER_ID = 'custom'
+  }
+
+  if (Object.keys(updates).length === 0) return []
+  upsertEnvFile(envPath, updates)
+  Object.assign(process.env, updates)
+  return Object.keys(updates)
+}
+
+/**
+ * 同步 opencode.json：纯模板覆盖。
+ * 用户模型/密钥等偏好在 .env，不在此文件中，避免模板更新冲掉用户设置。
  */
 function syncOpencodeConfig(templateRoot: string, workspaceRoot: string): void {
   const src = path.join(templateRoot, 'config', 'opencode', 'opencode.json')
   const dest = path.join(workspaceRoot, 'config', 'opencode', 'opencode.json')
   if (!fs.existsSync(src)) return
-
-  const template = JSON.parse(fs.readFileSync(src, 'utf8')) as Record<string, unknown>
-  let existing: Record<string, unknown> | null = null
-  if (fs.existsSync(dest)) {
-    try {
-      existing = JSON.parse(fs.readFileSync(dest, 'utf8')) as Record<string, unknown>
-    } catch {
-      existing = null
-    }
-  }
-
-  if (existing) {
-    if (typeof existing.model === 'string') template.model = existing.model
-    if (typeof existing.small_model === 'string') template.small_model = existing.small_model
-    if (existing.provider && typeof existing.provider === 'object') {
-      template.provider = {
-        ...((template.provider as object) ?? {}),
-        ...(existing.provider as object),
-      }
-    }
-  }
-
   fs.mkdirSync(path.dirname(dest), { recursive: true })
-  fs.writeFileSync(dest, `${JSON.stringify(template, null, 2)}\n`, 'utf8')
+  fs.copyFileSync(src, dest)
 }
 
 function syncManagedDir(
@@ -200,7 +228,7 @@ function syncManagedDir(
   if (!fs.existsSync(src)) return false
 
   if (dirName === 'config') {
-    // config：先整目录同步，再单独合并 opencode.json
+    // config：整目录覆盖；opencode.json 始终用模板（用户偏好在 .env）
     if (fs.existsSync(dest)) {
       fs.rmSync(dest, { recursive: true, force: true })
     }
@@ -280,6 +308,12 @@ export function initializeWorkspace(
       createdBootstrap,
       mcpBuildAttempted: false,
     }
+  }
+
+  // 模板覆盖 config 前，先把旧 opencode.json 里的模型迁到 .env
+  const migrated = migrateModelPrefsToEnv(target)
+  if (migrated.length) {
+    createdBootstrap.push(`migrated:${migrated.join(',')}`)
   }
 
   const force = Boolean(options?.forceManaged)

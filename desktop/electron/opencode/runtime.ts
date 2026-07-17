@@ -10,6 +10,7 @@ import {
   getOpenCodeXdgConfigHome,
   getWorkspaceRoot,
 } from '../config/paths'
+import { applyUserPrefsToOpenCodeConfig } from '../config/user-opencode-prefs'
 import {
   ensureOpenCodeOnPath,
   fetchHealth,
@@ -107,15 +108,21 @@ export class OpenCodeRuntime {
 
       const binaryPath = await ensureOpenCodeOnPath()
       const configPath = getOpenCodeConfigPath(workspaceRoot)
-      const config = rewriteMcpWorkspaceEnv(
-        readOpenCodeConfig(configPath) as Config,
-        workspaceRoot,
+      const config = applyUserPrefsToOpenCodeConfig(
+        rewriteMcpWorkspaceEnv(
+          readOpenCodeConfig(configPath) as Config,
+          workspaceRoot,
+        ),
+        process.env,
       )
 
       this.appendLog(`启动 OpenCode（SDK Server+Client）`)
       this.appendLog(`工作区: ${workspaceRoot}`)
       this.appendLog(`二进制: ${binaryPath}`)
       this.appendLog(`配置: ${configPath}`)
+      if (typeof config.model === 'string') {
+        this.appendLog(`模型: ${config.model}`)
+      }
 
       process.chdir(workspaceRoot)
       this.applyIsolatedOpenCodeEnv(configPath)

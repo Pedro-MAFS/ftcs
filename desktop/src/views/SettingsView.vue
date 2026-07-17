@@ -217,7 +217,7 @@ onMounted(() => {
         <section id="settings-model" class="settings-block">
           <div class="settings-block__head">
             <h3>模型与提供商</h3>
-            <span class="muted mono">opencode.json · model / provider</span>
+            <span class="muted mono">.env · FTCS_MODEL / provider</span>
           </div>
 
           <label class="field-label">提供商</label>
@@ -432,12 +432,16 @@ onMounted(() => {
             <span class="mono">Electron + Vue3 + OpenCode SDK</span>
           </div>
           <div class="about-row">
-            <span class="muted">配置路径</span>
+            <span class="muted">用户偏好</span>
+            <span class="mono">{{ snapshot?.envPath ?? '—' }}</span>
+          </div>
+          <div class="about-row">
+            <span class="muted">OpenCode 模板</span>
             <span class="mono">{{ snapshot?.opencodeConfigPath ?? '—' }}</span>
           </div>
           <p class="settings-foot">
             <Icon name="info" :size="14" />
-            API Key 写入本地 workspace/.env；模型选择写入 opencode.json。均不上传。
+            API Key 与模型偏好均写入本地 workspace/.env；opencode.json 由模板托管，同步不会覆盖你的设置。
           </p>
         </section>
       </div>

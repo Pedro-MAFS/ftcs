@@ -111,11 +111,6 @@ function readJsonConfig(configPath: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>
 }
 
-function writeJsonConfig(configPath: string, config: Record<string, unknown>): void {
-  fs.mkdirSync(path.dirname(configPath), { recursive: true })
-  fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8')
-}
-
 function detectProviderId(
   env: Record<string, string>,
   model: string,
@@ -184,27 +179,26 @@ export function getSettingsSnapshot(): SettingsSnapshot {
   const env = readEnvFile(envPath)
   const config = readJsonConfig(opencodeConfigPath)
 
+  // 用户偏好以 .env 为准；旧工作区若只有 opencode.json，则回退读取一次便于迁移
   const model =
-    typeof config.model === 'string' && config.model
-      ? config.model
-      : 'anthropic/claude-sonnet-4-5'
+    env.FTCS_MODEL ||
+    (typeof config.model === 'string' && config.model ? config.model : '') ||
+    'anthropic/claude-sonnet-4-5'
   const smallModel =
-    typeof config.small_model === 'string' && config.small_model
+    env.FTCS_SMALL_MODEL ||
+    (typeof config.small_model === 'string' && config.small_model
       ? config.small_model
-      : 'anthropic/claude-haiku-4-5'
+      : '') ||
+    'anthropic/claude-haiku-4-5'
 
-  const providerId = detectProviderId(env, model)
+  const providerId =
+    (['anthropic', 'openai', 'google', 'custom'].includes(env.FTCS_PROVIDER_ID)
+      ? (env.FTCS_PROVIDER_ID as ModelProviderId)
+      : undefined) || detectProviderId(env, model)
   const apiKey = resolveApiKey(env, providerId)
   const tavilyKey = env.TAVILY_API_KEY || ''
 
-  const providerBlock = (config.provider as Record<string, unknown> | undefined)?.[
-    providerId === 'custom' ? 'custom' : providerId
-  ] as { options?: { baseURL?: string } } | undefined
-
-  const baseUrl =
-    env.FTCS_MODEL_BASE_URL ||
-    providerBlock?.options?.baseURL ||
-    ''
+  const baseUrl = env.FTCS_MODEL_BASE_URL || ''
 
   const catalog = MODEL_CATALOG[providerId]
 
@@ -231,7 +225,6 @@ export function getSettingsSnapshot(): SettingsSnapshot {
 export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
   const workspaceRoot = getWorkspaceRoot()
   const envPath = getEnvPath(workspaceRoot)
-  const configPath = getOpenCodeConfigPath(workspaceRoot)
   const env = readEnvFile(envPath)
 
   const providerId = input.providerId
@@ -240,6 +233,8 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
 
   const envUpdates: Record<string, string> = {
     FTCS_PROVIDER_ID: providerId,
+    FTCS_MODEL: model,
+    FTCS_SMALL_MODEL: smallModel,
     SEARCH_PROVIDER: input.searchProvider || 'tavily',
     SEARCH_DAILY_LIMIT: String(
       Number.isFinite(input.searchDailyLimit) && input.searchDailyLimit > 0
@@ -281,33 +276,7 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
   Object.assign(process.env, envUpdates)
   process.env.FTCS_WORKSPACE = workspaceRoot
 
-  const config = readJsonConfig(configPath)
-  config.model = model
-  config.small_model = smallModel
-
-  if (providerId === 'custom') {
-    const modelId = model.includes('/') ? model.split('/').slice(1).join('/') : model
-    const smallId = smallModel.includes('/')
-      ? smallModel.split('/').slice(1).join('/')
-      : smallModel
-
-    const providers = (config.provider as Record<string, unknown> | undefined) ?? {}
-    providers.custom = {
-      npm: '@ai-sdk/openai-compatible',
-      name: 'Custom Compatible',
-      options: {
-        baseURL: baseUrl || 'http://127.0.0.1:11434/v1',
-        apiKey: `{env:${CUSTOM_ENV_KEY}}`,
-      },
-      models: {
-        [modelId]: { name: modelId },
-        ...(smallId !== modelId ? { [smallId]: { name: smallId } } : {}),
-      },
-    }
-    config.provider = providers
-  }
-
-  writeJsonConfig(configPath, config)
+  // 不再改写托管模板 opencode.json（模型等用户偏好只写 .env）
 
   return {
     ok: true,
