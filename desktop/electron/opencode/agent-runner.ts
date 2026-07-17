@@ -2,16 +2,11 @@ import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { BootstrapResult } from '../profile/profile-bootstrap'
 import {
   loadProfile,
-  waitForProfile,
   type ProductProfileDetail,
 } from '../profile/profile-reader'
+import { loadExpansion, type KeywordExpansion } from '../keywords/keywords-reader'
 import {
-  loadExpansion,
-  waitForExpansion,
-  type KeywordExpansion,
-} from '../keywords/keywords-reader'
-import {
-  waitForExplorationFinished,
+  findLatestRunAfter,
   type ExplorationRun,
 } from '../exploration/exploration-reader'
 
@@ -129,6 +124,26 @@ function buildDiscoverLeadsPrompt(
     `线索输出：data/leads/${productId}/raw/`,
     `运行记录：data/exploration/${productId}/runs/`,
   ].join('\n')
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** 会话结束后短暂重试读产物，仅覆盖落盘时序，不参与结束判定 */
+async function loadWithGrace<T>(
+  loader: () => T | null,
+  options?: { signal?: AbortSignal; attempts?: number; intervalMs?: number },
+): Promise<T | null> {
+  const attempts = options?.attempts ?? 12
+  const intervalMs = options?.intervalMs ?? 500
+  for (let i = 0; i < attempts; i++) {
+    if (options?.signal?.aborted) return null
+    const value = loader()
+    if (value) return value
+    if (i < attempts - 1) await sleep(intervalMs)
+  }
+  return null
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -345,7 +360,6 @@ export class AgentRunController {
     this.abort = new AbortController()
     const signal = this.abort.signal
     const startedAt = Date.now()
-    const afterIso = new Date().toISOString()
     const timeline = new TimelineBuilder()
 
     const flushTimeline = () => {
@@ -436,30 +450,16 @@ export class AgentRunController {
         sessionID: this.sessionId,
         parts: [{ type: 'text', text: promptText }],
       })
-
-      const expansionPromise = waitForExpansion(productId, {
-        signal,
-        afterIso,
-        timeoutMs: 12 * 60_000,
-      })
-      const idlePromise = this.waitUntilIdle(client, this.sessionId, signal)
-
-      const raced = await Promise.race([
-        expansionPromise.then((expansion) => ({
-          kind: 'expansion' as const,
-          expansion,
-        })),
-        idlePromise.then(() => ({ kind: 'idle' as const })),
-        new Promise<{ kind: 'abort' }>((resolve) => {
-          signal.addEventListener('abort', () => resolve({ kind: 'abort' }), {
-            once: true,
-          })
-        }),
-      ])
-
       void promptPromise
 
-      if (raced.kind === 'abort') {
+      const idleResult = await this.waitForSessionIdle(
+        client,
+        this.sessionId,
+        signal,
+        45 * 60_000,
+      )
+
+      if (idleResult === 'abort') {
         pushState('error')
         timeline.addSuffix({
           id: 'sys-abort',
@@ -478,33 +478,21 @@ export class AgentRunController {
         return { ok: false, message: '已中止关键词扩展' }
       }
 
-      let expansion =
-        raced.kind === 'expansion' ? raced.expansion : loadExpansion(productId)
-      if (!expansion) {
-        expansion = await waitForExpansion(productId, {
-          signal,
-          afterIso,
-          timeoutMs: 45_000,
-          intervalMs: 1000,
-        })
+      if (idleResult === 'timeout') {
+        throw new Error('等待 OpenCode 会话 idle 超时')
       }
+
+      await bridge.ingestNow().catch(() => undefined)
+
+      const expansion = await loadWithGrace(
+        () => loadExpansion(productId),
+        { signal, attempts: 12, intervalMs: 500 },
+      )
 
       if (!expansion) {
         throw new Error(
-          'Agent 已结束，但未找到 expansion.json。请向上滚动查看工具调用与模型输出。',
+          '会话已结束，但未找到 expansion.json。请向上滚动查看工具调用与模型输出。',
         )
-      }
-
-      // 产物已写入后继续等会话结束，收齐最终 assistant 回复
-      if (raced.kind === 'expansion') {
-        await this.settleAfterArtifact(
-          client,
-          this.sessionId,
-          signal,
-          bridge.ingestNow,
-        )
-      } else {
-        await bridge.ingestNow().catch(() => undefined)
       }
 
       const total = expansion.stats.total_queries
@@ -695,28 +683,27 @@ export class AgentRunController {
         sessionID: this.sessionId,
         parts: [{ type: 'text', text: promptText }],
       })
-
-      const runPromise = waitForExplorationFinished(productId, {
-        afterIso,
-        signal,
-        timeoutMs: 45 * 60_000,
-        onProgress: (run) => pushState('running', run),
-      })
-      const idlePromise = this.waitUntilIdle(client, this.sessionId, signal)
-
-      const raced = await Promise.race([
-        runPromise.then((run) => ({ kind: 'run' as const, run })),
-        idlePromise.then(() => ({ kind: 'idle' as const })),
-        new Promise<{ kind: 'abort' }>((resolve) => {
-          signal.addEventListener('abort', () => resolve({ kind: 'abort' }), {
-            once: true,
-          })
-        }),
-      ])
-
       void promptPromise
 
-      if (raced.kind === 'abort') {
+      // 运行中仅用于 UI 进度，不参与结束判定
+      const progressTimer = setInterval(() => {
+        const current = findLatestRunAfter(productId, afterIso)
+        if (current) pushState('running', current)
+      }, 2500)
+
+      let idleResult: 'idle' | 'abort' | 'timeout'
+      try {
+        idleResult = await this.waitForSessionIdle(
+          client,
+          this.sessionId,
+          signal,
+          45 * 60_000,
+        )
+      } finally {
+        clearInterval(progressTimer)
+      }
+
+      if (idleResult === 'abort') {
         pushState('error')
         timeline.addSuffix({
           id: 'sys-abort',
@@ -735,31 +722,20 @@ export class AgentRunController {
         return { ok: false, message: '已中止 R1 探索' }
       }
 
-      let run = raced.kind === 'run' ? raced.run : null
-      if (!run || (run.status !== 'completed' && run.status !== 'failed')) {
-        run = await waitForExplorationFinished(productId, {
-          afterIso,
-          signal,
-          timeoutMs: 60_000,
-          intervalMs: 1500,
-          onProgress: (r) => pushState('running', r),
-        })
+      if (idleResult === 'timeout') {
+        throw new Error('等待 OpenCode 会话 idle 超时')
       }
 
-      if (raced.kind === 'run' && run && run.status !== 'running') {
-        await this.settleAfterArtifact(
-          client,
-          this.sessionId,
-          signal,
-          bridge.ingestNow,
-        )
-      } else {
-        await bridge.ingestNow().catch(() => undefined)
-      }
+      await bridge.ingestNow().catch(() => undefined)
+
+      const run = await loadWithGrace(
+        () => findLatestRunAfter(productId, afterIso),
+        { signal, attempts: 12, intervalMs: 500 },
+      )
 
       if (!run) {
         throw new Error(
-          'Agent 已结束，但未找到探索运行记录。请确认已调用 exploration_start / exploration_finish。',
+          '会话已结束，但未找到探索运行记录。请确认已调用 exploration_start / exploration_finish。',
         )
       }
 
@@ -785,7 +761,7 @@ export class AgentRunController {
       }
 
       if (run.status === 'running') {
-        const message = `探索仍在进行或未正确收尾：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
+        const message = `会话已结束，但探索记录仍为 running：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
         timeline.addSuffix({
           id: 'sys-incomplete',
           kind: 'error',
@@ -977,26 +953,16 @@ export class AgentRunController {
         sessionID: this.sessionId,
         parts: [{ type: 'text', text: promptText }],
       })
-
-      const profilePromise = waitForProfile(bootstrap.productId, {
-        signal,
-        timeoutMs: 12 * 60_000,
-      })
-      const idlePromise = this.waitUntilIdle(client, this.sessionId, signal)
-
-      const raced = await Promise.race([
-        profilePromise.then((profile) => ({ kind: 'profile' as const, profile })),
-        idlePromise.then(() => ({ kind: 'idle' as const })),
-        new Promise<{ kind: 'abort' }>((resolve) => {
-          signal.addEventListener('abort', () => resolve({ kind: 'abort' }), {
-            once: true,
-          })
-        }),
-      ])
-
       void promptPromise
 
-      if (raced.kind === 'abort') {
+      const idleResult = await this.waitForSessionIdle(
+        client,
+        this.sessionId,
+        signal,
+        45 * 60_000,
+      )
+
+      if (idleResult === 'abort') {
         pushState('error')
         timeline.addSuffix({
           id: 'sys-abort',
@@ -1015,32 +981,21 @@ export class AgentRunController {
         return { ok: false, message: '已中止画像生成' }
       }
 
-      let profile =
-        raced.kind === 'profile' ? raced.profile : loadProfile(bootstrap.productId)
-      if (!profile) {
-        profile = await waitForProfile(bootstrap.productId, {
-          signal,
-          timeoutMs: 45_000,
-          intervalMs: 1000,
-        })
+      if (idleResult === 'timeout') {
+        throw new Error('等待 OpenCode 会话 idle 超时')
       }
+
+      await bridge.ingestNow().catch(() => undefined)
+
+      const profile = await loadWithGrace(
+        () => loadProfile(bootstrap.productId),
+        { signal, attempts: 12, intervalMs: 500 },
+      )
 
       if (!profile) {
         throw new Error(
-          'Agent 已结束，但未找到 profile.json。请向上滚动查看工具调用与模型输出。',
+          '会话已结束，但未找到 profile.json。请向上滚动查看工具调用与模型输出。',
         )
-      }
-
-      // 产物已写入后继续等会话结束，收齐最终 assistant 回复
-      if (raced.kind === 'profile') {
-        await this.settleAfterArtifact(
-          client,
-          this.sessionId,
-          signal,
-          bridge.ingestNow,
-        )
-      } else {
-        await bridge.ingestNow().catch(() => undefined)
       }
 
       const score =
@@ -1089,50 +1044,108 @@ export class AgentRunController {
     }
   }
 
-  private async waitUntilIdle(
+  /**
+   * 任务是否终止：仅以 OpenCode 官方会话状态为准（v2.wait / session.status）。
+   * 业务成败在返回 idle 后再读产物判断，不在此处做。
+   */
+  private async waitForSessionIdle(
     client: OpencodeClient,
     sessionId: string,
     signal: AbortSignal,
     timeoutMs = 12 * 60_000,
-  ): Promise<void> {
+  ): Promise<'idle' | 'abort' | 'timeout'> {
+    if (signal.aborted) return 'abort'
     const started = Date.now()
+
+    const official = await this.tryOfficialSessionWait(
+      client,
+      sessionId,
+      signal,
+      timeoutMs,
+    )
+    if (official !== 'unavailable') return official
+
+    const remaining = Math.max(5_000, timeoutMs - (Date.now() - started))
+    return this.pollSessionIdle(client, sessionId, signal, remaining)
+  }
+
+  /** 优先官方 wait；503/未实现等则返回 unavailable 走 status 轮询 */
+  private async tryOfficialSessionWait(
+    client: OpencodeClient,
+    sessionId: string,
+    signal: AbortSignal,
+    timeoutMs: number,
+  ): Promise<'idle' | 'abort' | 'timeout' | 'unavailable'> {
+    if (signal.aborted) return 'abort'
+
+    const local = new AbortController()
+    const onParentAbort = () => local.abort()
+    signal.addEventListener('abort', onParentAbort)
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      local.abort()
+    }, timeoutMs)
+
+    try {
+      const res = await client.v2.session.wait(
+        { sessionID: sessionId },
+        { signal: local.signal },
+      )
+      if (signal.aborted) return 'abort'
+      if (timedOut) return 'timeout'
+      const status = res.response?.status
+      if (status === 204 || (status != null && status >= 200 && status < 300)) {
+        return 'idle'
+      }
+      return 'unavailable'
+    } catch {
+      if (signal.aborted) return 'abort'
+      if (timedOut) return 'timeout'
+      return 'unavailable'
+    } finally {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', onParentAbort)
+    }
+  }
+
+  private async pollSessionIdle(
+    client: OpencodeClient,
+    sessionId: string,
+    signal: AbortSignal,
+    timeoutMs: number,
+  ): Promise<'idle' | 'abort' | 'timeout'> {
+    const started = Date.now()
+    /** 避免 promptAsync 后瞬间仍是 idle 就误判结束 */
+    let sawActive = false
+    const activeDeadlineMs = 30_000
+
     while (!signal.aborted && Date.now() - started < timeoutMs) {
       try {
         const status = await client.session.status({})
         const map = asRecord(status.data) ?? {}
         const entry = asRecord(map[sessionId])
-        if (asString(entry?.type) === 'idle') {
-          await new Promise((r) => setTimeout(r, 800))
-          return
+        // 不在 map 中时服务端语义为 idle
+        const type = asString(entry?.type) || 'idle'
+
+        if (type === 'busy' || type === 'retry') {
+          sawActive = true
+        } else if (type === 'idle') {
+          const waitedLongEnough = Date.now() - started >= activeDeadlineMs
+          if (sawActive || waitedLongEnough) {
+            await sleep(400)
+            if (signal.aborted) return 'abort'
+            return 'idle'
+          }
         }
       } catch {
-        // ignore
+        // 瞬时错误忽略，继续轮询
       }
-      await new Promise((r) => setTimeout(r, 1200))
+      await sleep(1000)
     }
-  }
 
-  /**
-   * 产物已写入后，再等会话 idle（或宽限期），以便收齐最终 assistant 回复。
-   */
-  private async settleAfterArtifact(
-    client: OpencodeClient,
-    sessionId: string,
-    signal: AbortSignal,
-    ingestNow: () => Promise<void>,
-  ): Promise<void> {
-    if (signal.aborted) return
-    await Promise.race([
-      this.waitUntilIdle(client, sessionId, signal, 90_000),
-      new Promise<void>((resolve) => {
-        signal.addEventListener('abort', () => resolve(), { once: true })
-      }),
-    ])
-    try {
-      await ingestNow()
-    } catch {
-      // ignore
-    }
+    if (signal.aborted) return 'abort'
+    return 'timeout'
   }
 
   private startEventBridge(
