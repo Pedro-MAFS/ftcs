@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getWorkspaceRoot } from '../config/paths'
+import { generateProductId } from './product-id'
 import { getProfilePath, loadProfile, type ProductProfileDetail } from './profile-reader'
 import { computeReadiness, resolveStatus } from './readiness'
 
@@ -57,6 +58,90 @@ function cleanString(value: unknown): string {
 function cleanStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.map((item) => String(item).trim()).filter(Boolean)
+}
+
+/** 新建一条空草稿画像，供用户手工填写 */
+export function createEmptyDraftProfile(
+  workspaceRoot = getWorkspaceRoot(),
+): ProfileSaveResult {
+  const productId = generateProductId(workspaceRoot)
+  const now = new Date().toISOString()
+
+  const company = {
+    name: '',
+    website: '',
+    country: '',
+    description: '',
+    certifications: [] as string[],
+  }
+  const products = [
+    {
+      name: '',
+      name_en: '',
+      category: '',
+      materials: [] as string[],
+      specs: [] as string[],
+      moq: '',
+      price_range: '',
+      use_cases: [] as string[],
+      differentiators: [] as string[],
+    },
+  ]
+  const buyer_personas: unknown[] = []
+  const target_markets = {
+    regions: [] as string[],
+    excluded_regions: [] as string[],
+    languages: [] as string[],
+  }
+  const competitors: unknown[] = []
+
+  const readiness = computeReadiness({
+    company,
+    products,
+    buyer_personas,
+    target_markets,
+    competitors,
+  })
+  const status = resolveStatus(readiness)
+
+  const profile: Record<string, unknown> = {
+    id: productId,
+    version: 1,
+    created_at: now,
+    updated_at: now,
+    status,
+    readiness,
+    company,
+    products,
+    buyer_personas,
+    target_markets,
+    competitors,
+    source_inputs: [
+      {
+        type: 'manual',
+        note: '手工创建草稿',
+        created_at: now,
+      },
+    ],
+  }
+
+  const profilePath = getProfilePath(productId, workspaceRoot)
+  fs.mkdirSync(path.dirname(profilePath), { recursive: true })
+  fs.mkdirSync(path.join(path.dirname(profilePath), 'inputs'), {
+    recursive: true,
+  })
+  fs.writeFileSync(profilePath, `${JSON.stringify(profile, null, 2)}\n`, 'utf8')
+
+  const loaded = loadProfile(productId, workspaceRoot)
+  if (!loaded) {
+    return { ok: false, message: '草稿已写入但重新读取失败' }
+  }
+
+  return {
+    ok: true,
+    message: `已创建草稿 ${productId}`,
+    profile: loaded,
+  }
 }
 
 export function saveProductProfile(

@@ -18,11 +18,12 @@ defineProps<{
 }>()
 
 const router = useRouter()
-const { products, activeProductId, pipelineSteps, selectProduct, deleteProduct } =
+const { products, activeProductId, pipelineSteps, selectProduct, deleteProduct, createDraftProduct } =
   useWorkspace()
 const { activeCategory, setCategory } = useSettingsNav()
 
 const deletingId = ref('')
+const creatingDraft = ref(false)
 const deleteError = ref('')
 const confirmOpen = ref(false)
 const pendingDelete = ref<{ id: string; label: string } | null>(null)
@@ -96,6 +97,24 @@ async function confirmDelete(): Promise<void> {
     deletingId.value = ''
   }
 }
+
+async function onCreateDraft(): Promise<void> {
+  if (creatingDraft.value) return
+  creatingDraft.value = true
+  deleteError.value = ''
+  try {
+    const res = await createDraftProduct()
+    if (!res.ok) {
+      deleteError.value = res.message
+      return
+    }
+    await router.push({ name: 'profile' })
+  } catch (err) {
+    deleteError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    creatingDraft.value = false
+  }
+}
 </script>
 
 <template>
@@ -119,7 +138,14 @@ async function confirmDelete(): Promise<void> {
     <template v-else>
       <div class="sidebar__head">
         <span>产品</span>
-        <button type="button" class="icon-btn" title="新建产品" aria-label="新建产品" disabled>
+        <button
+          type="button"
+          class="icon-btn"
+          title="新建空白草稿"
+          aria-label="新建空白草稿"
+          :disabled="creatingDraft"
+          @click="onCreateDraft"
+        >
           <Icon name="plus" :size="14" />
         </button>
       </div>

@@ -20,6 +20,7 @@ export const IPC = {
   PROFILE_LIST: 'profile:list',
   PROFILE_SAVE: 'profile:save',
   PROFILE_DELETE: 'profile:delete',
+  PROFILE_CREATE_DRAFT: 'profile:create-draft',
   AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',

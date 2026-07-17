@@ -92,7 +92,7 @@ function toProductSummary(profile: {
   productNames?: string[]
   updatedAt?: string
 }): ProductSummary {
-  const companyName = profile.companyName?.trim() || profile.id
+  const companyName = profile.companyName?.trim() || '未命名草稿'
   const names =
     profile.productNames && profile.productNames.length > 0
       ? profile.productNames
@@ -231,6 +231,19 @@ export function useWorkspace() {
     return { ok: true, message: res.message }
   }
 
+  async function createDraftProduct(): Promise<{ ok: boolean; message: string; productId?: string }> {
+    if (!window.ftcs?.createDraftProfile) {
+      return { ok: false, message: '新建草稿接口不可用' }
+    }
+    const res = await window.ftcs.createDraftProfile()
+    if (!res.ok || !res.profile) {
+      return { ok: false, message: res.message }
+    }
+    applyProfileToState(res.profile)
+    activeProductId.value = res.profile.id
+    return { ok: true, message: res.message, productId: res.profile.id }
+  }
+
   function setAgentContext(section: WorkspaceSection): void {
     if (agentStatus.value !== 'running') {
       agentSkill.value = SECTION_SKILL[section] ?? 'idle'
@@ -277,6 +290,7 @@ export function useWorkspace() {
     generating,
     selectProduct,
     deleteProduct,
+    createDraftProduct,
     setAgentContext,
     resetAgentForGenerate,
     toggleTimelineExpand,
