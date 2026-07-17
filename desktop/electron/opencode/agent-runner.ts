@@ -5,6 +5,11 @@ import {
   waitForProfile,
   type ProductProfileDetail,
 } from '../profile/profile-reader'
+import {
+  loadExpansion,
+  waitForExpansion,
+  type KeywordExpansion,
+} from '../keywords/keywords-reader'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -38,6 +43,7 @@ export type AgentEventPayload =
       productId: string
       message: string
       profile?: ProductProfileDetail
+      expansion?: KeywordExpansion
     }
 
 export type AgentEventSink = (event: AgentEventPayload) => void
@@ -75,6 +81,22 @@ function buildPrompt(bootstrap: BootstrapResult): string {
     '5. 完成后用简短中文汇报：产品 ID、公司名、核心产品、就绪度分数与 status、缺失字段、下一步建议。',
     '',
     `来源清单：data/products/${bootstrap.productId}/inputs/_sources.json`,
+  ].join('\n')
+}
+
+function buildExpandKeywordsPrompt(productId: string): string {
+  return [
+    '请严格按 skill `expand-keywords` 执行，为指定产品扩展获客关键词与搜索查询。',
+    '',
+    `产品 ID：${productId}`,
+    '',
+    '执行要求：',
+    '1. 调用 lead-store.product_get 确认画像存在且 status == "ready"。',
+    '2. 调用 lead-store.keywords_expand（传入上述 product_id）生成并保存 expansion.json。',
+    '3. 检查 stats：total_queries >= 30，维度覆盖 ≥ 4；不足则审阅补充后 keywords_save。',
+    '4. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例搜索词、下一步建议（discover-leads / R1）。',
+    '',
+    `输出路径：data/keywords/${productId}/expansion.json`,
   ].join('\n')
 }
 
@@ -263,12 +285,235 @@ export class AgentRunController {
     }
   }
 
+  async runExpandKeywords(
+    productId: string,
+    emit: AgentEventSink,
+  ): Promise<{ ok: boolean; message: string; expansion?: KeywordExpansion }> {
+    if (this.running) {
+      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+    }
+
+    const client = this.getClient()
+    if (!client) {
+      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+    }
+
+    const profile = loadProfile(productId)
+    if (!profile) {
+      throw new Error(`未找到产品画像：${productId}`)
+    }
+    if (profile.status !== 'ready') {
+      const missing =
+        profile.missingFields.length > 0
+          ? `缺失：${profile.missingFields.join('、')}`
+          : '请先补全并保存画像至就绪'
+      throw new Error(`画像未就绪（${profile.status}）。${missing}`)
+    }
+
+    this.running = true
+    this.abort = new AbortController()
+    const signal = this.abort.signal
+    const startedAt = Date.now()
+    const afterIso = new Date().toISOString()
+    const timeline = new TimelineBuilder()
+
+    const flushTimeline = () => {
+      const items = timeline.emitIfChanged()
+      if (items) emit({ type: 'timeline', items })
+    }
+
+    const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
+      const elapsedSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+      const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0')
+      const ss = String(elapsedSec % 60).padStart(2, '0')
+      let readiness = '扩展中'
+      let tone = 'accent'
+      if (status === 'done') {
+        readiness = '已就绪'
+        tone = 'success'
+      } else if (status === 'error') {
+        readiness = '失败'
+        tone = 'warning'
+      }
+      emit({
+        type: 'state',
+        skill: 'expand-keywords',
+        status,
+        productId,
+        meta: [
+          { label: '状态', value: readiness, tone },
+          { label: '产品', value: productId.slice(0, 18) },
+          { label: '耗时', value: `${mm}:${ss}` },
+          { label: '来源', value: '画像' },
+        ],
+      })
+    }
+
+    const promptText = buildExpandKeywordsPrompt(productId)
+    timeline.reset()
+    timeline.addPrefix({
+      id: 'sys-prepare',
+      kind: 'system',
+      time: nowTime(),
+      title: '系统',
+      body: `准备为 ${productId}（${profile.companyName || '未命名'}）扩展关键词`,
+    })
+    timeline.addPrefix({
+      id: 'user-expand',
+      kind: 'user',
+      time: nowTime(),
+      title: '你的指令 · 新建探索任务',
+      body: promptText,
+      collapsed: true,
+    })
+    pushState('running')
+    flushTimeline()
+
+    let stopEvents: (() => void) | null = null
+
+    try {
+      const created = await client.session.create({
+        title: `expand-keywords · ${productId}`,
+      })
+      if (created.error || !created.data?.id) {
+        throw new Error(
+          typeof created.error === 'object' && created.error && 'message' in created.error
+            ? String((created.error as { message?: string }).message)
+            : '创建 OpenCode 会话失败',
+        )
+      }
+      this.sessionId = created.data.id
+      timeline.addPrefix({
+        id: 'sys-session',
+        kind: 'system',
+        time: nowTime(),
+        title: '会话',
+        body: `已创建 OpenCode session\n${this.sessionId}`,
+      })
+      flushTimeline()
+
+      stopEvents = this.startEventBridge(
+        client,
+        this.sessionId,
+        timeline,
+        flushTimeline,
+        promptText,
+      )
+
+      const promptPromise = client.session.promptAsync({
+        sessionID: this.sessionId,
+        parts: [{ type: 'text', text: promptText }],
+      })
+
+      const expansionPromise = waitForExpansion(productId, {
+        signal,
+        afterIso,
+        timeoutMs: 12 * 60_000,
+      })
+      const idlePromise = this.waitUntilIdle(client, this.sessionId, signal)
+
+      const raced = await Promise.race([
+        expansionPromise.then((expansion) => ({
+          kind: 'expansion' as const,
+          expansion,
+        })),
+        idlePromise.then(() => ({ kind: 'idle' as const })),
+        new Promise<{ kind: 'abort' }>((resolve) => {
+          signal.addEventListener('abort', () => resolve({ kind: 'abort' }), {
+            once: true,
+          })
+        }),
+      ])
+
+      void promptPromise
+
+      if (raced.kind === 'abort') {
+        pushState('error')
+        timeline.addSuffix({
+          id: 'sys-abort',
+          kind: 'error',
+          time: nowTime(),
+          title: '已中止',
+          body: '用户中止了关键词扩展',
+        })
+        flushTimeline()
+        emit({
+          type: 'done',
+          ok: false,
+          productId,
+          message: '已中止关键词扩展',
+        })
+        return { ok: false, message: '已中止关键词扩展' }
+      }
+
+      let expansion =
+        raced.kind === 'expansion' ? raced.expansion : loadExpansion(productId)
+      if (!expansion) {
+        expansion = await waitForExpansion(productId, {
+          signal,
+          afterIso,
+          timeoutMs: 45_000,
+          intervalMs: 1000,
+        })
+      }
+
+      if (!expansion) {
+        throw new Error(
+          'Agent 已结束，但未找到 expansion.json。请向上滚动查看工具调用与模型输出。',
+        )
+      }
+
+      const total = expansion.stats.total_queries
+      const message = `关键词已扩展：${productId} · ${total} 条搜索词`
+      timeline.addSuffix({
+        id: 'sys-done',
+        kind: 'system',
+        time: nowTime(),
+        title: '完成',
+        body: message,
+      })
+      flushTimeline()
+      pushState('done')
+      emit({
+        type: 'done',
+        ok: true,
+        productId,
+        message,
+        expansion,
+      })
+      return { ok: true, message, expansion }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      timeline.addSuffix({
+        id: 'sys-error',
+        kind: 'error',
+        time: nowTime(),
+        title: '错误',
+        body: message,
+      })
+      flushTimeline()
+      pushState('error')
+      emit({
+        type: 'done',
+        ok: false,
+        productId,
+        message,
+      })
+      return { ok: false, message }
+    } finally {
+      stopEvents?.()
+      this.running = false
+      this.sessionId = null
+      this.abort = null
+    }
+  }
+
   async runExtractProfile(
     bootstrap: BootstrapResult,
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string; profile?: ProductProfileDetail }> {
     if (this.running) {
-      throw new Error('已有画像生成任务在运行，请稍候或先中止')
+      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()

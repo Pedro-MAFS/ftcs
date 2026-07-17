@@ -37,6 +37,8 @@ import { AgentRunController } from './opencode/agent-runner'
 import { bootstrapProductFromLibrary } from './profile/profile-bootstrap'
 import { listProductSummaries, loadProfile } from './profile/profile-reader'
 import { createEmptyDraftProfile, saveProductProfile, softDeleteProductProfile } from './profile/profile-writer'
+import { loadExpansion } from './keywords/keywords-reader'
+import { listExploreTasks } from './exploration/explore-tasks'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -400,6 +402,80 @@ function registerIpcHandlers(): void {
     }
   })
 
+  ipcMain.handle(IPC.KEYWORDS_GET, (_event, productId: string) => {
+    try {
+      return loadExpansion(productId)
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle(IPC.EXPLORATION_LIST_TASKS, (_event, productId: string) => {
+    try {
+      const profile = loadProfile(productId)
+      return listExploreTasks(productId, {
+        companyName: profile?.companyName,
+      })
+    } catch (err) {
+      return {
+        productId,
+        tasks: [],
+        summary: {
+          total: 0,
+          keywordsReady: 0,
+          running: 0,
+          completed: 0,
+          failed: 0,
+        },
+        expansion: null,
+        error: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.KEYWORDS_EXPAND, async (event, productId: string) => {
+    try {
+      if (!productId || typeof productId !== 'string') {
+        return { ok: false, message: '缺少 productId' }
+      }
+      if (getAgentRunner().isRunning()) {
+        return {
+          ok: false,
+          message: '已有 Agent 任务在运行',
+        }
+      }
+      if (runtime?.getStatus().state !== 'running' || !runtime.getClient()) {
+        return {
+          ok: false,
+          message: 'OpenCode 未就绪，请先在设置页确认运行时或点击「重启 OpenCode」',
+        }
+      }
+
+      const sender = event.sender
+      void getAgentRunner()
+        .runExpandKeywords(productId, (payload) => emitAgentEvent(sender, payload))
+        .catch((err) => {
+          emitAgentEvent(sender, {
+            type: 'done',
+            ok: false,
+            productId,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        })
+
+      return {
+        ok: true,
+        message: `正在为 ${productId} 扩展关键词…`,
+        productId,
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
   ipcMain.handle(IPC.PROFILE_ABORT, async () => {
     await getAgentRunner().abortCurrent()
     return { ok: true }
@@ -410,7 +486,7 @@ function registerIpcHandlers(): void {
       if (getAgentRunner().isRunning()) {
         return {
           ok: false,
-          message: '已有画像生成任务在运行',
+          message: '已有 Agent 任务在运行',
         }
       }
       if (runtime?.getStatus().state !== 'running' || !runtime.getClient()) {

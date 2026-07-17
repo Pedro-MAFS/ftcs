@@ -3,6 +3,9 @@ import { IPC } from './ipc/types'
 import type {
   AgentEventPayload,
   AppStatus,
+  ExploreTasksSnapshotDto,
+  KeywordExpansionDto,
+  KeywordsExpandResult,
   LibraryMutationResult,
   LibrarySnapshot,
   ProfileDetail,
@@ -65,6 +68,12 @@ const api = {
     ipcRenderer.invoke(IPC.PROFILE_DELETE, productId),
   createDraftProfile: (): Promise<ProfileSaveResult> =>
     ipcRenderer.invoke(IPC.PROFILE_CREATE_DRAFT),
+  expandKeywords: (productId: string): Promise<KeywordsExpandResult> =>
+    ipcRenderer.invoke(IPC.KEYWORDS_EXPAND, productId),
+  getKeywords: (productId: string): Promise<KeywordExpansionDto | null> =>
+    ipcRenderer.invoke(IPC.KEYWORDS_GET, productId),
+  listExploreTasks: (productId: string): Promise<ExploreTasksSnapshotDto> =>
+    ipcRenderer.invoke(IPC.EXPLORATION_LIST_TASKS, productId),
   onAgentEvent: (handler: (payload: AgentEventPayload) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: AgentEventPayload) => {
       handler(payload)

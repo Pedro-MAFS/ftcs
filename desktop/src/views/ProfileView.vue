@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import Icon from '../components/shared/Icon.vue'
 import type { ProfileDetail, ProfileSaveInput } from '../types/electron'
 
+const router = useRouter()
 const meta = SECTION_META.profile
 const {
   currentProfile,
@@ -14,6 +16,7 @@ const {
   loadActiveProfile,
   refreshProducts,
   applyProfileToState,
+  resetAgentForExpandKeywords,
 } = useWorkspace()
 
 interface ProductDraft {
@@ -44,6 +47,7 @@ const baseline = ref('')
 const saving = ref(false)
 const saveMessage = ref('')
 const saveError = ref(false)
+const expandError = ref('')
 
 const ROLE_LABELS: Record<string, string> = {
   procurement_manager: '采购经理',
@@ -289,6 +293,45 @@ async function save(): Promise<void> {
     saving.value = false
   }
 }
+
+const canCreateExplore = computed(() => {
+  return (
+    !!activeProductId.value &&
+    currentProfile.value?.status === 'ready' &&
+    !generating.value &&
+    !saving.value &&
+    !dirty.value
+  )
+})
+
+async function createExploreTask(): Promise<void> {
+  if (!activeProductId.value || !window.ftcs?.expandKeywords) return
+  expandError.value = ''
+
+  if (dirty.value) {
+    expandError.value = '请先保存画像修改，再新建探索任务'
+    return
+  }
+  if (currentProfile.value?.status !== 'ready') {
+    expandError.value = '画像未就绪，请补全必填字段并保存后再试'
+    return
+  }
+
+  resetAgentForExpandKeywords()
+  try {
+    const res = await window.ftcs.expandKeywords(activeProductId.value)
+    if (!res.ok) {
+      expandError.value = res.message
+      // 启动失败时恢复 Agent 面板状态（成功启动则由 agent:event 接管）
+      agentStatus.value = 'error'
+      return
+    }
+    await router.push({ name: 'explore' })
+  } catch (err) {
+    expandError.value = err instanceof Error ? err.message : String(err)
+    agentStatus.value = 'error'
+  }
+}
 </script>
 
 <template>
@@ -309,15 +352,33 @@ async function save(): Promise<void> {
         </button>
         <button
           type="button"
-          class="btn-primary"
+          class="btn-secondary"
           :disabled="generating || saving || !dirty || !draft"
           @click="save"
         >
           <Icon name="save" :size="12" />
           {{ saving ? '保存中…' : '保存画像' }}
         </button>
+        <button
+          type="button"
+          class="btn-primary"
+          :disabled="!canCreateExplore"
+          :title="
+            dirty
+              ? '请先保存修改'
+              : currentProfile?.status !== 'ready'
+                ? '画像就绪后方可新建'
+                : '调用 expand-keywords 生成探索任务'
+          "
+          @click="createExploreTask"
+        >
+          <Icon name="radar" :size="12" />
+          新建探索任务
+        </button>
       </div>
     </header>
+
+    <p v-if="expandError" class="profile-action-error">{{ expandError }}</p>
 
     <div class="profile-panel">
       <div

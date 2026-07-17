@@ -6,11 +6,18 @@ import type {
   ProductSummary,
   WorkspaceSection,
 } from '../types/workspace'
-import type { AgentEventPayload, ProfileDetail } from '../types/electron'
+import type {
+  AgentEventPayload,
+  ExploreTasksSnapshotDto,
+  KeywordExpansionDto,
+  ProfileDetail,
+} from '../types/electron'
 
 const products = ref<ProductSummary[]>([])
 const activeProductId = ref('')
 const currentProfile = ref<ProfileDetail | null>(null)
+const currentExpansion = ref<KeywordExpansionDto | null>(null)
+const exploreTasks = ref<ExploreTasksSnapshotDto | null>(null)
 
 const pipelineSteps = ref<PipelineStep[]>([
   { id: 'input', label: '1 产品录入', status: 'pending', statusLabel: '待执行' },
@@ -114,6 +121,18 @@ function toProductSummary(profile: {
   }
 }
 
+async function refreshExploreTasks(): Promise<void> {
+  if (!window.ftcs?.listExploreTasks || !activeProductId.value) {
+    exploreTasks.value = null
+    currentExpansion.value = null
+    return
+  }
+  const snap = await window.ftcs.listExploreTasks(activeProductId.value)
+  exploreTasks.value = snap
+  currentExpansion.value = snap.expansion
+  updatePipelineFromProfile()
+}
+
 async function refreshProducts(): Promise<void> {
   if (!window.ftcs?.listProfiles) return
   const list = await window.ftcs.listProfiles()
@@ -123,6 +142,7 @@ async function refreshProducts(): Promise<void> {
   }
   if (activeProductId.value) {
     await loadActiveProfile()
+    await refreshExploreTasks()
   }
   updatePipelineFromProfile()
 }
@@ -140,15 +160,38 @@ function updatePipelineFromProfile(): void {
   const profile = currentProfile.value
   if (!profile) return
   const ready = profile.status === 'ready'
+  const hasKeywords = !!currentExpansion.value
+  const hasRunning = (exploreTasks.value?.summary.running ?? 0) > 0
+  const hasCompleted = (exploreTasks.value?.summary.completed ?? 0) > 0
+  const expanding =
+    agentStatus.value === 'running' && agentSkill.value === 'expand-keywords'
+
   pipelineSteps.value = [
     { id: 'input', label: '1 产品录入', status: 'done', statusLabel: '完成' },
     {
       id: 'keywords',
       label: '2 关键词扩展',
-      status: 'pending',
-      statusLabel: ready ? '可执行' : '待就绪',
+      status: hasKeywords ? 'done' : expanding ? 'running' : 'pending',
+      statusLabel: hasKeywords
+        ? '完成'
+        : expanding
+          ? '执行中'
+          : ready
+            ? '可执行'
+            : '待就绪',
     },
-    { id: 'explore', label: '3 R1 探索', status: 'pending', statusLabel: '待执行' },
+    {
+      id: 'explore',
+      label: '3 R1 探索',
+      status: hasCompleted ? 'done' : hasRunning ? 'running' : 'pending',
+      statusLabel: hasCompleted
+        ? '完成'
+        : hasRunning
+          ? '执行中'
+          : hasKeywords
+            ? '可执行'
+            : '待关键词',
+    },
     { id: 'score', label: '4 线索评分', status: 'pending', statusLabel: '待执行' },
     { id: 'email', label: '5 邮件草稿', status: 'pending', statusLabel: '待执行' },
   ]
@@ -166,6 +209,7 @@ function handleAgentEvent(payload: AgentEventPayload): void {
     if (payload.productId) {
       activeProductId.value = payload.productId
     }
+    updatePipelineFromProfile()
     return
   }
   if (payload.type === 'timeline') {
@@ -177,9 +221,12 @@ function handleAgentEvent(payload: AgentEventPayload): void {
     if (payload.profile) {
       applyProfileToState(payload.profile)
       activeProductId.value = payload.profile.id
-    } else {
-      void refreshProducts()
     }
+    if (payload.expansion) {
+      currentExpansion.value = payload.expansion
+    }
+    void refreshProducts()
+    void refreshExploreTasks()
   }
 }
 
@@ -208,7 +255,7 @@ export function useWorkspace() {
 
   function selectProduct(id: string): void {
     activeProductId.value = id
-    void loadActiveProfile()
+    void loadActiveProfile().then(() => refreshExploreTasks())
   }
 
   async function deleteProduct(id: string): Promise<{ ok: boolean; message: string }> {
@@ -224,14 +271,24 @@ export function useWorkspace() {
     if (wasActive) {
       const next = products.value[0]
       activeProductId.value = next?.id ?? ''
-      if (next) await loadActiveProfile()
-      else currentProfile.value = null
+      if (next) {
+        await loadActiveProfile()
+        await refreshExploreTasks()
+      } else {
+        currentProfile.value = null
+        currentExpansion.value = null
+        exploreTasks.value = null
+      }
     }
 
     return { ok: true, message: res.message }
   }
 
-  async function createDraftProduct(): Promise<{ ok: boolean; message: string; productId?: string }> {
+  async function createDraftProduct(): Promise<{
+    ok: boolean
+    message: string
+    productId?: string
+  }> {
     if (!window.ftcs?.createDraftProfile) {
       return { ok: false, message: '新建草稿接口不可用' }
     }
@@ -241,6 +298,8 @@ export function useWorkspace() {
     }
     applyProfileToState(res.profile)
     activeProductId.value = res.profile.id
+    currentExpansion.value = null
+    exploreTasks.value = null
     return { ok: true, message: res.message, productId: res.profile.id }
   }
 
@@ -259,6 +318,18 @@ export function useWorkspace() {
       { label: '就绪度', value: '生成中', tone: 'accent' },
       { label: '选中', value: `${selectedCount} 项` },
       { label: '来源', value: '资料库' },
+    ]
+  }
+
+  function resetAgentForExpandKeywords(): void {
+    agentSkill.value = 'expand-keywords'
+    agentStatus.value = 'running'
+    agentTimeline.value = []
+    agentExpanded.value = {}
+    agentMeta.value = [
+      { label: '状态', value: '扩展中', tone: 'accent' },
+      { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
+      { label: '来源', value: '画像' },
     ]
   }
 
@@ -281,6 +352,8 @@ export function useWorkspace() {
     activeProductId,
     activeProduct,
     currentProfile,
+    currentExpansion,
+    exploreTasks,
     pipelineSteps,
     agentSkill,
     agentStatus,
@@ -293,10 +366,12 @@ export function useWorkspace() {
     createDraftProduct,
     setAgentContext,
     resetAgentForGenerate,
+    resetAgentForExpandKeywords,
     toggleTimelineExpand,
     isTimelineExpanded,
     refreshProducts,
     loadActiveProfile,
+    refreshExploreTasks,
     applyProfileToState,
   }
 }

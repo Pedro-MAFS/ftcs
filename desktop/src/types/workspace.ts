@@ -73,12 +73,12 @@ export const SECTION_META: Record<
   profile: {
     label: '画像',
     title: '产品画像',
-    subtitle: '可编辑公司与产品信息，纠正 AI 识别后保存',
+    subtitle: '确认画像后可新建探索任务，自动扩展关键词',
   },
   explore: {
     label: '探索',
     title: '获客探索',
-    subtitle: '一键执行 R1 广撒网，查看进度与候选线索',
+    subtitle: '探索任务由画像驱动，扩展关键词后即可启用 R1',
   },
   leads: {
     label: '线索',
@@ -99,7 +99,7 @@ export const SECTION_META: Record<
 
 export const PIPELINE_TO_SECTION: Partial<Record<PipelineStepId, WorkspaceSection>> = {
   input: 'input',
-  keywords: 'profile',
+  keywords: 'explore',
   explore: 'explore',
   score: 'leads',
   email: 'email',

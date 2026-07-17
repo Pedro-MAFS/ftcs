@@ -21,6 +21,9 @@ export const IPC = {
   PROFILE_SAVE: 'profile:save',
   PROFILE_DELETE: 'profile:delete',
   PROFILE_CREATE_DRAFT: 'profile:create-draft',
+  KEYWORDS_EXPAND: 'keywords:expand',
+  KEYWORDS_GET: 'keywords:get',
+  EXPLORATION_LIST_TASKS: 'exploration:list-tasks',
   AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
@@ -96,6 +99,76 @@ export interface ProfileGenerateResult {
   skipped?: string[]
 }
 
+export interface KeywordsExpandResult {
+  ok: boolean
+  message: string
+  productId?: string
+}
+
+export interface KeywordExpansionDto {
+  product_id: string
+  generated_at: string
+  dimensions: {
+    product: string[]
+    scenario: string[]
+    buyer: string[]
+    geo: string[]
+    competitor: string[]
+  }
+  search_queries: Array<{
+    id: string
+    query: string
+    dimension: string
+    language: string
+    priority: string
+    round: string
+  }>
+  stats: {
+    total_queries: number
+    by_round: Record<string, number>
+    by_dimension?: Record<string, number>
+  }
+}
+
+export type ExploreTaskStatus =
+  | 'keywords_ready'
+  | 'running'
+  | 'completed'
+  | 'failed'
+
+export interface ExploreTaskDto {
+  id: string
+  productId: string
+  status: ExploreTaskStatus
+  title: string
+  subtitle: string
+  startedAt?: string
+  finishedAt?: string | null
+  totalQueries: number
+  queriesExecuted: number
+  leadsFound: number
+  leadsAfterDedupe?: number
+  rounds: string[]
+  dimensionCounts: Array<{ key: string; label: string; count: number }>
+  sampleQueries: string[]
+  expansionPath?: string
+  runPath?: string
+}
+
+export interface ExploreTasksSnapshotDto {
+  productId: string
+  companyName?: string
+  tasks: ExploreTaskDto[]
+  summary: {
+    total: number
+    keywordsReady: number
+    running: number
+    completed: number
+    failed: number
+  }
+  expansion: KeywordExpansionDto | null
+}
+
 export type AgentTimelineItem = {
   id: string
   kind: 'user' | 'system' | 'assistant' | 'reasoning' | 'tool' | 'error'
@@ -124,6 +197,7 @@ export type AgentEventPayload =
       productId: string
       message: string
       profile?: ProfileDetail
+      expansion?: KeywordExpansionDto
     }
 
 export type OpenCodeRuntimeState = 'idle' | 'starting' | 'running' | 'error' | 'stopped'

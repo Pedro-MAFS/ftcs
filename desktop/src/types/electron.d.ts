@@ -30,6 +30,7 @@ export type AgentEventPayload =
       productId: string
       message: string
       profile?: ProfileDetail
+      expansion?: KeywordExpansionDto
     }
 
 export interface ProfileGenerateInput {
@@ -101,6 +102,76 @@ export interface ProfileGenerateResult {
   skipped?: string[]
 }
 
+export interface KeywordsExpandResult {
+  ok: boolean
+  message: string
+  productId?: string
+}
+
+export interface KeywordExpansionDto {
+  product_id: string
+  generated_at: string
+  dimensions: {
+    product: string[]
+    scenario: string[]
+    buyer: string[]
+    geo: string[]
+    competitor: string[]
+  }
+  search_queries: Array<{
+    id: string
+    query: string
+    dimension: string
+    language: string
+    priority: string
+    round: string
+  }>
+  stats: {
+    total_queries: number
+    by_round: Record<string, number>
+    by_dimension?: Record<string, number>
+  }
+}
+
+export type ExploreTaskStatus =
+  | 'keywords_ready'
+  | 'running'
+  | 'completed'
+  | 'failed'
+
+export interface ExploreTaskDto {
+  id: string
+  productId: string
+  status: ExploreTaskStatus
+  title: string
+  subtitle: string
+  startedAt?: string
+  finishedAt?: string | null
+  totalQueries: number
+  queriesExecuted: number
+  leadsFound: number
+  leadsAfterDedupe?: number
+  rounds: string[]
+  dimensionCounts: Array<{ key: string; label: string; count: number }>
+  sampleQueries: string[]
+  expansionPath?: string
+  runPath?: string
+}
+
+export interface ExploreTasksSnapshotDto {
+  productId: string
+  companyName?: string
+  tasks: ExploreTaskDto[]
+  summary: {
+    total: number
+    keywordsReady: number
+    running: number
+    completed: number
+    failed: number
+  }
+  expansion: KeywordExpansionDto | null
+}
+
 declare global {
   interface Window {
     ftcs?: {
@@ -135,6 +206,9 @@ declare global {
       saveProfile: (input: ProfileSaveInput) => Promise<ProfileSaveResult>
       deleteProfile: (productId: string) => Promise<ProfileSaveResult>
       createDraftProfile: () => Promise<ProfileSaveResult>
+      expandKeywords: (productId: string) => Promise<KeywordsExpandResult>
+      getKeywords: (productId: string) => Promise<KeywordExpansionDto | null>
+      listExploreTasks: (productId: string) => Promise<ExploreTasksSnapshotDto>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
       getSidecarLogs: () => Promise<string[]>
