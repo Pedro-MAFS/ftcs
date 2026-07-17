@@ -34,6 +34,16 @@ export interface AgentLogLine {
   message: string
 }
 
+export interface AgentTimelineItem {
+  id: string
+  kind: 'user' | 'system' | 'assistant' | 'reasoning' | 'tool' | 'error'
+  time: string
+  title: string
+  body: string
+  status?: 'running' | 'done' | 'error'
+  collapsed?: boolean
+}
+
 export interface AgentMetaItem {
   label: string
   value: string

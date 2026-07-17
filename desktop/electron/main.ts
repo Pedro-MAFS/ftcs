@@ -32,7 +32,10 @@ import {
   pasteClipboardFiles,
   pickAndImportFiles,
 } from './library/library-service'
-import type { LibrarySnapshot } from './ipc/types'
+import type { LibrarySnapshot, ProfileGenerateInput } from './ipc/types'
+import { AgentRunController } from './opencode/agent-runner'
+import { bootstrapProductFromLibrary } from './profile/profile-bootstrap'
+import { listProductSummaries, loadProfile } from './profile/profile-reader'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -51,8 +54,34 @@ app.commandLine.appendSwitch('disable-gpu-compositing')
 
 let mainWindow: BrowserWindow | null = null
 let runtime: OpenCodeRuntime | null = null
+let agentRunner: AgentRunController | null = null
 /** Electron 不会 await before-quit；需要 preventDefault + 二次 quit */
 let isCleaningUp = false
+
+function getAgentRunner(): AgentRunController {
+  if (!agentRunner) {
+    agentRunner = new AgentRunController(() => runtime?.getClient() ?? null)
+  }
+  return agentRunner
+}
+
+function emitAgentEvent(
+  sender: Electron.WebContents | null | undefined,
+  payload: import('./ipc/types').AgentEventPayload,
+): void {
+  try {
+    sender?.send(IPC.AGENT_EVENT, payload)
+  } catch {
+    // window closed
+  }
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents !== sender) {
+    try {
+      mainWindow.webContents.send(IPC.AGENT_EVENT, payload)
+    } catch {
+      // ignore
+    }
+  }
+}
 
 function getWindowOptions(): BrowserWindowConstructorOptions {
   const options: BrowserWindowConstructorOptions = {
@@ -329,6 +358,64 @@ function registerIpcHandlers(): void {
       }
     },
   )
+
+  ipcMain.handle(IPC.PROFILE_LIST, () => listProductSummaries())
+
+  ipcMain.handle(IPC.PROFILE_GET, (_event, productId: string) => {
+    if (!productId) return null
+    return loadProfile(productId)
+  })
+
+  ipcMain.handle(IPC.PROFILE_ABORT, async () => {
+    await getAgentRunner().abortCurrent()
+    return { ok: true }
+  })
+
+  ipcMain.handle(IPC.PROFILE_GENERATE, async (event, input: ProfileGenerateInput) => {
+    try {
+      if (getAgentRunner().isRunning()) {
+        return {
+          ok: false,
+          message: '已有画像生成任务在运行',
+        }
+      }
+      if (runtime?.getStatus().state !== 'running' || !runtime.getClient()) {
+        return {
+          ok: false,
+          message: 'OpenCode 未就绪，请先在设置页确认运行时或点击「重启 OpenCode」',
+        }
+      }
+
+      const bootstrap = bootstrapProductFromLibrary({
+        websitePaths: input?.websitePaths ?? [],
+        filePaths: input?.filePaths ?? [],
+      })
+
+      const sender = event.sender
+      void getAgentRunner()
+        .runExtractProfile(bootstrap, (payload) => emitAgentEvent(sender, payload))
+        .catch((err) => {
+          emitAgentEvent(sender, {
+            type: 'done',
+            ok: false,
+            productId: bootstrap.productId,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        })
+
+      return {
+        ok: true,
+        message: `已分配 ${bootstrap.productId}，正在生成画像…`,
+        productId: bootstrap.productId,
+        skipped: bootstrap.skipped,
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
 }
 
 async function bootstrapOpenCode(): Promise<void> {

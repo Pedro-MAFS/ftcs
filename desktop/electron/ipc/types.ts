@@ -14,11 +14,73 @@ export const IPC = {
   LIBRARY_IMPORT_PATHS: 'library:import-paths',
   LIBRARY_PASTE_CLIPBOARD: 'library:paste-clipboard',
   LIBRARY_DELETE_ENTRY: 'library:delete-entry',
+  PROFILE_GENERATE: 'profile:generate',
+  PROFILE_ABORT: 'profile:abort',
+  PROFILE_GET: 'profile:get',
+  PROFILE_LIST: 'profile:list',
+  AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_GET_LOGS */
   SIDECAR_GET_LOGS: 'opencode:get-logs',
 } as const
+
+export interface ProfileGenerateInput {
+  websitePaths: string[]
+  filePaths: string[]
+}
+
+export interface ProfileSummary {
+  id: string
+  status: string
+  readinessScore?: number
+  companyName?: string
+  productName?: string
+  missingFields: string[]
+  profilePath: string
+  updatedAt?: string
+}
+
+export interface ProfileDetail extends ProfileSummary {
+  raw: Record<string, unknown>
+}
+
+export interface ProfileGenerateResult {
+  ok: boolean
+  message: string
+  productId?: string
+  skipped?: string[]
+}
+
+export type AgentTimelineItem = {
+  id: string
+  kind: 'user' | 'system' | 'assistant' | 'reasoning' | 'tool' | 'error'
+  time: string
+  title: string
+  body: string
+  status?: 'running' | 'done' | 'error'
+  collapsed?: boolean
+}
+
+export type AgentEventPayload =
+  | {
+      type: 'state'
+      skill: string
+      status: 'idle' | 'running' | 'done' | 'error'
+      productId?: string
+      meta: Array<{ label: string; value: string; tone?: string }>
+    }
+  | {
+      type: 'timeline'
+      items: AgentTimelineItem[]
+    }
+  | {
+      type: 'done'
+      ok: boolean
+      productId: string
+      message: string
+      profile?: ProfileDetail
+    }
 
 export type OpenCodeRuntimeState = 'idle' | 'starting' | 'running' | 'error' | 'stopped'
 

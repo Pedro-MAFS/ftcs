@@ -1,16 +1,22 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import type { FileEntry, LibrarySnapshot, WebsiteItem } from '../types/library'
+import { useWorkspace } from '../composables/useWorkspace'
 import Icon from '../components/shared/Icon.vue'
 
 const meta = SECTION_META.input
+const router = useRouter()
+const { resetAgentForGenerate, generating } = useWorkspace()
+
 const websiteUrl = ref('')
 const websites = ref<WebsiteItem[]>([])
 const cwd = ref('')
 const entries = ref<FileEntry[]>([])
 const filesRootLabel = ref('data/library/files')
 const selectedIds = ref<Set<string>>(new Set())
+const selectedWebsiteIds = ref<Set<string>>(new Set())
 const busy = ref(false)
 const message = ref('')
 const error = ref('')
@@ -20,7 +26,17 @@ const newFolderName = ref('')
 const folderInputRef = ref<HTMLInputElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 
-const selectedCount = computed(() => selectedIds.value.size)
+const selectedFileCount = computed(
+  () =>
+    [...selectedIds.value].filter(
+      (id) => entries.value.find((e) => e.relativePath === id)?.kind === 'file',
+    ).length,
+)
+const selectedWebsiteCount = computed(() => selectedWebsiteIds.value.size)
+const selectedCount = computed(() => selectedFileCount.value + selectedWebsiteCount.value)
+const canGenerate = computed(
+  () => selectedCount.value > 0 && !busy.value && !generating.value,
+)
 const crumbs = computed(() => {
   if (!cwd.value) return [] as Array<{ label: string; path: string }>
   const parts = cwd.value.split('/').filter(Boolean)
@@ -38,8 +54,12 @@ function applySnapshot(snap: LibrarySnapshot) {
   cwd.value = snap.cwd
   entries.value = snap.entries
   filesRootLabel.value = snap.filesRootLabel
-  const valid = new Set(snap.entries.map((e) => e.relativePath))
-  selectedIds.value = new Set([...selectedIds.value].filter((id) => valid.has(id)))
+  const validFiles = new Set(snap.entries.map((e) => e.relativePath))
+  selectedIds.value = new Set([...selectedIds.value].filter((id) => validFiles.has(id)))
+  const validSites = new Set(snap.websites.map((w) => w.relativePath))
+  selectedWebsiteIds.value = new Set(
+    [...selectedWebsiteIds.value].filter((id) => validSites.has(id)),
+  )
 }
 
 function applyResult(res: { ok: boolean; message: string; snapshot: LibrarySnapshot }) {
@@ -68,6 +88,13 @@ function toggleSelect(id: string) {
   selectedIds.value = next
 }
 
+function toggleWebsite(id: string) {
+  const next = new Set(selectedWebsiteIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedWebsiteIds.value = next
+}
+
 function formatSize(n?: number): string {
   if (n == null) return ''
   if (n < 1024) return `${n} B`
@@ -83,7 +110,15 @@ async function addWebsite() {
   try {
     const res = await window.ftcs.addWebsite(websiteUrl.value, cwd.value)
     applyResult(res)
-    if (res.ok) websiteUrl.value = ''
+    if (res.ok) {
+      websiteUrl.value = ''
+      const added = res.snapshot.websites[0]
+      if (added) {
+        const next = new Set(selectedWebsiteIds.value)
+        next.add(added.relativePath)
+        selectedWebsiteIds.value = next
+      }
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -226,7 +261,6 @@ function collectFilePaths(fileList: FileList | File[] | null | undefined): strin
 async function onPaste(e: ClipboardEvent) {
   const target = e.target as HTMLElement | null
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
-    // 在输入框内允许普通文本粘贴；若剪贴板是文件则仍走文件粘贴
     const hasOsFiles = (e.clipboardData?.files?.length ?? 0) > 0
     if (!hasOsFiles) return
   }
@@ -238,7 +272,6 @@ async function onPaste(e: ClipboardEvent) {
     return
   }
 
-  // 资源管理器复制的文件：网页 paste 通常拿不到 File，改走主进程读系统剪贴板
   e.preventDefault()
   await pasteFromClipboard()
 }
@@ -251,7 +284,6 @@ function onGlobalKeydown(e: KeyboardEvent) {
   const target = e.target as HTMLElement | null
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
 
-  // 拦截默认粘贴，走文件导入
   e.preventDefault()
   void pasteFromClipboard()
 }
@@ -291,6 +323,41 @@ function onEntryActivate(entry: FileEntry) {
   else toggleSelect(entry.relativePath)
 }
 
+async function generateProfile() {
+  if (!window.ftcs?.generateProfile || !canGenerate.value) return
+
+  const websitePaths = [...selectedWebsiteIds.value]
+  const filePaths = [...selectedIds.value].filter(
+    (id) => entries.value.find((e) => e.relativePath === id)?.kind === 'file',
+  )
+  if (!websitePaths.length && !filePaths.length) {
+    error.value = '请先勾选至少一个公司网站或资料文件'
+    return
+  }
+
+  busy.value = true
+  error.value = ''
+  message.value = ''
+  resetAgentForGenerate(websitePaths.length + filePaths.length)
+
+  try {
+    const res = await window.ftcs.generateProfile({ websitePaths, filePaths })
+    if (!res.ok) {
+      error.value = res.message
+      return
+    }
+    message.value = res.message
+    if (res.skipped?.length) {
+      message.value += `（跳过：${res.skipped.join('；')}）`
+    }
+    await router.push({ name: 'profile' })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
+}
+
 onMounted(() => {
   void refresh('')
   window.addEventListener('keydown', onGlobalKeydown)
@@ -310,19 +377,40 @@ onUnmounted(() => {
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
-        <button type="button" class="btn-secondary" :disabled="busy" @click="startCreateFolder">
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="busy || generating"
+          @click="startCreateFolder"
+        >
           <Icon name="folder-plus" :size="12" />
           新建目录
         </button>
-        <button type="button" class="btn-secondary" :disabled="busy" @click="pasteFromClipboard">
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="busy || generating"
+          @click="pasteFromClipboard"
+        >
           粘贴文件
         </button>
-        <button type="button" class="btn-secondary" :disabled="busy" @click="uploadFiles">
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="busy || generating"
+          @click="uploadFiles"
+        >
           上传文件
         </button>
-        <button type="button" class="btn-primary" disabled title="下一步实现">
+        <button
+          type="button"
+          class="btn-primary"
+          :disabled="!canGenerate"
+          :title="selectedCount ? '基于勾选资料生成画像' : '请先勾选网站或文件'"
+          @click="generateProfile"
+        >
           <Icon name="sparkles" :size="12" />
-          生成画像
+          {{ generating ? '生成中…' : '生成画像' }}
         </button>
       </div>
     </header>
@@ -335,13 +423,13 @@ onUnmounted(() => {
           class="text-input"
           type="url"
           placeholder="https://www.example.com"
-          :disabled="busy"
+          :disabled="busy || generating"
           @keydown.enter.prevent="addWebsite"
         />
         <button
           type="button"
           class="btn-accent-ghost"
-          :disabled="busy || !websiteUrl.trim()"
+          :disabled="busy || generating || !websiteUrl.trim()"
           @click="addWebsite"
         >
           <Icon name="plus" :size="14" />
@@ -350,7 +438,22 @@ onUnmounted(() => {
       </div>
 
       <ul v-if="websites.length" class="website-chips">
-        <li v-for="site in websites" :key="site.id" class="website-chip">
+        <li
+          v-for="site in websites"
+          :key="site.id"
+          class="website-chip"
+          :class="{ selected: selectedWebsiteIds.has(site.relativePath) }"
+        >
+          <button
+            type="button"
+            class="library-check"
+            :class="{ on: selectedWebsiteIds.has(site.relativePath) }"
+            :aria-pressed="selectedWebsiteIds.has(site.relativePath)"
+            title="勾选后参与生成画像"
+            @click="toggleWebsite(site.relativePath)"
+          >
+            <Icon v-if="selectedWebsiteIds.has(site.relativePath)" name="check" :size="10" />
+          </button>
           <Icon name="globe" :size="12" />
           <div class="website-chip__meta">
             <a class="website-chip__title" :href="site.url" target="_blank" rel="noreferrer">
@@ -362,7 +465,7 @@ onUnmounted(() => {
             type="button"
             class="icon-btn"
             title="删除网站"
-            :disabled="busy"
+            :disabled="busy || generating"
             @click="removeWebsite(site)"
           >
             <Icon name="trash" :size="12" />
@@ -385,7 +488,10 @@ onUnmounted(() => {
             </template>
           </div>
         </div>
-        <span class="library-count">{{ entries.length }} 项 · 已选 {{ selectedCount }}</span>
+        <span class="library-count">
+          {{ entries.length }} 项 · 已选网站 {{ selectedWebsiteCount }} / 文件
+          {{ selectedFileCount }}
+        </span>
       </div>
 
       <div class="library-toolbar">
@@ -394,7 +500,7 @@ onUnmounted(() => {
           上级
         </button>
         <span class="mono muted library-path">{{ filesRootLabel }}</span>
-        <span class="muted library-tip">Ctrl+V 粘贴 / 拖入文件</span>
+        <span class="muted library-tip">勾选资料后点「生成画像」</span>
       </div>
 
       <div v-if="creatingFolder" class="mkdir-row">
@@ -408,10 +514,20 @@ onUnmounted(() => {
           @keydown.enter.prevent="confirmCreateFolder"
           @keydown.esc.prevent="cancelCreateFolder"
         />
-        <button type="button" class="btn-primary btn-sm" :disabled="busy" @click="confirmCreateFolder">
+        <button
+          type="button"
+          class="btn-primary btn-sm"
+          :disabled="busy"
+          @click="confirmCreateFolder"
+        >
           创建
         </button>
-        <button type="button" class="btn-secondary btn-sm" :disabled="busy" @click="cancelCreateFolder">
+        <button
+          type="button"
+          class="btn-secondary btn-sm"
+          :disabled="busy"
+          @click="cancelCreateFolder"
+        >
           取消
         </button>
       </div>
@@ -436,7 +552,8 @@ onUnmounted(() => {
             class="library-check"
             :class="{ on: selectedIds.has(entry.relativePath) }"
             :aria-pressed="selectedIds.has(entry.relativePath)"
-            @click="toggleSelect(entry.relativePath)"
+            :disabled="entry.kind === 'dir'"
+            @click="entry.kind === 'file' && toggleSelect(entry.relativePath)"
           >
             <Icon v-if="selectedIds.has(entry.relativePath)" name="check" :size="10" />
           </button>
@@ -457,7 +574,7 @@ onUnmounted(() => {
             type="button"
             class="icon-btn library-delete"
             title="删除"
-            :disabled="busy"
+            :disabled="busy || generating"
             @click="removeEntry(entry)"
           >
             <Icon name="trash" :size="13" />
@@ -477,7 +594,7 @@ onUnmounted(() => {
 
       <p class="library-hint muted">
         <Icon name="info" :size="14" />
-        网站保存在 data/library/websites/；文件在 data/library/files/。在资源管理器复制文件后，于本页按 Ctrl+V 或点「粘贴文件」。
+        资料保存在 data/library/；生成画像时再分配产品 ID，并复制快照到 products/{id}/inputs/。
       </p>
 
       <p v-if="message" class="library-feedback ok">{{ message }}</p>

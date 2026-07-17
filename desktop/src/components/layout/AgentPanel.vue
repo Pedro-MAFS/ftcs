@@ -1,25 +1,72 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue'
 import Icon from '../shared/Icon.vue'
 import { useWorkspace } from '../../composables/useWorkspace'
+import type { AgentTimelineItem } from '../../types/workspace'
 
-const { agentSkill, agentMeta, agentLogs, agentPrompt } = useWorkspace()
+const {
+  agentSkill,
+  agentMeta,
+  agentTimeline,
+  agentPrompt,
+  agentStatus,
+  generating,
+  toggleTimelineExpand,
+  isTimelineExpanded,
+} = useWorkspace()
 
-function tagClass(tag: string): string {
-  if (tag === '写入') return 'tag-success'
-  if (tag === '跳过') return 'tag-warn'
-  return 'tag-accent'
+const timelineEl = ref<HTMLElement | null>(null)
+
+function kindLabel(kind: AgentTimelineItem['kind']): string {
+  switch (kind) {
+    case 'user':
+      return '你'
+    case 'system':
+      return '系统'
+    case 'assistant':
+      return '回复'
+    case 'reasoning':
+      return '思考'
+    case 'tool':
+      return '工具'
+    case 'error':
+      return '错误'
+    default:
+      return kind
+  }
 }
 
-function onSend(): void {
-  // 功能占位：后续接入 OpenCode session prompt
+function preview(body: string, max = 160): string {
+  const text = body.trim()
+  if (text.length <= max) return text
+  return `${text.slice(0, max)}…`
 }
+
+async function onSend(): Promise<void> {
+  if (!agentPrompt.value.trim()) return
+}
+
+async function onAbort(): Promise<void> {
+  await window.ftcs?.abortProfile?.()
+}
+
+watch(
+  agentTimeline,
+  async () => {
+    await nextTick()
+    if (timelineEl.value) {
+      timelineEl.value.scrollTop = timelineEl.value.scrollHeight
+    }
+  },
+  { deep: true, flush: 'post' },
+)
 </script>
 
 <template>
   <aside class="agent-panel" aria-label="Agent">
     <div class="agent-panel__head">
       <div class="agent-panel__title">
-        <i class="agent-panel__pulse" />
+        <i class="agent-panel__pulse" :class="{ on: generating }" />
         <span>Agent</span>
       </div>
       <span class="agent-panel__skill">{{ agentSkill }}</span>
@@ -34,27 +81,60 @@ function onSend(): void {
       </div>
     </div>
 
-    <div class="agent-panel__logs">
-      <div v-for="(line, idx) in agentLogs" :key="`${line.time}-${idx}`" class="log-line">
-        <div class="log-line__top">
-          <span class="log-line__time">{{ line.time }}</span>
-          <span class="log-line__tag" :class="tagClass(line.tag)">{{ line.tag }}</span>
+    <div ref="timelineEl" class="agent-panel__timeline">
+      <div
+        v-for="item in agentTimeline"
+        :key="item.id"
+        class="tl-item"
+        :class="[`tl-item--${item.kind}`, item.status ? `is-${item.status}` : '']"
+      >
+        <div class="tl-item__head">
+          <span class="tl-item__badge">{{ kindLabel(item.kind) }}</span>
+          <span class="tl-item__title">{{ item.title }}</span>
+          <span class="tl-item__time">{{ item.time }}</span>
         </div>
-        <p class="log-line__msg">{{ line.message }}</p>
+
+        <template v-if="item.collapsed || item.kind === 'reasoning' || item.kind === 'user'">
+          <pre v-if="isTimelineExpanded(item)" class="tl-item__body">{{ item.body }}</pre>
+          <pre v-else class="tl-item__body tl-item__body--preview">{{ preview(item.body) }}</pre>
+          <button
+            type="button"
+            class="tl-item__toggle"
+            @click="toggleTimelineExpand(item.id)"
+          >
+            {{ isTimelineExpanded(item) ? '收起' : '展开全文' }}
+          </button>
+        </template>
+        <pre v-else class="tl-item__body">{{ item.body }}</pre>
       </div>
-      <p v-if="!agentLogs.length" class="agent-panel__empty">暂无 Agent 日志</p>
+
+      <p v-if="!agentTimeline.length" class="agent-panel__empty">
+        {{ generating ? '任务启动中…' : '点击「生成画像」后，此处按时间顺序展示指令、思考、工具与回复' }}
+      </p>
     </div>
 
     <div class="agent-panel__composer">
       <textarea
         v-model="agentPrompt"
         class="composer-input"
-        rows="3"
+        rows="2"
         placeholder="向 Agent 发送指令…"
+        :disabled="generating"
       />
       <div class="composer-actions">
-        <span class="composer-skill">Skill · {{ agentSkill }}</span>
-        <button type="button" class="btn-primary btn-sm" @click="onSend">
+        <span class="composer-skill">
+          Skill · {{ agentSkill }}
+          <template v-if="agentStatus !== 'idle'"> · {{ agentStatus }}</template>
+        </span>
+        <button
+          v-if="generating"
+          type="button"
+          class="btn-secondary btn-sm"
+          @click="onAbort"
+        >
+          中止
+        </button>
+        <button type="button" class="btn-primary btn-sm" :disabled="generating" @click="onSend">
           <Icon name="send" :size="12" />
           发送
         </button>

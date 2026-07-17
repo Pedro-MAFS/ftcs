@@ -1,58 +1,36 @@
 import { computed, ref } from 'vue'
 import type {
-  AgentLogLine,
   AgentMetaItem,
+  AgentTimelineItem,
   PipelineStep,
   ProductSummary,
   WorkspaceSection,
 } from '../types/workspace'
+import type { AgentEventPayload, ProfileDetail } from '../types/electron'
 
-/** 占位数据：后续接 lead-store / IPC 后替换 */
-const products = ref<ProductSummary[]>([
-  {
-    id: 'prod_valve_a',
-    name: 'Industrial Valve Series A',
-    meta: '就绪 · 42 线索',
-  },
-  {
-    id: 'prod_led',
-    name: 'LED Grow Light Pro',
-    meta: '探索中 · R1',
-  },
-  {
-    id: 'prod_mug',
-    name: 'Ceramic Mug Set',
-    meta: '草稿 · 未就绪',
-  },
-])
-
-const activeProductId = ref(products.value[0]?.id ?? '')
+const products = ref<ProductSummary[]>([])
+const activeProductId = ref('')
+const currentProfile = ref<ProfileDetail | null>(null)
 
 const pipelineSteps = ref<PipelineStep[]>([
-  { id: 'input', label: '1 产品录入', status: 'done', statusLabel: '完成' },
-  { id: 'keywords', label: '2 关键词扩展', status: 'done', statusLabel: '完成' },
-  { id: 'explore', label: '3 R1 探索', status: 'running', statusLabel: '运行中' },
+  { id: 'input', label: '1 产品录入', status: 'pending', statusLabel: '待执行' },
+  { id: 'keywords', label: '2 关键词扩展', status: 'pending', statusLabel: '待执行' },
+  { id: 'explore', label: '3 R1 探索', status: 'pending', statusLabel: '待执行' },
   { id: 'score', label: '4 线索评分', status: 'pending', statusLabel: '待执行' },
   { id: 'email', label: '5 邮件草稿', status: 'pending', statusLabel: '待执行' },
 ])
 
-const agentSkill = ref('discover-leads')
+const agentSkill = ref('extract-product-profile')
+const agentStatus = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const agentMeta = ref<AgentMetaItem[]>([
-  { label: '进度', value: '7 / 12 词' },
-  { label: '新线索', value: '+18', tone: 'success' },
-  { label: '耗时', value: '04:12' },
+  { label: '就绪度', value: '待生成' },
+  { label: '选中', value: '0 项' },
+  { label: '来源', value: '资料库' },
 ])
-const agentLogs = ref<AgentLogLine[]>([
-  { time: '12:04:01', tag: '搜索', message: 'industrial valve distributor Europe' },
-  { time: '12:04:18', tag: '验证', message: 'nordicflow.se — 判定为目标客户' },
-  { time: '12:04:22', tag: '写入', message: 'lead_a8f2 · A 候选' },
-  { time: '12:04:41', tag: '搜索', message: 'ball valve importer Middle East' },
-  { time: '12:05:02', tag: '验证', message: 'gulfvalve.ae — 有询盘入口' },
-  { time: '12:05:08', tag: '写入', message: 'lead_b3c1 · A 候选' },
-  { time: '12:05:33', tag: '跳过', message: 'alibaba.com — 平台页' },
-  { time: '12:05:51', tag: '搜索', message: 'steam valve wholesale USA' },
-])
+const agentTimeline = ref<AgentTimelineItem[]>([])
+const agentExpanded = ref<Record<string, boolean>>({})
 const agentPrompt = ref('')
+const generating = computed(() => agentStatus.value === 'running')
 
 const activeProduct = computed(
   () => products.value.find((p) => p.id === activeProductId.value) ?? products.value[0],
@@ -67,25 +45,169 @@ const SECTION_SKILL: Partial<Record<WorkspaceSection, string>> = {
   settings: 'idle',
 }
 
+let agentBound = false
+let productsLoaded = false
+
+function toProductSummary(profile: {
+  id: string
+  status: string
+  readinessScore?: number
+  companyName?: string
+  productName?: string
+}): ProductSummary {
+  const name = profile.productName || profile.companyName || profile.id
+  const score =
+    profile.readinessScore != null ? `就绪度 ${profile.readinessScore}` : profile.status
+  return {
+    id: profile.id,
+    name,
+    meta: `${profile.status} · ${score}`,
+  }
+}
+
+async function refreshProducts(): Promise<void> {
+  if (!window.ftcs?.listProfiles) return
+  const list = await window.ftcs.listProfiles()
+  products.value = list.map(toProductSummary)
+  if (!activeProductId.value && products.value[0]) {
+    activeProductId.value = products.value[0].id
+  }
+  if (activeProductId.value) {
+    await loadActiveProfile()
+  }
+  updatePipelineFromProfile()
+}
+
+async function loadActiveProfile(): Promise<void> {
+  if (!window.ftcs?.getProfile || !activeProductId.value) {
+    currentProfile.value = null
+    return
+  }
+  currentProfile.value = await window.ftcs.getProfile(activeProductId.value)
+  updatePipelineFromProfile()
+}
+
+function updatePipelineFromProfile(): void {
+  const profile = currentProfile.value
+  if (!profile) return
+  const ready = profile.status === 'ready'
+  pipelineSteps.value = [
+    { id: 'input', label: '1 产品录入', status: 'done', statusLabel: '完成' },
+    {
+      id: 'keywords',
+      label: '2 关键词扩展',
+      status: 'pending',
+      statusLabel: ready ? '可执行' : '待就绪',
+    },
+    { id: 'explore', label: '3 R1 探索', status: 'pending', statusLabel: '待执行' },
+    { id: 'score', label: '4 线索评分', status: 'pending', statusLabel: '待执行' },
+    { id: 'email', label: '5 邮件草稿', status: 'pending', statusLabel: '待执行' },
+  ]
+}
+
+function handleAgentEvent(payload: AgentEventPayload): void {
+  if (payload.type === 'state') {
+    agentSkill.value = payload.skill
+    agentStatus.value = payload.status
+    agentMeta.value = payload.meta.map((m) => ({
+      label: m.label,
+      value: m.value,
+      tone: (m.tone as AgentMetaItem['tone']) || undefined,
+    }))
+    if (payload.productId) {
+      activeProductId.value = payload.productId
+    }
+    return
+  }
+  if (payload.type === 'timeline') {
+    agentTimeline.value = payload.items
+    return
+  }
+  if (payload.type === 'done') {
+    agentStatus.value = payload.ok ? 'done' : 'error'
+    if (payload.profile) {
+      currentProfile.value = payload.profile
+      const summary = toProductSummary(payload.profile)
+      const idx = products.value.findIndex((p) => p.id === summary.id)
+      if (idx >= 0) products.value[idx] = summary
+      else products.value = [summary, ...products.value]
+      activeProductId.value = summary.id
+      updatePipelineFromProfile()
+    } else {
+      void refreshProducts()
+    }
+  }
+}
+
+function ensureWorkspaceBindings(): void {
+  if (!agentBound && window.ftcs?.onAgentEvent) {
+    window.ftcs.onAgentEvent(handleAgentEvent)
+    agentBound = true
+  }
+  if (!productsLoaded) {
+    productsLoaded = true
+    void refreshProducts()
+  }
+}
+
 export function useWorkspace() {
+  ensureWorkspaceBindings()
+
   function selectProduct(id: string): void {
     activeProductId.value = id
+    void loadActiveProfile()
   }
 
   function setAgentContext(section: WorkspaceSection): void {
-    agentSkill.value = SECTION_SKILL[section] ?? 'idle'
+    if (agentStatus.value !== 'running') {
+      agentSkill.value = SECTION_SKILL[section] ?? 'idle'
+    }
+  }
+
+  function resetAgentForGenerate(selectedCount: number): void {
+    agentSkill.value = 'extract-product-profile'
+    agentStatus.value = 'running'
+    agentTimeline.value = []
+    agentExpanded.value = {}
+    agentMeta.value = [
+      { label: '就绪度', value: '生成中', tone: 'accent' },
+      { label: '选中', value: `${selectedCount} 项` },
+      { label: '来源', value: '资料库' },
+    ]
+  }
+
+  function toggleTimelineExpand(id: string): void {
+    agentExpanded.value = {
+      ...agentExpanded.value,
+      [id]: !agentExpanded.value[id],
+    }
+  }
+
+  function isTimelineExpanded(item: AgentTimelineItem): boolean {
+    if (Object.prototype.hasOwnProperty.call(agentExpanded.value, item.id)) {
+      return !!agentExpanded.value[item.id]
+    }
+    return !item.collapsed
   }
 
   return {
     products,
     activeProductId,
     activeProduct,
+    currentProfile,
     pipelineSteps,
     agentSkill,
+    agentStatus,
     agentMeta,
-    agentLogs,
+    agentTimeline,
     agentPrompt,
+    generating,
     selectProduct,
     setAgentContext,
+    resetAgentForGenerate,
+    toggleTimelineExpand,
+    isTimelineExpanded,
+    refreshProducts,
+    loadActiveProfile,
   }
 }

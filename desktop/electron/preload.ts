@@ -1,9 +1,14 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
 import type {
+  AgentEventPayload,
   AppStatus,
   LibraryMutationResult,
   LibrarySnapshot,
+  ProfileDetail,
+  ProfileGenerateInput,
+  ProfileGenerateResult,
+  ProfileSummary,
   SettingsSaveInput,
   SettingsSaveResult,
   SettingsSnapshot,
@@ -46,6 +51,21 @@ const api = {
     ipcRenderer.invoke(IPC.LIBRARY_PASTE_CLIPBOARD, cwd),
   deleteLibraryEntry: (relativePath: string, cwd = ''): Promise<LibraryMutationResult> =>
     ipcRenderer.invoke(IPC.LIBRARY_DELETE_ENTRY, { relativePath, cwd }),
+  generateProfile: (input: ProfileGenerateInput): Promise<ProfileGenerateResult> =>
+    ipcRenderer.invoke(IPC.PROFILE_GENERATE, input),
+  abortProfile: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.PROFILE_ABORT),
+  getProfile: (productId: string): Promise<ProfileDetail | null> =>
+    ipcRenderer.invoke(IPC.PROFILE_GET, productId),
+  listProfiles: (): Promise<ProfileSummary[]> => ipcRenderer.invoke(IPC.PROFILE_LIST),
+  onAgentEvent: (handler: (payload: AgentEventPayload) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: AgentEventPayload) => {
+      handler(payload)
+    }
+    ipcRenderer.on(IPC.AGENT_EVENT, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.AGENT_EVENT, listener)
+    }
+  },
   restartSidecar: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.OPENCODE_RESTART),
   getSidecarLogs: (): Promise<string[]> => ipcRenderer.invoke(IPC.OPENCODE_GET_LOGS),
 }
