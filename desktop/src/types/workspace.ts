@@ -73,7 +73,7 @@ export const SECTION_META: Record<
   profile: {
     label: '画像',
     title: '产品画像',
-    subtitle: '查看与编辑画像字段，确认就绪度后扩展关键词',
+    subtitle: '公司信息 + 产品列表 · 可确认后扩展关键词',
   },
   explore: {
     label: '探索',

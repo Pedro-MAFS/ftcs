@@ -11122,7 +11122,7 @@
                           "type": "text",
                           "id": "i2uMJC",
                           "fill": "$text-muted",
-                          "content": "就绪度 86% · 可扩展关键词并开始探索",
+                          "content": "公司信息 + 产品列表 · 可编辑后扩展关键词",
                           "fontFamily": "$font-ui",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -11211,7 +11211,7 @@
                   "stroke": "$border",
                   "strokeWidth": 1,
                   "layout": "vertical",
-                  "gap": 12,
+                  "gap": 14,
                   "padding": 16,
                   "children": [
                     {
@@ -11231,7 +11231,7 @@
                           "type": "text",
                           "id": "X5f0H",
                           "fill": "$text",
-                          "content": "就绪度 86% · 必填字段已齐 · 建议补充竞品与认证",
+                          "content": "就绪度 90% · draft · 必填字段已齐",
                           "fontFamily": "$font-ui",
                           "fontSize": 12,
                           "fontWeight": "normal"
@@ -11258,55 +11258,211 @@
                     },
                     {
                       "type": "frame",
-                      "id": "o8HWGe",
+                      "id": "C8QFb",
+                      "name": "ScrollBody",
+                      "clip": true,
                       "width": "fill_container",
                       "height": "fill_container",
-                      "gap": 12,
+                      "layout": "vertical",
+                      "gap": 16,
                       "children": [
                         {
                           "type": "frame",
-                          "id": "RJPdD",
+                          "id": "sRzvB",
+                          "name": "SectionCompany",
                           "width": "fill_container",
-                          "height": "fill_container",
                           "layout": "vertical",
                           "gap": 10,
                           "children": [
                             {
+                              "type": "text",
+                              "id": "ApqW0",
+                              "fill": "$text",
+                              "content": "公司信息",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 12,
+                              "fontWeight": "600",
+                              "letterSpacing": 0.3
+                            },
+                            {
                               "type": "frame",
-                              "id": "xoEyH",
+                              "id": "Tl06K",
+                              "name": "CompanyGrid",
+                              "width": "fill_container",
+                              "gap": 10,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "vSdre",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 4,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "s8hxIN",
+                                      "fill": "$text-muted",
+                                      "content": "公司名称",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "iPi1N",
+                                      "width": "fill_container",
+                                      "height": 34,
+                                      "fill": "$bg-input",
+                                      "cornerRadius": 6,
+                                      "stroke": "$border",
+                                      "strokeWidth": 1,
+                                      "padding": [
+                                        0,
+                                        10
+                                      ],
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "oMjl5",
+                                          "fill": "$text",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "山东绿森塑木复合材料有限公司",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 12,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "gzMk1",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 4,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "AmZpt",
+                                      "fill": "$text-muted",
+                                      "content": "官网",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "LeZ9z",
+                                      "width": "fill_container",
+                                      "height": 34,
+                                      "fill": "$bg-input",
+                                      "cornerRadius": 6,
+                                      "stroke": "$border",
+                                      "strokeWidth": 1,
+                                      "padding": [
+                                        0,
+                                        10
+                                      ],
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "F383eo",
+                                          "fill": "$accent",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "https://www.lvsenwpc.com",
+                                          "fontFamily": "$font-mono",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "s3HYz",
+                                  "width": 140,
+                                  "layout": "vertical",
+                                  "gap": 4,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "HwxtG",
+                                      "fill": "$text-muted",
+                                      "content": "国家",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "F8t3q",
+                                      "width": "fill_container",
+                                      "height": 34,
+                                      "fill": "$bg-input",
+                                      "cornerRadius": 6,
+                                      "stroke": "$border",
+                                      "strokeWidth": 1,
+                                      "padding": [
+                                        0,
+                                        10
+                                      ],
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "b3UAd",
+                                          "fill": "$text",
+                                          "content": "CN",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 12,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "oFjkQ",
                               "width": "fill_container",
                               "layout": "vertical",
                               "gap": 4,
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "rBUdN",
+                                  "id": "SBCVy",
                                   "fill": "$text-muted",
-                                  "content": "产品名称",
+                                  "content": "公司简介",
                                   "fontFamily": "$font-ui",
                                   "fontSize": 11,
                                   "fontWeight": "normal"
                                 },
                                 {
                                   "type": "frame",
-                                  "id": "bTOzL",
+                                  "id": "H4bfw",
                                   "width": "fill_container",
-                                  "height": 34,
                                   "fill": "$bg-input",
                                   "cornerRadius": 6,
                                   "stroke": "$border",
                                   "strokeWidth": 1,
-                                  "padding": [
-                                    0,
-                                    10
-                                  ],
-                                  "alignItems": "center",
+                                  "layout": "vertical",
+                                  "padding": 10,
                                   "children": [
                                     {
                                       "type": "text",
-                                      "id": "Co1b4",
-                                      "fill": "$text",
-                                      "content": "Industrial Valve Series A",
+                                      "id": "vuLnC",
+                                      "fill": "$text-secondary",
+                                      "textGrowth": "fixed-width",
+                                      "width": "fill_container",
+                                      "content": "成立于2006年，国家高新技术民营企业，年产能60,000吨以上。产品涵盖七大系列一百多个品种，销往全球50多个国家和地区。拥有 Lvsenwood / 绿森等品牌，30余项专利。",
                                       "fontFamily": "$font-ui",
                                       "fontSize": 12,
                                       "fontWeight": "normal"
@@ -11317,131 +11473,113 @@
                             },
                             {
                               "type": "frame",
-                              "id": "Ll4Hw",
+                              "id": "bHyTE",
                               "width": "fill_container",
                               "layout": "vertical",
                               "gap": 4,
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "eq4BM",
+                                  "id": "ra7Ic",
                                   "fill": "$text-muted",
-                                  "content": "品类",
+                                  "content": "认证资质",
                                   "fontFamily": "$font-ui",
                                   "fontSize": 11,
                                   "fontWeight": "normal"
                                 },
                                 {
                                   "type": "frame",
-                                  "id": "M4OBg7",
+                                  "id": "Wy1MZ",
                                   "width": "fill_container",
-                                  "height": 34,
-                                  "fill": "$bg-input",
-                                  "cornerRadius": 6,
-                                  "stroke": "$border",
-                                  "strokeWidth": 1,
-                                  "padding": [
-                                    0,
-                                    10
-                                  ],
-                                  "alignItems": "center",
+                                  "gap": 6,
                                   "children": [
                                     {
-                                      "type": "text",
-                                      "id": "zCznS",
-                                      "fill": "$text",
-                                      "content": "Ball / Gate Valve",
-                                      "fontFamily": "$font-ui",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "C0HtGV",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 4,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "F6dKO5",
-                                  "fill": "$text-muted",
-                                  "content": "应用场景",
-                                  "fontFamily": "$font-ui",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "nAajX",
-                                  "width": "fill_container",
-                                  "height": 34,
-                                  "fill": "$bg-input",
-                                  "cornerRadius": 6,
-                                  "stroke": "$border",
-                                  "strokeWidth": 1,
-                                  "padding": [
-                                    0,
-                                    10
-                                  ],
-                                  "alignItems": "center",
-                                  "children": [
+                                      "type": "frame",
+                                      "id": "SHYIE",
+                                      "fill": "$bg-active",
+                                      "cornerRadius": 4,
+                                      "padding": [
+                                        4,
+                                        8
+                                      ],
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "mhWVB",
+                                          "fill": "$text-secondary",
+                                          "content": "ISO9001",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    },
                                     {
-                                      "type": "text",
-                                      "id": "DO9tJ",
-                                      "fill": "$text",
-                                      "content": "Oil & Gas, Water Treatment",
-                                      "fontFamily": "$font-ui",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "BFLmN",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 4,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "T1o30A",
-                                  "fill": "$text-muted",
-                                  "content": "目标买家",
-                                  "fontFamily": "$font-ui",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                },
-                                {
-                                  "type": "frame",
-                                  "id": "NgZ1L",
-                                  "width": "fill_container",
-                                  "height": 34,
-                                  "fill": "$bg-input",
-                                  "cornerRadius": 6,
-                                  "stroke": "$border",
-                                  "strokeWidth": 1,
-                                  "padding": [
-                                    0,
-                                    10
-                                  ],
-                                  "alignItems": "center",
-                                  "children": [
+                                      "type": "frame",
+                                      "id": "tZfZH",
+                                      "fill": "$bg-active",
+                                      "cornerRadius": 4,
+                                      "padding": [
+                                        4,
+                                        8
+                                      ],
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "lT61X",
+                                          "fill": "$text-secondary",
+                                          "content": "CE",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    },
                                     {
-                                      "type": "text",
-                                      "id": "AeqJE",
-                                      "fill": "$text",
-                                      "content": "Industrial distributors, EPC",
-                                      "fontFamily": "$font-ui",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
+                                      "type": "frame",
+                                      "id": "O75mIE",
+                                      "fill": "$bg-active",
+                                      "cornerRadius": 4,
+                                      "padding": [
+                                        4,
+                                        8
+                                      ],
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "L0T5Dc",
+                                          "fill": "$text-secondary",
+                                          "content": "国家高新技术企业",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "uD6iV",
+                                      "fill": "$bg-active",
+                                      "cornerRadius": 4,
+                                      "padding": [
+                                        4,
+                                        8
+                                      ],
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "XhOvQ",
+                                          "fill": "$text-secondary",
+                                          "content": "省级资源综合利用企业",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
@@ -11451,51 +11589,202 @@
                         },
                         {
                           "type": "frame",
-                          "id": "aHfl8",
+                          "id": "g7qSt9",
+                          "name": "SectionProducts",
                           "width": "fill_container",
-                          "height": "fill_container",
                           "layout": "vertical",
                           "gap": 10,
                           "children": [
                             {
                               "type": "frame",
-                              "id": "J9pX0F",
+                              "id": "XLdJe",
                               "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 4,
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
                               "children": [
                                 {
                                   "type": "text",
-                                  "id": "iWBvk",
+                                  "id": "lNt3N",
+                                  "fill": "$text",
+                                  "content": "产品列表",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 12,
+                                  "fontWeight": "600",
+                                  "letterSpacing": 0.3
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "U96osL",
                                   "fill": "$text-muted",
-                                  "content": "目标市场",
+                                  "content": "共 7 个 · 首项展开详情",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "XJ3aq",
+                              "name": "ProductCard",
+                              "width": "fill_container",
+                              "fill": "$bg-input",
+                              "cornerRadius": 8,
+                              "stroke": "$accent",
+                              "strokeWidth": 1,
+                              "layout": "vertical",
+                              "gap": 8,
+                              "padding": 12,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "xMENn",
+                                  "fill": "$accent",
+                                  "content": "01 · 展开示例",
+                                  "fontFamily": "$font-mono",
+                                  "fontSize": 10,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "iFbHM",
+                                  "fill": "$text",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "木塑地板（共挤/3D浮雕）",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "ZeoDA",
+                                  "fill": "$text-muted",
+                                  "textGrowth": "fixed-width",
+                                  "width": "fill_container",
+                                  "content": "WPC Decking (Co-extruded / 3D Embossed)",
                                   "fontFamily": "$font-ui",
                                   "fontSize": 11,
                                   "fontWeight": "normal"
                                 },
                                 {
                                   "type": "frame",
-                                  "id": "whaJU",
+                                  "id": "Ug0OV",
                                   "width": "fill_container",
-                                  "height": 34,
-                                  "fill": "$bg-input",
-                                  "cornerRadius": 6,
-                                  "stroke": "$border",
-                                  "strokeWidth": 1,
-                                  "padding": [
-                                    0,
-                                    10
-                                  ],
-                                  "alignItems": "center",
+                                  "layout": "vertical",
+                                  "gap": 6,
                                   "children": [
                                     {
-                                      "type": "text",
-                                      "id": "OJpEM",
-                                      "fill": "$text",
-                                      "content": "Europe, Middle East, SE Asia",
-                                      "fontFamily": "$font-ui",
-                                      "fontSize": 12,
-                                      "fontWeight": "normal"
+                                      "type": "frame",
+                                      "id": "gjlVg",
+                                      "width": "fill_container",
+                                      "gap": 8,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "pAZiI",
+                                          "fill": "$text-muted",
+                                          "content": "品类",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "er0KH",
+                                          "fill": "$text-secondary",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "WPC Decking",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "B1AM0t",
+                                      "width": "fill_container",
+                                      "gap": 8,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "fsBp0",
+                                          "fill": "$text-muted",
+                                          "content": "材料",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "zhJgC",
+                                          "fill": "$text-secondary",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "木塑复合材料 · WPC",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "sL3UH",
+                                      "width": "fill_container",
+                                      "gap": 8,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "eELz3",
+                                          "fill": "$text-muted",
+                                          "content": "应用场景",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "hxQTf",
+                                          "fill": "$text-secondary",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "户外庭院 · 露台 · 阳台 · 商业景观",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "YXCbr",
+                                      "width": "fill_container",
+                                      "gap": 8,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "a1ur7",
+                                          "fill": "$text-muted",
+                                          "content": "差异化",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "e9QtAH",
+                                          "fill": "$text-secondary",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "第二代共挤 · 3D浮雕 · 哑光耐磨",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
@@ -11503,131 +11792,513 @@
                             },
                             {
                               "type": "frame",
-                              "id": "ACWNV",
+                              "id": "R4YOHG",
+                              "name": "ProductCompactList",
                               "width": "fill_container",
                               "layout": "vertical",
-                              "gap": 4,
+                              "gap": 6,
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "u9x48d",
-                                  "fill": "$text-muted",
-                                  "content": "认证",
-                                  "fontFamily": "$font-ui",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                },
-                                {
                                   "type": "frame",
-                                  "id": "G1iBik",
+                                  "id": "GVQR1",
                                   "width": "fill_container",
-                                  "height": 34,
                                   "fill": "$bg-input",
                                   "cornerRadius": 6,
                                   "stroke": "$border",
                                   "strokeWidth": 1,
+                                  "gap": 10,
                                   "padding": [
-                                    0,
-                                    10
+                                    10,
+                                    12
                                   ],
                                   "alignItems": "center",
                                   "children": [
                                     {
                                       "type": "text",
-                                      "id": "A7Y3d",
-                                      "fill": "$text",
-                                      "content": "CE, ISO 9001, API 6D",
-                                      "fontFamily": "$font-ui",
-                                      "fontSize": 12,
+                                      "id": "gtum0",
+                                      "fill": "$text-muted",
+                                      "content": "02",
+                                      "fontFamily": "$font-mono",
+                                      "fontSize": 11,
                                       "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "BELkZ",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "fEY7G",
+                                          "fill": "$text",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "木塑墙板",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 12,
+                                          "fontWeight": "600"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "M8Rgy2",
+                                          "fill": "$text-muted",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "WPC Wall Cladding  ·  建筑外墙 · 室内装饰 · 户外墙板",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "l578Q",
+                                  "width": "fill_container",
+                                  "fill": "$bg-input",
+                                  "cornerRadius": 6,
+                                  "stroke": "$border",
+                                  "strokeWidth": 1,
+                                  "gap": 10,
+                                  "padding": [
+                                    10,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "TANTu",
+                                      "fill": "$text-muted",
+                                      "content": "03",
+                                      "fontFamily": "$font-mono",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "u6v8qS",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "ugUZy",
+                                          "fill": "$text",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "木塑围栏/栅栏",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 12,
+                                          "fontWeight": "600"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "kmzyH",
+                                          "fill": "$text-muted",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "WPC Fencing  ·  庭院围栏 · 花园栅栏 · 公共设施",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "swq3u",
+                                  "width": "fill_container",
+                                  "fill": "$bg-input",
+                                  "cornerRadius": 6,
+                                  "stroke": "$border",
+                                  "strokeWidth": 1,
+                                  "gap": 10,
+                                  "padding": [
+                                    10,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "INiGb",
+                                      "fill": "$text-muted",
+                                      "content": "04",
+                                      "fontFamily": "$font-mono",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "jrg5r",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "FfCe6",
+                                          "fill": "$text",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "拼接地板",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 12,
+                                          "fontWeight": "600"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "uFPXv",
+                                          "fill": "$text-muted",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "WPC Interlocking Floor Tiles  ·  阳台 · 露台 · DIY 庭院铺设",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "G8tGo",
+                                  "width": "fill_container",
+                                  "fill": "$bg-input",
+                                  "cornerRadius": 6,
+                                  "stroke": "$border",
+                                  "strokeWidth": 1,
+                                  "gap": 10,
+                                  "padding": [
+                                    10,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "hNK4l",
+                                      "fill": "$text-muted",
+                                      "content": "05",
+                                      "fontFamily": "$font-mono",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "hfRLr",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "Edmpt",
+                                          "fill": "$text",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "木塑护栏/栏杆",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 12,
+                                          "fontWeight": "600"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "P3MpP",
+                                          "fill": "$text-muted",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "WPC Railing / Balustrade  ·  阳台护栏 · 楼梯扶手 · 庭院栏杆",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "Q0Pa5b",
+                                  "width": "fill_container",
+                                  "fill": "$bg-input",
+                                  "cornerRadius": 6,
+                                  "stroke": "$border",
+                                  "strokeWidth": 1,
+                                  "gap": 10,
+                                  "padding": [
+                                    10,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "p0vFDM",
+                                      "fill": "$text-muted",
+                                      "content": "06",
+                                      "fontFamily": "$font-mono",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "hallv",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "c0Q9X2",
+                                          "fill": "$text",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "凉亭花架",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 12,
+                                          "fontWeight": "600"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "PxKiG",
+                                          "fill": "$text-muted",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "WPC Pergola & Garden Structures  ·  花园凉亭 · 花架 · 户外休闲",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "ya65S",
+                                  "width": "fill_container",
+                                  "fill": "$bg-input",
+                                  "cornerRadius": 6,
+                                  "stroke": "$border",
+                                  "strokeWidth": 1,
+                                  "gap": 10,
+                                  "padding": [
+                                    10,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "xcJVH",
+                                      "fill": "$text-muted",
+                                      "content": "07",
+                                      "fontFamily": "$font-mono",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "XXzlY",
+                                      "width": "fill_container",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "FpU8B",
+                                          "fill": "$text",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "阳台定制/户外家具",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 12,
+                                          "fontWeight": "600"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "ZsX1n",
+                                          "fill": "$text-muted",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "Balcony Customization / Outdoor Furniture  ·  阳台整体定制 · 户外家具 · 庭院布置",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 11,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
                               ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "cFHLm",
+                          "name": "SectionMarkets",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "fWaj2",
+                              "fill": "$text",
+                              "content": "市场与买家",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 12,
+                              "fontWeight": "600",
+                              "letterSpacing": 0.3
                             },
                             {
                               "type": "frame",
-                              "id": "U2pPC",
+                              "id": "u78QI",
                               "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 4,
+                              "gap": 10,
                               "children": [
                                 {
-                                  "type": "text",
-                                  "id": "oMATC",
-                                  "fill": "$text-muted",
-                                  "content": "差异化卖点",
-                                  "fontFamily": "$font-ui",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
-                                },
-                                {
                                   "type": "frame",
-                                  "id": "Mk9wP",
+                                  "id": "nawPZ",
                                   "width": "fill_container",
-                                  "height": 34,
-                                  "fill": "$bg-input",
-                                  "cornerRadius": 6,
-                                  "stroke": "$border",
-                                  "strokeWidth": 1,
-                                  "padding": [
-                                    0,
-                                    10
-                                  ],
-                                  "alignItems": "center",
+                                  "layout": "vertical",
+                                  "gap": 4,
                                   "children": [
                                     {
                                       "type": "text",
-                                      "id": "Ht4FE",
-                                      "fill": "$text",
-                                      "content": "Short lead time · Custom OEM",
+                                      "id": "CQFno",
+                                      "fill": "$text-muted",
+                                      "content": "目标市场",
                                       "fontFamily": "$font-ui",
-                                      "fontSize": 12,
+                                      "fontSize": 11,
                                       "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "yl5DA",
+                                      "width": "fill_container",
+                                      "height": 34,
+                                      "fill": "$bg-input",
+                                      "cornerRadius": 6,
+                                      "stroke": "$border",
+                                      "strokeWidth": 1,
+                                      "padding": [
+                                        0,
+                                        10
+                                      ],
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "o5qHQ",
+                                          "fill": "$text",
+                                          "content": "EU · NA · AU · AS · SA · ME",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 12,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
                                     }
                                   ]
-                                }
-                              ]
-                            },
-                            {
-                              "type": "frame",
-                              "id": "nOQtU",
-                              "width": "fill_container",
-                              "layout": "vertical",
-                              "gap": 4,
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "qIdgn",
-                                  "fill": "$text-muted",
-                                  "content": "竞品参考",
-                                  "fontFamily": "$font-ui",
-                                  "fontSize": 11,
-                                  "fontWeight": "normal"
                                 },
                                 {
                                   "type": "frame",
-                                  "id": "gxeo7",
+                                  "id": "cHb3N",
                                   "width": "fill_container",
-                                  "height": 34,
-                                  "fill": "$bg-input",
-                                  "cornerRadius": 6,
-                                  "stroke": "$border",
-                                  "strokeWidth": 1,
-                                  "padding": [
-                                    0,
-                                    10
-                                  ],
-                                  "alignItems": "center",
+                                  "layout": "vertical",
+                                  "gap": 4,
                                   "children": [
                                     {
                                       "type": "text",
-                                      "id": "M4n8o",
-                                      "fill": "$text",
-                                      "content": "Emerson, KITZ, Bray",
+                                      "id": "HFusb",
+                                      "fill": "$text-muted",
+                                      "content": "买家角色",
                                       "fontFamily": "$font-ui",
-                                      "fontSize": 12,
+                                      "fontSize": 11,
                                       "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "rSpbU",
+                                      "width": "fill_container",
+                                      "height": 34,
+                                      "fill": "$bg-input",
+                                      "cornerRadius": 6,
+                                      "stroke": "$border",
+                                      "strokeWidth": 1,
+                                      "padding": [
+                                        0,
+                                        10
+                                      ],
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "nv81M",
+                                          "fill": "$text",
+                                          "content": "采购经理 · 工程承包商",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 12,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "CbNPI",
+                                  "width": "fill_container",
+                                  "layout": "vertical",
+                                  "gap": 4,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "Mn6KH",
+                                      "fill": "$text-muted",
+                                      "content": "公司类型",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 11,
+                                      "fontWeight": "normal"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "mhUfZ",
+                                      "width": "fill_container",
+                                      "height": 34,
+                                      "fill": "$bg-input",
+                                      "cornerRadius": 6,
+                                      "stroke": "$border",
+                                      "strokeWidth": 1,
+                                      "padding": [
+                                        0,
+                                        10
+                                      ],
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "B5Po7",
+                                          "fill": "$text",
+                                          "textGrowth": "fixed-width",
+                                          "width": "fill_container",
+                                          "content": "分销商 · 进口商 · 建材连锁 · OEM",
+                                          "fontFamily": "$font-ui",
+                                          "fontSize": 12,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
