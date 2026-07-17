@@ -165,6 +165,8 @@ function updatePipelineFromProfile(): void {
   const hasCompleted = (exploreTasks.value?.summary.completed ?? 0) > 0
   const expanding =
     agentStatus.value === 'running' && agentSkill.value === 'expand-keywords'
+  const exploring =
+    agentStatus.value === 'running' && agentSkill.value === 'discover-leads'
 
   pipelineSteps.value = [
     { id: 'input', label: '1 产品录入', status: 'done', statusLabel: '完成' },
@@ -183,10 +185,14 @@ function updatePipelineFromProfile(): void {
     {
       id: 'explore',
       label: '3 R1 探索',
-      status: hasCompleted ? 'done' : hasRunning ? 'running' : 'pending',
+      status: hasCompleted
+        ? 'done'
+        : hasRunning || exploring
+          ? 'running'
+          : 'pending',
       statusLabel: hasCompleted
         ? '完成'
-        : hasRunning
+        : hasRunning || exploring
           ? '执行中'
           : hasKeywords
             ? '可执行'
@@ -333,6 +339,19 @@ export function useWorkspace() {
     ]
   }
 
+  function resetAgentForDiscoverLeads(maxQueries = 10): void {
+    agentSkill.value = 'discover-leads'
+    agentStatus.value = 'running'
+    agentTimeline.value = []
+    agentExpanded.value = {}
+    agentMeta.value = [
+      { label: '状态', value: '探索中', tone: 'accent' },
+      { label: '进度', value: `0/${maxQueries}` },
+      { label: '线索', value: '0' },
+      { label: '来源', value: '关键词' },
+    ]
+  }
+
   function toggleTimelineExpand(id: string): void {
     agentExpanded.value = {
       ...agentExpanded.value,
@@ -367,6 +386,7 @@ export function useWorkspace() {
     setAgentContext,
     resetAgentForGenerate,
     resetAgentForExpandKeywords,
+    resetAgentForDiscoverLeads,
     toggleTimelineExpand,
     isTimelineExpanded,
     refreshProducts,

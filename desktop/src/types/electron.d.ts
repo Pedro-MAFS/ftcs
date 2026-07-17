@@ -31,6 +31,7 @@ export type AgentEventPayload =
       message: string
       profile?: ProfileDetail
       expansion?: KeywordExpansionDto
+      explorationRun?: ExplorationRunDto
     }
 
 export interface ProfileGenerateInput {
@@ -151,6 +152,35 @@ export interface KeywordsSaveResult {
   expansion?: KeywordExpansionDto
 }
 
+export interface DiscoverLeadsInput {
+  productId: string
+  rounds?: string[]
+  maxQueries?: number
+}
+
+export interface DiscoverLeadsResult {
+  ok: boolean
+  message: string
+  productId?: string
+}
+
+export interface ExplorationRunDto {
+  id: string
+  product_id: string
+  started_at: string
+  finished_at: string | null
+  status: 'running' | 'completed' | 'failed'
+  rounds: string[]
+  queries_executed: number
+  leads_found: number
+  leads_after_dedupe?: number
+  api_usage: {
+    search_calls: number
+    crawl_pages: number
+  }
+  errors: string[]
+}
+
 export type ExploreTaskStatus =
   | 'keywords_ready'
   | 'running'
@@ -228,6 +258,7 @@ declare global {
       getKeywords: (productId: string) => Promise<KeywordExpansionDto | null>
       saveKeywords: (input: KeywordsSaveInput) => Promise<KeywordsSaveResult>
       listExploreTasks: (productId: string) => Promise<ExploreTasksSnapshotDto>
+      startExploreR1: (input: DiscoverLeadsInput) => Promise<DiscoverLeadsResult>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
       getSidecarLogs: () => Promise<string[]>

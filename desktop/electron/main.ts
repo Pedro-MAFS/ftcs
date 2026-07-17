@@ -32,7 +32,13 @@ import {
   pasteClipboardFiles,
   pickAndImportFiles,
 } from './library/library-service'
-import type { LibrarySnapshot, ProfileGenerateInput, ProfileSaveInput, KeywordsSaveInput } from './ipc/types'
+import type {
+  LibrarySnapshot,
+  ProfileGenerateInput,
+  ProfileSaveInput,
+  KeywordsSaveInput,
+  DiscoverLeadsInput,
+} from './ipc/types'
 import { AgentRunController } from './opencode/agent-runner'
 import { bootstrapProductFromLibrary } from './profile/profile-bootstrap'
 import { listProductSummaries, loadProfile } from './profile/profile-reader'
@@ -477,6 +483,57 @@ function registerIpcHandlers(): void {
       return {
         ok: true,
         message: `正在为 ${productId} 扩展关键词…`,
+        productId,
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.EXPLORATION_START_R1, async (event, input: DiscoverLeadsInput) => {
+    try {
+      const productId = input?.productId
+      if (!productId || typeof productId !== 'string') {
+        return { ok: false, message: '缺少 productId' }
+      }
+      if (getAgentRunner().isRunning()) {
+        return {
+          ok: false,
+          message: '已有 Agent 任务在运行',
+        }
+      }
+      if (runtime?.getStatus().state !== 'running' || !runtime.getClient()) {
+        return {
+          ok: false,
+          message: 'OpenCode 未就绪，请先在设置页确认运行时或点击「重启 OpenCode」',
+        }
+      }
+
+      const sender = event.sender
+      void getAgentRunner()
+        .runDiscoverLeads(
+          productId,
+          (payload) => emitAgentEvent(sender, payload),
+          {
+            rounds: input.rounds,
+            maxQueries: input.maxQueries,
+          },
+        )
+        .catch((err) => {
+          emitAgentEvent(sender, {
+            type: 'done',
+            ok: false,
+            productId,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        })
+
+      return {
+        ok: true,
+        message: `正在为 ${productId} 启动 R1 探索…`,
         productId,
       }
     } catch (err) {

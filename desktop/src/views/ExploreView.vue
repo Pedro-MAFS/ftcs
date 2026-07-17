@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import Icon from '../components/shared/Icon.vue'
@@ -16,14 +16,19 @@ const {
   agentSkill,
   agentStatus,
   refreshExploreTasks,
+  resetAgentForDiscoverLeads,
 } = useWorkspace()
 
 const expandedId = ref('')
 const actionMessage = ref('')
 const loading = ref(false)
 const editorOpen = ref(false)
+const startingR1 = ref(false)
 const previewRound = ref('R1')
 const previewDimension = ref('all')
+const DEFAULT_MAX_QUERIES = 10
+
+let progressTimer: ReturnType<typeof setInterval> | null = null
 
 const DIMENSION_OPTIONS = [
   { value: 'all', label: '全部维度' },
@@ -94,9 +99,52 @@ const expandingPlaceholder = computed(() => {
   )
 })
 
+const discoveringPlaceholder = computed(() => {
+  return (
+    generating.value &&
+    agentSkill.value === 'discover-leads' &&
+    !tasks.value.some((t) => t.status === 'running')
+  )
+})
+
 const hasKeywordsReady = computed(() =>
   tasks.value.some((t) => t.status === 'keywords_ready'),
 )
+
+const r1QueryCount = computed(
+  () => allQueries.value.filter((q) => q.round === 'R1').length,
+)
+
+const canStartR1 = computed(() => {
+  return (
+    !!activeProductId.value &&
+    hasKeywordsReady.value &&
+    r1QueryCount.value > 0 &&
+    !generating.value &&
+    !startingR1.value
+  )
+})
+
+const isDiscovering = computed(
+  () => generating.value && agentSkill.value === 'discover-leads',
+)
+
+function stopProgressPolling(): void {
+  if (progressTimer) {
+    clearInterval(progressTimer)
+    progressTimer = null
+  }
+}
+
+function startProgressPolling(): void {
+  stopProgressPolling()
+  progressTimer = setInterval(() => {
+    void refreshExploreTasks().then(() => {
+      const running = tasks.value.find((t) => t.status === 'running')
+      if (running) expandedId.value = running.id
+    })
+  }, 2500)
+}
 
 const statusLabel = (status: ExploreTaskDto['status']): string => {
   if (status === 'keywords_ready') return '关键词就绪'
@@ -135,10 +183,46 @@ async function stopAgent(): Promise<void> {
   if (!window.ftcs?.abortProfile) return
   await window.ftcs.abortProfile()
   actionMessage.value = '已请求停止当前任务'
+  stopProgressPolling()
 }
 
-function startR1Hint(): void {
-  actionMessage.value = 'R1 探索（discover-leads）即将接入，请先确认关键词就绪任务'
+async function startR1(): Promise<void> {
+  if (!activeProductId.value || !window.ftcs?.startExploreR1) return
+  if (!canStartR1.value) {
+    if (!hasKeywordsReady.value) {
+      actionMessage.value = '请先完成关键词扩展'
+    } else if (r1QueryCount.value === 0) {
+      actionMessage.value = '当前没有 R1 搜索词，请编辑关键词后重试'
+    }
+    return
+  }
+
+  startingR1.value = true
+  actionMessage.value = ''
+  const maxQueries = Math.min(DEFAULT_MAX_QUERIES, r1QueryCount.value || DEFAULT_MAX_QUERIES)
+  resetAgentForDiscoverLeads(maxQueries)
+  startProgressPolling()
+
+  try {
+    const res = await window.ftcs.startExploreR1({
+      productId: activeProductId.value,
+      rounds: ['R1'],
+      maxQueries,
+    })
+    if (!res.ok) {
+      actionMessage.value = res.message
+      agentStatus.value = 'error'
+      stopProgressPolling()
+      return
+    }
+    actionMessage.value = res.message
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+    agentStatus.value = 'error'
+    stopProgressPolling()
+  } finally {
+    startingR1.value = false
+  }
 }
 
 function openKeywordEditor(): void {
@@ -186,12 +270,24 @@ watch(activeProductId, () => {
 
 watch(agentStatus, (status) => {
   if (status === 'done' || status === 'error') {
-    void refreshExploreTasks()
+    stopProgressPolling()
+    void refreshExploreTasks().then(() => {
+      const done = tasks.value.find(
+        (t) => t.status === 'completed' || t.status === 'failed',
+      )
+      const running = tasks.value.find((t) => t.status === 'running')
+      if (running) expandedId.value = running.id
+      else if (done) expandedId.value = done.id
+    })
   }
 })
 
 onMounted(() => {
   void refreshExploreTasks()
+})
+
+onUnmounted(() => {
+  stopProgressPolling()
 })
 </script>
 
@@ -214,11 +310,11 @@ onMounted(() => {
         <button
           type="button"
           class="btn-primary"
-          :disabled="!hasKeywordsReady || generating"
-          @click="startR1Hint"
+          :disabled="!canStartR1"
+          @click="startR1"
         >
           <Icon name="play" :size="12" />
-          开始 R1
+          {{ startingR1 || isDiscovering ? '探索中…' : '开始 R1' }}
         </button>
       </div>
     </header>
@@ -246,6 +342,23 @@ onMounted(() => {
               <span class="explore-status is-accent">扩展中</span>
             </div>
             <p>正在调用 expand-keywords，完成后将出现在此列表…</p>
+          </div>
+        </button>
+        <div class="explore-task__body">
+          <div class="explore-progress">
+            <div class="explore-progress__bar is-indeterminate" />
+          </div>
+        </div>
+      </div>
+
+      <div v-if="discoveringPlaceholder" class="explore-task is-expanded">
+        <button type="button" class="explore-task__head" disabled>
+          <div class="explore-task__title-block">
+            <div class="explore-task__title-row">
+              <strong>R1 探索</strong>
+              <span class="explore-status is-accent">启动中</span>
+            </div>
+            <p>正在调用 discover-leads，创建探索运行记录…</p>
           </div>
         </button>
         <div class="explore-task__body">
@@ -355,16 +468,21 @@ onMounted(() => {
             >
               编辑关键词
             </button>
-            <button type="button" class="btn-primary btn-secondary--sm" @click="startR1Hint">
+            <button
+              type="button"
+              class="btn-primary btn-secondary--sm"
+              :disabled="!canStartR1"
+              @click="startR1"
+            >
               <Icon name="play" :size="11" />
-              开始 R1
+              {{ startingR1 || isDiscovering ? '探索中…' : '开始 R1' }}
             </button>
           </div>
         </div>
       </div>
 
       <div
-        v-if="!tasks.length && !expandingPlaceholder"
+        v-if="!tasks.length && !expandingPlaceholder && !discoveringPlaceholder"
         class="explore-empty"
       >
         <h2>暂无探索任务</h2>

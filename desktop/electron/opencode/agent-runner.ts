@@ -10,6 +10,10 @@ import {
   waitForExpansion,
   type KeywordExpansion,
 } from '../keywords/keywords-reader'
+import {
+  waitForExplorationFinished,
+  type ExplorationRun,
+} from '../exploration/exploration-reader'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -44,6 +48,7 @@ export type AgentEventPayload =
       message: string
       profile?: ProductProfileDetail
       expansion?: KeywordExpansion
+      explorationRun?: ExplorationRun
     }
 
 export type AgentEventSink = (event: AgentEventPayload) => void
@@ -97,6 +102,32 @@ function buildExpandKeywordsPrompt(productId: string): string {
     '4. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例搜索词、下一步建议（discover-leads / R1）。',
     '',
     `输出路径：data/keywords/${productId}/expansion.json`,
+  ].join('\n')
+}
+
+function buildDiscoverLeadsPrompt(
+  productId: string,
+  options: { rounds: string[]; maxQueries: number },
+): string {
+  const rounds = options.rounds.length ? options.rounds : ['R1']
+  return [
+    '请严格按 skill `discover-leads` 执行获客探索（默认 R1 广撒网）。',
+    '',
+    `产品 ID：${productId}`,
+    `轮次 rounds：${JSON.stringify(rounds)}`,
+    `最多搜索词 max_queries：${options.maxQueries}`,
+    '',
+    '执行要求：',
+    '1. lead-store.product_get 确认画像 ready；lead-store.keywords_get 读取 search_queries。',
+    '2. search-api.search_usage 确认当日配额未用尽。',
+    '3. lead-store.exploration_start 创建运行记录，记住 run_id。',
+    '4. 从 search_queries 筛选指定 rounds，按 priority（high→medium→low）排序，取前 max_queries 条。',
+    '5. 对每个搜索词：search-api.search_web → chrome-devtools 打开候选页 → 判断是否目标客户 → 是则 lead_append_raw。',
+    '6. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。',
+    '7. 用简短中文汇报：run_id、执行词数、线索数、API 用量、3～5 条代表性线索、下一步 score-and-dedupe。',
+    '',
+    `线索输出：data/leads/${productId}/raw/`,
+    `运行记录：data/exploration/${productId}/runs/`,
   ].join('\n')
 }
 
@@ -495,6 +526,303 @@ export class AgentRunController {
         expansion,
       })
       return { ok: true, message, expansion }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      timeline.addSuffix({
+        id: 'sys-error',
+        kind: 'error',
+        time: nowTime(),
+        title: '错误',
+        body: message,
+      })
+      flushTimeline()
+      pushState('error')
+      emit({
+        type: 'done',
+        ok: false,
+        productId,
+        message,
+      })
+      return { ok: false, message }
+    } finally {
+      stopEvents?.()
+      this.running = false
+      this.sessionId = null
+      this.abort = null
+    }
+  }
+
+  async runDiscoverLeads(
+    productId: string,
+    emit: AgentEventSink,
+    options?: { rounds?: string[]; maxQueries?: number },
+  ): Promise<{ ok: boolean; message: string; explorationRun?: ExplorationRun }> {
+    if (this.running) {
+      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+    }
+
+    const client = this.getClient()
+    if (!client) {
+      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+    }
+
+    const profile = loadProfile(productId)
+    if (!profile) {
+      throw new Error(`未找到产品画像：${productId}`)
+    }
+    if (profile.status !== 'ready') {
+      throw new Error(`画像未就绪（${profile.status}），请先补全并保存`)
+    }
+
+    const expansion = loadExpansion(productId)
+    if (!expansion || expansion.search_queries.length === 0) {
+      throw new Error('尚未扩展关键词，请先在画像页「新建探索任务」')
+    }
+
+    const rounds = (options?.rounds?.length ? options.rounds : ['R1']).map((r) =>
+      r.toUpperCase(),
+    )
+    const maxQueries = Math.max(1, options?.maxQueries ?? 10)
+    const r1Count = expansion.search_queries.filter((q) =>
+      rounds.includes(String(q.round).toUpperCase()),
+    ).length
+    if (r1Count === 0) {
+      throw new Error(`expansion.json 中没有 ${rounds.join('/')} 轮次的搜索词`)
+    }
+
+    this.running = true
+    this.abort = new AbortController()
+    const signal = this.abort.signal
+    const startedAt = Date.now()
+    const afterIso = new Date().toISOString()
+    const timeline = new TimelineBuilder()
+
+    const flushTimeline = () => {
+      const items = timeline.emitIfChanged()
+      if (items) emit({ type: 'timeline', items })
+    }
+
+    const pushState = (
+      status: 'idle' | 'running' | 'done' | 'error',
+      run?: ExplorationRun | null,
+    ) => {
+      const elapsedSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+      const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0')
+      const ss = String(elapsedSec % 60).padStart(2, '0')
+      let label = '探索中'
+      let tone = 'accent'
+      if (status === 'done') {
+        label = '已完成'
+        tone = 'success'
+      } else if (status === 'error') {
+        label = '失败'
+        tone = 'warning'
+      }
+      const progress =
+        run != null
+          ? `${run.queries_executed}/${Math.min(maxQueries, r1Count)}`
+          : `0/${Math.min(maxQueries, r1Count)}`
+      emit({
+        type: 'state',
+        skill: 'discover-leads',
+        status,
+        productId,
+        meta: [
+          { label: '状态', value: label, tone },
+          { label: '进度', value: progress },
+          {
+            label: '线索',
+            value: run != null ? String(run.leads_found) : '0',
+          },
+          { label: '耗时', value: `${mm}:${ss}` },
+        ],
+      })
+    }
+
+    const promptText = buildDiscoverLeadsPrompt(productId, { rounds, maxQueries })
+    timeline.reset()
+    timeline.addPrefix({
+      id: 'sys-prepare',
+      kind: 'system',
+      time: nowTime(),
+      title: '系统',
+      body: `准备为 ${productId}（${profile.companyName || '未命名'}）执行 ${rounds.join('+')} 探索 · 最多 ${maxQueries} 词（可用 ${r1Count}）`,
+    })
+    timeline.addPrefix({
+      id: 'user-discover',
+      kind: 'user',
+      time: nowTime(),
+      title: '你的指令 · 开始 R1 探索',
+      body: promptText,
+      collapsed: true,
+    })
+    pushState('running')
+    flushTimeline()
+
+    let stopEvents: (() => void) | null = null
+
+    try {
+      const created = await client.session.create({
+        title: `discover-leads · ${productId}`,
+      })
+      if (created.error || !created.data?.id) {
+        throw new Error(
+          typeof created.error === 'object' && created.error && 'message' in created.error
+            ? String((created.error as { message?: string }).message)
+            : '创建 OpenCode 会话失败',
+        )
+      }
+      this.sessionId = created.data.id
+      timeline.addPrefix({
+        id: 'sys-session',
+        kind: 'system',
+        time: nowTime(),
+        title: '会话',
+        body: `已创建 OpenCode session\n${this.sessionId}`,
+      })
+      flushTimeline()
+
+      const bridge = this.startEventBridge(
+        client,
+        this.sessionId,
+        timeline,
+        flushTimeline,
+        promptText,
+      )
+      stopEvents = bridge.stop
+
+      const promptPromise = client.session.promptAsync({
+        sessionID: this.sessionId,
+        parts: [{ type: 'text', text: promptText }],
+      })
+
+      const runPromise = waitForExplorationFinished(productId, {
+        afterIso,
+        signal,
+        timeoutMs: 45 * 60_000,
+        onProgress: (run) => pushState('running', run),
+      })
+      const idlePromise = this.waitUntilIdle(client, this.sessionId, signal)
+
+      const raced = await Promise.race([
+        runPromise.then((run) => ({ kind: 'run' as const, run })),
+        idlePromise.then(() => ({ kind: 'idle' as const })),
+        new Promise<{ kind: 'abort' }>((resolve) => {
+          signal.addEventListener('abort', () => resolve({ kind: 'abort' }), {
+            once: true,
+          })
+        }),
+      ])
+
+      void promptPromise
+
+      if (raced.kind === 'abort') {
+        pushState('error')
+        timeline.addSuffix({
+          id: 'sys-abort',
+          kind: 'error',
+          time: nowTime(),
+          title: '已中止',
+          body: '用户中止了 R1 探索',
+        })
+        flushTimeline()
+        emit({
+          type: 'done',
+          ok: false,
+          productId,
+          message: '已中止 R1 探索',
+        })
+        return { ok: false, message: '已中止 R1 探索' }
+      }
+
+      let run = raced.kind === 'run' ? raced.run : null
+      if (!run || (run.status !== 'completed' && run.status !== 'failed')) {
+        run = await waitForExplorationFinished(productId, {
+          afterIso,
+          signal,
+          timeoutMs: 60_000,
+          intervalMs: 1500,
+          onProgress: (r) => pushState('running', r),
+        })
+      }
+
+      if (raced.kind === 'run' && run && run.status !== 'running') {
+        await this.settleAfterArtifact(
+          client,
+          this.sessionId,
+          signal,
+          bridge.ingestNow,
+        )
+      } else {
+        await bridge.ingestNow().catch(() => undefined)
+      }
+
+      if (!run) {
+        throw new Error(
+          'Agent 已结束，但未找到探索运行记录。请确认已调用 exploration_start / exploration_finish。',
+        )
+      }
+
+      if (run.status === 'failed') {
+        const message = `R1 探索失败：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
+        timeline.addSuffix({
+          id: 'sys-failed',
+          kind: 'error',
+          time: nowTime(),
+          title: '失败',
+          body: message,
+        })
+        flushTimeline()
+        pushState('error', run)
+        emit({
+          type: 'done',
+          ok: false,
+          productId,
+          message,
+          explorationRun: run,
+        })
+        return { ok: false, message, explorationRun: run }
+      }
+
+      if (run.status === 'running') {
+        const message = `探索仍在进行或未正确收尾：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
+        timeline.addSuffix({
+          id: 'sys-incomplete',
+          kind: 'error',
+          time: nowTime(),
+          title: '未完成',
+          body: `${message}\n请检查 Agent 是否调用了 exploration_finish`,
+        })
+        flushTimeline()
+        pushState('error', run)
+        emit({
+          type: 'done',
+          ok: false,
+          productId,
+          message,
+          explorationRun: run,
+        })
+        return { ok: false, message, explorationRun: run }
+      }
+
+      const message = `R1 探索完成：${run.id} · ${run.queries_executed} 词 · 线索 ${run.leads_found}`
+      timeline.addSuffix({
+        id: 'sys-done',
+        kind: 'system',
+        time: nowTime(),
+        title: '完成',
+        body: message,
+      })
+      flushTimeline()
+      pushState('done', run)
+      emit({
+        type: 'done',
+        ok: true,
+        productId,
+        message,
+        explorationRun: run,
+      })
+      return { ok: true, message, explorationRun: run }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       timeline.addSuffix({

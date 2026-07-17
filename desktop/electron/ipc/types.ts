@@ -25,6 +25,7 @@ export const IPC = {
   KEYWORDS_GET: 'keywords:get',
   KEYWORDS_SAVE: 'keywords:save',
   EXPLORATION_LIST_TASKS: 'exploration:list-tasks',
+  EXPLORATION_START_R1: 'exploration:start-r1',
   AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
@@ -149,6 +150,35 @@ export interface KeywordsSaveResult {
   expansion?: KeywordExpansionDto
 }
 
+export interface DiscoverLeadsInput {
+  productId: string
+  rounds?: string[]
+  maxQueries?: number
+}
+
+export interface DiscoverLeadsResult {
+  ok: boolean
+  message: string
+  productId?: string
+}
+
+export interface ExplorationRunDto {
+  id: string
+  product_id: string
+  started_at: string
+  finished_at: string | null
+  status: 'running' | 'completed' | 'failed'
+  rounds: string[]
+  queries_executed: number
+  leads_found: number
+  leads_after_dedupe?: number
+  api_usage: {
+    search_calls: number
+    crawl_pages: number
+  }
+  errors: string[]
+}
+
 export type ExploreTaskStatus =
   | 'keywords_ready'
   | 'running'
@@ -217,6 +247,7 @@ export type AgentEventPayload =
       message: string
       profile?: ProfileDetail
       expansion?: KeywordExpansionDto
+      explorationRun?: ExplorationRunDto
     }
 
 export type OpenCodeRuntimeState = 'idle' | 'starting' | 'running' | 'error' | 'stopped'

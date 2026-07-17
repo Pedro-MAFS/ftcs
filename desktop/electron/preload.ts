@@ -8,6 +8,8 @@ import type {
   KeywordsExpandResult,
   KeywordsSaveInput,
   KeywordsSaveResult,
+  DiscoverLeadsInput,
+  DiscoverLeadsResult,
   LibraryMutationResult,
   LibrarySnapshot,
   ProfileDetail,
@@ -78,6 +80,8 @@ const api = {
     ipcRenderer.invoke(IPC.KEYWORDS_SAVE, input),
   listExploreTasks: (productId: string): Promise<ExploreTasksSnapshotDto> =>
     ipcRenderer.invoke(IPC.EXPLORATION_LIST_TASKS, productId),
+  startExploreR1: (input: DiscoverLeadsInput): Promise<DiscoverLeadsResult> =>
+    ipcRenderer.invoke(IPC.EXPLORATION_START_R1, input),
   onAgentEvent: (handler: (payload: AgentEventPayload) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: AgentEventPayload) => {
       handler(payload)
