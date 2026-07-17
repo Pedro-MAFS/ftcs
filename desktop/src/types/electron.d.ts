@@ -108,6 +108,18 @@ export interface KeywordsExpandResult {
   productId?: string
 }
 
+export interface KeywordsSaveInput {
+  productId: string
+  search_queries: Array<{
+    id?: string
+    query: string
+    dimension: string
+    language?: string
+    priority?: string
+    round?: string
+  }>
+}
+
 export interface KeywordExpansionDto {
   product_id: string
   generated_at: string
@@ -131,6 +143,12 @@ export interface KeywordExpansionDto {
     by_round: Record<string, number>
     by_dimension?: Record<string, number>
   }
+}
+
+export interface KeywordsSaveResult {
+  ok: boolean
+  message: string
+  expansion?: KeywordExpansionDto
 }
 
 export type ExploreTaskStatus =
@@ -208,6 +226,7 @@ declare global {
       createDraftProfile: () => Promise<ProfileSaveResult>
       expandKeywords: (productId: string) => Promise<KeywordsExpandResult>
       getKeywords: (productId: string) => Promise<KeywordExpansionDto | null>
+      saveKeywords: (input: KeywordsSaveInput) => Promise<KeywordsSaveResult>
       listExploreTasks: (productId: string) => Promise<ExploreTasksSnapshotDto>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>

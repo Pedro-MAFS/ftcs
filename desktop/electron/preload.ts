@@ -6,6 +6,8 @@ import type {
   ExploreTasksSnapshotDto,
   KeywordExpansionDto,
   KeywordsExpandResult,
+  KeywordsSaveInput,
+  KeywordsSaveResult,
   LibraryMutationResult,
   LibrarySnapshot,
   ProfileDetail,
@@ -72,6 +74,8 @@ const api = {
     ipcRenderer.invoke(IPC.KEYWORDS_EXPAND, productId),
   getKeywords: (productId: string): Promise<KeywordExpansionDto | null> =>
     ipcRenderer.invoke(IPC.KEYWORDS_GET, productId),
+  saveKeywords: (input: KeywordsSaveInput): Promise<KeywordsSaveResult> =>
+    ipcRenderer.invoke(IPC.KEYWORDS_SAVE, input),
   listExploreTasks: (productId: string): Promise<ExploreTasksSnapshotDto> =>
     ipcRenderer.invoke(IPC.EXPLORATION_LIST_TASKS, productId),
   onAgentEvent: (handler: (payload: AgentEventPayload) => void): (() => void) => {

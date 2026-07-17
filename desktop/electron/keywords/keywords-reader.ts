@@ -139,3 +139,149 @@ export function waitForExpansion(
     tick()
   })
 }
+
+const DIMENSIONS: KeywordDimension[] = [
+  'product',
+  'scenario',
+  'buyer',
+  'geo',
+  'competitor',
+]
+
+const ROUNDS = new Set(['R1', 'R2', 'R3', 'R4'])
+const PRIORITIES = new Set(['high', 'medium', 'low'])
+
+export interface SaveExpansionInput {
+  productId: string
+  search_queries: Array<{
+    id?: string
+    query: string
+    dimension: string
+    language?: string
+    priority?: string
+    round?: string
+  }>
+  /** 若不传则按 search_queries 重建维度词表 */
+  dimensions?: KeywordExpansion['dimensions']
+}
+
+export interface SaveExpansionResult {
+  ok: boolean
+  message: string
+  expansion?: KeywordExpansion
+}
+
+function normalizeDimension(value: string): KeywordDimension {
+  const key = value.trim().toLowerCase()
+  if ((DIMENSIONS as string[]).includes(key)) return key as KeywordDimension
+  return 'product'
+}
+
+function rebuildDimensions(
+  queries: SearchQuery[],
+  fallback?: KeywordExpansion['dimensions'],
+): KeywordExpansion['dimensions'] {
+  const next: KeywordExpansion['dimensions'] = {
+    product: [],
+    scenario: [],
+    buyer: [],
+    geo: [],
+    competitor: [],
+  }
+  for (const q of queries) {
+    const dim = normalizeDimension(String(q.dimension))
+    const text = q.query.trim()
+    if (!text) continue
+    if (!next[dim].includes(text)) next[dim].push(text)
+  }
+  // 若某维为空且有旧数据，保留旧词（避免误删维度摘要）
+  if (fallback) {
+    for (const dim of DIMENSIONS) {
+      if (next[dim].length === 0 && fallback[dim]?.length) {
+        next[dim] = [...fallback[dim]]
+      }
+    }
+  }
+  return next
+}
+
+function buildStats(queries: SearchQuery[]): KeywordExpansion['stats'] {
+  const by_round: Record<string, number> = {}
+  const by_dimension: Record<string, number> = {}
+  for (const q of queries) {
+    by_round[q.round] = (by_round[q.round] ?? 0) + 1
+    by_dimension[q.dimension] = (by_dimension[q.dimension] ?? 0) + 1
+  }
+  return {
+    total_queries: queries.length,
+    by_round,
+    by_dimension,
+  }
+}
+
+export function saveExpansion(input: SaveExpansionInput): SaveExpansionResult {
+  const productId = input.productId?.trim()
+  if (!productId) {
+    return { ok: false, message: '缺少 productId' }
+  }
+
+  const existing = loadExpansion(productId)
+  const cleaned: SearchQuery[] = []
+  for (let index = 0; index < (input.search_queries ?? []).length; index++) {
+    const row = input.search_queries[index]
+    const query = String(row?.query || '').trim()
+    if (!query) continue
+    const roundRaw = String(row?.round || 'R1').toUpperCase()
+    const round = ROUNDS.has(roundRaw) ? roundRaw : 'R1'
+    const priorityRaw = String(row?.priority || 'medium').toLowerCase()
+    const priority = PRIORITIES.has(priorityRaw) ? priorityRaw : 'medium'
+    cleaned.push({
+      id: String(row?.id || `q_${String(index + 1).padStart(3, '0')}`),
+      query,
+      dimension: normalizeDimension(String(row?.dimension || 'product')),
+      language: String(row?.language || 'en').trim() || 'en',
+      priority,
+      round,
+    })
+  }
+
+  if (cleaned.length === 0) {
+    return { ok: false, message: '至少保留一条有效搜索词' }
+  }
+
+  // 确保 id 唯一
+  const seen = new Set<string>()
+  const search_queries: SearchQuery[] = cleaned.map((row, index) => {
+    let id = row.id
+    if (!id || seen.has(id)) {
+      id = `q_${String(index + 1).padStart(3, '0')}`
+      while (seen.has(id)) {
+        id = `q_${String(Date.now()).slice(-6)}_${index}`
+      }
+    }
+    seen.add(id)
+    return { ...row, id }
+  })
+
+  const dimensions =
+    input.dimensions ??
+    rebuildDimensions(search_queries, existing?.dimensions)
+
+  const expansion: KeywordExpansion = {
+    product_id: productId,
+    generated_at: new Date().toISOString(),
+    dimensions,
+    search_queries,
+    stats: buildStats(search_queries),
+  }
+
+  const filePath = getExpansionPath(productId)
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  fs.writeFileSync(filePath, `${JSON.stringify(expansion, null, 2)}\n`, 'utf8')
+
+  return {
+    ok: true,
+    message: `已保存 ${search_queries.length} 条搜索词`,
+    expansion,
+  }
+}

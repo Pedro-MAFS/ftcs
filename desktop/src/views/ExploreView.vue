@@ -3,13 +3,15 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import Icon from '../components/shared/Icon.vue'
-import type { ExploreTaskDto } from '../types/electron'
+import KeywordEditorDialog from '../components/shared/KeywordEditorDialog.vue'
+import type { ExploreTaskDto, KeywordExpansionDto } from '../types/electron'
 
 const meta = SECTION_META.explore
 const {
   activeProductId,
   activeProduct,
   exploreTasks,
+  currentExpansion,
   generating,
   agentSkill,
   agentStatus,
@@ -19,6 +21,34 @@ const {
 const expandedId = ref('')
 const actionMessage = ref('')
 const loading = ref(false)
+const editorOpen = ref(false)
+const previewRound = ref('R1')
+const previewDimension = ref('all')
+
+const DIMENSION_OPTIONS = [
+  { value: 'all', label: '全部维度' },
+  { value: 'product', label: '产品' },
+  { value: 'scenario', label: '场景' },
+  { value: 'buyer', label: '买家' },
+  { value: 'geo', label: '地理' },
+  { value: 'competitor', label: '竞品' },
+]
+
+const ROUND_OPTIONS = [
+  { value: 'all', label: '全部轮次' },
+  { value: 'R1', label: 'R1' },
+  { value: 'R2', label: 'R2' },
+  { value: 'R3', label: 'R3' },
+  { value: 'R4', label: 'R4' },
+]
+
+const DIM_LABEL: Record<string, string> = {
+  product: '产品',
+  scenario: '场景',
+  buyer: '买家',
+  geo: '地理',
+  competitor: '竞品',
+}
 
 const tasks = computed(() => exploreTasks.value?.tasks ?? [])
 const summary = computed(
@@ -31,6 +61,30 @@ const summary = computed(
       failed: 0,
     },
 )
+
+const allQueries = computed(() => currentExpansion.value?.search_queries ?? [])
+
+const filteredQueries = computed(() => {
+  return allQueries.value.filter((q) => {
+    if (previewRound.value !== 'all' && q.round !== previewRound.value) return false
+    if (previewDimension.value !== 'all' && q.dimension !== previewDimension.value) {
+      return false
+    }
+    return !!q.query?.trim()
+  })
+})
+
+const previewTitle = computed(() => {
+  const round =
+    previewRound.value === 'all'
+      ? '全部轮次'
+      : previewRound.value
+  const dim =
+    previewDimension.value === 'all'
+      ? '全部维度'
+      : DIM_LABEL[previewDimension.value] || previewDimension.value
+  return `搜索词预览 · ${round} · ${dim} · ${filteredQueries.value.length} 条`
+})
 
 const expandingPlaceholder = computed(() => {
   return (
@@ -87,6 +141,23 @@ function startR1Hint(): void {
   actionMessage.value = 'R1 探索（discover-leads）即将接入，请先确认关键词就绪任务'
 }
 
+function openKeywordEditor(): void {
+  if (!activeProductId.value) return
+  editorOpen.value = true
+}
+
+function closeKeywordEditor(): void {
+  editorOpen.value = false
+}
+
+async function onKeywordsSaved(expansion: KeywordExpansionDto): Promise<void> {
+  editorOpen.value = false
+  actionMessage.value = `已保存 ${expansion.stats.total_queries} 条搜索词`
+  await refreshExploreTasks()
+  const ready = tasks.value.find((t) => t.status === 'keywords_ready')
+  if (ready) expandedId.value = ready.id
+}
+
 watch(
   () => tasks.value,
   (list) => {
@@ -107,6 +178,9 @@ watch(
 )
 
 watch(activeProductId, () => {
+  editorOpen.value = false
+  previewRound.value = 'R1'
+  previewDimension.value = 'all'
   void refreshExploreTasks()
 })
 
@@ -228,13 +302,41 @@ onMounted(() => {
           </div>
 
           <div
-            v-if="task.status === 'keywords_ready' && task.sampleQueries.length"
+            v-if="task.status === 'keywords_ready' && allQueries.length"
             class="explore-preview"
           >
-            <div class="explore-preview__title">搜索词预览</div>
-            <ul>
-              <li v-for="(q, i) in task.sampleQueries" :key="i">{{ q }}</li>
+            <div class="explore-preview__head">
+              <div class="explore-preview__title">{{ previewTitle }}</div>
+              <div class="explore-preview__filters">
+                <select v-model="previewRound" class="text-input explore-preview__select">
+                  <option
+                    v-for="opt in ROUND_OPTIONS"
+                    :key="opt.value"
+                    :value="opt.value"
+                  >
+                    {{ opt.label }}
+                  </option>
+                </select>
+                <select v-model="previewDimension" class="text-input explore-preview__select">
+                  <option
+                    v-for="opt in DIMENSION_OPTIONS"
+                    :key="opt.value"
+                    :value="opt.value"
+                  >
+                    {{ opt.label }}
+                  </option>
+                </select>
+              </div>
+            </div>
+            <ul v-if="filteredQueries.length" class="explore-preview__list">
+              <li v-for="q in filteredQueries" :key="q.id">
+                <span class="explore-preview__query">{{ q.query }}</span>
+                <span class="explore-preview__meta">
+                  {{ DIM_LABEL[q.dimension] || q.dimension }} · {{ q.round }}
+                </span>
+              </li>
             </ul>
+            <p v-else class="explore-preview__empty">当前筛选下无搜索词</p>
           </div>
 
           <div v-if="task.status === 'running'" class="explore-progress">
@@ -245,7 +347,12 @@ onMounted(() => {
             v-if="task.status === 'keywords_ready'"
             class="explore-task__actions"
           >
-            <button type="button" class="btn-secondary btn-secondary--sm" disabled>
+            <button
+              type="button"
+              class="btn-secondary btn-secondary--sm"
+              :disabled="generating"
+              @click="openKeywordEditor"
+            >
               编辑关键词
             </button>
             <button type="button" class="btn-primary btn-secondary--sm" @click="startR1Hint">
@@ -267,5 +374,12 @@ onMounted(() => {
         </button>
       </div>
     </div>
+
+    <KeywordEditorDialog
+      :open="editorOpen"
+      :product-id="activeProductId"
+      @close="closeKeywordEditor"
+      @saved="onKeywordsSaved"
+    />
   </section>
 </template>

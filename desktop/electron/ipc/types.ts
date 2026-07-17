@@ -23,6 +23,7 @@ export const IPC = {
   PROFILE_CREATE_DRAFT: 'profile:create-draft',
   KEYWORDS_EXPAND: 'keywords:expand',
   KEYWORDS_GET: 'keywords:get',
+  KEYWORDS_SAVE: 'keywords:save',
   EXPLORATION_LIST_TASKS: 'exploration:list-tasks',
   AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
@@ -105,6 +106,18 @@ export interface KeywordsExpandResult {
   productId?: string
 }
 
+export interface KeywordsSaveInput {
+  productId: string
+  search_queries: Array<{
+    id?: string
+    query: string
+    dimension: string
+    language?: string
+    priority?: string
+    round?: string
+  }>
+}
+
 export interface KeywordExpansionDto {
   product_id: string
   generated_at: string
@@ -128,6 +141,12 @@ export interface KeywordExpansionDto {
     by_round: Record<string, number>
     by_dimension?: Record<string, number>
   }
+}
+
+export interface KeywordsSaveResult {
+  ok: boolean
+  message: string
+  expansion?: KeywordExpansionDto
 }
 
 export type ExploreTaskStatus =

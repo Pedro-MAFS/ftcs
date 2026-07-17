@@ -2338,38 +2338,85 @@ select.text-input {
   border: 1px solid var(--border);
 }
 
+.explore-preview__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
 .explore-preview__title {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
-  margin-bottom: 6px;
 }
 
-.explore-preview ul {
+.explore-preview__filters {
+  display: flex;
+  gap: 6px;
+}
+
+.explore-preview__select {
+  width: auto;
+  min-width: 96px;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.explore-preview__list {
   margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-height: 240px;
+  overflow: auto;
 }
 
-.explore-preview li {
+.explore-preview__list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
   position: relative;
-  padding-left: 12px;
+  padding: 4px 0 4px 12px;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.explore-preview li::before {
+.explore-preview__list li::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 7px;
+  top: 10px;
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: var(--accent);
+}
+
+.explore-preview__query {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.explore-preview__meta {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.explore-preview__empty {
+  margin: 0;
+  padding: 8px 0 2px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .explore-progress {
@@ -2430,4 +2477,165 @@ select.text-input {
   color: var(--text-muted);
   max-width: 420px;
 }
+
+/* —— Keyword editor —— */
+.kw-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.kw-editor__backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  border-radius: 0;
+  background: rgb(0 0 0 / 55%);
+  cursor: default;
+}
+
+.kw-editor__panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(920px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 45%);
+  overflow: hidden;
+}
+
+.kw-editor__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.kw-editor__head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.kw-editor__head p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.kw-editor__filters {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.kw-editor__select {
+  width: auto;
+  min-width: 110px;
+  height: 30px;
+  padding: 0 8px;
+}
+
+.kw-editor__error {
+  margin: 0;
+  padding: 8px 18px;
+  font-size: 12px;
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  flex-shrink: 0;
+}
+
+.kw-editor__hint {
+  margin: 0;
+  padding: 16px 18px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.kw-editor__table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 12px 8px;
+}
+
+.kw-editor__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.kw-editor__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 6px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+}
+
+.kw-editor__table td {
+  padding: 6px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-subtle, var(--border));
+}
+
+.kw-col-query {
+  width: auto;
+}
+
+.kw-col-dim {
+  width: 96px;
+}
+
+.kw-col-round {
+  width: 72px;
+}
+
+.kw-col-pri {
+  width: 72px;
+}
+
+.kw-col-act {
+  width: 36px;
+}
+
+.kw-editor__table .text-input {
+  width: 100%;
+  min-height: 30px;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.kw-editor__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.kw-editor__foot-actions {
+  display: flex;
+  gap: 8px;
+}
+
 

@@ -32,12 +32,12 @@ import {
   pasteClipboardFiles,
   pickAndImportFiles,
 } from './library/library-service'
-import type { LibrarySnapshot, ProfileGenerateInput, ProfileSaveInput } from './ipc/types'
+import type { LibrarySnapshot, ProfileGenerateInput, ProfileSaveInput, KeywordsSaveInput } from './ipc/types'
 import { AgentRunController } from './opencode/agent-runner'
 import { bootstrapProductFromLibrary } from './profile/profile-bootstrap'
 import { listProductSummaries, loadProfile } from './profile/profile-reader'
 import { createEmptyDraftProfile, saveProductProfile, softDeleteProductProfile } from './profile/profile-writer'
-import { loadExpansion } from './keywords/keywords-reader'
+import { loadExpansion, saveExpansion } from './keywords/keywords-reader'
 import { listExploreTasks } from './exploration/explore-tasks'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -407,6 +407,17 @@ function registerIpcHandlers(): void {
       return loadExpansion(productId)
     } catch {
       return null
+    }
+  })
+
+  ipcMain.handle(IPC.KEYWORDS_SAVE, (_event, input: KeywordsSaveInput) => {
+    try {
+      return saveExpansion(input)
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
     }
   })
 
