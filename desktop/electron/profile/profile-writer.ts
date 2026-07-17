@@ -166,3 +166,44 @@ export function saveProductProfile(
     profile,
   }
 }
+
+/** 逻辑删除：仅将 status 标为 deleted，不删除目录与文件 */
+export function softDeleteProductProfile(
+  productId: string,
+  workspaceRoot = getWorkspaceRoot(),
+): ProfileSaveResult {
+  const id = cleanString(productId)
+  if (!id) {
+    return { ok: false, message: '缺少产品 ID' }
+  }
+
+  const existing = loadProfile(id, workspaceRoot)
+  if (!existing) {
+    return { ok: false, message: `未找到画像：${id}` }
+  }
+
+  if (existing.status === 'deleted' || existing.status === 'archived') {
+    return { ok: true, message: `${id} 已是删除状态`, profile: existing }
+  }
+
+  const now = new Date().toISOString()
+  const next: Record<string, unknown> = {
+    ...existing.raw,
+    id,
+    status: 'deleted',
+    updated_at: now,
+    deleted_at: now,
+  }
+
+  const profilePath = getProfilePath(id, workspaceRoot)
+  fs.mkdirSync(path.dirname(profilePath), { recursive: true })
+  fs.writeFileSync(profilePath, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+
+  const profile = loadProfile(id, workspaceRoot)
+  return {
+    ok: true,
+    message: `已删除「${id}」`,
+    profile: profile ?? undefined,
+  }
+}
+

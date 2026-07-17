@@ -61,6 +61,8 @@ const api = {
   listProfiles: (): Promise<ProfileSummary[]> => ipcRenderer.invoke(IPC.PROFILE_LIST),
   saveProfile: (input: ProfileSaveInput): Promise<ProfileSaveResult> =>
     ipcRenderer.invoke(IPC.PROFILE_SAVE, input),
+  deleteProfile: (productId: string): Promise<ProfileSaveResult> =>
+    ipcRenderer.invoke(IPC.PROFILE_DELETE, productId),
   onAgentEvent: (handler: (payload: AgentEventPayload) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: AgentEventPayload) => {
       handler(payload)

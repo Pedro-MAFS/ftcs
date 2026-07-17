@@ -36,7 +36,7 @@ import type { LibrarySnapshot, ProfileGenerateInput, ProfileSaveInput } from './
 import { AgentRunController } from './opencode/agent-runner'
 import { bootstrapProductFromLibrary } from './profile/profile-bootstrap'
 import { listProductSummaries, loadProfile } from './profile/profile-reader'
-import { saveProductProfile } from './profile/profile-writer'
+import { saveProductProfile, softDeleteProductProfile } from './profile/profile-writer'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -370,6 +370,17 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.PROFILE_SAVE, (_event, input: ProfileSaveInput) => {
     try {
       return saveProductProfile(input)
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.PROFILE_DELETE, (_event, productId: string) => {
+    try {
+      return softDeleteProductProfile(productId)
     } catch (err) {
       return {
         ok: false,

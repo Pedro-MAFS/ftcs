@@ -142,6 +142,16 @@ button:focus-visible {
   background: var(--accent-hover);
 }
 
+.btn-primary.is-danger {
+  background: var(--danger);
+  color: #111;
+}
+
+.btn-primary.is-danger:hover:not(:disabled) {
+  background: #ef4444;
+  color: #fff;
+}
+
 .btn-secondary {
   display: inline-flex;
   align-items: center;
@@ -155,6 +165,58 @@ button:focus-visible {
 
 .btn-secondary:hover:not(:disabled) {
   background: var(--bg-active);
+}
+
+/* —— Confirm dialog —— */
+.confirm-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.confirm-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  border-radius: 0;
+  background: rgb(0 0 0 / 55%);
+  cursor: default;
+}
+
+.confirm-dialog__panel {
+  position: relative;
+  z-index: 1;
+  width: min(400px, 100%);
+  padding: 18px 18px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 45%);
+}
+
+.confirm-dialog__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.confirm-dialog__message {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
 }
 
 .btn-sm {
@@ -426,10 +488,15 @@ button:focus-visible {
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   text-align: left;
+  cursor: pointer;
 }
 
 .product-item--simple {
   gap: 2px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
 }
 
 .product-item:hover {
@@ -440,11 +507,19 @@ button:focus-visible {
   background: var(--bg-active);
 }
 
+.product-item__top {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+}
+
 .product-item__name {
   font-size: 12px;
   font-weight: 500;
   color: var(--text);
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -452,6 +527,43 @@ button:focus-visible {
 
 .product-item.is-active .product-item__name {
   font-weight: 600;
+}
+
+.product-item__delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  color: var(--text-muted);
+  opacity: 0;
+}
+
+.product-item:hover .product-item__delete,
+.product-item.is-active .product-item__delete,
+.product-item__delete:focus-visible {
+  opacity: 1;
+}
+
+.product-item__delete:hover:not(:disabled) {
+  color: var(--danger, #f87171);
+  background: color-mix(in srgb, var(--danger, #f87171) 16%, transparent);
+}
+
+.product-item__delete:disabled {
+  opacity: 0.4;
+  cursor: wait;
+}
+
+.sidebar__error {
+  margin: 0 4px 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--danger, #f87171);
+  background: color-mix(in srgb, var(--danger, #f87171) 12%, transparent);
 }
 
 .product-item__products {

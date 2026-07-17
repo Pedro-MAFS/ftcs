@@ -133,6 +133,7 @@ declare global {
       getProfile: (productId: string) => Promise<ProfileDetail | null>
       listProfiles: () => Promise<ProfileSummary[]>
       saveProfile: (input: ProfileSaveInput) => Promise<ProfileSaveResult>
+      deleteProfile: (productId: string) => Promise<ProfileSaveResult>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
       getSidecarLogs: () => Promise<string[]>

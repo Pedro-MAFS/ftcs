@@ -211,6 +211,26 @@ export function useWorkspace() {
     void loadActiveProfile()
   }
 
+  async function deleteProduct(id: string): Promise<{ ok: boolean; message: string }> {
+    if (!window.ftcs?.deleteProfile) {
+      return { ok: false, message: '删除接口不可用' }
+    }
+    const res = await window.ftcs.deleteProfile(id)
+    if (!res.ok) return { ok: false, message: res.message }
+
+    const wasActive = activeProductId.value === id
+    products.value = products.value.filter((p) => p.id !== id)
+
+    if (wasActive) {
+      const next = products.value[0]
+      activeProductId.value = next?.id ?? ''
+      if (next) await loadActiveProfile()
+      else currentProfile.value = null
+    }
+
+    return { ok: true, message: res.message }
+  }
+
   function setAgentContext(section: WorkspaceSection): void {
     if (agentStatus.value !== 'running') {
       agentSkill.value = SECTION_SKILL[section] ?? 'idle'
@@ -256,6 +276,7 @@ export function useWorkspace() {
     agentPrompt,
     generating,
     selectProduct,
+    deleteProduct,
     setAgentContext,
     resetAgentForGenerate,
     toggleTimelineExpand,

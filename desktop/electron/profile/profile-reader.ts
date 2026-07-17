@@ -87,6 +87,7 @@ export function loadProfile(
 
 export function listProductSummaries(
   workspaceRoot = getWorkspaceRoot(),
+  options?: { includeDeleted?: boolean },
 ): ProductProfileSummary[] {
   const productsDir = path.join(workspaceRoot, 'data', 'products')
   if (!fs.existsSync(productsDir)) return []
@@ -100,7 +101,14 @@ export function listProductSummaries(
         string,
         unknown
       >
-      out.push(summarizeProfile(raw, `data/products/${name}/profile.json`))
+      const summary = summarizeProfile(raw, `data/products/${name}/profile.json`)
+      if (
+        !options?.includeDeleted &&
+        (summary.status === 'deleted' || summary.status === 'archived')
+      ) {
+        continue
+      }
+      out.push(summary)
     } catch {
       // skip broken
     }
