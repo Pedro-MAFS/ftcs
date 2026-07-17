@@ -8,6 +8,8 @@ import type {
   ProfileDetail,
   ProfileGenerateInput,
   ProfileGenerateResult,
+  ProfileSaveInput,
+  ProfileSaveResult,
   ProfileSummary,
   SettingsSaveInput,
   SettingsSaveResult,
@@ -57,6 +59,8 @@ const api = {
   getProfile: (productId: string): Promise<ProfileDetail | null> =>
     ipcRenderer.invoke(IPC.PROFILE_GET, productId),
   listProfiles: (): Promise<ProfileSummary[]> => ipcRenderer.invoke(IPC.PROFILE_LIST),
+  saveProfile: (input: ProfileSaveInput): Promise<ProfileSaveResult> =>
+    ipcRenderer.invoke(IPC.PROFILE_SAVE, input),
   onAgentEvent: (handler: (payload: AgentEventPayload) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: AgentEventPayload) => {
       handler(payload)

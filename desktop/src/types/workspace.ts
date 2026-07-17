@@ -73,7 +73,7 @@ export const SECTION_META: Record<
   profile: {
     label: '画像',
     title: '产品画像',
-    subtitle: '公司信息 + 产品列表 · 可确认后扩展关键词',
+    subtitle: '可编辑公司与产品信息，纠正 AI 识别后保存',
   },
   explore: {
     label: '探索',

@@ -18,6 +18,7 @@ export const IPC = {
   PROFILE_ABORT: 'profile:abort',
   PROFILE_GET: 'profile:get',
   PROFILE_LIST: 'profile:list',
+  PROFILE_SAVE: 'profile:save',
   AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
@@ -43,6 +44,47 @@ export interface ProfileSummary {
 
 export interface ProfileDetail extends ProfileSummary {
   raw: Record<string, unknown>
+}
+
+export interface ProfileProductEdit {
+  name?: string
+  name_en?: string
+  category?: string
+  materials?: string[]
+  specs?: string[]
+  moq?: string
+  price_range?: string
+  use_cases?: string[]
+  differentiators?: string[]
+}
+
+export interface ProfileSaveInput {
+  productId: string
+  company: {
+    name?: string
+    website?: string
+    country?: string
+    description?: string
+    certifications?: string[]
+  }
+  products: ProfileProductEdit[]
+  buyer_personas: Array<{
+    role?: string
+    company_types?: string[]
+    regions?: string[]
+    pain_points?: string[]
+  }>
+  target_markets: {
+    regions?: string[]
+    excluded_regions?: string[]
+    languages?: string[]
+  }
+}
+
+export interface ProfileSaveResult {
+  ok: boolean
+  message: string
+  profile?: ProfileDetail
 }
 
 export interface ProfileGenerateResult {

@@ -53,6 +53,47 @@ export interface ProfileDetail extends ProfileSummary {
   raw: Record<string, unknown>
 }
 
+export interface ProfileProductEdit {
+  name?: string
+  name_en?: string
+  category?: string
+  materials?: string[]
+  specs?: string[]
+  moq?: string
+  price_range?: string
+  use_cases?: string[]
+  differentiators?: string[]
+}
+
+export interface ProfileSaveInput {
+  productId: string
+  company: {
+    name?: string
+    website?: string
+    country?: string
+    description?: string
+    certifications?: string[]
+  }
+  products: ProfileProductEdit[]
+  buyer_personas: Array<{
+    role?: string
+    company_types?: string[]
+    regions?: string[]
+    pain_points?: string[]
+  }>
+  target_markets: {
+    regions?: string[]
+    excluded_regions?: string[]
+    languages?: string[]
+  }
+}
+
+export interface ProfileSaveResult {
+  ok: boolean
+  message: string
+  profile?: ProfileDetail
+}
+
 export interface ProfileGenerateResult {
   ok: boolean
   message: string
@@ -91,6 +132,7 @@ declare global {
       abortProfile: () => Promise<{ ok: boolean }>
       getProfile: (productId: string) => Promise<ProfileDetail | null>
       listProfiles: () => Promise<ProfileSummary[]>
+      saveProfile: (input: ProfileSaveInput) => Promise<ProfileSaveResult>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
       getSidecarLogs: () => Promise<string[]>

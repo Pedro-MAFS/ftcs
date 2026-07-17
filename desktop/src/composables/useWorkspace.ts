@@ -175,17 +175,21 @@ function handleAgentEvent(payload: AgentEventPayload): void {
   if (payload.type === 'done') {
     agentStatus.value = payload.ok ? 'done' : 'error'
     if (payload.profile) {
-      currentProfile.value = payload.profile
-      const summary = toProductSummary(payload.profile)
-      const idx = products.value.findIndex((p) => p.id === summary.id)
-      if (idx >= 0) products.value[idx] = summary
-      else products.value = [summary, ...products.value]
-      activeProductId.value = summary.id
-      updatePipelineFromProfile()
+      applyProfileToState(payload.profile)
+      activeProductId.value = payload.profile.id
     } else {
       void refreshProducts()
     }
   }
+}
+
+function applyProfileToState(profile: ProfileDetail): void {
+  currentProfile.value = profile
+  const summary = toProductSummary(profile)
+  const idx = products.value.findIndex((p) => p.id === summary.id)
+  if (idx >= 0) products.value[idx] = summary
+  else products.value = [summary, ...products.value]
+  updatePipelineFromProfile()
 }
 
 function ensureWorkspaceBindings(): void {
@@ -258,5 +262,6 @@ export function useWorkspace() {
     isTimelineExpanded,
     refreshProducts,
     loadActiveProfile,
+    applyProfileToState,
   }
 }
