@@ -392,13 +392,14 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      stopEvents = this.startEventBridge(
+      const bridge = this.startEventBridge(
         client,
         this.sessionId,
         timeline,
         flushTimeline,
         promptText,
       )
+      stopEvents = bridge.stop
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -461,6 +462,18 @@ export class AgentRunController {
         throw new Error(
           'Agent 已结束，但未找到 expansion.json。请向上滚动查看工具调用与模型输出。',
         )
+      }
+
+      // 产物已写入后继续等会话结束，收齐最终 assistant 回复
+      if (raced.kind === 'expansion') {
+        await this.settleAfterArtifact(
+          client,
+          this.sessionId,
+          signal,
+          bridge.ingestNow,
+        )
+      } else {
+        await bridge.ingestNow().catch(() => undefined)
       }
 
       const total = expansion.stats.total_queries
@@ -623,13 +636,14 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      stopEvents = this.startEventBridge(
+      const bridge = this.startEventBridge(
         client,
         this.sessionId,
         timeline,
         flushTimeline,
         promptText,
       )
+      stopEvents = bridge.stop
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -689,6 +703,18 @@ export class AgentRunController {
         )
       }
 
+      // 产物已写入后继续等会话结束，收齐最终 assistant 回复
+      if (raced.kind === 'profile') {
+        await this.settleAfterArtifact(
+          client,
+          this.sessionId,
+          signal,
+          bridge.ingestNow,
+        )
+      } else {
+        await bridge.ingestNow().catch(() => undefined)
+      }
+
       const score =
         profile.readinessScore != null ? String(profile.readinessScore) : '—'
       const message = `画像已生成：${profile.id} · ${profile.status} · 就绪度 ${score}`
@@ -739,9 +765,9 @@ export class AgentRunController {
     client: OpencodeClient,
     sessionId: string,
     signal: AbortSignal,
+    timeoutMs = 12 * 60_000,
   ): Promise<void> {
     const started = Date.now()
-    const timeoutMs = 12 * 60_000
     while (!signal.aborted && Date.now() - started < timeoutMs) {
       try {
         const status = await client.session.status({})
@@ -758,23 +784,54 @@ export class AgentRunController {
     }
   }
 
+  /**
+   * 产物已写入后，再等会话 idle（或宽限期），以便收齐最终 assistant 回复。
+   */
+  private async settleAfterArtifact(
+    client: OpencodeClient,
+    sessionId: string,
+    signal: AbortSignal,
+    ingestNow: () => Promise<void>,
+  ): Promise<void> {
+    if (signal.aborted) return
+    await Promise.race([
+      this.waitUntilIdle(client, sessionId, signal, 90_000),
+      new Promise<void>((resolve) => {
+        signal.addEventListener('abort', () => resolve(), { once: true })
+      }),
+    ])
+    try {
+      await ingestNow()
+    } catch {
+      // ignore
+    }
+  }
+
   private startEventBridge(
     client: OpencodeClient,
     sessionId: string,
     timeline: TimelineBuilder,
     flush: () => void,
     userPrompt: string,
-  ): () => void {
+  ): { stop: () => void; ingestNow: () => Promise<void> } {
     let stopped = false
+
+    const normalizeMessageRows = (raw: unknown): unknown[] => {
+      if (Array.isArray(raw)) return raw
+      const rec = asRecord(raw)
+      if (!rec) return []
+      if (Array.isArray(rec.data)) return rec.data
+      if (Array.isArray(rec.messages)) return rec.messages
+      return []
+    }
 
     const ingestMessages = async () => {
       const res = await client.session.messages({ sessionID: sessionId, limit: 80 })
-      const rows = Array.isArray(res.data) ? res.data : []
-      // 按消息顺序重建 session 段（保留 prefix）
+      const rows = normalizeMessageRows(res.data)
       const nextSession: AgentTimelineItem[] = []
 
       for (const row of rows) {
-        const info = asRecord(asRecord(row)?.info)
+        const info = asRecord(asRecord(row)?.info) ?? asRecord(row)
         const role = asString(info?.role)
         const messageId = asString(info?.id) || `msg-${nextSession.length}`
         const parts = Array.isArray(asRecord(row)?.parts)
@@ -782,17 +839,15 @@ export class AgentRunController {
           : []
 
         if (role === 'user') {
-          // 已在 prefix 展示「你的指令」，跳过会话里重复的同一 prompt
           const text = parts
             .map((p) => asRecord(p))
-            .filter((p) => p && asString(p.type) === 'text')
+            .filter((p) => p && asString(p.type) === 'text' && !p.ignored)
             .map((p) => asString(p!.text))
             .join('\n')
             .trim()
           if (!text || text === userPrompt.trim()) continue
-          const id = `user-${messageId}`
           nextSession.push({
-            id,
+            id: `user-${messageId}`,
             kind: 'user',
             time: nowTime(),
             title: '你的补充指令',
@@ -806,7 +861,7 @@ export class AgentRunController {
 
         for (const raw of parts) {
           const part = asRecord(raw)
-          if (!part) continue
+          if (!part || part.ignored === true) continue
           const partType = asString(part.type)
           const partId = asString(part.id) || `${messageId}-${partType}-${nextSession.length}`
 
@@ -874,31 +929,99 @@ export class AgentRunController {
         }
       }
 
-      // 用权威消息列表替换 session 段，避免乱序
       timeline.replaceSessionItems(nextSession)
       flush()
     }
 
+    const upsertTextItem = (
+      kind: 'assistant' | 'reasoning',
+      partId: string,
+      deltaOrFull: string,
+      mode: 'append' | 'set',
+      title: string,
+    ) => {
+      if (!partId) return
+      const id = `${kind}-${partId}`
+      if (!timeline.has(id)) {
+        timeline.upsertSessionItem({
+          id,
+          kind,
+          time: nowTime(),
+          title,
+          body: mode === 'set' ? deltaOrFull : deltaOrFull,
+          collapsed: kind === 'reasoning',
+        })
+        flush()
+        return
+      }
+      if (mode === 'set') {
+        if (timeline.setText(id, deltaOrFull)) flush()
+      } else if (timeline.appendText(id, deltaOrFull)) {
+        flush()
+      }
+    }
+
     const handleLiveDelta = (event: unknown) => {
-      // 仅对已存在的条目追加增量，不新建条目，避免打乱消息顺序
       const type = eventType(event)
       const props = eventProps(event)
 
+      if (type === 'session.next.text.started') {
+        const textId = asString(props.textID) || asString(props.partID)
+        upsertTextItem('assistant', textId, '', 'set', '模型回复')
+        return
+      }
       if (type === 'session.next.text.delta' || type.endsWith('text.delta')) {
-        const id = `assistant-${asString(props.textID) || asString(props.partID) || 'live'}`
-        if (timeline.has(id) && timeline.appendText(id, asString(props.delta))) flush()
+        const textId = asString(props.textID) || asString(props.partID) || 'live'
+        upsertTextItem('assistant', textId, asString(props.delta), 'append', '模型回复')
+        return
+      }
+      if (type === 'session.next.text.ended' || type.endsWith('text.ended')) {
+        const textId = asString(props.textID) || asString(props.partID) || 'live'
+        const full = asString(props.text)
+        if (full) upsertTextItem('assistant', textId, full, 'set', '模型回复')
+        return
+      }
+      if (type === 'session.next.reasoning.started') {
+        const rid = asString(props.reasoningID) || asString(props.partID)
+        upsertTextItem('reasoning', rid, '', 'set', '思考')
         return
       }
       if (type === 'session.next.reasoning.delta' || type.endsWith('reasoning.delta')) {
-        const id = `reasoning-${asString(props.reasoningID) || asString(props.partID) || 'live'}`
-        if (timeline.has(id) && timeline.appendText(id, asString(props.delta))) flush()
+        const rid = asString(props.reasoningID) || asString(props.partID) || 'live'
+        upsertTextItem('reasoning', rid, asString(props.delta), 'append', '思考')
+        return
+      }
+      if (type === 'session.next.reasoning.ended' || type.endsWith('reasoning.ended')) {
+        const rid = asString(props.reasoningID) || asString(props.partID) || 'live'
+        const full = asString(props.text)
+        if (full) upsertTextItem('reasoning', rid, full, 'set', '思考')
         return
       }
       if (type === 'message.part.delta') {
         const field = asString(props.field)
         const kind = field.includes('reason') ? 'reasoning' : 'assistant'
-        const id = `${kind}-${asString(props.partID) || 'live'}`
-        if (timeline.has(id) && timeline.appendText(id, asString(props.delta))) flush()
+        const partId = asString(props.partID) || 'live'
+        upsertTextItem(
+          kind,
+          partId,
+          asString(props.delta),
+          'append',
+          kind === 'reasoning' ? '思考' : '模型回复',
+        )
+        return
+      }
+      if (type === 'message.part.updated') {
+        const part = asRecord(props.part)
+        if (!part || part.ignored === true) return
+        const partType = asString(part.type)
+        const partId = asString(part.id)
+        if (partType === 'text' && partId) {
+          const text = asString(part.text)
+          if (text) upsertTextItem('assistant', partId, text, 'set', '模型回复')
+        } else if (partType === 'reasoning' && partId) {
+          const text = asString(part.text)
+          if (text) upsertTextItem('reasoning', partId, text, 'set', '思考')
+        }
       }
     }
 
@@ -922,7 +1045,6 @@ export class AgentRunController {
 
           handleLiveDelta(event)
 
-          // part 更新 / 工具完成时，立即用消息列表重排一次
           if (
             type === 'message.part.updated' ||
             type.includes('tool.') ||
@@ -965,12 +1087,14 @@ export class AgentRunController {
       })()
     }, 1000)
 
-    // 首次立刻拉一次
     void ingestMessages().catch(() => undefined)
 
-    return () => {
-      stopped = true
-      clearInterval(pollTimer)
+    return {
+      stop: () => {
+        stopped = true
+        clearInterval(pollTimer)
+      },
+      ingestNow: ingestMessages,
     }
   }
 }
