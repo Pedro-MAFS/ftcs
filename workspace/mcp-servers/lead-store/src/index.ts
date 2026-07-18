@@ -727,7 +727,7 @@ server.tool(
   {
     product_id: z.string(),
     lead_ids: z.array(z.string()).optional(),
-    limit: z.number().int().min(1).max(20).default(5),
+    limit: z.number().int().min(1).max(50).default(5),
     write_markdown: z.boolean().default(true),
   },
   async ({ product_id, lead_ids, limit, write_markdown }) => {

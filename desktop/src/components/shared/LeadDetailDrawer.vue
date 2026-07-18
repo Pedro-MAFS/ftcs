@@ -10,11 +10,13 @@ import Icon from './Icon.vue'
 const props = defineProps<{
   open: boolean
   lead: LeadRowDto | null
+  drafting?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
   saved: [lead: LeadRowDto]
+  draft: [lead: LeadRowDto]
 }>()
 
 type ContactDraft = {
@@ -717,10 +719,21 @@ onUnmounted(() => {
               v-else-if="lead.phase === 'scored'"
               type="button"
               class="btn-primary"
-              disabled
-              title="邮件草稿后续接入"
+              :disabled="drafting"
+              :title="
+                lead.status === 'email_drafted' || lead.status === 'email_approved'
+                  ? '重新生成开发信草稿'
+                  : '为该线索生成开发信草稿'
+              "
+              @click="emit('draft', lead)"
             >
-              写邮件
+              {{
+                drafting
+                  ? '起草中…'
+                  : lead.status === 'email_drafted' || lead.status === 'email_approved'
+                    ? '重写邮件'
+                    : '写邮件'
+              }}
             </button>
           </template>
         </footer>

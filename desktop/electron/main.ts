@@ -39,6 +39,7 @@ import type {
   KeywordsSaveInput,
   DiscoverLeadsInput,
   RawLeadSaveInput,
+  DraftEmailsInput,
 } from './ipc/types'
 import { AgentRunController } from './opencode/agent-runner'
 import { bootstrapProductFromLibrary } from './profile/profile-bootstrap'
@@ -48,6 +49,7 @@ import { loadExpansion, saveExpansion } from './keywords/keywords-reader'
 import { listExploreTasks } from './exploration/explore-tasks'
 import { listLeadsSnapshot } from './leads/leads-reader'
 import { saveRawLead } from './leads/lead-writer'
+import { listEmailDraftsSnapshot } from './emails/emails-reader'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -574,6 +576,81 @@ function registerIpcHandlers(): void {
       return {
         ok: true,
         message: `正在为 ${productId} 评分去重…`,
+        productId,
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.EMAIL_DRAFT_LIST, (_event, productId: string) => {
+    try {
+      if (!productId || typeof productId !== 'string') {
+        return {
+          productId: '',
+          drafts: [],
+          pendingHighLeadIds: [],
+          stats: { total: 0, pendingReview: 0, pendingHigh: 0 },
+        }
+      }
+      return listEmailDraftsSnapshot(productId)
+    } catch (err) {
+      return {
+        productId,
+        drafts: [],
+        pendingHighLeadIds: [],
+        stats: { total: 0, pendingReview: 0, pendingHigh: 0 },
+        error: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.EMAIL_DRAFT_GENERATE, async (event, input: DraftEmailsInput) => {
+    try {
+      const productId = input?.productId
+      if (!productId || typeof productId !== 'string') {
+        return { ok: false, message: '缺少 productId' }
+      }
+      if (getAgentRunner().isRunning()) {
+        return { ok: false, message: '已有 Agent 任务在运行' }
+      }
+      if (runtime?.getStatus().state !== 'running' || !runtime.getClient()) {
+        return {
+          ok: false,
+          message: 'OpenCode 未就绪，请先在设置页确认运行时或点击「重启 OpenCode」',
+        }
+      }
+
+      const leadIds = Array.isArray(input.leadIds)
+        ? input.leadIds.filter((id) => typeof id === 'string' && id.trim())
+        : undefined
+
+      const sender = event.sender
+      void getAgentRunner()
+        .runDraftOutreachEmail(
+          productId,
+          (payload) => emitAgentEvent(sender, payload),
+          { leadIds },
+        )
+        .catch((err) => {
+          emitAgentEvent(sender, {
+            type: 'done',
+            ok: false,
+            productId,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        })
+
+      const scope =
+        leadIds && leadIds.length > 0
+          ? `${leadIds.length} 条指定线索`
+          : '全部待起草 high 线索'
+      return {
+        ok: true,
+        message: `正在为 ${productId} 起草开发信（${scope}）…`,
         productId,
       }
     } catch (err) {

@@ -33,6 +33,7 @@ export type AgentEventPayload =
       expansion?: KeywordExpansionDto
       explorationRun?: ExplorationRunDto
       scored?: ScoredLeadsSummaryDto
+      emailDrafts?: EmailDraftsSummaryDto
     }
 
 export interface ProfileGenerateInput {
@@ -307,6 +308,60 @@ export interface ScoreAndDedupeResult {
   productId?: string
 }
 
+export interface EmailVariantDto {
+  type: string
+  subject: string
+  body: string
+}
+
+export interface EmailDraftRowDto {
+  id: string
+  leadId: string
+  productId: string
+  createdAt: string
+  status: string
+  language: string
+  companyName: string
+  recipientEmail: string
+  tier: string
+  leadStatus: string
+  score: number | null
+  subject: string
+  variants: EmailVariantDto[]
+  personalizationEvidence: string[]
+  draftPath: string
+  markdownPath: string
+}
+
+export interface EmailDraftsSnapshotDto {
+  productId: string
+  drafts: EmailDraftRowDto[]
+  pendingHighLeadIds: string[]
+  stats: {
+    total: number
+    pendingReview: number
+    pendingHigh: number
+  }
+}
+
+export interface EmailDraftsSummaryDto {
+  productId: string
+  generatedLeadIds: string[]
+  total: number
+  newestCreatedAt: string
+}
+
+export interface DraftEmailsInput {
+  productId: string
+  leadIds?: string[]
+}
+
+export interface DraftEmailsResult {
+  ok: boolean
+  message: string
+  productId?: string
+}
+
 export interface RawLeadContactEditDto {
   type: string
   value: string
@@ -380,6 +435,8 @@ declare global {
       listLeads: (productId: string) => Promise<LeadsSnapshotDto>
       saveRawLead: (input: RawLeadSaveInput) => Promise<RawLeadSaveResult>
       scoreAndDedupeLeads: (productId: string) => Promise<ScoreAndDedupeResult>
+      listEmailDrafts: (productId: string) => Promise<EmailDraftsSnapshotDto>
+      draftEmails: (input: DraftEmailsInput) => Promise<DraftEmailsResult>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
       getSidecarLogs: () => Promise<string[]>

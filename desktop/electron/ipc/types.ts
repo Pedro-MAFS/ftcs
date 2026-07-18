@@ -29,6 +29,8 @@ export const IPC = {
   LEADS_LIST: 'leads:list',
   LEADS_SAVE_RAW: 'leads:save-raw',
   LEADS_SCORE_AND_DEDUPE: 'leads:score-and-dedupe',
+  EMAIL_DRAFT_LIST: 'email:draft-list',
+  EMAIL_DRAFT_GENERATE: 'email:draft-generate',
   AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
@@ -307,6 +309,61 @@ export interface ScoreAndDedupeResult {
   productId?: string
 }
 
+export interface EmailVariantDto {
+  type: string
+  subject: string
+  body: string
+}
+
+export interface EmailDraftRowDto {
+  id: string
+  leadId: string
+  productId: string
+  createdAt: string
+  status: string
+  language: string
+  companyName: string
+  recipientEmail: string
+  tier: string
+  leadStatus: string
+  score: number | null
+  subject: string
+  variants: EmailVariantDto[]
+  personalizationEvidence: string[]
+  draftPath: string
+  markdownPath: string
+}
+
+export interface EmailDraftsSnapshotDto {
+  productId: string
+  drafts: EmailDraftRowDto[]
+  pendingHighLeadIds: string[]
+  stats: {
+    total: number
+    pendingReview: number
+    pendingHigh: number
+  }
+}
+
+export interface EmailDraftsSummaryDto {
+  productId: string
+  generatedLeadIds: string[]
+  total: number
+  newestCreatedAt: string
+}
+
+export interface DraftEmailsInput {
+  productId: string
+  /** 指定线索；不传则批量 high 待起草 */
+  leadIds?: string[]
+}
+
+export interface DraftEmailsResult {
+  ok: boolean
+  message: string
+  productId?: string
+}
+
 export interface RawLeadContactEditDto {
   type: string
   value: string
@@ -370,6 +427,7 @@ export type AgentEventPayload =
       expansion?: KeywordExpansionDto
       explorationRun?: ExplorationRunDto
       scored?: ScoredLeadsSummaryDto
+      emailDrafts?: EmailDraftsSummaryDto
     }
 
 export type OpenCodeRuntimeState = 'idle' | 'starting' | 'running' | 'error' | 'stopped'

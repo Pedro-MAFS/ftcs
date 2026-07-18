@@ -1,9 +1,169 @@
 <script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { SECTION_META } from '../types/workspace'
+import { useWorkspace } from '../composables/useWorkspace'
 import Icon from '../components/shared/Icon.vue'
-import PlaceholderPanel from '../components/shared/PlaceholderPanel.vue'
+import type { EmailDraftRowDto, EmailDraftsSnapshotDto } from '../types/electron'
 
 const meta = SECTION_META.email
+const {
+  activeProductId,
+  generating,
+  agentSkill,
+  agentStatus,
+  resetAgentForDraftEmail,
+} = useWorkspace()
+
+const loading = ref(false)
+const drafting = ref(false)
+const actionMessage = ref('')
+const snapshot = ref<EmailDraftsSnapshotDto | null>(null)
+const selectedId = ref('')
+const activeVariant = ref<'short' | 'professional'>('short')
+
+const emptyStats = { total: 0, pendingReview: 0, pendingHigh: 0 }
+
+const stats = computed(() => snapshot.value?.stats ?? emptyStats)
+const drafts = computed(() => snapshot.value?.drafts ?? [])
+const pendingHigh = computed(() => snapshot.value?.pendingHighLeadIds ?? [])
+
+const selected = computed(() => {
+  if (!selectedId.value) return drafts.value[0] ?? null
+  return drafts.value.find((d) => d.leadId === selectedId.value) ?? null
+})
+
+const isDrafting = computed(
+  () =>
+    drafting.value ||
+    (generating.value && agentSkill.value === 'draft-outreach-email'),
+)
+
+const canBatchDraft = computed(
+  () =>
+    !!activeProductId.value &&
+    !isDrafting.value &&
+    !generating.value &&
+    pendingHigh.value.length > 0,
+)
+
+const subtitle = computed(() => {
+  if (!activeProductId.value) return '请先在侧栏选择产品'
+  const s = stats.value
+  if (s.total === 0) {
+    return pendingHigh.value.length > 0
+      ? `暂无草稿 · ${pendingHigh.value.length} 条 high 线索可批量起草`
+      : '暂无草稿 · 请先在线索页完成评分，再为 high 线索起草'
+  }
+  return `${s.total} 封草稿 · 待审 ${s.pendingReview} · 待起草 high ${s.pendingHigh}`
+})
+
+const currentVariant = computed(() => {
+  const draft = selected.value
+  if (!draft) return null
+  return (
+    draft.variants.find((v) => v.type === activeVariant.value) ??
+    draft.variants[0] ??
+    null
+  )
+})
+
+async function refreshDrafts(): Promise<void> {
+  if (!window.ftcs?.listEmailDrafts || !activeProductId.value) {
+    snapshot.value = null
+    selectedId.value = ''
+    return
+  }
+  loading.value = true
+  try {
+    snapshot.value = await window.ftcs.listEmailDrafts(activeProductId.value)
+    if (
+      selectedId.value &&
+      !snapshot.value.drafts.some((d) => d.leadId === selectedId.value)
+    ) {
+      selectedId.value = snapshot.value.drafts[0]?.leadId ?? ''
+    } else if (!selectedId.value && snapshot.value.drafts[0]) {
+      selectedId.value = snapshot.value.drafts[0].leadId
+    }
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+    snapshot.value = null
+  } finally {
+    loading.value = false
+  }
+}
+
+async function onBatchDraft(): Promise<void> {
+  if (!activeProductId.value || !window.ftcs?.draftEmails) return
+  if (generating.value) {
+    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    return
+  }
+  if (pendingHigh.value.length <= 0) {
+    actionMessage.value = '暂无待起草的 high 线索'
+    return
+  }
+
+  drafting.value = true
+  actionMessage.value = ''
+  resetAgentForDraftEmail(pendingHigh.value.length)
+
+  try {
+    const res = await window.ftcs.draftEmails({
+      productId: activeProductId.value,
+    })
+    if (!res.ok) {
+      actionMessage.value = res.message
+      agentStatus.value = 'error'
+      return
+    }
+    actionMessage.value = res.message
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+    agentStatus.value = 'error'
+  } finally {
+    drafting.value = false
+  }
+}
+
+function selectDraft(row: EmailDraftRowDto): void {
+  selectedId.value = row.leadId
+  activeVariant.value = 'short'
+}
+
+function statusLabel(status: string): string {
+  if (status === 'pending_review') return '待审核'
+  if (status === 'approved') return '已通过'
+  if (status === 'rejected') return '已驳回'
+  return status || '—'
+}
+
+watch(activeProductId, () => {
+  actionMessage.value = ''
+  selectedId.value = ''
+  void refreshDrafts()
+})
+
+watch(agentStatus, (status) => {
+  if (
+    (status === 'done' || status === 'error') &&
+    agentSkill.value === 'draft-outreach-email'
+  ) {
+    void refreshDrafts()
+  }
+})
+
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  void refreshDrafts()
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') void refreshDrafts()
+  }, 8000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
+})
 </script>
 
 <template>
@@ -11,26 +171,128 @@ const meta = SECTION_META.email
     <header class="main-pane__head">
       <div>
         <h1>{{ meta.title }}</h1>
-        <p>{{ meta.subtitle }}</p>
+        <p>{{ subtitle }}</p>
       </div>
       <div class="main-pane__actions">
-        <button type="button" class="btn-secondary" disabled>驳回</button>
-        <button type="button" class="btn-primary" disabled>
+        <button
+          type="button"
+          class="btn-primary"
+          :disabled="!canBatchDraft"
+          :title="
+            pendingHigh.length > 0
+              ? `为 ${pendingHigh.length} 条 high 线索批量起草`
+              : '暂无待起草的 high 线索'
+          "
+          @click="onBatchDraft"
+        >
+          {{ isDrafting ? '起草中…' : `批量起草${pendingHigh.length ? ` ${pendingHigh.length}` : ''}` }}
+        </button>
+        <button type="button" class="btn-secondary" disabled title="后续接入">
+          驳回
+        </button>
+        <button type="button" class="btn-secondary" disabled title="后续接入">
           <Icon name="check" :size="12" />
           通过并保存
         </button>
       </div>
     </header>
 
+    <p v-if="actionMessage" class="leads-banner">{{ actionMessage }}</p>
+
     <div class="email-layout">
       <aside class="draft-list">
-        <div class="draft-list__head">草稿队列</div>
-        <p class="muted draft-list__empty">暂无草稿 · 后续接入 email_draft_list</p>
+        <div class="draft-list__head">
+          草稿队列
+          <span v-if="stats.total"> · {{ stats.total }}</span>
+        </div>
+        <p v-if="loading && !snapshot" class="muted draft-list__empty">加载中…</p>
+        <p v-else-if="!activeProductId" class="muted draft-list__empty">未选择产品</p>
+        <p v-else-if="drafts.length === 0" class="muted draft-list__empty">
+          暂无草稿
+          <template v-if="pendingHigh.length > 0">
+            · 可点击「批量起草」
+          </template>
+        </p>
+        <button
+          v-for="row in drafts"
+          :key="row.leadId"
+          type="button"
+          class="draft-list__item"
+          :class="{ 'is-active': selected?.leadId === row.leadId }"
+          @click="selectDraft(row)"
+        >
+          <span class="draft-list__company">{{ row.companyName }}</span>
+          <span class="draft-list__subject">{{ row.subject || '（无主题）' }}</span>
+          <span class="draft-list__meta">
+            {{ statusLabel(row.status) }}
+            <template v-if="row.tier"> · {{ row.tier }}</template>
+          </span>
+        </button>
       </aside>
-      <PlaceholderPanel
-        title="邮件编辑占位"
-        description="后续展示 To / Subject / Body，并调用 draft-outreach-email。"
-      />
+
+      <div v-if="selected" class="email-preview">
+        <div class="email-preview__toolbar">
+          <button
+            type="button"
+            class="filter-chip"
+            :class="{ 'is-active': activeVariant === 'short' }"
+            @click="activeVariant = 'short'"
+          >
+            short
+          </button>
+          <button
+            type="button"
+            class="filter-chip"
+            :class="{ 'is-active': activeVariant === 'professional' }"
+            @click="activeVariant = 'professional'"
+          >
+            professional
+          </button>
+          <span class="email-preview__path muted">{{ selected.draftPath }}</span>
+        </div>
+
+        <dl class="email-preview__fields">
+          <div class="email-preview__field">
+            <dt>To</dt>
+            <dd>{{ selected.recipientEmail || '—' }}</dd>
+          </div>
+          <div class="email-preview__field">
+            <dt>Company</dt>
+            <dd>{{ selected.companyName }}</dd>
+          </div>
+          <div class="email-preview__field">
+            <dt>Subject</dt>
+            <dd>{{ currentVariant?.subject || '—' }}</dd>
+          </div>
+          <div class="email-preview__field">
+            <dt>Language</dt>
+            <dd>{{ selected.language || 'en' }}</dd>
+          </div>
+        </dl>
+
+        <div class="email-preview__body">
+          <pre>{{ currentVariant?.body || '（无正文）' }}</pre>
+        </div>
+
+        <section v-if="selected.personalizationEvidence.length" class="email-preview__evidence">
+          <h4>personalization_evidence</h4>
+          <ul>
+            <li
+              v-for="(item, i) in selected.personalizationEvidence"
+              :key="i"
+            >
+              {{ item }}
+            </li>
+          </ul>
+        </section>
+      </div>
+
+      <div v-else class="email-preview email-preview--empty">
+        <p>{{ loading ? '加载草稿中…' : '选择左侧草稿查看内容' }}</p>
+        <p class="muted">
+          单条起草请在线索页对已评分线索点击「写邮件」
+        </p>
+      </div>
     </div>
   </section>
 </template>

@@ -169,8 +169,12 @@ function updatePipelineFromProfile(): void {
     agentStatus.value === 'running' && agentSkill.value === 'discover-leads'
   const scoring =
     agentStatus.value === 'running' && agentSkill.value === 'score-and-dedupe'
+  const drafting =
+    agentStatus.value === 'running' && agentSkill.value === 'draft-outreach-email'
   const hasScored =
     agentSkill.value === 'score-and-dedupe' && agentStatus.value === 'done'
+  const hasDrafted =
+    agentSkill.value === 'draft-outreach-email' && agentStatus.value === 'done'
 
   pipelineSteps.value = [
     { id: 'input', label: '1 产品录入', status: 'done', statusLabel: '完成' },
@@ -214,7 +218,18 @@ function updatePipelineFromProfile(): void {
             ? '可执行'
             : '待探索',
     },
-    { id: 'email', label: '5 邮件草稿', status: 'pending', statusLabel: '待执行' },
+    {
+      id: 'email',
+      label: '5 邮件草稿',
+      status: hasDrafted ? 'done' : drafting ? 'running' : 'pending',
+      statusLabel: hasDrafted
+        ? '完成'
+        : drafting
+          ? '执行中'
+          : hasScored
+            ? '可执行'
+            : '待评分',
+    },
   ]
 }
 
@@ -379,6 +394,18 @@ export function useWorkspace() {
     ]
   }
 
+  function resetAgentForDraftEmail(targetCount?: number): void {
+    agentSkill.value = 'draft-outreach-email'
+    agentStatus.value = 'running'
+    agentTimeline.value = []
+    agentExpanded.value = {}
+    agentMeta.value = [
+      { label: '状态', value: '起草中', tone: 'accent' },
+      { label: '目标', value: targetCount != null ? String(targetCount) : '—' },
+      { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
+    ]
+  }
+
   function toggleTimelineExpand(id: string): void {
     agentExpanded.value = {
       ...agentExpanded.value,
@@ -415,6 +442,7 @@ export function useWorkspace() {
     resetAgentForExpandKeywords,
     resetAgentForDiscoverLeads,
     resetAgentForScoreAndDedupe,
+    resetAgentForDraftEmail,
     toggleTimelineExpand,
     isTimelineExpanded,
     refreshProducts,

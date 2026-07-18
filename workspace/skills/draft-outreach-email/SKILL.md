@@ -41,7 +41,7 @@ outputs:
 |------|------|------|
 | `product_id` | 必填 | 产品 ID |
 | `lead_ids` | 无 | 指定线索 ID 列表；不填则取 Top high tier |
-| `limit` | `5` | 最多生成几封（验收要求 Top 5） |
+| `limit` | `5` | 最多生成几封（工具上限 50；桌面批量会显式传入 lead_ids） |
 
 ## 执行步骤
 

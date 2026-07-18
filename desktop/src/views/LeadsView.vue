@@ -15,6 +15,7 @@ const {
   agentSkill,
   agentStatus,
   resetAgentForScoreAndDedupe,
+  resetAgentForDraftEmail,
 } = useWorkspace()
 
 type FilterId = 'all' | 'raw' | 'scored' | 'discarded' | 'a' | 'b' | 'c' | 'mail'
@@ -23,6 +24,8 @@ const activeFilter = ref<FilterId>('all')
 const searchQuery = ref('')
 const loading = ref(false)
 const scoring = ref(false)
+const drafting = ref(false)
+const pendingHighIds = ref<string[]>([])
 const actionMessage = ref('')
 const snapshot = ref<LeadsSnapshotDto | null>(null)
 const selectedId = ref('')
@@ -47,12 +50,29 @@ const isScoring = computed(
     (generating.value && agentSkill.value === 'score-and-dedupe'),
 )
 
+const isDrafting = computed(
+  () =>
+    drafting.value ||
+    (generating.value && agentSkill.value === 'draft-outreach-email'),
+)
+
 const canScore = computed(() => {
   return (
     !!activeProductId.value &&
     !isScoring.value &&
+    !isDrafting.value &&
     !generating.value &&
     stats.value.raw > 0
+  )
+})
+
+const canBatchDraft = computed(() => {
+  return (
+    !!activeProductId.value &&
+    !isScoring.value &&
+    !isDrafting.value &&
+    !generating.value &&
+    pendingHighIds.value.length > 0
   )
 })
 
@@ -93,6 +113,39 @@ function phaseClass(phase: LeadRowDto['phase']): string {
   if (phase === 'scored') return 'is-scored'
   if (phase === 'discarded') return 'is-discarded'
   return 'is-raw'
+}
+
+/** 已评分线索的生命周期：new / email_drafted 等 */
+function lifecycleLabel(status: string | null | undefined): string {
+  if (!status || status === 'new') return ''
+  const map: Record<string, string> = {
+    reviewed: '已审阅',
+    email_drafted: '已写邮件',
+    email_approved: '邮件已通过',
+    contacted: '已触达',
+    replied: '已回复',
+    converted: '已转化',
+    rejected: '已拒绝',
+  }
+  return map[status] || status
+}
+
+function lifecycleClass(status: string | null | undefined): string {
+  if (status === 'email_drafted' || status === 'email_approved') return 'is-mailed'
+  if (status === 'contacted' || status === 'replied' || status === 'converted') {
+    return 'is-progress'
+  }
+  if (status === 'rejected') return 'is-rejected'
+  return 'is-muted'
+}
+
+function hasDrafted(row: LeadRowDto): boolean {
+  return (
+    row.phase === 'scored' &&
+    (row.status === 'email_drafted' ||
+      row.status === 'email_approved' ||
+      row.status === 'contacted')
+  )
 }
 
 function matchesFilter(row: LeadRowDto, filter: FilterId): boolean {
@@ -156,11 +209,16 @@ const filteredRows = computed(() => {
 async function refreshLeads(): Promise<void> {
   if (!window.ftcs?.listLeads || !activeProductId.value) {
     snapshot.value = null
+    pendingHighIds.value = []
     return
   }
   loading.value = true
   try {
     snapshot.value = await window.ftcs.listLeads(activeProductId.value)
+    if (window.ftcs.listEmailDrafts) {
+      const emails = await window.ftcs.listEmailDrafts(activeProductId.value)
+      pendingHighIds.value = emails.pendingHighLeadIds ?? []
+    }
     if (
       selectedId.value &&
       !snapshot.value.rows.some((r) => r.id === selectedId.value)
@@ -215,6 +273,58 @@ async function onScoreClick(): Promise<void> {
   }
 }
 
+async function startDraftEmails(leadIds?: string[]): Promise<void> {
+  if (!activeProductId.value || !window.ftcs?.draftEmails) return
+  if (generating.value || isDrafting.value) {
+    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    return
+  }
+
+  const targetCount = leadIds?.length ?? pendingHighIds.value.length
+  if (!leadIds && targetCount <= 0) {
+    actionMessage.value = '暂无待起草的 high 线索'
+    return
+  }
+
+  drafting.value = true
+  actionMessage.value = ''
+  resetAgentForDraftEmail(targetCount)
+
+  try {
+    const res = await window.ftcs.draftEmails({
+      productId: activeProductId.value,
+      leadIds,
+    })
+    if (!res.ok) {
+      actionMessage.value = res.message
+      agentStatus.value = 'error'
+      return
+    }
+    actionMessage.value = res.message
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+    agentStatus.value = 'error'
+  } finally {
+    drafting.value = false
+  }
+}
+
+function onBatchDraftClick(): void {
+  void startDraftEmails()
+}
+
+function onDraftLead(lead: LeadRowDto): void {
+  if (lead.phase !== 'scored') {
+    actionMessage.value = '仅已评分线索可写邮件'
+    return
+  }
+  void startDraftEmails([lead.id])
+}
+
+function goEmail(): void {
+  router.push({ name: 'email' }).catch(() => undefined)
+}
+
 function goExplore(): void {
   router.push({ name: 'explore' }).catch(() => undefined)
 }
@@ -261,6 +371,14 @@ watch(agentStatus, (status) => {
       }
     })
   }
+  if (
+    (status === 'done' || status === 'error') &&
+    agentSkill.value === 'draft-outreach-email'
+  ) {
+    void refreshLeads().then(() => {
+      if (status === 'done') goEmail()
+    })
+  }
 })
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -285,6 +403,19 @@ onUnmounted(() => {
         <p>{{ subtitle }}</p>
       </div>
       <div class="main-pane__actions">
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="!canBatchDraft"
+          :title="
+            pendingHighIds.length > 0
+              ? `为 ${pendingHighIds.length} 条 high 线索批量起草`
+              : '暂无待起草的 high 线索'
+          "
+          @click="onBatchDraftClick"
+        >
+          {{ isDrafting ? '起草中…' : `批量起草${pendingHighIds.length ? ` ${pendingHighIds.length}` : ''}` }}
+        </button>
         <button
           type="button"
           class="btn-primary"
@@ -379,9 +510,16 @@ onUnmounted(() => {
           <span class="table-cell leads-table__company" :title="row.companyName">
             {{ row.companyName }}
           </span>
-          <span class="table-cell">
+          <span class="table-cell leads-table__status">
             <span class="lead-phase" :class="phaseClass(row.phase)">
               {{ phaseLabel(row.phase) }}
+            </span>
+            <span
+              v-if="lifecycleLabel(row.status)"
+              class="lead-lifecycle"
+              :class="lifecycleClass(row.status)"
+            >
+              {{ lifecycleLabel(row.status) }}
             </span>
           </span>
           <span class="table-cell leads-table__mono">
@@ -430,13 +568,23 @@ onUnmounted(() => {
               {{ row.matchReason || '—' }}
             </template>
           </span>
-          <span class="table-cell">
+          <span class="table-cell leads-table__actions">
             <button
               type="button"
               class="leads-table__action"
               @click.stop="openDrawer(row)"
             >
               查看
+            </button>
+            <button
+              v-if="row.phase === 'scored'"
+              type="button"
+              class="leads-table__action"
+              :disabled="isDrafting || generating"
+              :title="hasDrafted(row) ? '重新生成开发信草稿' : '生成开发信草稿'"
+              @click.stop="onDraftLead(row)"
+            >
+              {{ hasDrafted(row) ? '重写邮件' : '写邮件' }}
             </button>
           </span>
         </div>
@@ -446,8 +594,10 @@ onUnmounted(() => {
     <LeadDetailDrawer
       :open="drawerOpen"
       :lead="detailLead"
+      :drafting="isDrafting || generating"
       @close="closeDrawer"
       @saved="onLeadSaved"
+      @draft="onDraftLead"
     />
   </section>
 </template>

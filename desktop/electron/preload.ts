@@ -14,6 +14,9 @@ import type {
   RawLeadSaveInput,
   RawLeadSaveResult,
   ScoreAndDedupeResult,
+  DraftEmailsInput,
+  DraftEmailsResult,
+  EmailDraftsSnapshotDto,
   LibraryMutationResult,
   LibrarySnapshot,
   ProfileDetail,
@@ -92,6 +95,10 @@ const api = {
     ipcRenderer.invoke(IPC.LEADS_SAVE_RAW, input),
   scoreAndDedupeLeads: (productId: string): Promise<ScoreAndDedupeResult> =>
     ipcRenderer.invoke(IPC.LEADS_SCORE_AND_DEDUPE, productId),
+  listEmailDrafts: (productId: string): Promise<EmailDraftsSnapshotDto> =>
+    ipcRenderer.invoke(IPC.EMAIL_DRAFT_LIST, productId),
+  draftEmails: (input: DraftEmailsInput): Promise<DraftEmailsResult> =>
+    ipcRenderer.invoke(IPC.EMAIL_DRAFT_GENERATE, input),
   onAgentEvent: (handler: (payload: AgentEventPayload) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: AgentEventPayload) => {
       handler(payload)

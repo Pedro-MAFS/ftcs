@@ -14,6 +14,11 @@ import {
   loadScoredArtifact,
   type ScoredLeadsArtifact,
 } from '../leads/leads-reader'
+import {
+  listHighLeadsNeedingDraft,
+  loadEmailDraftsArtifact,
+  type EmailDraftsArtifact,
+} from '../emails/emails-reader'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -50,6 +55,7 @@ export type AgentEventPayload =
       expansion?: KeywordExpansion
       explorationRun?: ExplorationRun
       scored?: ScoredLeadsArtifact
+      emailDrafts?: EmailDraftsArtifact
     }
 
 export type AgentEventSink = (event: AgentEventPayload) => void
@@ -119,6 +125,29 @@ function buildScoreAndDedupePrompt(productId: string): string {
     '4. 用简短中文汇报：原始数→去重后数量→淘汰数量、高/中/低意向分布、Top 5 线索（公司/分数/tier/匹配理由）、下一步 draft-outreach-email。',
     '',
     `输出路径：data/leads/${productId}/scored.json 、 data/leads/${productId}/discarded.json`,
+  ].join('\n')
+}
+
+function buildDraftOutreachPrompt(
+  productId: string,
+  leadIds: string[],
+): string {
+  const idsJson = JSON.stringify(leadIds)
+  const limit = Math.min(Math.max(leadIds.length, 1), 50)
+  return [
+    '请严格按 skill `draft-outreach-email` 执行，为指定线索生成开发信草稿。',
+    '',
+    `产品 ID：${productId}`,
+    `线索 ID 列表 lead_ids：${idsJson}`,
+    `limit：${limit}`,
+    '',
+    '执行要求：',
+    '1. 调用 lead-store.leads_get_scored 确认 scored.json 存在；若无则停止并提示先运行 score-and-dedupe。',
+    '2. 必须调用 lead-store.email_draft_generate，传入上述 product_id、lead_ids、limit，以及 write_markdown: true。禁止用手写/Write 工具直接创建 draft.json。',
+    '3. 可选：对生成结果 email_draft_get 审阅；若需润色再 email_draft_save。',
+    '4. 用简短中文汇报：生成数量、跳过数量、每条公司名/收件邮箱/short subject、草稿路径；提醒人工审核后再发送。',
+    '',
+    `输出路径：data/emails/{lead_id}/draft.json 、 data/emails/{lead_id}/draft.md`,
   ].join('\n')
 }
 
@@ -749,6 +778,244 @@ export class AgentRunController {
         scored,
       })
       return { ok: true, message, scored }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      timeline.addSuffix({
+        id: 'sys-error',
+        kind: 'error',
+        time: nowTime(),
+        title: '错误',
+        body: message,
+      })
+      flushTimeline()
+      pushState('error')
+      emit({
+        type: 'done',
+        ok: false,
+        productId,
+        message,
+      })
+      return { ok: false, message }
+    } finally {
+      stopEvents?.()
+      this.running = false
+      this.sessionId = null
+      this.abort = null
+    }
+  }
+
+  async runDraftOutreachEmail(
+    productId: string,
+    emit: AgentEventSink,
+    options?: { leadIds?: string[] },
+  ): Promise<{ ok: boolean; message: string; emailDrafts?: EmailDraftsArtifact }> {
+    if (this.running) {
+      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+    }
+
+    const client = this.getClient()
+    if (!client) {
+      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+    }
+
+    const profile = loadProfile(productId)
+    if (!profile) {
+      throw new Error(`未找到产品画像：${productId}`)
+    }
+
+    const explicitIds = (options?.leadIds ?? []).map((id) => id.trim()).filter(Boolean)
+    const leadIds =
+      explicitIds.length > 0
+        ? explicitIds
+        : listHighLeadsNeedingDraft(productId)
+
+    if (leadIds.length === 0) {
+      const message =
+        explicitIds.length > 0
+          ? '未指定有效线索 ID'
+          : '暂无待起草的 high 线索（可能已全部生成草稿）'
+      emit({
+        type: 'state',
+        skill: 'draft-outreach-email',
+        status: 'done',
+        productId,
+        meta: [
+          { label: '状态', value: '无需起草', tone: 'success' },
+          { label: '目标', value: '0' },
+          { label: '产品', value: productId.slice(0, 18) },
+        ],
+      })
+      emit({ type: 'done', ok: true, productId, message })
+      return { ok: true, message }
+    }
+
+    if (leadIds.length > 50) {
+      throw new Error(`一次最多起草 50 封，当前 ${leadIds.length} 条，请缩小范围`)
+    }
+
+    this.running = true
+    this.abort = new AbortController()
+    const signal = this.abort.signal
+    const startedAt = Date.now()
+    const afterIso = new Date().toISOString()
+    const timeline = new TimelineBuilder()
+    const modeLabel = explicitIds.length > 0 ? `指定 ${leadIds.length} 条` : `high ${leadIds.length} 条`
+
+    const flushTimeline = () => {
+      const items = timeline.emitIfChanged()
+      if (items) emit({ type: 'timeline', items })
+    }
+
+    const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
+      const elapsedSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+      const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0')
+      const ss = String(elapsedSec % 60).padStart(2, '0')
+      let readiness = '起草中'
+      let tone = 'accent'
+      if (status === 'done') {
+        readiness = '已完成'
+        tone = 'success'
+      } else if (status === 'error') {
+        readiness = '失败'
+        tone = 'warning'
+      }
+      emit({
+        type: 'state',
+        skill: 'draft-outreach-email',
+        status,
+        productId,
+        meta: [
+          { label: '状态', value: readiness, tone },
+          { label: '目标', value: String(leadIds.length) },
+          { label: '产品', value: productId.slice(0, 18) },
+          { label: '耗时', value: `${mm}:${ss}` },
+        ],
+      })
+    }
+
+    const promptText = buildDraftOutreachPrompt(productId, leadIds)
+    timeline.reset()
+    timeline.addPrefix({
+      id: 'sys-prepare',
+      kind: 'system',
+      time: nowTime(),
+      title: '系统',
+      body: `准备为 ${productId}（${profile.companyName || '未命名'}）起草开发信 · ${modeLabel}`,
+    })
+    timeline.addPrefix({
+      id: 'user-draft',
+      kind: 'user',
+      time: nowTime(),
+      title: '你的指令 · 邮件起草',
+      body: promptText,
+      collapsed: true,
+    })
+    pushState('running')
+    flushTimeline()
+
+    let stopEvents: (() => void) | null = null
+
+    try {
+      const created = await client.session.create({
+        title: `draft-outreach-email · ${productId}`,
+      })
+      if (created.error || !created.data?.id) {
+        throw new Error(
+          typeof created.error === 'object' && created.error && 'message' in created.error
+            ? String((created.error as { message?: string }).message)
+            : '创建 OpenCode 会话失败',
+        )
+      }
+      this.sessionId = created.data.id
+      timeline.addPrefix({
+        id: 'sys-session',
+        kind: 'system',
+        time: nowTime(),
+        title: '会话',
+        body: `已创建 OpenCode session\n${this.sessionId}`,
+      })
+      flushTimeline()
+
+      const bridge = this.startEventBridge(
+        client,
+        this.sessionId,
+        timeline,
+        flushTimeline,
+        promptText,
+      )
+      stopEvents = bridge.stop
+
+      const promptPromise = client.session.promptAsync({
+        sessionID: this.sessionId,
+        parts: [{ type: 'text', text: promptText }],
+      })
+      void promptPromise
+
+      const idleResult = await this.waitForSessionIdle(
+        client,
+        this.sessionId,
+        signal,
+        20 * 60_000,
+      )
+
+      if (idleResult === 'abort') {
+        pushState('error')
+        timeline.addSuffix({
+          id: 'sys-abort',
+          kind: 'error',
+          time: nowTime(),
+          title: '已中止',
+          body: '用户中止了邮件起草',
+        })
+        flushTimeline()
+        emit({
+          type: 'done',
+          ok: false,
+          productId,
+          message: '已中止邮件起草',
+        })
+        return { ok: false, message: '已中止邮件起草' }
+      }
+
+      if (idleResult === 'timeout') {
+        throw new Error('等待 OpenCode 会话 idle 超时')
+      }
+
+      await bridge.ingestNow().catch(() => undefined)
+
+      const emailDrafts = await loadWithGrace(
+        () =>
+          loadEmailDraftsArtifact(productId, {
+            leadIds,
+            afterIso,
+          }),
+        { signal, attempts: 16, intervalMs: 500 },
+      )
+
+      if (!emailDrafts) {
+        throw new Error(
+          '会话已结束，但未找到目标线索的 draft.json。请确认已调用 email_draft_generate。',
+        )
+      }
+
+      const message = `邮件起草完成：${emailDrafts.total} 封 · 目标 ${leadIds.length} 条`
+      timeline.addSuffix({
+        id: 'sys-done',
+        kind: 'system',
+        time: nowTime(),
+        title: '完成',
+        body: message,
+      })
+      flushTimeline()
+      pushState('done')
+      emit({
+        type: 'done',
+        ok: true,
+        productId,
+        message,
+        emailDrafts,
+      })
+      return { ok: true, message, emailDrafts }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       timeline.addSuffix({
