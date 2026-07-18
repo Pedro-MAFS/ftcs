@@ -27,9 +27,9 @@
 
 ## 当前阶段
 
-**Phase 1：MVP 闭环 ✅ 已完成** — 全部子章节（1.1–1.5）已验收通过。
+**Phase 2 进行中** — **2.0 Electron + OpenCode（P0）、2.1 外贸 Web UI（P0）已完成**。
 
-下一步：**Phase 2** — **Electron + OpenCode CLI** 桌面 App + 外贸 Web UI。架构见 [docs/08-产品架构决策-Electron-OpenCode.md](docs/08-产品架构决策-Electron-OpenCode.md)，复盘见 [docs/retrospective/phase-1.md](docs/retrospective/phase-1.md)。
+下一步：审核后发信（`email-sender` / 2.4）、定时探索（`scheduler`）。架构见 [docs/08-产品架构决策-Electron-OpenCode.md](docs/08-产品架构决策-Electron-OpenCode.md)，计划见 [docs/04-实施计划.md](docs/04-实施计划.md)。
 
 **标准工作流目录**：[`workspace/`](workspace/) — Skills、MCP、配置、`data/`、`.env` 的**唯一维护位置**。应用壳在 `desktop/`。`.cursor/`、`.opencode/` 为本机 IDE/工具临时目录（**不进 Git**）。
 
@@ -52,5 +52,7 @@
 - [x] Phase 1.4 线索评分与去重（已验收）
 - [x] Phase 1.5 意向邮件生成（已验收）
 - [x] **Phase 1 MVP 闭环（已全部验收）**
-- [x] Phase 2.0 Electron + OpenCode 集成（desktop/ 骨架）
-- [ ] Phase 2.1 外贸 Web UI
+- [x] Phase 2.0 Electron + OpenCode 集成（P0）
+- [x] Phase 2.1 外贸 Web UI（P0）
+- [ ] Phase 2.4 审核与发送 / email-sender
+- [ ] Phase 2 scheduler 定时探索
