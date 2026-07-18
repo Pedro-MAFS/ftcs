@@ -40,6 +40,7 @@ import type {
   DiscoverLeadsInput,
   RawLeadSaveInput,
   DraftEmailsInput,
+  RejectEmailDraftInput,
 } from './ipc/types'
 import { AgentRunController } from './opencode/agent-runner'
 import { bootstrapProductFromLibrary } from './profile/profile-bootstrap'
@@ -50,6 +51,7 @@ import { listExploreTasks } from './exploration/explore-tasks'
 import { listLeadsSnapshot } from './leads/leads-reader'
 import { saveRawLead } from './leads/lead-writer'
 import { listEmailDraftsSnapshot } from './emails/emails-reader'
+import { rejectEmailDraft } from './emails/emails-writer'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -604,6 +606,17 @@ function registerIpcHandlers(): void {
         pendingHighLeadIds: [],
         stats: { total: 0, pendingReview: 0, pendingHigh: 0 },
         error: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.EMAIL_DRAFT_REJECT, (_event, input: RejectEmailDraftInput) => {
+    try {
+      return rejectEmailDraft(input)
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
       }
     }
   })

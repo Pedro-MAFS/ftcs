@@ -31,6 +31,7 @@ export const IPC = {
   LEADS_SCORE_AND_DEDUPE: 'leads:score-and-dedupe',
   EMAIL_DRAFT_LIST: 'email:draft-list',
   EMAIL_DRAFT_GENERATE: 'email:draft-generate',
+  EMAIL_DRAFT_REJECT: 'email:draft-reject',
   AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
@@ -362,6 +363,18 @@ export interface DraftEmailsResult {
   ok: boolean
   message: string
   productId?: string
+}
+
+export interface RejectEmailDraftInput {
+  productId: string
+  leadId: string
+}
+
+export interface RejectEmailDraftResult {
+  ok: boolean
+  message: string
+  productId?: string
+  leadId?: string
 }
 
 export interface RawLeadContactEditDto {

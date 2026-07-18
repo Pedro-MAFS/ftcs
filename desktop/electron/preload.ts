@@ -17,6 +17,8 @@ import type {
   DraftEmailsInput,
   DraftEmailsResult,
   EmailDraftsSnapshotDto,
+  RejectEmailDraftInput,
+  RejectEmailDraftResult,
   LibraryMutationResult,
   LibrarySnapshot,
   ProfileDetail,
@@ -99,6 +101,8 @@ const api = {
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_LIST, productId),
   draftEmails: (input: DraftEmailsInput): Promise<DraftEmailsResult> =>
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_GENERATE, input),
+  rejectEmailDraft: (input: RejectEmailDraftInput): Promise<RejectEmailDraftResult> =>
+    ipcRenderer.invoke(IPC.EMAIL_DRAFT_REJECT, input),
   onAgentEvent: (handler: (payload: AgentEventPayload) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: AgentEventPayload) => {
       handler(payload)

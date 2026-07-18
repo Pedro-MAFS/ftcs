@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import Icon from '../components/shared/Icon.vue'
+import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import type { EmailDraftRowDto, EmailDraftsSnapshotDto } from '../types/electron'
 
 const meta = SECTION_META.email
@@ -16,6 +17,8 @@ const {
 
 const loading = ref(false)
 const drafting = ref(false)
+const rejecting = ref(false)
+const rejectConfirmOpen = ref(false)
 const actionMessage = ref('')
 const snapshot = ref<EmailDraftsSnapshotDto | null>(null)
 const selectedId = ref('')
@@ -43,8 +46,24 @@ const canBatchDraft = computed(
     !!activeProductId.value &&
     !isDrafting.value &&
     !generating.value &&
+    !rejecting.value &&
     pendingHigh.value.length > 0,
 )
+
+const canReject = computed(
+  () =>
+    !!activeProductId.value &&
+    !!selected.value &&
+    !isDrafting.value &&
+    !generating.value &&
+    !rejecting.value,
+)
+
+const rejectConfirmMessage = computed(() => {
+  const draft = selected.value
+  if (!draft) return ''
+  return `确定驳回「${draft.companyName}」的开发信吗？将删除邮件草稿，并把线索状态回退为 new。`
+})
 
 const subtitle = computed(() => {
   if (!activeProductId.value) return '请先在侧栏选择产品'
@@ -137,6 +156,40 @@ function statusLabel(status: string): string {
   return status || '—'
 }
 
+function openRejectConfirm(): void {
+  if (!canReject.value) return
+  rejectConfirmOpen.value = true
+}
+
+function closeRejectConfirm(): void {
+  if (rejecting.value) return
+  rejectConfirmOpen.value = false
+}
+
+async function confirmReject(): Promise<void> {
+  if (!activeProductId.value || !selected.value || !window.ftcs?.rejectEmailDraft) {
+    return
+  }
+  rejecting.value = true
+  actionMessage.value = ''
+  try {
+    const res = await window.ftcs.rejectEmailDraft({
+      productId: activeProductId.value,
+      leadId: selected.value.leadId,
+    })
+    actionMessage.value = res.message
+    if (res.ok) {
+      rejectConfirmOpen.value = false
+      selectedId.value = ''
+      await refreshDrafts()
+    }
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    rejecting.value = false
+  }
+}
+
 watch(activeProductId, () => {
   actionMessage.value = ''
   selectedId.value = ''
@@ -187,8 +240,14 @@ onUnmounted(() => {
         >
           {{ isDrafting ? '起草中…' : `批量起草${pendingHigh.length ? ` ${pendingHigh.length}` : ''}` }}
         </button>
-        <button type="button" class="btn-secondary" disabled title="后续接入">
-          驳回
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="!canReject"
+          title="驳回当前草稿：删除邮件文件，线索回退为 new"
+          @click="openRejectConfirm"
+        >
+          {{ rejecting ? '驳回中…' : '驳回' }}
         </button>
         <button type="button" class="btn-secondary" disabled title="后续接入">
           <Icon name="check" :size="12" />
@@ -294,5 +353,17 @@ onUnmounted(() => {
         </p>
       </div>
     </div>
+
+    <ConfirmDialog
+      :open="rejectConfirmOpen"
+      title="驳回开发信"
+      :message="rejectConfirmMessage"
+      confirm-label="确认驳回"
+      cancel-label="取消"
+      danger
+      :busy="rejecting"
+      @confirm="confirmReject"
+      @cancel="closeRejectConfirm"
+    />
   </section>
 </template>

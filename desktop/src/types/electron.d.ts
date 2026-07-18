@@ -362,6 +362,18 @@ export interface DraftEmailsResult {
   productId?: string
 }
 
+export interface RejectEmailDraftInput {
+  productId: string
+  leadId: string
+}
+
+export interface RejectEmailDraftResult {
+  ok: boolean
+  message: string
+  productId?: string
+  leadId?: string
+}
+
 export interface RawLeadContactEditDto {
   type: string
   value: string
@@ -437,6 +449,7 @@ declare global {
       scoreAndDedupeLeads: (productId: string) => Promise<ScoreAndDedupeResult>
       listEmailDrafts: (productId: string) => Promise<EmailDraftsSnapshotDto>
       draftEmails: (input: DraftEmailsInput) => Promise<DraftEmailsResult>
+      rejectEmailDraft: (input: RejectEmailDraftInput) => Promise<RejectEmailDraftResult>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
       getSidecarLogs: () => Promise<string[]>
