@@ -23,7 +23,7 @@
 | `exploration_update` | 更新探索进度与 API 用量 |
 | `exploration_finish` | 完成探索运行 |
 | `exploration_get` / `exploration_list` | 读取探索记录 |
-| `leads_score_and_dedupe` | 原始线索去重、评分、写入 scored.json |
+| `leads_score_and_dedupe` | 原始线索去重、评分；写入 scored.json 与 discarded.json |
 | `leads_get_scored` | 读取评分后的线索 |
 | `email_draft_generate` | 为高意向线索生成邮件草稿（json + md） |
 | `email_draft_get` | 读取单条邮件草稿 |

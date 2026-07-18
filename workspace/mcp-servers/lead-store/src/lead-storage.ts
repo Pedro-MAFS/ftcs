@@ -1,19 +1,31 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ExplorationRun, RawLead, RawLeadInput } from "./lead-types.js";
-import { ExplorationRunSchema, RawLeadSchema } from "./lead-types.js";
+import type {
+  DiscardedLead,
+  DiscardedLeadsFile,
+  ExplorationRun,
+  RawLead,
+  RawLeadInput,
+  ScoredLead,
+  ScoredLeadsFile,
+} from "./lead-types.js";
+import {
+  DiscardedLeadsFileSchema,
+  ExplorationRunSchema,
+  RawLeadSchema,
+  ScoredLeadsFileSchema,
+} from "./lead-types.js";
 import { generateLeadId, generateRunId, normalizeDomain } from "./lead-id.js";
 import {
+  getDiscardedLeadsPath,
   getExplorationRunPath,
   getExplorationRunsDir,
   getRawLeadsPath,
   getScoredLeadsPath,
 } from "./paths.js";
-import type { ScoredLead, ScoredLeadsFile } from "./lead-types.js";
-import { ScoredLeadsFileSchema } from "./lead-types.js";
 import {
   buildScoredStats,
-  dedupeRawLeads,
+  dedupeRawLeadsDetailed,
   getDedupeKey,
   rawLeadToScoredLead,
   sortScoredLeads,
@@ -183,10 +195,57 @@ export function saveScoredLeads(root: string, file: ScoredLeadsFile): ScoredLead
   return parsed;
 }
 
+export function loadDiscardedLeads(
+  root: string,
+  productId: string
+): DiscardedLeadsFile | null {
+  const discardedPath = getDiscardedLeadsPath(root, productId);
+  if (!existsSync(discardedPath)) {
+    return null;
+  }
+  return DiscardedLeadsFileSchema.parse(JSON.parse(readFileSync(discardedPath, "utf8")));
+}
+
+export function saveDiscardedLeads(
+  root: string,
+  file: DiscardedLeadsFile
+): DiscardedLeadsFile {
+  const parsed = DiscardedLeadsFileSchema.parse(file);
+  const discardedPath = getDiscardedLeadsPath(root, parsed.product_id);
+  mkdirSync(dirname(discardedPath), { recursive: true });
+  writeFileSync(discardedPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+  return parsed;
+}
+
+function toDiscardedLead(entry: {
+  lead: RawLead;
+  dedupe_key: string;
+  kept_lead_id: string;
+  reason: "duplicate_domain";
+}): DiscardedLead {
+  return {
+    id: entry.lead.id,
+    product_id: entry.lead.product_id,
+    dedupe_key: entry.dedupe_key,
+    reason: entry.reason,
+    kept_lead_id: entry.kept_lead_id,
+    company: entry.lead.company,
+    source: entry.lead.source,
+    match_reason: entry.lead.match_reason,
+    contacts: entry.lead.contacts,
+    round: entry.lead.round,
+    query_id: entry.lead.query_id,
+    discovered_at: entry.lead.discovered_at,
+    raw_score: entry.lead.raw_score,
+  };
+}
+
 export function scoreAndDedupeLeads(root: string, productId: string): {
   scored: ScoredLeadsFile;
+  discarded: DiscardedLeadsFile;
   raw_total: number;
   deduped_total: number;
+  discarded_total: number;
 } {
   const profile = loadProfile(root, productId);
   if (!profile) {
@@ -199,7 +258,7 @@ export function scoreAndDedupeLeads(root: string, productId: string): {
   }
 
   const config = loadScoringConfig(root);
-  const deduped = dedupeRawLeads(rawLeads);
+  const { kept: deduped, discarded: discardedEntries } = dedupeRawLeadsDetailed(rawLeads);
   const existing = loadScoredLeads(root, productId);
 
   const preservedStatusByKey = new Map<string, ScoredLead["status"]>();
@@ -219,18 +278,30 @@ export function scoreAndDedupeLeads(root: string, productId: string): {
     })
   );
 
+  const updatedAt = nowIso();
   const scored: ScoredLeadsFile = {
     product_id: productId,
-    updated_at: nowIso(),
+    updated_at: updatedAt,
     leads: scoredLeads,
     stats: buildScoredStats(scoredLeads),
   };
 
+  const discardedLeads = discardedEntries.map(toDiscardedLead);
+  const discarded: DiscardedLeadsFile = {
+    product_id: productId,
+    updated_at: updatedAt,
+    leads: discardedLeads,
+    stats: { total: discardedLeads.length },
+  };
+
   saveScoredLeads(root, scored);
+  saveDiscardedLeads(root, discarded);
 
   return {
     scored,
+    discarded,
     raw_total: rawLeads.length,
     deduped_total: deduped.length,
+    discarded_total: discardedLeads.length,
   };
 }

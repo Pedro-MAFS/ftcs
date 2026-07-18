@@ -9,6 +9,11 @@ import {
   findLatestRunAfter,
   type ExplorationRun,
 } from '../exploration/exploration-reader'
+import {
+  countRawLeads,
+  loadScoredArtifact,
+  type ScoredLeadsArtifact,
+} from '../leads/leads-reader'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -44,6 +49,7 @@ export type AgentEventPayload =
       profile?: ProductProfileDetail
       expansion?: KeywordExpansion
       explorationRun?: ExplorationRun
+      scored?: ScoredLeadsArtifact
     }
 
 export type AgentEventSink = (event: AgentEventPayload) => void
@@ -97,6 +103,22 @@ function buildExpandKeywordsPrompt(productId: string): string {
     '4. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例搜索词、下一步建议（discover-leads / R1）。',
     '',
     `输出路径：data/keywords/${productId}/expansion.json`,
+  ].join('\n')
+}
+
+function buildScoreAndDedupePrompt(productId: string): string {
+  return [
+    '请严格按 skill `score-and-dedupe` 执行，对指定产品的原始线索评分、去重并分级。',
+    '',
+    `产品 ID：${productId}`,
+    '',
+    '执行要求：',
+    '1. 调用 lead-store.lead_list_raw 确认存在原始线索；若 total == 0 则停止并提示先运行 discover-leads。',
+    '2. 调用 lead-store.leads_score_and_dedupe（传入上述 product_id）完成去重、六维评分与 tier 分级；保留写入 scored.json，同域名淘汰写入 discarded.json。',
+    '3. 调用 lead-store.leads_get_scored 核对：deduped_total ≤ raw_total，discarded_total = raw_total - deduped_total，每条含 score_breakdown 与 tier。',
+    '4. 用简短中文汇报：原始数→去重后数量→淘汰数量、高/中/低意向分布、Top 5 线索（公司/分数/tier/匹配理由）、下一步 draft-outreach-email。',
+    '',
+    `输出路径：data/leads/${productId}/scored.json 、 data/leads/${productId}/discarded.json`,
   ].join('\n')
 }
 
@@ -514,6 +536,219 @@ export class AgentRunController {
         expansion,
       })
       return { ok: true, message, expansion }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      timeline.addSuffix({
+        id: 'sys-error',
+        kind: 'error',
+        time: nowTime(),
+        title: '错误',
+        body: message,
+      })
+      flushTimeline()
+      pushState('error')
+      emit({
+        type: 'done',
+        ok: false,
+        productId,
+        message,
+      })
+      return { ok: false, message }
+    } finally {
+      stopEvents?.()
+      this.running = false
+      this.sessionId = null
+      this.abort = null
+    }
+  }
+
+  async runScoreAndDedupe(
+    productId: string,
+    emit: AgentEventSink,
+  ): Promise<{ ok: boolean; message: string; scored?: ScoredLeadsArtifact }> {
+    if (this.running) {
+      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+    }
+
+    const client = this.getClient()
+    if (!client) {
+      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+    }
+
+    const profile = loadProfile(productId)
+    if (!profile) {
+      throw new Error(`未找到产品画像：${productId}`)
+    }
+
+    const rawCount = countRawLeads(productId)
+    if (rawCount <= 0) {
+      throw new Error('暂无原始线索，请先在探索页完成 R1（discover-leads）')
+    }
+
+    this.running = true
+    this.abort = new AbortController()
+    const signal = this.abort.signal
+    const startedAt = Date.now()
+    const afterIso = new Date().toISOString()
+    const timeline = new TimelineBuilder()
+
+    const flushTimeline = () => {
+      const items = timeline.emitIfChanged()
+      if (items) emit({ type: 'timeline', items })
+    }
+
+    const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
+      const elapsedSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+      const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0')
+      const ss = String(elapsedSec % 60).padStart(2, '0')
+      let readiness = '评分中'
+      let tone = 'accent'
+      if (status === 'done') {
+        readiness = '已完成'
+        tone = 'success'
+      } else if (status === 'error') {
+        readiness = '失败'
+        tone = 'warning'
+      }
+      emit({
+        type: 'state',
+        skill: 'score-and-dedupe',
+        status,
+        productId,
+        meta: [
+          { label: '状态', value: readiness, tone },
+          { label: '原始', value: String(rawCount) },
+          { label: '产品', value: productId.slice(0, 18) },
+          { label: '耗时', value: `${mm}:${ss}` },
+        ],
+      })
+    }
+
+    const promptText = buildScoreAndDedupePrompt(productId)
+    timeline.reset()
+    timeline.addPrefix({
+      id: 'sys-prepare',
+      kind: 'system',
+      time: nowTime(),
+      title: '系统',
+      body: `准备为 ${productId}（${profile.companyName || '未命名'}）评分去重 · 原始线索 ${rawCount} 条`,
+    })
+    timeline.addPrefix({
+      id: 'user-score',
+      kind: 'user',
+      time: nowTime(),
+      title: '你的指令 · 评分去重',
+      body: promptText,
+      collapsed: true,
+    })
+    pushState('running')
+    flushTimeline()
+
+    let stopEvents: (() => void) | null = null
+
+    try {
+      const created = await client.session.create({
+        title: `score-and-dedupe · ${productId}`,
+      })
+      if (created.error || !created.data?.id) {
+        throw new Error(
+          typeof created.error === 'object' && created.error && 'message' in created.error
+            ? String((created.error as { message?: string }).message)
+            : '创建 OpenCode 会话失败',
+        )
+      }
+      this.sessionId = created.data.id
+      timeline.addPrefix({
+        id: 'sys-session',
+        kind: 'system',
+        time: nowTime(),
+        title: '会话',
+        body: `已创建 OpenCode session\n${this.sessionId}`,
+      })
+      flushTimeline()
+
+      const bridge = this.startEventBridge(
+        client,
+        this.sessionId,
+        timeline,
+        flushTimeline,
+        promptText,
+      )
+      stopEvents = bridge.stop
+
+      const promptPromise = client.session.promptAsync({
+        sessionID: this.sessionId,
+        parts: [{ type: 'text', text: promptText }],
+      })
+      void promptPromise
+
+      const idleResult = await this.waitForSessionIdle(
+        client,
+        this.sessionId,
+        signal,
+        20 * 60_000,
+      )
+
+      if (idleResult === 'abort') {
+        pushState('error')
+        timeline.addSuffix({
+          id: 'sys-abort',
+          kind: 'error',
+          time: nowTime(),
+          title: '已中止',
+          body: '用户中止了评分去重',
+        })
+        flushTimeline()
+        emit({
+          type: 'done',
+          ok: false,
+          productId,
+          message: '已中止评分去重',
+        })
+        return { ok: false, message: '已中止评分去重' }
+      }
+
+      if (idleResult === 'timeout') {
+        throw new Error('等待 OpenCode 会话 idle 超时')
+      }
+
+      await bridge.ingestNow().catch(() => undefined)
+
+      const scored = await loadWithGrace(
+        () => {
+          const artifact = loadScoredArtifact(productId)
+          if (!artifact || artifact.total <= 0) return null
+          // 重跑时需确保 scored.json 已更新（有 updatedAt 才校验）
+          if (artifact.updatedAt && artifact.updatedAt < afterIso) return null
+          return artifact
+        },
+        { signal, attempts: 16, intervalMs: 500 },
+      )
+
+      if (!scored) {
+        throw new Error(
+          '会话已结束，但未找到更新后的 scored.json。请确认已调用 leads_score_and_dedupe。',
+        )
+      }
+
+      const message = `评分去重完成：${rawCount} → ${scored.total} 条 · A ${scored.byTier.high} / B ${scored.byTier.medium} / C ${scored.byTier.low}`
+      timeline.addSuffix({
+        id: 'sys-done',
+        kind: 'system',
+        time: nowTime(),
+        title: '完成',
+        body: message,
+      })
+      flushTimeline()
+      pushState('done')
+      emit({
+        type: 'done',
+        ok: true,
+        productId,
+        message,
+        scored,
+      })
+      return { ok: true, message, scored }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       timeline.addSuffix({

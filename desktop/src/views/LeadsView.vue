@@ -9,13 +9,20 @@ import type { LeadRowDto, LeadsSnapshotDto } from '../types/electron'
 
 const meta = SECTION_META.leads
 const router = useRouter()
-const { activeProductId } = useWorkspace()
+const {
+  activeProductId,
+  generating,
+  agentSkill,
+  agentStatus,
+  resetAgentForScoreAndDedupe,
+} = useWorkspace()
 
-type FilterId = 'all' | 'raw' | 'scored' | 'a' | 'b' | 'c' | 'mail'
+type FilterId = 'all' | 'raw' | 'scored' | 'discarded' | 'a' | 'b' | 'c' | 'mail'
 
 const activeFilter = ref<FilterId>('all')
 const searchQuery = ref('')
 const loading = ref(false)
+const scoring = ref(false)
 const actionMessage = ref('')
 const snapshot = ref<LeadsSnapshotDto | null>(null)
 const selectedId = ref('')
@@ -26,6 +33,7 @@ const emptyStats = {
   total: 0,
   raw: 0,
   scored: 0,
+  discarded: 0,
   byTier: { high: 0, medium: 0, low: 0 },
   pendingMail: 0,
 }
@@ -33,11 +41,28 @@ const emptyStats = {
 const stats = computed(() => snapshot.value?.stats ?? emptyStats)
 const rows = computed(() => snapshot.value?.rows ?? [])
 
+const isScoring = computed(
+  () =>
+    scoring.value ||
+    (generating.value && agentSkill.value === 'score-and-dedupe'),
+)
+
+const canScore = computed(() => {
+  return (
+    !!activeProductId.value &&
+    !isScoring.value &&
+    !generating.value &&
+    stats.value.raw > 0
+  )
+})
+
 const subtitle = computed(() => {
   if (!activeProductId.value) return '请先在侧栏选择产品'
   const s = stats.value
   if (s.total === 0) return '暂无线索 · 可在探索页完成 R1 后回来查看'
-  return `${s.total} 条 · 原始 ${s.raw} + 已评分 ${s.scored} · 可按状态筛选`
+  const parts = [`${s.total} 条`, `未评分 ${s.raw}`, `已评分 ${s.scored}`]
+  if (s.discarded > 0) parts.push(`淘汰 ${s.discarded}`)
+  return `${parts.join(' · ')} · 可按状态筛选`
 })
 
 const filters = computed(() => {
@@ -46,6 +71,11 @@ const filters = computed(() => {
     { id: 'all' as const, label: `全部 ${s.total}`, tone: '' },
     { id: 'raw' as const, label: `未评分 ${s.raw}`, tone: 'warning' },
     { id: 'scored' as const, label: `已评分 ${s.scored}`, tone: '' },
+    {
+      id: 'discarded' as const,
+      label: `重复淘汰 ${s.discarded}`,
+      tone: 'muted',
+    },
     { id: 'a' as const, label: `A 级 ${s.byTier.high}`, tone: '' },
     { id: 'b' as const, label: `B 级 ${s.byTier.medium}`, tone: '' },
     { id: 'c' as const, label: `C 级 ${s.byTier.low}`, tone: '' },
@@ -53,12 +83,26 @@ const filters = computed(() => {
   ]
 })
 
+function phaseLabel(phase: LeadRowDto['phase']): string {
+  if (phase === 'scored') return '已评分'
+  if (phase === 'discarded') return '重复淘汰'
+  return '未评分'
+}
+
+function phaseClass(phase: LeadRowDto['phase']): string {
+  if (phase === 'scored') return 'is-scored'
+  if (phase === 'discarded') return 'is-discarded'
+  return 'is-raw'
+}
+
 function matchesFilter(row: LeadRowDto, filter: FilterId): boolean {
   switch (filter) {
     case 'raw':
       return row.phase === 'raw'
     case 'scored':
       return row.phase === 'scored'
+    case 'discarded':
+      return row.phase === 'discarded'
     case 'a':
       return row.tier === 'high'
     case 'b':
@@ -140,8 +184,35 @@ async function refreshLeads(): Promise<void> {
   }
 }
 
-function onScoreClick(): void {
-  actionMessage.value = '评分去重将在后续接入 Agent（score-and-dedupe）'
+async function onScoreClick(): Promise<void> {
+  if (!activeProductId.value || !window.ftcs?.scoreAndDedupeLeads) return
+  if (stats.value.raw <= 0) {
+    actionMessage.value = '暂无未评分原始线索，请先完成 R1 探索'
+    return
+  }
+  if (generating.value) {
+    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    return
+  }
+
+  scoring.value = true
+  actionMessage.value = ''
+  resetAgentForScoreAndDedupe(stats.value.raw)
+
+  try {
+    const res = await window.ftcs.scoreAndDedupeLeads(activeProductId.value)
+    if (!res.ok) {
+      actionMessage.value = res.message
+      agentStatus.value = 'error'
+      return
+    }
+    actionMessage.value = res.message
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+    agentStatus.value = 'error'
+  } finally {
+    scoring.value = false
+  }
 }
 
 function goExplore(): void {
@@ -171,6 +242,19 @@ watch(activeProductId, () => {
   void refreshLeads()
 })
 
+watch(agentStatus, (status) => {
+  if (
+    (status === 'done' || status === 'error') &&
+    agentSkill.value === 'score-and-dedupe'
+  ) {
+    void refreshLeads().then(() => {
+      if (status === 'done' && stats.value.scored > 0) {
+        activeFilter.value = 'scored'
+      }
+    })
+  }
+})
+
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
@@ -196,11 +280,15 @@ onUnmounted(() => {
         <button
           type="button"
           class="btn-primary"
-          :disabled="!activeProductId"
-          title="后续接入 score-and-dedupe"
+          :disabled="!canScore"
+          :title="
+            stats.raw > 0
+              ? '对原始线索执行 score-and-dedupe'
+              : '需要先有未评分的原始线索'
+          "
           @click="onScoreClick"
         >
-          评分去重
+          {{ isScoring ? '评分中…' : '评分去重' }}
         </button>
         <button
           type="button"
@@ -268,7 +356,7 @@ onUnmounted(() => {
           {{
             rows.length === 0
               ? '前往探索页启动 R1，原始线索将出现在此'
-              : '试试切换「全部 / 未评分 / 已评分」或清空搜索'
+              : '试试切换「全部 / 未评分 / 已评分 / 重复淘汰」或清空搜索'
           }}
         </p>
       </div>
@@ -284,11 +372,8 @@ onUnmounted(() => {
             {{ row.companyName }}
           </span>
           <span class="table-cell">
-            <span
-              class="lead-phase"
-              :class="row.phase === 'scored' ? 'is-scored' : 'is-raw'"
-            >
-              {{ row.phase === 'scored' ? '已评分' : '未评分' }}
+            <span class="lead-phase" :class="phaseClass(row.phase)">
+              {{ phaseLabel(row.phase) }}
             </span>
           </span>
           <span class="table-cell leads-table__mono">
@@ -326,7 +411,11 @@ onUnmounted(() => {
             {{ row.score != null ? row.score : '—' }}
           </span>
           <span class="table-cell leads-table__reason" :title="row.matchReason">
-            <template v-if="row.phase === 'raw' && row.matchReason">
+            <template v-if="row.phase === 'discarded'">
+              保留 {{ row.keptLeadId || '—' }}
+              <template v-if="row.matchReason"> · {{ row.matchReason }}</template>
+            </template>
+            <template v-else-if="row.phase === 'raw' && row.matchReason">
               R1 · {{ row.matchReason }}
             </template>
             <template v-else>

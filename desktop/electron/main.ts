@@ -461,6 +461,7 @@ function registerIpcHandlers(): void {
             total: 0,
             raw: 0,
             scored: 0,
+            discarded: 0,
             byTier: { high: 0, medium: 0, low: 0 },
             pendingMail: 0,
           },
@@ -475,6 +476,7 @@ function registerIpcHandlers(): void {
           total: 0,
           raw: 0,
           scored: 0,
+          discarded: 0,
           byTier: { high: 0, medium: 0, low: 0 },
           pendingMail: 0,
         },
@@ -516,6 +518,49 @@ function registerIpcHandlers(): void {
       return {
         ok: true,
         message: `正在为 ${productId} 扩展关键词…`,
+        productId,
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.LEADS_SCORE_AND_DEDUPE, async (event, productId: string) => {
+    try {
+      if (!productId || typeof productId !== 'string') {
+        return { ok: false, message: '缺少 productId' }
+      }
+      if (getAgentRunner().isRunning()) {
+        return {
+          ok: false,
+          message: '已有 Agent 任务在运行',
+        }
+      }
+      if (runtime?.getStatus().state !== 'running' || !runtime.getClient()) {
+        return {
+          ok: false,
+          message: 'OpenCode 未就绪，请先在设置页确认运行时或点击「重启 OpenCode」',
+        }
+      }
+
+      const sender = event.sender
+      void getAgentRunner()
+        .runScoreAndDedupe(productId, (payload) => emitAgentEvent(sender, payload))
+        .catch((err) => {
+          emitAgentEvent(sender, {
+            type: 'done',
+            ok: false,
+            productId,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        })
+
+      return {
+        ok: true,
+        message: `正在为 ${productId} 评分去重…`,
         productId,
       }
     } catch (err) {

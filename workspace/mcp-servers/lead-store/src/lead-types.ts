@@ -130,3 +130,33 @@ export const ScoredLeadsFileSchema = z.object({
 });
 
 export type ScoredLeadsFile = z.infer<typeof ScoredLeadsFileSchema>;
+
+/** 评分去重时因同域名被淘汰的原始线索 */
+export const DiscardedLeadSchema = z.object({
+  id: z.string(),
+  product_id: z.string(),
+  dedupe_key: z.string(),
+  reason: z.literal("duplicate_domain"),
+  kept_lead_id: z.string(),
+  company: LeadCompanySchema,
+  source: LeadSourceSchema,
+  match_reason: z.string(),
+  contacts: z.array(LeadContactSchema).default([]),
+  round: z.enum(["R1", "R2", "R3", "R4"]),
+  query_id: z.string(),
+  discovered_at: z.string(),
+  raw_score: z.number().optional(),
+});
+
+export type DiscardedLead = z.infer<typeof DiscardedLeadSchema>;
+
+export const DiscardedLeadsFileSchema = z.object({
+  product_id: z.string(),
+  updated_at: z.string(),
+  leads: z.array(DiscardedLeadSchema),
+  stats: z.object({
+    total: z.number().int().nonnegative(),
+  }),
+});
+
+export type DiscardedLeadsFile = z.infer<typeof DiscardedLeadsFileSchema>;

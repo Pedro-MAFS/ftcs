@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { getWorkspaceRoot } from '../config/paths'
 
-export type LeadPhase = 'raw' | 'scored'
+export type LeadPhase = 'raw' | 'scored' | 'discarded'
 export type LeadTier = 'high' | 'medium' | 'low' | null
 export type LeadLifecycleStatus =
   | 'new'
@@ -62,6 +62,9 @@ export interface LeadRow {
   queryId: string
   rawScore: number | null
   dedupeKey: string
+  /** 淘汰线索指向保留的 scored lead id */
+  keptLeadId: string
+  discardReason: string
   company: LeadCompanyDetail
   source: LeadSourceDetail
   scoreBreakdown: LeadScoreBreakdown | null
@@ -80,6 +83,7 @@ export interface LeadsSnapshot {
     total: number
     raw: number
     scored: number
+    discarded: number
     byTier: { high: number; medium: number; low: number }
     pendingMail: number
   }
@@ -232,6 +236,13 @@ export function getScoredLeadsPath(
   return path.join(workspaceRoot, 'data', 'leads', productId, 'scored.json')
 }
 
+function getDiscardedLeadsPath(
+  productId: string,
+  workspaceRoot = getWorkspaceRoot(),
+): string {
+  return path.join(workspaceRoot, 'data', 'leads', productId, 'discarded.json')
+}
+
 function loadRawLeads(
   productId: string,
   workspaceRoot = getWorkspaceRoot(),
@@ -281,6 +292,8 @@ function loadRawLeads(
           queryId: asString(raw.query_id),
           rawScore: asNumber(raw.raw_score),
           dedupeKey: '',
+          keptLeadId: '',
+          discardReason: '',
           company,
           source,
           scoreBreakdown: null,
@@ -295,6 +308,70 @@ function loadRawLeads(
   }
 
   return rows
+}
+
+function loadDiscardedLeads(
+  productId: string,
+  workspaceRoot = getWorkspaceRoot(),
+): LeadRow[] {
+  const filePath = getDiscardedLeadsPath(productId, workspaceRoot)
+  if (!fs.existsSync(filePath)) return []
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown
+    const root = asRecord(parsed)
+    if (!root) return []
+    const leads = Array.isArray(root.leads) ? root.leads : []
+    const rows: LeadRow[] = []
+
+    for (const item of leads) {
+      const raw = asRecord(item)
+      if (!raw) continue
+      const company = parseCompany(raw.company)
+      const source = parseSource(raw.source)
+      const dedupeKey = asString(raw.dedupe_key)
+      const domain = dedupeKey || domainFromUrl(company.website || source.url)
+      const contacts = parseContacts(raw.contacts)
+      const keptLeadId = asString(raw.kept_lead_id)
+      const reason = asString(raw.reason) || 'duplicate_domain'
+      const matchReason =
+        asString(raw.match_reason) ||
+        (keptLeadId
+          ? `同域名重复，已保留 ${keptLeadId}`
+          : '同域名重复，评分去重时淘汰')
+      rows.push({
+        id: asString(raw.id) || `discarded_${rows.length + 1}`,
+        productId: asString(raw.product_id) || productId,
+        phase: 'discarded',
+        companyName: company.name || domain || '未命名公司',
+        domain,
+        country: company.country.toUpperCase(),
+        tier: null,
+        tierLabel: '',
+        score: null,
+        matchReason,
+        sourceUrl: source.url,
+        round: asString(raw.round) || '',
+        status: null,
+        discoveredAt: asString(raw.discovered_at),
+        queryId: asString(raw.query_id),
+        rawScore: asNumber(raw.raw_score),
+        dedupeKey,
+        keptLeadId,
+        discardReason: reason,
+        company,
+        source,
+        scoreBreakdown: null,
+        contacts,
+        contactLabel: formatContactLabel(contacts),
+        record: cloneRecord(raw),
+      })
+    }
+
+    return rows
+  } catch {
+    return []
+  }
 }
 
 function loadScoredLeads(
@@ -340,6 +417,8 @@ function loadScoredLeads(
         queryId: asString(raw.query_id),
         rawScore: asNumber(raw.raw_score),
         dedupeKey: asString(raw.dedupe_key),
+        keptLeadId: '',
+        discardReason: '',
         company,
         source,
         scoreBreakdown: parseScoreBreakdown(raw.score_breakdown),
@@ -358,18 +437,83 @@ function loadScoredLeads(
   }
 }
 
-/** 合并 raw + scored：同 id 优先展示已评分；未进入 scored 的 raw 单独列出 */
+export function countRawLeads(
+  productId: string,
+  workspaceRoot = getWorkspaceRoot(),
+): number {
+  return loadRawLeads(productId, workspaceRoot).length
+}
+
+export type ScoredLeadsArtifact = {
+  productId: string
+  updatedAt: string
+  total: number
+  byTier: { high: number; medium: number; low: number }
+}
+
+/** 读取 scored.json 摘要；供 Agent 结束后校验产物 */
+export function loadScoredArtifact(
+  productId: string,
+  workspaceRoot = getWorkspaceRoot(),
+): ScoredLeadsArtifact | null {
+  const filePath = getScoredLeadsPath(productId, workspaceRoot)
+  if (!fs.existsSync(filePath)) return null
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown
+    const root = asRecord(parsed)
+    if (!root) return null
+    const leads = Array.isArray(root.leads) ? root.leads : []
+    const stats = asRecord(root.stats) ?? {}
+    const byTierRaw = asRecord(stats.by_tier) ?? {}
+    const byTier = {
+      high: Number(byTierRaw.high) || 0,
+      medium: Number(byTierRaw.medium) || 0,
+      low: Number(byTierRaw.low) || 0,
+    }
+    if (byTier.high + byTier.medium + byTier.low === 0) {
+      for (const item of leads) {
+        const row = asRecord(item)
+        const tier = parseTier(row?.tier)
+        if (tier === 'high') byTier.high += 1
+        else if (tier === 'medium') byTier.medium += 1
+        else if (tier === 'low') byTier.low += 1
+      }
+    }
+    return {
+      productId: asString(root.product_id) || productId,
+      updatedAt: asString(root.updated_at),
+      total:
+        typeof stats.total === 'number' ? stats.total : leads.length,
+      byTier,
+    }
+  } catch {
+    return null
+  }
+}
+
+const PHASE_ORDER: Record<LeadPhase, number> = {
+  scored: 0,
+  raw: 1,
+  discarded: 2,
+}
+
+/** 合并 scored + discarded + 未处理 raw：同 id 优先 scored，其次 discarded */
 export function listLeadsSnapshot(
   productId: string,
   workspaceRoot = getWorkspaceRoot(),
 ): LeadsSnapshot {
   const scored = loadScoredLeads(productId, workspaceRoot)
+  const discarded = loadDiscardedLeads(productId, workspaceRoot)
   const raw = loadRawLeads(productId, workspaceRoot)
   const scoredIds = new Set(scored.rows.map((r) => r.id))
+  const discardedIds = new Set(discarded.map((r) => r.id))
 
-  const pendingRaw = raw.filter((r) => !scoredIds.has(r.id))
-  const rows = [...scored.rows, ...pendingRaw].sort((a, b) => {
-    if (a.phase !== b.phase) return a.phase === 'scored' ? -1 : 1
+  const pendingRaw = raw.filter(
+    (r) => !scoredIds.has(r.id) && !discardedIds.has(r.id),
+  )
+  const rows = [...scored.rows, ...pendingRaw, ...discarded].sort((a, b) => {
+    const phaseDiff = PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase]
+    if (phaseDiff !== 0) return phaseDiff
     const scoreA = a.score ?? -1
     const scoreB = b.score ?? -1
     if (scoreA !== scoreB) return scoreB - scoreA
@@ -395,6 +539,7 @@ export function listLeadsSnapshot(
       total: rows.length,
       raw: pendingRaw.length,
       scored: scored.rows.length,
+      discarded: discarded.length,
       byTier,
       pendingMail,
     },

@@ -1024,6 +1024,11 @@ button:focus-visible {
   background: var(--warning-bg);
 }
 
+.lead-phase.is-discarded {
+  color: var(--text-muted, #6b7280);
+  background: color-mix(in srgb, var(--text-muted, #6b7280) 14%, transparent);
+}
+
 .lead-tier {
   display: inline-flex;
   align-items: center;

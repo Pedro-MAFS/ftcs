@@ -632,7 +632,7 @@ server.tool(
 
 server.tool(
   "leads_score_and_dedupe",
-  "Score and dedupe raw leads, then save to data/leads/{product_id}/scored.json",
+  "Score and dedupe raw leads; save kept leads to scored.json and domain duplicates to discarded.json",
   {
     product_id: z.string(),
   },
@@ -649,15 +649,25 @@ server.tool(
                 success: true,
                 product_id,
                 scored_path: `data/leads/${product_id}/scored.json`,
+                discarded_path: `data/leads/${product_id}/discarded.json`,
                 raw_total: result.raw_total,
                 deduped_total: result.deduped_total,
+                discarded_total: result.discarded_total,
                 stats: result.scored.stats,
+                discarded_stats: result.discarded.stats,
                 top_leads: result.scored.leads.slice(0, 5).map((lead) => ({
                   id: lead.id,
                   company: lead.company.name,
                   score: lead.score,
                   tier: lead.tier,
                   dedupe_key: lead.dedupe_key,
+                })),
+                discarded_sample: result.discarded.leads.slice(0, 5).map((lead) => ({
+                  id: lead.id,
+                  company: lead.company.name,
+                  dedupe_key: lead.dedupe_key,
+                  kept_lead_id: lead.kept_lead_id,
+                  reason: lead.reason,
                 })),
               },
               null,

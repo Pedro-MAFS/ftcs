@@ -321,18 +321,63 @@ function leadCompletenessScore(lead: RawLead): number {
   return score;
 }
 
-export function dedupeRawLeads(leads: RawLead[]): RawLead[] {
-  const bestByKey = new Map<string, RawLead>();
+export type DedupeBucket = {
+  kept: RawLead;
+  discarded: RawLead[];
+};
+
+/** 按域名去重，并返回被淘汰的原始线索（含最终保留的 lead id） */
+export function dedupeRawLeadsDetailed(leads: RawLead[]): {
+  kept: RawLead[];
+  discarded: Array<{
+    lead: RawLead;
+    dedupe_key: string;
+    kept_lead_id: string;
+    reason: "duplicate_domain";
+  }>;
+} {
+  const byKey = new Map<string, DedupeBucket>();
 
   for (const lead of leads) {
     const key = getDedupeKey(lead);
-    const existing = bestByKey.get(key);
-    if (!existing || leadCompletenessScore(lead) > leadCompletenessScore(existing)) {
-      bestByKey.set(key, lead);
+    const bucket = byKey.get(key);
+    if (!bucket) {
+      byKey.set(key, { kept: lead, discarded: [] });
+      continue;
+    }
+    if (leadCompletenessScore(lead) > leadCompletenessScore(bucket.kept)) {
+      bucket.discarded.push(bucket.kept);
+      bucket.kept = lead;
+    } else {
+      bucket.discarded.push(lead);
     }
   }
 
-  return [...bestByKey.values()];
+  const kept: RawLead[] = [];
+  const discarded: Array<{
+    lead: RawLead;
+    dedupe_key: string;
+    kept_lead_id: string;
+    reason: "duplicate_domain";
+  }> = [];
+
+  for (const [dedupe_key, bucket] of byKey) {
+    kept.push(bucket.kept);
+    for (const lead of bucket.discarded) {
+      discarded.push({
+        lead,
+        dedupe_key,
+        kept_lead_id: bucket.kept.id,
+        reason: "duplicate_domain",
+      });
+    }
+  }
+
+  return { kept, discarded };
+}
+
+export function dedupeRawLeads(leads: RawLead[]): RawLead[] {
+  return dedupeRawLeadsDetailed(leads).kept;
 }
 
 export function rawLeadToScoredLead(

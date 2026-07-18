@@ -167,6 +167,10 @@ function updatePipelineFromProfile(): void {
     agentStatus.value === 'running' && agentSkill.value === 'expand-keywords'
   const exploring =
     agentStatus.value === 'running' && agentSkill.value === 'discover-leads'
+  const scoring =
+    agentStatus.value === 'running' && agentSkill.value === 'score-and-dedupe'
+  const hasScored =
+    agentSkill.value === 'score-and-dedupe' && agentStatus.value === 'done'
 
   pipelineSteps.value = [
     { id: 'input', label: '1 产品录入', status: 'done', statusLabel: '完成' },
@@ -198,7 +202,18 @@ function updatePipelineFromProfile(): void {
             ? '可执行'
             : '待关键词',
     },
-    { id: 'score', label: '4 线索评分', status: 'pending', statusLabel: '待执行' },
+    {
+      id: 'score',
+      label: '4 线索评分',
+      status: hasScored ? 'done' : scoring ? 'running' : 'pending',
+      statusLabel: hasScored
+        ? '完成'
+        : scoring
+          ? '执行中'
+          : hasCompleted
+            ? '可执行'
+            : '待探索',
+    },
     { id: 'email', label: '5 邮件草稿', status: 'pending', statusLabel: '待执行' },
   ]
 }
@@ -352,6 +367,18 @@ export function useWorkspace() {
     ]
   }
 
+  function resetAgentForScoreAndDedupe(rawCount?: number): void {
+    agentSkill.value = 'score-and-dedupe'
+    agentStatus.value = 'running'
+    agentTimeline.value = []
+    agentExpanded.value = {}
+    agentMeta.value = [
+      { label: '状态', value: '评分中', tone: 'accent' },
+      { label: '原始', value: rawCount != null ? String(rawCount) : '—' },
+      { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
+    ]
+  }
+
   function toggleTimelineExpand(id: string): void {
     agentExpanded.value = {
       ...agentExpanded.value,
@@ -387,6 +414,7 @@ export function useWorkspace() {
     resetAgentForGenerate,
     resetAgentForExpandKeywords,
     resetAgentForDiscoverLeads,
+    resetAgentForScoreAndDedupe,
     toggleTimelineExpand,
     isTimelineExpanded,
     refreshProducts,

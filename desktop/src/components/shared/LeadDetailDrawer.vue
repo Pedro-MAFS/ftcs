@@ -17,9 +17,12 @@ const copied = ref(false)
 
 const title = computed(() => props.lead?.companyName || '线索详情')
 
-const phaseLabel = computed(() =>
-  props.lead?.phase === 'scored' ? '已评分（scored）' : '未评分（raw）',
-)
+const phaseLabel = computed(() => {
+  const phase = props.lead?.phase
+  if (phase === 'scored') return '已评分（scored）'
+  if (phase === 'discarded') return '重复淘汰（discarded）'
+  return '未评分（raw）'
+})
 
 const statusLabel = computed(() => {
   const s = props.lead?.status
@@ -179,7 +182,13 @@ onUnmounted(() => {
           <div class="lead-drawer__badges">
             <span
               class="lead-phase"
-              :class="lead.phase === 'scored' ? 'is-scored' : 'is-raw'"
+              :class="
+                lead.phase === 'scored'
+                  ? 'is-scored'
+                  : lead.phase === 'discarded'
+                    ? 'is-discarded'
+                    : 'is-raw'
+              "
             >
               {{ phaseLabel }}
             </span>
@@ -232,6 +241,14 @@ onUnmounted(() => {
               <div class="lead-drawer__field">
                 <dt>dedupe_key</dt>
                 <dd>{{ displayOrDash(lead.dedupeKey) }}</dd>
+              </div>
+              <div v-if="lead.phase === 'discarded'" class="lead-drawer__field">
+                <dt>kept_lead_id</dt>
+                <dd>{{ displayOrDash(lead.keptLeadId) }}</dd>
+              </div>
+              <div v-if="lead.phase === 'discarded'" class="lead-drawer__field">
+                <dt>discard_reason</dt>
+                <dd>{{ displayOrDash(lead.discardReason) }}</dd>
               </div>
             </dl>
           </section>

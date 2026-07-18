@@ -27,6 +27,7 @@ export const IPC = {
   EXPLORATION_LIST_TASKS: 'exploration:list-tasks',
   EXPLORATION_START_R1: 'exploration:start-r1',
   LEADS_LIST: 'leads:list',
+  LEADS_SCORE_AND_DEDUPE: 'leads:score-and-dedupe',
   AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
@@ -219,7 +220,7 @@ export interface ExploreTasksSnapshotDto {
   expansion: KeywordExpansionDto | null
 }
 
-export type LeadPhaseDto = 'raw' | 'scored'
+export type LeadPhaseDto = 'raw' | 'scored' | 'discarded'
 export type LeadTierDto = 'high' | 'medium' | 'low' | null
 
 export interface LeadContactDto {
@@ -268,6 +269,8 @@ export interface LeadRowDto {
   queryId: string
   rawScore: number | null
   dedupeKey: string
+  keptLeadId: string
+  discardReason: string
   company: LeadCompanyDetailDto
   source: LeadSourceDetailDto
   scoreBreakdown: LeadScoreBreakdownDto | null
@@ -284,9 +287,23 @@ export interface LeadsSnapshotDto {
     total: number
     raw: number
     scored: number
+    discarded: number
     byTier: { high: number; medium: number; low: number }
     pendingMail: number
   }
+}
+
+export interface ScoredLeadsSummaryDto {
+  productId: string
+  updatedAt: string
+  total: number
+  byTier: { high: number; medium: number; low: number }
+}
+
+export interface ScoreAndDedupeResult {
+  ok: boolean
+  message: string
+  productId?: string
 }
 
 export type AgentTimelineItem = {
@@ -319,6 +336,7 @@ export type AgentEventPayload =
       profile?: ProfileDetail
       expansion?: KeywordExpansionDto
       explorationRun?: ExplorationRunDto
+      scored?: ScoredLeadsSummaryDto
     }
 
 export type OpenCodeRuntimeState = 'idle' | 'starting' | 'running' | 'error' | 'stopped'

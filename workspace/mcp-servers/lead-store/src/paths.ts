@@ -106,6 +106,10 @@ export function getScoredLeadsPath(root: string, productId: string): string {
   return join(getLeadsDir(root, productId), "scored.json");
 }
 
+export function getDiscardedLeadsPath(root: string, productId: string): string {
+  return join(getLeadsDir(root, productId), "discarded.json");
+}
+
 export function getEmailsDir(root: string): string {
   return join(getDataDir(root), "emails");
 }

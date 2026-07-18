@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import Icon from '../components/shared/Icon.vue'
@@ -7,6 +8,7 @@ import KeywordEditorDialog from '../components/shared/KeywordEditorDialog.vue'
 import type { ExploreTaskDto, KeywordExpansionDto } from '../types/electron'
 
 const meta = SECTION_META.explore
+const router = useRouter()
 const {
   activeProductId,
   activeProduct,
@@ -17,6 +19,7 @@ const {
   agentStatus,
   refreshExploreTasks,
   resetAgentForDiscoverLeads,
+  resetAgentForScoreAndDedupe,
 } = useWorkspace()
 
 const expandedId = ref('')
@@ -24,6 +27,7 @@ const actionMessage = ref('')
 const loading = ref(false)
 const editorOpen = ref(false)
 const startingR1 = ref(false)
+const scoringLeads = ref(false)
 const previewRound = ref('R1')
 const previewDimension = ref('all')
 const DEFAULT_MAX_QUERIES = 10
@@ -129,6 +133,12 @@ const isDiscovering = computed(
   () => generating.value && agentSkill.value === 'discover-leads',
 )
 
+const isScoring = computed(
+  () =>
+    scoringLeads.value ||
+    (generating.value && agentSkill.value === 'score-and-dedupe'),
+)
+
 function stopProgressPolling(): void {
   if (progressTimer) {
     clearInterval(progressTimer)
@@ -225,6 +235,41 @@ async function startR1(): Promise<void> {
   }
 }
 
+function goLeads(): void {
+  router.push({ name: 'leads' }).catch(() => undefined)
+}
+
+async function startScoreAndDedupe(task: ExploreTaskDto): Promise<void> {
+  if (!activeProductId.value || !window.ftcs?.scoreAndDedupeLeads) return
+  if (generating.value) {
+    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    return
+  }
+  if (task.status !== 'completed' || task.leadsFound <= 0) {
+    actionMessage.value = '该任务没有可评分的线索'
+    return
+  }
+
+  scoringLeads.value = true
+  actionMessage.value = ''
+  resetAgentForScoreAndDedupe(task.leadsFound)
+
+  try {
+    const res = await window.ftcs.scoreAndDedupeLeads(activeProductId.value)
+    if (!res.ok) {
+      actionMessage.value = res.message
+      agentStatus.value = 'error'
+      return
+    }
+    actionMessage.value = res.message
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+    agentStatus.value = 'error'
+  } finally {
+    scoringLeads.value = false
+  }
+}
+
 function openKeywordEditor(): void {
   if (!activeProductId.value) return
   editorOpen.value = true
@@ -269,6 +314,9 @@ watch(activeProductId, () => {
 })
 
 watch(agentStatus, (status) => {
+  if (status === 'done' && agentSkill.value === 'score-and-dedupe') {
+    actionMessage.value = '评分去重已完成，可前往线索库查看'
+  }
   if (status === 'done' || status === 'error') {
     stopProgressPolling()
     void refreshExploreTasks().then(() => {
@@ -476,6 +524,28 @@ onUnmounted(() => {
             >
               <Icon name="play" :size="11" />
               {{ startingR1 || isDiscovering ? '探索中…' : '开始 R1' }}
+            </button>
+          </div>
+
+          <div
+            v-if="task.status === 'completed' && task.leadsFound > 0"
+            class="explore-task__actions"
+          >
+            <button
+              type="button"
+              class="btn-secondary btn-secondary--sm"
+              @click="goLeads"
+            >
+              查看线索
+            </button>
+            <button
+              type="button"
+              class="btn-primary btn-secondary--sm"
+              :disabled="generating || isScoring"
+              @click="startScoreAndDedupe(task)"
+            >
+              <Icon name="sparkles" :size="11" />
+              {{ isScoring ? '评分中…' : '评分去重' }}
             </button>
           </div>
         </div>

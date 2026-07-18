@@ -32,6 +32,7 @@ export type AgentEventPayload =
       profile?: ProfileDetail
       expansion?: KeywordExpansionDto
       explorationRun?: ExplorationRunDto
+      scored?: ScoredLeadsSummaryDto
     }
 
 export interface ProfileGenerateInput {
@@ -220,7 +221,7 @@ export interface ExploreTasksSnapshotDto {
   expansion: KeywordExpansionDto | null
 }
 
-export type LeadPhaseDto = 'raw' | 'scored'
+export type LeadPhaseDto = 'raw' | 'scored' | 'discarded'
 export type LeadTierDto = 'high' | 'medium' | 'low' | null
 
 export interface LeadContactDto {
@@ -269,6 +270,8 @@ export interface LeadRowDto {
   queryId: string
   rawScore: number | null
   dedupeKey: string
+  keptLeadId: string
+  discardReason: string
   company: LeadCompanyDetailDto
   source: LeadSourceDetailDto
   scoreBreakdown: LeadScoreBreakdownDto | null
@@ -285,9 +288,23 @@ export interface LeadsSnapshotDto {
     total: number
     raw: number
     scored: number
+    discarded: number
     byTier: { high: number; medium: number; low: number }
     pendingMail: number
   }
+}
+
+export interface ScoredLeadsSummaryDto {
+  productId: string
+  updatedAt: string
+  total: number
+  byTier: { high: number; medium: number; low: number }
+}
+
+export interface ScoreAndDedupeResult {
+  ok: boolean
+  message: string
+  productId?: string
 }
 
 declare global {
@@ -330,6 +347,7 @@ declare global {
       listExploreTasks: (productId: string) => Promise<ExploreTasksSnapshotDto>
       startExploreR1: (input: DiscoverLeadsInput) => Promise<DiscoverLeadsResult>
       listLeads: (productId: string) => Promise<LeadsSnapshotDto>
+      scoreAndDedupeLeads: (productId: string) => Promise<ScoreAndDedupeResult>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
       getSidecarLogs: () => Promise<string[]>

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -150,7 +150,9 @@ test("scoreAndDedupeLeads writes scored.json without duplicate domains", () => {
     const result = scoreAndDedupeLeads(root, productId);
     assert.equal(result.raw_total, 3);
     assert.equal(result.deduped_total, 2);
+    assert.equal(result.discarded_total, 1);
     assert.equal(result.scored.leads.length, 2);
+    assert.equal(result.discarded.leads.length, 1);
 
     const dedupeKeys = result.scored.leads.map((lead) => lead.dedupe_key);
     assert.equal(new Set(dedupeKeys).size, dedupeKeys.length);
@@ -161,6 +163,15 @@ test("scoreAndDedupeLeads writes scored.json without duplicate domains", () => {
       assert.ok(lead.match_reason);
       assert.ok(lead.source_url);
     }
+
+    const discarded = result.discarded.leads[0]!;
+    assert.equal(discarded.reason, "duplicate_domain");
+    assert.equal(discarded.dedupe_key, "abc-decking.de");
+    assert.ok(result.scored.leads.some((lead) => lead.id === discarded.kept_lead_id));
+    assert.ok(!result.scored.leads.some((lead) => lead.id === discarded.id));
+
+    const discardedPath = join(root, "data", "leads", productId, "discarded.json");
+    assert.ok(existsSync(discardedPath));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

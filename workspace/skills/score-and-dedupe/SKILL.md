@@ -1,6 +1,6 @@
 ---
 name: score-and-dedupe
-description: 对原始线索进行域名去重、六维加权评分与分级，输出 scored.json。用户说线索评分、去重、整理线索时使用。
+description: 对原始线索进行域名去重、六维加权评分与分级，输出 scored.json、discarded.json。用户说线索评分、去重、整理线索时使用。
 phase: 1
 inputs:
   - name: product_id
@@ -9,11 +9,13 @@ inputs:
 outputs:
   - path: data/leads/{product_id}/scored.json
     schema: ScoredLeadsFile
+  - path: data/leads/{product_id}/discarded.json
+    schema: DiscardedLeadsFile
 ---
 
 # score-and-dedupe
 
-将 `raw/*.jsonl` 中的原始线索**去重、评分、分级**，输出至 `data/leads/{product_id}/scored.json`。
+将 `raw/*.jsonl` 中的原始线索**去重、评分、分级**：保留结果写入 `scored.json`，同域名淘汰结果写入 `discarded.json`。
 
 ## 何时使用
 
@@ -50,23 +52,27 @@ lead-store.leads_score_and_dedupe({ product_id })
 4. 计算六维 `score_breakdown` 与加权 `score`
 5. 分配 `tier`：`high` / `medium` / `low`
 6. 若已有 `scored.json`，保留已有线索的 `status` 不被覆盖
-7. 写入 `data/leads/{product_id}/scored.json`
+7. 写入 `data/leads/{product_id}/scored.json`（保留线索）
+8. 写入 `data/leads/{product_id}/discarded.json`（同域名淘汰线索，含 `kept_lead_id`）
 
 ### Step 3：检查结果
 
 调用 `lead-store.leads_get_scored` 或在 Step 2 返回中查看：
 
 - `deduped_total` ≤ `raw_total`（去重生效）
+- `discarded_total` = `raw_total` - `deduped_total`
 - 每条线索含 `score_breakdown` 与 `tier`
 - `stats.by_tier` 分布合理
+- 存在 `discarded.json`（可为 `leads: []`）
 
 ### Step 4：输出摘要
 
 向用户展示：
 
-- 原始线索数 → 去重后数量
+- 原始线索数 → 去重后数量 → 淘汰数量
 - 高/中/低意向分布（`stats.by_tier`）
 - Top 5 线索：公司名、分数、tier、match_reason
+- 若有淘汰：示例 1～3 条（公司、`dedupe_key`、保留的 `kept_lead_id`）
 - 下一步建议：为 high tier 线索运行 `draft-outreach-email`
 
 ## 评分维度说明
@@ -88,9 +94,10 @@ Tier 阈值（默认）：
 
 ## 输出要求
 
-- 必须写入 `scored.json`
-- 同域名仅保留 1 条线索
-- 每条线索必须有 `score_breakdown` 和 `tier`
+- 必须写入 `scored.json` 与 `discarded.json`
+- 同域名仅保留 1 条线索进入 `scored.json`
+- 被淘汰线索写入 `discarded.json`，`reason` 为 `duplicate_domain`，并记录 `kept_lead_id`
+- 每条 scored 线索必须有 `score_breakdown` 和 `tier`
 - 默认 `status` 为 `new`（已有记录保留原 status）
 
 ## 错误处理
@@ -140,6 +147,34 @@ Tier 阈值（默认）：
 **线索 status（本阶段相关）**：`new` → `email_drafted`（后续发送阶段再流转）。
 
 去重键：规范化后的域名（去掉 `www.`、统一小写）。
+
+## 淘汰文件 Schema（discarded.json）
+
+路径：`data/leads/{product_id}/discarded.json`
+
+```json
+{
+  "product_id": "prod_...",
+  "updated_at": "ISO8601",
+  "leads": [
+    {
+      "id": "lead_...",
+      "product_id": "prod_...",
+      "dedupe_key": "example.com",
+      "reason": "duplicate_domain",
+      "kept_lead_id": "lead_kept_...",
+      "company": { "name": "...", "website": "https://...", "country": "DE" },
+      "source": { "url": "https://...", "type": "tavily_search" },
+      "match_reason": "...",
+      "contacts": [],
+      "round": "R1",
+      "query_id": "q_001",
+      "discovered_at": "ISO8601"
+    }
+  ],
+  "stats": { "total": 1 }
+}
+```
 
 ## 示例对话
 
