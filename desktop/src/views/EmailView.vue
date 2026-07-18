@@ -6,6 +6,8 @@ import Icon from '../components/shared/Icon.vue'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import type { EmailDraftRowDto, EmailDraftsSnapshotDto } from '../types/electron'
 
+type VariantKey = 'short' | 'professional'
+
 const meta = SECTION_META.email
 const {
   activeProductId,
@@ -23,7 +25,18 @@ const rejectConfirmOpen = ref(false)
 const actionMessage = ref('')
 const snapshot = ref<EmailDraftsSnapshotDto | null>(null)
 const selectedId = ref('')
-const activeVariant = ref<'short' | 'professional'>('short')
+const activeVariant = ref<VariantKey>('short')
+
+/** 本地改稿缓冲；轮询刷新同一 lead 时不覆盖 */
+const editLeadId = ref('')
+const editSubjects = ref<Record<VariantKey, string>>({
+  short: '',
+  professional: '',
+})
+const editBodies = ref<Record<VariantKey, string>>({
+  short: '',
+  professional: '',
+})
 
 const emptyStats = { total: 0, pendingReview: 0, pendingHigh: 0 }
 
@@ -64,7 +77,6 @@ const canApprove = computed(
   () =>
     !!activeProductId.value &&
     !!selected.value &&
-    selected.value.status === 'pending_review' &&
     !isBusy.value,
 )
 
@@ -85,20 +97,57 @@ const subtitle = computed(() => {
   return `${s.total} 封草稿 · 待审 ${s.pendingReview} · 待起草 high ${s.pendingHigh}`
 })
 
-const currentVariant = computed(() => {
-  const draft = selected.value
-  if (!draft) return null
-  return (
-    draft.variants.find((v) => v.type === activeVariant.value) ??
-    draft.variants[0] ??
-    null
-  )
+const editSubject = computed({
+  get: () => editSubjects.value[activeVariant.value],
+  set: (value: string) => {
+    editSubjects.value = {
+      ...editSubjects.value,
+      [activeVariant.value]: value,
+    }
+  },
 })
 
-async function refreshDrafts(): Promise<void> {
+const editBody = computed({
+  get: () => editBodies.value[activeVariant.value],
+  set: (value: string) => {
+    editBodies.value = {
+      ...editBodies.value,
+      [activeVariant.value]: value,
+    }
+  },
+})
+
+function hydrateEdits(draft: EmailDraftRowDto, force: boolean): void {
+  if (!force && editLeadId.value === draft.leadId) return
+  editLeadId.value = draft.leadId
+  const nextSubjects: Record<VariantKey, string> = {
+    short: '',
+    professional: '',
+  }
+  const nextBodies: Record<VariantKey, string> = {
+    short: '',
+    professional: '',
+  }
+  for (const key of ['short', 'professional'] as const) {
+    const variant = draft.variants.find((v) => v.type === key)
+    nextSubjects[key] = variant?.subject ?? ''
+    nextBodies[key] = variant?.body ?? ''
+  }
+  editSubjects.value = nextSubjects
+  editBodies.value = nextBodies
+}
+
+function clearEdits(): void {
+  editLeadId.value = ''
+  editSubjects.value = { short: '', professional: '' }
+  editBodies.value = { short: '', professional: '' }
+}
+
+async function refreshDrafts(options?: { forceHydrate?: boolean }): Promise<void> {
   if (!window.ftcs?.listEmailDrafts || !activeProductId.value) {
     snapshot.value = null
     selectedId.value = ''
+    clearEdits()
     return
   }
   loading.value = true
@@ -109,8 +158,19 @@ async function refreshDrafts(): Promise<void> {
       !snapshot.value.drafts.some((d) => d.leadId === selectedId.value)
     ) {
       selectedId.value = snapshot.value.drafts[0]?.leadId ?? ''
+      clearEdits()
     } else if (!selectedId.value && snapshot.value.drafts[0]) {
       selectedId.value = snapshot.value.drafts[0].leadId
+    }
+
+    const draft =
+      snapshot.value.drafts.find((d) => d.leadId === selectedId.value) ??
+      snapshot.value.drafts[0] ??
+      null
+    if (draft) {
+      hydrateEdits(draft, options?.forceHydrate === true)
+    } else {
+      clearEdits()
     }
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
@@ -157,6 +217,7 @@ function selectDraft(row: EmailDraftRowDto): void {
   selectedId.value = row.leadId
   activeVariant.value =
     row.selectedVariant === 'professional' ? 'professional' : 'short'
+  hydrateEdits(row, true)
 }
 
 function statusLabel(status: string): string {
@@ -191,7 +252,8 @@ async function confirmReject(): Promise<void> {
     if (res.ok) {
       rejectConfirmOpen.value = false
       selectedId.value = ''
-      await refreshDrafts()
+      clearEdits()
+      await refreshDrafts({ forceHydrate: true })
     }
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
@@ -213,10 +275,22 @@ async function onApprove(): Promise<void> {
       productId: activeProductId.value,
       leadId: selected.value.leadId,
       selectedVariant: activeVariant.value,
+      variants: [
+        {
+          type: 'short',
+          subject: editSubjects.value.short,
+          body: editBodies.value.short,
+        },
+        {
+          type: 'professional',
+          subject: editSubjects.value.professional,
+          body: editBodies.value.professional,
+        },
+      ],
     })
     actionMessage.value = res.message
     if (res.ok) {
-      await refreshDrafts()
+      await refreshDrafts({ forceHydrate: true })
     }
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
@@ -225,21 +299,11 @@ async function onApprove(): Promise<void> {
   }
 }
 
-watch(
-  () => selected.value?.leadId,
-  (leadId) => {
-    if (!leadId || !selected.value) return
-    activeVariant.value =
-      selected.value.selectedVariant === 'professional'
-        ? 'professional'
-        : 'short'
-  },
-)
-
 watch(activeProductId, () => {
   actionMessage.value = ''
   selectedId.value = ''
-  void refreshDrafts()
+  clearEdits()
+  void refreshDrafts({ forceHydrate: true })
 })
 
 watch(agentStatus, (status) => {
@@ -247,14 +311,14 @@ watch(agentStatus, (status) => {
     (status === 'done' || status === 'error') &&
     agentSkill.value === 'draft-outreach-email'
   ) {
-    void refreshDrafts()
+    void refreshDrafts({ forceHydrate: true })
   }
 })
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
-  void refreshDrafts()
+  void refreshDrafts({ forceHydrate: true })
   pollTimer = setInterval(() => {
     if (document.visibilityState === 'visible') void refreshDrafts()
   }, 8000)
@@ -299,11 +363,7 @@ onUnmounted(() => {
           type="button"
           class="btn-secondary"
           :disabled="!canApprove"
-          :title="
-            selected?.status === 'approved'
-              ? '该草稿已通过'
-              : '通过并保存：选用当前变体，线索标记为 email_approved（不发送）'
-          "
+          title="保存当前编辑内容，选用当前变体并标记为已通过（不发送）"
           @click="onApprove"
         >
           <Icon name="check" :size="12" />
@@ -351,6 +411,7 @@ onUnmounted(() => {
             type="button"
             class="filter-chip"
             :class="{ 'is-active': activeVariant === 'short' }"
+            :disabled="isBusy"
             @click="activeVariant = 'short'"
           >
             short
@@ -359,6 +420,7 @@ onUnmounted(() => {
             type="button"
             class="filter-chip"
             :class="{ 'is-active': activeVariant === 'professional' }"
+            :disabled="isBusy"
             @click="activeVariant = 'professional'"
           >
             professional
@@ -375,9 +437,17 @@ onUnmounted(() => {
             <dt>Company</dt>
             <dd>{{ selected.companyName }}</dd>
           </div>
-          <div class="email-preview__field">
+          <div class="email-preview__field email-preview__field--full">
             <dt>Subject</dt>
-            <dd>{{ currentVariant?.subject || '—' }}</dd>
+            <dd>
+              <input
+                v-model="editSubject"
+                type="text"
+                class="email-preview__input"
+                :disabled="isBusy"
+                placeholder="邮件主题"
+              />
+            </dd>
           </div>
           <div class="email-preview__field">
             <dt>Language</dt>
@@ -386,7 +456,13 @@ onUnmounted(() => {
         </dl>
 
         <div class="email-preview__body">
-          <pre>{{ currentVariant?.body || '（无正文）' }}</pre>
+          <textarea
+            v-model="editBody"
+            class="email-preview__textarea"
+            :disabled="isBusy"
+            placeholder="邮件正文"
+            spellcheck="false"
+          />
         </div>
 
         <section v-if="selected.personalizationEvidence.length" class="email-preview__evidence">

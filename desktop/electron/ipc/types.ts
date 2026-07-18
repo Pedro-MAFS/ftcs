@@ -379,10 +379,17 @@ export interface RejectEmailDraftResult {
   leadId?: string
 }
 
+export interface EmailVariantEditDto {
+  type: 'short' | 'professional'
+  subject: string
+  body: string
+}
+
 export interface ApproveEmailDraftInput {
   productId: string
   leadId: string
   selectedVariant?: 'short' | 'professional'
+  variants?: EmailVariantEditDto[]
 }
 
 export interface ApproveEmailDraftResult {

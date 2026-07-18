@@ -1629,24 +1629,54 @@ button:focus-visible {
   word-break: break-word;
 }
 
-.email-preview__body {
-  flex: 1;
-  min-height: 160px;
+.email-preview__field--full {
+  grid-column: 1 / -1;
+}
+
+.email-preview__input,
+.email-preview__textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-input);
-  padding: 12px;
-  overflow: auto;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
 }
 
-.email-preview__body pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: inherit;
-  font-size: 12px;
+.email-preview__input {
+  padding: 6px 8px;
+}
+
+.email-preview__input:focus,
+.email-preview__textarea:focus {
+  outline: none;
+  border-color: var(--accent, #3d7eff);
+}
+
+.email-preview__input:disabled,
+.email-preview__textarea:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.email-preview__body {
+  flex: 1;
+  min-height: 160px;
+  display: flex;
+  min-width: 0;
+}
+
+.email-preview__textarea {
+  flex: 1;
+  min-height: 160px;
+  resize: vertical;
+  padding: 12px;
   line-height: 1.55;
   color: var(--text-secondary);
+  white-space: pre-wrap;
 }
 
 .email-preview__evidence h4 {

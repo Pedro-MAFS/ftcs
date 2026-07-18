@@ -14,11 +14,19 @@ export interface RejectEmailDraftResult {
   leadId?: string
 }
 
+export interface EmailVariantEdit {
+  type: 'short' | 'professional'
+  subject: string
+  body: string
+}
+
 export interface ApproveEmailDraftInput {
   productId: string
   leadId: string
   /** 选用的邮件变体；默认 short */
   selectedVariant?: 'short' | 'professional'
+  /** 可选：一并写入的变体内容（人工改稿） */
+  variants?: EmailVariantEdit[]
 }
 
 export interface ApproveEmailDraftResult {
@@ -35,6 +43,49 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function cleanString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function asBody(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function applyVariantEdits(
+  draft: Record<string, unknown>,
+  edits: EmailVariantEdit[] | undefined,
+): Record<string, unknown> {
+  if (!edits || edits.length === 0) return draft
+
+  const existing = Array.isArray(draft.variants) ? draft.variants : []
+  const byType = new Map<string, Record<string, unknown>>()
+  for (const item of existing) {
+    const v = asRecord(item)
+    if (!v) continue
+    const type = cleanString(v.type)
+    if (type) byType.set(type, { ...v })
+  }
+
+  for (const edit of edits) {
+    const type = edit.type === 'professional' ? 'professional' : 'short'
+    const prev = byType.get(type) ?? { type }
+    byType.set(type, {
+      ...prev,
+      type,
+      subject: cleanString(edit.subject),
+      body: asBody(edit.body),
+    })
+  }
+
+  const order = ['short', 'professional']
+  const nextVariants: Record<string, unknown>[] = []
+  for (const type of order) {
+    const v = byType.get(type)
+    if (v) nextVariants.push(v)
+  }
+  for (const [type, v] of byType) {
+    if (!order.includes(type)) nextVariants.push(v)
+  }
+
+  return { ...draft, variants: nextVariants }
 }
 
 function getScoredPath(productId: string, workspaceRoot: string): string {
@@ -277,12 +328,14 @@ export function approveEmailDraft(
 
   const selectedVariant =
     input.selectedVariant === 'professional' ? 'professional' : 'short'
+  draft = applyVariantEdits(draft, input.variants)
+
   const variants = Array.isArray(draft.variants) ? draft.variants : []
   const hasVariant = variants.some((item) => {
     const v = asRecord(item)
     return v && cleanString(v.type) === selectedVariant
   })
-  if (!hasVariant && variants.length > 0) {
+  if (!hasVariant) {
     return {
       ok: false,
       message: `草稿中不存在变体 ${selectedVariant}`,
