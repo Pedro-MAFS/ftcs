@@ -327,6 +327,7 @@ export interface EmailDraftRowDto {
   leadStatus: string
   score: number | null
   subject: string
+  selectedVariant: string
   variants: EmailVariantDto[]
   personalizationEvidence: string[]
   draftPath: string
@@ -368,6 +369,19 @@ export interface RejectEmailDraftInput {
 }
 
 export interface RejectEmailDraftResult {
+  ok: boolean
+  message: string
+  productId?: string
+  leadId?: string
+}
+
+export interface ApproveEmailDraftInput {
+  productId: string
+  leadId: string
+  selectedVariant?: 'short' | 'professional'
+}
+
+export interface ApproveEmailDraftResult {
   ok: boolean
   message: string
   productId?: string
@@ -450,6 +464,7 @@ declare global {
       listEmailDrafts: (productId: string) => Promise<EmailDraftsSnapshotDto>
       draftEmails: (input: DraftEmailsInput) => Promise<DraftEmailsResult>
       rejectEmailDraft: (input: RejectEmailDraftInput) => Promise<RejectEmailDraftResult>
+      approveEmailDraft: (input: ApproveEmailDraftInput) => Promise<ApproveEmailDraftResult>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
       getSidecarLogs: () => Promise<string[]>

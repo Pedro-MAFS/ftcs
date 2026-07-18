@@ -14,6 +14,20 @@ export interface RejectEmailDraftResult {
   leadId?: string
 }
 
+export interface ApproveEmailDraftInput {
+  productId: string
+  leadId: string
+  /** 选用的邮件变体；默认 short */
+  selectedVariant?: 'short' | 'professional'
+}
+
+export interface ApproveEmailDraftResult {
+  ok: boolean
+  message: string
+  productId?: string
+  leadId?: string
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, unknown>
@@ -47,9 +61,10 @@ function rebuildStats(leads: Record<string, unknown>[]): Record<string, unknown>
   }
 }
 
-function revertLeadStatusToNew(
+function updateLeadStatus(
   productId: string,
   leadId: string,
+  status: string,
   workspaceRoot: string,
 ): { ok: boolean; message: string } {
   const scoredPath = getScoredPath(productId, workspaceRoot)
@@ -77,7 +92,7 @@ function revertLeadStatusToNew(
     if (!lead) continue
     if (cleanString(lead.id) === leadId) {
       found = true
-      nextLeads.push({ ...lead, status: 'new' })
+      nextLeads.push({ ...lead, status })
     } else {
       nextLeads.push(lead)
     }
@@ -98,7 +113,59 @@ function revertLeadStatusToNew(
     stats: rebuildStats(nextLeads),
   }
   fs.writeFileSync(scoredPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
-  return { ok: true, message: '线索状态已回退为 new' }
+  return { ok: true, message: `线索状态已更新为 ${status}` }
+}
+
+function getDraftPath(leadId: string, workspaceRoot: string): string {
+  return path.join(getEmailLeadDir(leadId, workspaceRoot), 'draft.json')
+}
+
+function getMarkdownPath(leadId: string, workspaceRoot: string): string {
+  return path.join(getEmailLeadDir(leadId, workspaceRoot), 'draft.md')
+}
+
+function syncApprovedMarkdown(
+  draft: Record<string, unknown>,
+  leadId: string,
+  workspaceRoot: string,
+): void {
+  const mdPath = getMarkdownPath(leadId, workspaceRoot)
+  if (!fs.existsSync(mdPath) && !fs.existsSync(getDraftPath(leadId, workspaceRoot))) {
+    return
+  }
+
+  const variants = Array.isArray(draft.variants) ? draft.variants : []
+  const selected = cleanString(draft.selected_variant) || 'short'
+  const chosen =
+    variants.find((item) => {
+      const v = asRecord(item)
+      return v && cleanString(v.type) === selected
+    }) ?? asRecord(variants[0])
+
+  const subject = chosen ? cleanString(chosen.subject) : ''
+  const body = chosen ? cleanString(chosen.body) : ''
+  const review = asRecord(draft.review) ?? {}
+  const reviewedAt = cleanString(review.reviewed_at) || new Date().toISOString()
+
+  const md = [
+    `# Email Draft · ${leadId}`,
+    '',
+    `- status: approved`,
+    `- selected_variant: ${selected}`,
+    `- reviewed_at: ${reviewedAt}`,
+    '',
+    `## Subject`,
+    '',
+    subject || '—',
+    '',
+    `## Body`,
+    '',
+    body || '—',
+    '',
+  ].join('\n')
+
+  fs.mkdirSync(path.dirname(mdPath), { recursive: true })
+  fs.writeFileSync(mdPath, md, 'utf8')
 }
 
 function removeEmailDocuments(
@@ -129,7 +196,7 @@ export function rejectEmailDraft(
   const emailDir = getEmailLeadDir(leadId, workspaceRoot)
   const hasEmailDir = fs.existsSync(emailDir)
 
-  const statusResult = revertLeadStatusToNew(productId, leadId, workspaceRoot)
+  const statusResult = updateLeadStatus(productId, leadId, 'new', workspaceRoot)
   if (!statusResult.ok) {
     // 若仅有邮件目录、scored 无此线索，仍尽量删邮件文件
     if (hasEmailDir) {
@@ -155,6 +222,110 @@ export function rejectEmailDraft(
   return {
     ok: true,
     message: parts.join('；'),
+    productId,
+    leadId,
+  }
+}
+
+/**
+ * 通过并保存：draft → approved，线索 → email_approved；不发送。
+ */
+export function approveEmailDraft(
+  input: ApproveEmailDraftInput,
+  workspaceRoot = getWorkspaceRoot(),
+): ApproveEmailDraftResult {
+  const productId = cleanString(input.productId)
+  const leadId = cleanString(input.leadId)
+  if (!productId) return { ok: false, message: '缺少 productId' }
+  if (!leadId) return { ok: false, message: '缺少 leadId' }
+
+  const draftPath = getDraftPath(leadId, workspaceRoot)
+  if (!fs.existsSync(draftPath)) {
+    return {
+      ok: false,
+      message: `未找到草稿：data/emails/${leadId}/draft.json`,
+      productId,
+      leadId,
+    }
+  }
+
+  let draft: Record<string, unknown>
+  try {
+    const parsed = asRecord(JSON.parse(fs.readFileSync(draftPath, 'utf8')))
+    if (!parsed) {
+      return { ok: false, message: 'draft.json 格式无效', productId, leadId }
+    }
+    draft = parsed
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+      productId,
+      leadId,
+    }
+  }
+
+  const draftProductId = cleanString(draft.product_id)
+  if (draftProductId && draftProductId !== productId) {
+    return {
+      ok: false,
+      message: `草稿属于 ${draftProductId}，与当前产品 ${productId} 不一致`,
+      productId,
+      leadId,
+    }
+  }
+
+  const selectedVariant =
+    input.selectedVariant === 'professional' ? 'professional' : 'short'
+  const variants = Array.isArray(draft.variants) ? draft.variants : []
+  const hasVariant = variants.some((item) => {
+    const v = asRecord(item)
+    return v && cleanString(v.type) === selectedVariant
+  })
+  if (!hasVariant && variants.length > 0) {
+    return {
+      ok: false,
+      message: `草稿中不存在变体 ${selectedVariant}`,
+      productId,
+      leadId,
+    }
+  }
+
+  const reviewedAt = new Date().toISOString()
+  const nextDraft: Record<string, unknown> = {
+    ...draft,
+    product_id: draftProductId || productId,
+    lead_id: cleanString(draft.lead_id) || leadId,
+    status: 'approved',
+    selected_variant: selectedVariant,
+    review: {
+      approved: true,
+      reviewer_notes: asRecord(draft.review)?.reviewer_notes ?? null,
+      reviewed_at: reviewedAt,
+    },
+  }
+
+  fs.writeFileSync(draftPath, `${JSON.stringify(nextDraft, null, 2)}\n`, 'utf8')
+  syncApprovedMarkdown(nextDraft, leadId, workspaceRoot)
+
+  const statusResult = updateLeadStatus(
+    productId,
+    leadId,
+    'email_approved',
+    workspaceRoot,
+  )
+  if (!statusResult.ok) {
+    return {
+      ok: false,
+      message: `草稿已标记 approved，但线索状态更新失败：${statusResult.message}`,
+      productId,
+      leadId,
+    }
+  }
+
+  return {
+    ok: true,
+    message: `已通过并保存：选用 ${selectedVariant}，线索状态 → email_approved`,
     productId,
     leadId,
   }

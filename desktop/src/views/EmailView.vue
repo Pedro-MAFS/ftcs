@@ -18,6 +18,7 @@ const {
 const loading = ref(false)
 const drafting = ref(false)
 const rejecting = ref(false)
+const approving = ref(false)
 const rejectConfirmOpen = ref(false)
 const actionMessage = ref('')
 const snapshot = ref<EmailDraftsSnapshotDto | null>(null)
@@ -41,12 +42,14 @@ const isDrafting = computed(
     (generating.value && agentSkill.value === 'draft-outreach-email'),
 )
 
+const isBusy = computed(
+  () => isDrafting.value || generating.value || rejecting.value || approving.value,
+)
+
 const canBatchDraft = computed(
   () =>
     !!activeProductId.value &&
-    !isDrafting.value &&
-    !generating.value &&
-    !rejecting.value &&
+    !isBusy.value &&
     pendingHigh.value.length > 0,
 )
 
@@ -54,9 +57,15 @@ const canReject = computed(
   () =>
     !!activeProductId.value &&
     !!selected.value &&
-    !isDrafting.value &&
-    !generating.value &&
-    !rejecting.value,
+    !isBusy.value,
+)
+
+const canApprove = computed(
+  () =>
+    !!activeProductId.value &&
+    !!selected.value &&
+    selected.value.status === 'pending_review' &&
+    !isBusy.value,
 )
 
 const rejectConfirmMessage = computed(() => {
@@ -146,7 +155,8 @@ async function onBatchDraft(): Promise<void> {
 
 function selectDraft(row: EmailDraftRowDto): void {
   selectedId.value = row.leadId
-  activeVariant.value = 'short'
+  activeVariant.value =
+    row.selectedVariant === 'professional' ? 'professional' : 'short'
 }
 
 function statusLabel(status: string): string {
@@ -189,6 +199,42 @@ async function confirmReject(): Promise<void> {
     rejecting.value = false
   }
 }
+
+async function onApprove(): Promise<void> {
+  if (!canApprove.value || !activeProductId.value || !selected.value) return
+  if (!window.ftcs?.approveEmailDraft) {
+    actionMessage.value = '当前环境不支持通过并保存'
+    return
+  }
+  approving.value = true
+  actionMessage.value = ''
+  try {
+    const res = await window.ftcs.approveEmailDraft({
+      productId: activeProductId.value,
+      leadId: selected.value.leadId,
+      selectedVariant: activeVariant.value,
+    })
+    actionMessage.value = res.message
+    if (res.ok) {
+      await refreshDrafts()
+    }
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    approving.value = false
+  }
+}
+
+watch(
+  () => selected.value?.leadId,
+  (leadId) => {
+    if (!leadId || !selected.value) return
+    activeVariant.value =
+      selected.value.selectedVariant === 'professional'
+        ? 'professional'
+        : 'short'
+  },
+)
 
 watch(activeProductId, () => {
   actionMessage.value = ''
@@ -249,9 +295,19 @@ onUnmounted(() => {
         >
           {{ rejecting ? '驳回中…' : '驳回' }}
         </button>
-        <button type="button" class="btn-secondary" disabled title="后续接入">
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="!canApprove"
+          :title="
+            selected?.status === 'approved'
+              ? '该草稿已通过'
+              : '通过并保存：选用当前变体，线索标记为 email_approved（不发送）'
+          "
+          @click="onApprove"
+        >
           <Icon name="check" :size="12" />
-          通过并保存
+          {{ approving ? '保存中…' : '通过并保存' }}
         </button>
       </div>
     </header>

@@ -32,6 +32,7 @@ export const IPC = {
   EMAIL_DRAFT_LIST: 'email:draft-list',
   EMAIL_DRAFT_GENERATE: 'email:draft-generate',
   EMAIL_DRAFT_REJECT: 'email:draft-reject',
+  EMAIL_DRAFT_APPROVE: 'email:draft-approve',
   AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
@@ -329,6 +330,7 @@ export interface EmailDraftRowDto {
   leadStatus: string
   score: number | null
   subject: string
+  selectedVariant: string
   variants: EmailVariantDto[]
   personalizationEvidence: string[]
   draftPath: string
@@ -371,6 +373,19 @@ export interface RejectEmailDraftInput {
 }
 
 export interface RejectEmailDraftResult {
+  ok: boolean
+  message: string
+  productId?: string
+  leadId?: string
+}
+
+export interface ApproveEmailDraftInput {
+  productId: string
+  leadId: string
+  selectedVariant?: 'short' | 'professional'
+}
+
+export interface ApproveEmailDraftResult {
   ok: boolean
   message: string
   productId?: string

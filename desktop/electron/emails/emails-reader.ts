@@ -21,6 +21,7 @@ export interface EmailDraftRow {
   leadStatus: string
   score: number | null
   subject: string
+  selectedVariant: string
   variants: EmailVariantRow[]
   personalizationEvidence: string[]
   draftPath: string
@@ -163,8 +164,11 @@ function parseDraftFile(
         body: asString(v.body),
       })
     }
-    const short =
-      variants.find((v) => v.type === 'short') ?? variants[0] ?? {
+    const selectedVariant = asString(root.selected_variant) || 'short'
+    const chosen =
+      variants.find((v) => v.type === selectedVariant) ??
+      variants.find((v) => v.type === 'short') ??
+      variants[0] ?? {
         type: '',
         subject: '',
         body: '',
@@ -188,7 +192,8 @@ function parseDraftFile(
       tier: scoredLead?.tier || '',
       leadStatus: scoredLead?.status || '',
       score: scoredLead?.score ?? null,
-      subject: short.subject,
+      subject: chosen.subject,
+      selectedVariant,
       variants,
       personalizationEvidence: evidence,
       draftPath: `data/emails/${leadId}/draft.json`,
