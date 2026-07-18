@@ -100,7 +100,16 @@ function emitAgentEvent(
   }
 }
 
+/** 与标题栏 LogoMark（蓝底 FT）一致的应用图标 */
+function getAppIconPath(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'icon.png')
+  }
+  return path.join(__dirname, '../../build/icon.png')
+}
+
 function getWindowOptions(): BrowserWindowConstructorOptions {
+  const iconPath = getAppIconPath()
   const options: BrowserWindowConstructorOptions = {
     width: 1180,
     height: 760,
@@ -110,6 +119,7 @@ function getWindowOptions(): BrowserWindowConstructorOptions {
     autoHideMenuBar: true,
     backgroundColor: '#141414',
     title: '外贸获客智能体',
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,
@@ -802,6 +812,9 @@ async function bootstrapOpenCode(): Promise<void> {
 app.whenReady().then(async () => {
   // 强制暗色系统主题，避免 Windows 原生控件/菜单仍为浅色
   nativeTheme.themeSource = 'dark'
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.ftcs.desktop')
+  }
 
   registerIpcHandlers()
 

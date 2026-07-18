@@ -37,6 +37,62 @@ npm run dev
 默认运行时工作区：`%APPDATA%/@ftcs/desktop/workspace`（具体以 Electron `userData` 为准）。  
 可用设置页「更改…」或环境变量 `FTCS_WORKSPACE` 覆盖。
 
+## 应用图标
+
+标题栏左上角「FT」蓝标对应 `build/icon.png` / `build/icon.ico`：
+- 开发态：主进程 `BrowserWindow.icon` 读取 `build/icon.png`
+- 安装包：`electron-builder` 使用 `build/icon.ico`，并额外把 `icon.png` 打入 `resources/`
+
+更换图标：只替换 `build/icon.png`，再执行 `npm run make:icon` 生成合法 `.ico`（**不要用 PowerShell `>` 写 ico**，会变成 UTF-16 损坏文件），然后 `npm run dist`。
+
+## 打轻量安装包（Windows）
+
+**范围**：Electron App + `workspace-template`（skills / config / MCP `dist/mcp.js`）。  
+**不包含**：OpenCode CLI（用户本机需已安装）、用户 `data/` / `.env`。
+
+```powershell
+cd desktop
+npm install
+
+# 推荐：缓存与二进制工具放到空间充足的盘（避免 C: 满盘失败）
+$env:ELECTRON_BUILDER_CACHE = 'D:\workplace\electron-builder-cache'
+$env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://npmmirror.com/mirrors/electron-builder-binaries/'
+$env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'   # 跳过代码签名探测
+
+npm run dist
+```
+
+`package.json` 已配置：
+- `electronDist` → 复用 `node_modules/electron/dist`（避免重复下载 ~116MB）
+- `electronDownload.mirror` → npmmirror（仅在需要下载时）
+
+等价分步：
+
+```powershell
+npm run build:mcp          # 构建两个 MCP 的 dist/mcp.js
+npm run prepare:template   # 生成 resources/workspace-template/
+npm run build              # electron-vite
+npx electron-builder --win # 产出 release/
+```
+
+| 脚本 | 说明 |
+|------|------|
+| `npm run dist` | 完整发版（NSIS 安装包 + portable） |
+| `npm run pack` | 仅解包目录（`--dir`，便于本地试跑，不重新 build MCP） |
+
+产物目录：`desktop/release/`，例如：
+
+- `外贸获客-Setup-0.1.0.exe`（NSIS 安装包）
+- `外贸获客-Portable-0.1.0.exe`（便携版）
+
+### 安装包使用方前置
+
+1. 本机安装 OpenCode：`npm install -g opencode-ai`（或设置 `FTCS_OPENCODE_PATH`）
+2. 启动 App → 设置页填写 API Key
+3. 验收：录入 → 探索 → 线索 → 邮件
+
+> 内嵌 OpenCode 二进制见实施计划 2.0.6，不在本轻量包范围。
+
 ## 工作区初始化
 
 启动 OpenCode 前会执行 `initializeWorkspace`：

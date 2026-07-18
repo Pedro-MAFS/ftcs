@@ -3,13 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "description": "外贸获客桌面应用（Electron + Vue3 + OpenCode SDK Server/Client）",
+  "author": "FTCS",
   "main": "./out/main/index.js",
   "type": "module",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "typecheck": "vue-tsc --noEmit -p tsconfig.web.json --composite false"
+    "typecheck": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
+    "build:mcp": "node scripts/build-mcp.mjs",
+    "prepare:template": "node scripts/prepare-workspace-template.mjs",
+    "make:icon": "node scripts/make-icon.mjs",
+    "pack": "npm run prepare:template && npm run build && electron-builder --win --dir",
+    "dist": "npm run build:mcp && npm run prepare:template && npm run build && electron-builder --win"
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.18.1",
@@ -19,9 +25,71 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
     "electron": "^34.0.2",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
+    "png-to-ico": "^2.1.8",
     "typescript": "^5.8.2",
     "vite": "^5.4.11",
     "vue-tsc": "^2.2.0"
+  },
+  "build": {
+    "appId": "com.ftcs.desktop",
+    "productName": "外贸获客",
+    "copyright": "Copyright © FTCS",
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    },
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/workspace-template",
+        "to": "workspace-template",
+        "filter": [
+          "**/*",
+          "!.gitkeep"
+        ]
+      },
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "外贸获客",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    }
   }
 }
