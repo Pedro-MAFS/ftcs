@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import Icon from '../components/shared/Icon.vue'
@@ -9,6 +10,7 @@ import type { EmailDraftRowDto, EmailDraftsSnapshotDto } from '../types/electron
 type VariantKey = 'short' | 'professional'
 
 const meta = SECTION_META.email
+const route = useRoute()
 const {
   activeProductId,
   generating,
@@ -143,6 +145,26 @@ function clearEdits(): void {
   editBodies.value = { short: '', professional: '' }
 }
 
+function routeLeadId(): string {
+  const q = route.query.leadId
+  if (typeof q === 'string') return q.trim()
+  if (Array.isArray(q) && typeof q[0] === 'string') return q[0].trim()
+  return ''
+}
+
+/** 从线索页跳转时选中对应草稿 */
+function applyRouteSelection(forceHydrate: boolean): boolean {
+  const leadId = routeLeadId()
+  if (!leadId || !snapshot.value) return false
+  const draft = snapshot.value.drafts.find((d) => d.leadId === leadId)
+  if (!draft) return false
+  selectedId.value = leadId
+  activeVariant.value =
+    draft.selectedVariant === 'professional' ? 'professional' : 'short'
+  hydrateEdits(draft, forceHydrate || editLeadId.value !== leadId)
+  return true
+}
+
 async function refreshDrafts(options?: { forceHydrate?: boolean }): Promise<void> {
   if (!window.ftcs?.listEmailDrafts || !activeProductId.value) {
     snapshot.value = null
@@ -153,7 +175,11 @@ async function refreshDrafts(options?: { forceHydrate?: boolean }): Promise<void
   loading.value = true
   try {
     snapshot.value = await window.ftcs.listEmailDrafts(activeProductId.value)
-    if (
+
+    const fromRoute = routeLeadId()
+    if (fromRoute && snapshot.value.drafts.some((d) => d.leadId === fromRoute)) {
+      applyRouteSelection(options?.forceHydrate === true)
+    } else if (
       selectedId.value &&
       !snapshot.value.drafts.some((d) => d.leadId === selectedId.value)
     ) {
@@ -171,6 +197,10 @@ async function refreshDrafts(options?: { forceHydrate?: boolean }): Promise<void
       hydrateEdits(draft, options?.forceHydrate === true)
     } else {
       clearEdits()
+    }
+
+    if (fromRoute && !snapshot.value.drafts.some((d) => d.leadId === fromRoute)) {
+      actionMessage.value = `未找到线索 ${fromRoute} 的邮件草稿`
     }
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
@@ -305,6 +335,17 @@ watch(activeProductId, () => {
   clearEdits()
   void refreshDrafts({ forceHydrate: true })
 })
+
+watch(
+  () => route.query.leadId,
+  () => {
+    if (!snapshot.value) {
+      void refreshDrafts({ forceHydrate: true })
+      return
+    }
+    applyRouteSelection(true)
+  },
+)
 
 watch(agentStatus, (status) => {
   if (

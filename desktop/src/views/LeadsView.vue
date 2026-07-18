@@ -325,6 +325,12 @@ function goEmail(): void {
   router.push({ name: 'email' }).catch(() => undefined)
 }
 
+function goEmailLead(lead: LeadRowDto): void {
+  router
+    .push({ name: 'email', query: { leadId: lead.id } })
+    .catch(() => undefined)
+}
+
 function goExplore(): void {
   router.push({ name: 'explore' }).catch(() => undefined)
 }
@@ -577,6 +583,15 @@ onUnmounted(() => {
               查看
             </button>
             <button
+              v-if="hasDrafted(row)"
+              type="button"
+              class="leads-table__action"
+              title="跳转到该线索的开发信"
+              @click.stop="goEmailLead(row)"
+            >
+              邮件
+            </button>
+            <button
               v-if="row.phase === 'scored'"
               type="button"
               class="leads-table__action"
@@ -598,6 +613,7 @@ onUnmounted(() => {
       @close="closeDrawer"
       @saved="onLeadSaved"
       @draft="onDraftLead"
+      @open-email="goEmailLead"
     />
   </section>
 </template>

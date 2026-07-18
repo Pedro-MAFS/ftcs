@@ -17,7 +17,17 @@ const emit = defineEmits<{
   close: []
   saved: [lead: LeadRowDto]
   draft: [lead: LeadRowDto]
+  openEmail: [lead: LeadRowDto]
 }>()
+
+const hasEmailDraft = computed(
+  () =>
+    !!props.lead &&
+    props.lead.phase === 'scored' &&
+    (props.lead.status === 'email_drafted' ||
+      props.lead.status === 'email_approved' ||
+      props.lead.status === 'contacted'),
+)
 
 type ContactDraft = {
   type: string
@@ -715,26 +725,36 @@ onUnmounted(() => {
             >
               编辑
             </button>
-            <button
-              v-else-if="lead.phase === 'scored'"
-              type="button"
-              class="btn-primary"
-              :disabled="drafting"
-              :title="
-                lead.status === 'email_drafted' || lead.status === 'email_approved'
-                  ? '重新生成开发信草稿'
-                  : '为该线索生成开发信草稿'
-              "
-              @click="emit('draft', lead)"
-            >
-              {{
-                drafting
-                  ? '起草中…'
-                  : lead.status === 'email_drafted' || lead.status === 'email_approved'
-                    ? '重写邮件'
-                    : '写邮件'
-              }}
-            </button>
+            <template v-else-if="lead.phase === 'scored'">
+              <button
+                v-if="hasEmailDraft"
+                type="button"
+                class="btn-secondary"
+                title="跳转到该线索的开发信"
+                @click="emit('openEmail', lead)"
+              >
+                邮件
+              </button>
+              <button
+                type="button"
+                class="btn-primary"
+                :disabled="drafting"
+                :title="
+                  hasEmailDraft
+                    ? '重新生成开发信草稿'
+                    : '为该线索生成开发信草稿'
+                "
+                @click="emit('draft', lead)"
+              >
+                {{
+                  drafting
+                    ? '起草中…'
+                    : hasEmailDraft
+                      ? '重写邮件'
+                      : '写邮件'
+                }}
+              </button>
+            </template>
           </template>
         </footer>
       </aside>
