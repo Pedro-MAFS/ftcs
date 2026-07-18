@@ -11,6 +11,8 @@ import type {
   DiscoverLeadsInput,
   DiscoverLeadsResult,
   LeadsSnapshotDto,
+  RawLeadSaveInput,
+  RawLeadSaveResult,
   ScoreAndDedupeResult,
   LibraryMutationResult,
   LibrarySnapshot,
@@ -86,6 +88,8 @@ const api = {
     ipcRenderer.invoke(IPC.EXPLORATION_START_R1, input),
   listLeads: (productId: string): Promise<LeadsSnapshotDto> =>
     ipcRenderer.invoke(IPC.LEADS_LIST, productId),
+  saveRawLead: (input: RawLeadSaveInput): Promise<RawLeadSaveResult> =>
+    ipcRenderer.invoke(IPC.LEADS_SAVE_RAW, input),
   scoreAndDedupeLeads: (productId: string): Promise<ScoreAndDedupeResult> =>
     ipcRenderer.invoke(IPC.LEADS_SCORE_AND_DEDUPE, productId),
   onAgentEvent: (handler: (payload: AgentEventPayload) => void): (() => void) => {

@@ -230,6 +230,14 @@ function closeDrawer(): void {
   detailLead.value = null
 }
 
+async function onLeadSaved(lead: LeadRowDto): Promise<void> {
+  detailLead.value = lead
+  selectedId.value = lead.id
+  await refreshLeads()
+  const latest = snapshot.value?.rows.find((r) => r.id === lead.id)
+  if (latest) detailLead.value = latest
+}
+
 function selectRow(row: LeadRowDto): void {
   selectedId.value = row.id
 }
@@ -439,6 +447,7 @@ onUnmounted(() => {
       :open="drawerOpen"
       :lead="detailLead"
       @close="closeDrawer"
+      @saved="onLeadSaved"
     />
   </section>
 </template>

@@ -38,6 +38,7 @@ import type {
   ProfileSaveInput,
   KeywordsSaveInput,
   DiscoverLeadsInput,
+  RawLeadSaveInput,
 } from './ipc/types'
 import { AgentRunController } from './opencode/agent-runner'
 import { bootstrapProductFromLibrary } from './profile/profile-bootstrap'
@@ -46,6 +47,7 @@ import { createEmptyDraftProfile, saveProductProfile, softDeleteProductProfile }
 import { loadExpansion, saveExpansion } from './keywords/keywords-reader'
 import { listExploreTasks } from './exploration/explore-tasks'
 import { listLeadsSnapshot } from './leads/leads-reader'
+import { saveRawLead } from './leads/lead-writer'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -481,6 +483,17 @@ function registerIpcHandlers(): void {
           pendingMail: 0,
         },
         error: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.LEADS_SAVE_RAW, (_event, input: RawLeadSaveInput) => {
+    try {
+      return saveRawLead(input)
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
       }
     }
   })

@@ -27,6 +27,7 @@ export const IPC = {
   EXPLORATION_LIST_TASKS: 'exploration:list-tasks',
   EXPLORATION_START_R1: 'exploration:start-r1',
   LEADS_LIST: 'leads:list',
+  LEADS_SAVE_RAW: 'leads:save-raw',
   LEADS_SCORE_AND_DEDUPE: 'leads:score-and-dedupe',
   AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
@@ -304,6 +305,38 @@ export interface ScoreAndDedupeResult {
   ok: boolean
   message: string
   productId?: string
+}
+
+export interface RawLeadContactEditDto {
+  type: string
+  value: string
+  confidence?: string
+}
+
+/** 人工编辑未评分（raw）线索 */
+export interface RawLeadSaveInput {
+  productId: string
+  leadId: string
+  company: {
+    name?: string
+    website?: string
+    country?: string
+    description?: string
+  }
+  source: {
+    url: string
+    type?: string
+    snippet?: string
+  }
+  match_reason: string
+  contacts: RawLeadContactEditDto[]
+  raw_score?: number | null
+}
+
+export interface RawLeadSaveResult {
+  ok: boolean
+  message: string
+  lead?: LeadRowDto
 }
 
 export type AgentTimelineItem = {

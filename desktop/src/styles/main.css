@@ -1350,6 +1350,92 @@ button:focus-visible {
   white-space: pre;
 }
 
+.lead-drawer__banner {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.lead-drawer__banner.is-error {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.lead-drawer__form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+}
+
+.lead-drawer__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.lead-drawer__form label.is-block {
+  grid-column: 1 / -1;
+}
+
+.lead-drawer__form input,
+.lead-drawer__form select,
+.lead-drawer__form textarea,
+.lead-drawer__contact-edit input,
+.lead-drawer__contact-edit select {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--bg-input);
+  color-scheme: dark;
+}
+
+.lead-drawer__form input::placeholder,
+.lead-drawer__form textarea::placeholder,
+.lead-drawer__contact-edit input::placeholder {
+  color: var(--text-muted);
+}
+
+.lead-drawer__form input:focus,
+.lead-drawer__form select:focus,
+.lead-drawer__form textarea:focus,
+.lead-drawer__contact-edit input:focus,
+.lead-drawer__contact-edit select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.lead-drawer__form select option,
+.lead-drawer__contact-edit select option {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.lead-drawer__form textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.lead-drawer__contact-edit {
+  display: grid;
+  grid-template-columns: 88px 1fr 96px auto;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
 .lead-drawer__foot {
   display: flex;
   justify-content: flex-end;

@@ -307,6 +307,37 @@ export interface ScoreAndDedupeResult {
   productId?: string
 }
 
+export interface RawLeadContactEditDto {
+  type: string
+  value: string
+  confidence?: string
+}
+
+export interface RawLeadSaveInput {
+  productId: string
+  leadId: string
+  company: {
+    name?: string
+    website?: string
+    country?: string
+    description?: string
+  }
+  source: {
+    url: string
+    type?: string
+    snippet?: string
+  }
+  match_reason: string
+  contacts: RawLeadContactEditDto[]
+  raw_score?: number | null
+}
+
+export interface RawLeadSaveResult {
+  ok: boolean
+  message: string
+  lead?: LeadRowDto
+}
+
 declare global {
   interface Window {
     ftcs?: {
@@ -347,6 +378,7 @@ declare global {
       listExploreTasks: (productId: string) => Promise<ExploreTasksSnapshotDto>
       startExploreR1: (input: DiscoverLeadsInput) => Promise<DiscoverLeadsResult>
       listLeads: (productId: string) => Promise<LeadsSnapshotDto>
+      saveRawLead: (input: RawLeadSaveInput) => Promise<RawLeadSaveResult>
       scoreAndDedupeLeads: (productId: string) => Promise<ScoreAndDedupeResult>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
