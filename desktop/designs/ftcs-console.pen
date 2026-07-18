@@ -993,7 +993,7 @@
                           "type": "text",
                           "id": "Ibskq",
                           "fill": "$text-muted",
-                          "content": "42 条 · 去重后 · 按评分排序",
+                          "content": "57 条 · 原始 15 + 已评分 42 · 可按状态筛选",
                           "fontFamily": "$font-ui",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -1012,9 +1012,9 @@
                           "id": "GlPDR",
                           "name": "BtnScore",
                           "height": 30,
+                          "fill": "$accent",
                           "cornerRadius": 6,
                           "stroke": "$border",
-                          "strokeWidth": 1,
                           "padding": [
                             6,
                             12
@@ -1024,11 +1024,11 @@
                             {
                               "type": "text",
                               "id": "PUv8O",
-                              "fill": "$text-secondary",
+                              "fill": "#FFFFFF",
                               "content": "评分去重",
                               "fontFamily": "$font-ui",
                               "fontSize": 12,
-                              "fontWeight": "normal"
+                              "fontWeight": "600"
                             }
                           ]
                         },
@@ -1037,8 +1037,10 @@
                           "id": "wLRk2",
                           "name": "BtnExplore",
                           "height": 30,
-                          "fill": "$accent",
+                          "fill": "#00000000",
                           "cornerRadius": 6,
+                          "stroke": "$border",
+                          "strokeWidth": 1,
                           "gap": 6,
                           "padding": [
                             6,
@@ -1053,16 +1055,16 @@
                               "height": 12,
                               "icon": "play",
                               "library": "lucide",
-                              "fill": "#FFFFFF"
+                              "fill": "$text-secondary"
                             },
                             {
                               "type": "text",
                               "id": "dYozB",
-                              "fill": "#FFFFFF",
+                              "fill": "$text-secondary",
                               "content": "一键 R1",
                               "fontFamily": "$font-ui",
                               "fontSize": 12,
-                              "fontWeight": "600"
+                              "fontWeight": "normal"
                             }
                           ]
                         }
@@ -1081,7 +1083,7 @@
                     {
                       "type": "frame",
                       "id": "P5Zplo",
-                      "name": "Filter 全部 42",
+                      "name": "Filter 全部 57",
                       "fill": "$bg-active",
                       "cornerRadius": 4,
                       "stroke": "$border",
@@ -1096,7 +1098,59 @@
                           "type": "text",
                           "id": "lI6a9",
                           "fill": "$text",
-                          "content": "全部 42",
+                          "content": "全部 57",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "LryiM",
+                      "name": "Filter 未评分 15",
+                      "fill": "$bg-elevated",
+                      "cornerRadius": 4,
+                      "stroke": "#00000000",
+                      "strokeWidth": 1,
+                      "padding": [
+                        5,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "aEvvG",
+                          "name": "Label",
+                          "fill": "$warning",
+                          "content": "未评分 15",
+                          "fontFamily": "$font-ui",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "IkCKa",
+                      "name": "Filter 已评分 42",
+                      "fill": "$bg-elevated",
+                      "cornerRadius": 4,
+                      "stroke": "#00000000",
+                      "strokeWidth": 1,
+                      "padding": [
+                        5,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "w0Lgbq",
+                          "name": "Label",
+                          "fill": "$text-muted",
+                          "content": "已评分 42",
                           "fontFamily": "$font-ui",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -1283,7 +1337,7 @@
                           "type": "frame",
                           "id": "uKgGZ",
                           "name": "H 公司",
-                          "width": 180,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1300,9 +1354,29 @@
                         },
                         {
                           "type": "frame",
+                          "id": "X9LkM",
+                          "name": "H 状态",
+                          "width": 72,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "RdWq7",
+                              "name": "Label",
+                              "fill": "$text-muted",
+                              "content": "状态",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
                           "id": "FxwSq",
                           "name": "H 域名",
-                          "width": 140,
+                          "width": 120,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1321,7 +1395,7 @@
                           "type": "frame",
                           "id": "Ak4Hu",
                           "name": "H 国家",
-                          "width": 70,
+                          "width": 48,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1378,7 +1452,7 @@
                           "type": "frame",
                           "id": "JPV7G",
                           "name": "H 匹配理由",
-                          "width": 200,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1434,7 +1508,7 @@
                         {
                           "type": "frame",
                           "id": "OPDGQ",
-                          "width": 180,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1443,7 +1517,7 @@
                               "id": "sNDww",
                               "fill": "$text",
                               "textGrowth": "fixed-width",
-                              "width": 170,
+                              "width": 140,
                               "content": "Nordic Flow Controls",
                               "fontFamily": "$font-ui",
                               "fontSize": 12,
@@ -1453,8 +1527,42 @@
                         },
                         {
                           "type": "frame",
+                          "id": "KLFAK",
+                          "name": "C 状态",
+                          "width": 72,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "GXNWL",
+                              "name": "Badge",
+                              "fill": "#4ade8014",
+                              "cornerRadius": 4,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "kAJp1",
+                                  "name": "BadgeText",
+                                  "fill": "$success",
+                                  "content": "已评分",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
                           "id": "qi6KG",
-                          "width": 140,
+                          "width": 120,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1463,7 +1571,7 @@
                               "id": "XszSJ",
                               "fill": "$text-secondary",
                               "textGrowth": "fixed-width",
-                              "width": 130,
+                              "width": 110,
                               "content": "nordicflow.se",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
@@ -1474,7 +1582,7 @@
                         {
                           "type": "frame",
                           "id": "R6RSJF",
-                          "width": 70,
+                          "width": 48,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1541,7 +1649,7 @@
                         {
                           "type": "frame",
                           "id": "C4zqAM",
-                          "width": 200,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1550,7 +1658,7 @@
                               "id": "MkebR",
                               "fill": "$text-muted",
                               "textGrowth": "fixed-width",
-                              "width": 190,
+                              "width": 140,
                               "content": "阀门分销商 · 有采购页",
                               "fontFamily": "$font-ui",
                               "fontSize": 11,
@@ -1598,7 +1706,7 @@
                         {
                           "type": "frame",
                           "id": "FP8N3",
-                          "width": 180,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1617,8 +1725,42 @@
                         },
                         {
                           "type": "frame",
+                          "id": "lPz54",
+                          "name": "C 状态",
+                          "width": 72,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "T8Pnay",
+                              "name": "Badge",
+                              "fill": "#4ade8014",
+                              "cornerRadius": 4,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "yy5tg",
+                                  "name": "BadgeText",
+                                  "fill": "$success",
+                                  "content": "已评分",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
                           "id": "f1vBe",
-                          "width": 140,
+                          "width": 120,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1638,7 +1780,7 @@
                         {
                           "type": "frame",
                           "id": "l6D6yT",
-                          "width": 70,
+                          "width": 48,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1705,7 +1847,7 @@
                         {
                           "type": "frame",
                           "id": "YYSU5",
-                          "width": 200,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1762,7 +1904,7 @@
                         {
                           "type": "frame",
                           "id": "s63by",
-                          "width": 180,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1781,8 +1923,42 @@
                         },
                         {
                           "type": "frame",
+                          "id": "H5asF",
+                          "name": "C 状态",
+                          "width": 72,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "VbFS9",
+                              "name": "Badge",
+                              "fill": "#4ade8014",
+                              "cornerRadius": 4,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "mQgoh",
+                                  "name": "BadgeText",
+                                  "fill": "$success",
+                                  "content": "已评分",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
                           "id": "qcyTB",
-                          "width": 140,
+                          "width": 120,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1802,7 +1978,7 @@
                         {
                           "type": "frame",
                           "id": "XnJ54",
-                          "width": 70,
+                          "width": 48,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1869,7 +2045,7 @@
                         {
                           "type": "frame",
                           "id": "ITGYS",
-                          "width": 200,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1926,7 +2102,7 @@
                         {
                           "type": "frame",
                           "id": "QVtPi",
-                          "width": 180,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1945,8 +2121,42 @@
                         },
                         {
                           "type": "frame",
+                          "id": "pw7IX",
+                          "name": "C 状态",
+                          "width": 72,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "aXUxh",
+                              "name": "Badge",
+                              "fill": "#4ade8014",
+                              "cornerRadius": 4,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "DKDLr",
+                                  "name": "BadgeText",
+                                  "fill": "$success",
+                                  "content": "已评分",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
                           "id": "y32FcJ",
-                          "width": 140,
+                          "width": 120,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -1966,7 +2176,7 @@
                         {
                           "type": "frame",
                           "id": "ocIXG",
-                          "width": 70,
+                          "width": 48,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2033,7 +2243,7 @@
                         {
                           "type": "frame",
                           "id": "JmEVf",
-                          "width": 200,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2090,7 +2300,7 @@
                         {
                           "type": "frame",
                           "id": "dJISe",
-                          "width": 180,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2109,8 +2319,42 @@
                         },
                         {
                           "type": "frame",
+                          "id": "X97iuX",
+                          "name": "C 状态",
+                          "width": 72,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "Y2iCz",
+                              "name": "Badge",
+                              "fill": "#4ade8014",
+                              "cornerRadius": 4,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "SnK0K",
+                                  "name": "BadgeText",
+                                  "fill": "$success",
+                                  "content": "已评分",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
                           "id": "dbpLp",
-                          "width": 140,
+                          "width": 120,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2130,7 +2374,7 @@
                         {
                           "type": "frame",
                           "id": "F2IiB",
-                          "width": 70,
+                          "width": 48,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2197,7 +2441,7 @@
                         {
                           "type": "frame",
                           "id": "W9tNz9",
-                          "width": 200,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2254,7 +2498,7 @@
                         {
                           "type": "frame",
                           "id": "g70PD",
-                          "width": 180,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2263,7 +2507,7 @@
                               "id": "Xbs5j",
                               "fill": "$text",
                               "textGrowth": "fixed-width",
-                              "width": 170,
+                              "width": 140,
                               "content": "Andes Hydro Tech",
                               "fontFamily": "$font-ui",
                               "fontSize": 12,
@@ -2273,8 +2517,42 @@
                         },
                         {
                           "type": "frame",
+                          "id": "XNF2I",
+                          "name": "C 状态",
+                          "width": 72,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "ovHLL",
+                              "name": "Badge",
+                              "fill": "#fbbf2414",
+                              "cornerRadius": 4,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "z7OSkh",
+                                  "name": "BadgeText",
+                                  "fill": "$warning",
+                                  "content": "未评分",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
                           "id": "tj69B",
-                          "width": 140,
+                          "width": 120,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2283,7 +2561,7 @@
                               "id": "HhvR8",
                               "fill": "$text-secondary",
                               "textGrowth": "fixed-width",
-                              "width": 130,
+                              "width": 110,
                               "content": "andeshydro.cl",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
@@ -2294,7 +2572,7 @@
                         {
                           "type": "frame",
                           "id": "KsbML",
-                          "width": 70,
+                          "width": 48,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2311,32 +2589,21 @@
                         },
                         {
                           "type": "frame",
-                          "id": "e8KuoP",
+                          "id": "ELzE3",
+                          "name": "C Tier",
                           "width": 50,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "frame",
-                              "id": "C01FNU",
-                              "fill": "#6b6b6b14",
-                              "cornerRadius": 4,
-                              "padding": [
-                                2,
-                                6
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "bWeBo",
-                                  "fill": "$text-muted",
-                                  "content": "C",
-                                  "fontFamily": "$font-ui",
-                                  "fontSize": 10,
-                                  "fontWeight": "600"
-                                }
-                              ]
+                              "type": "text",
+                              "id": "KfkKw",
+                              "name": "Dash",
+                              "fill": "$text-muted",
+                              "content": "—",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -2350,18 +2617,18 @@
                             {
                               "type": "text",
                               "id": "r9OMXW",
-                              "fill": "$text",
-                              "content": "54",
+                              "fill": "$text-muted",
+                              "content": "—",
                               "fontFamily": "$font-mono",
                               "fontSize": 12,
-                              "fontWeight": "600"
+                              "fontWeight": "normal"
                             }
                           ]
                         },
                         {
                           "type": "frame",
                           "id": "infca",
-                          "width": 200,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2370,8 +2637,8 @@
                               "id": "L0nqU",
                               "fill": "$text-muted",
                               "textGrowth": "fixed-width",
-                              "width": 190,
-                              "content": "拉美水利工程",
+                              "width": 140,
+                              "content": "R1 新发现 · 塑木经销商候选",
                               "fontFamily": "$font-ui",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -2388,8 +2655,8 @@
                             {
                               "type": "text",
                               "id": "jY7TP",
-                              "fill": "$accent",
-                              "content": "写邮件",
+                              "fill": "$text-secondary",
+                              "content": "查看",
                               "fontFamily": "$font-ui",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -2418,7 +2685,7 @@
                         {
                           "type": "frame",
                           "id": "LEbal",
-                          "width": 180,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2427,7 +2694,7 @@
                               "id": "Dp2aM",
                               "fill": "$text",
                               "textGrowth": "fixed-width",
-                              "width": 170,
+                              "width": 140,
                               "content": "Bosphorus Trade Co",
                               "fontFamily": "$font-ui",
                               "fontSize": 12,
@@ -2437,8 +2704,42 @@
                         },
                         {
                           "type": "frame",
+                          "id": "tuN7a",
+                          "name": "C 状态",
+                          "width": 72,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "Hu2oC",
+                              "name": "Badge",
+                              "fill": "#fbbf2414",
+                              "cornerRadius": 4,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "vwSHH",
+                                  "name": "BadgeText",
+                                  "fill": "$warning",
+                                  "content": "未评分",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
                           "id": "tyLCJ",
-                          "width": 140,
+                          "width": 120,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2447,7 +2748,7 @@
                               "id": "vMBTR",
                               "fill": "$text-secondary",
                               "textGrowth": "fixed-width",
-                              "width": 130,
+                              "width": 110,
                               "content": "bosphorustrade.com.tr",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
@@ -2458,7 +2759,7 @@
                         {
                           "type": "frame",
                           "id": "ZNkCq",
-                          "width": 70,
+                          "width": 48,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2475,32 +2776,21 @@
                         },
                         {
                           "type": "frame",
-                          "id": "sU3JA",
+                          "id": "dMmzB",
+                          "name": "C Tier",
                           "width": 50,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "frame",
-                              "id": "RFx5U",
-                              "fill": "#6b6b6b14",
-                              "cornerRadius": 4,
-                              "padding": [
-                                2,
-                                6
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "LLYRm",
-                                  "fill": "$text-muted",
-                                  "content": "C",
-                                  "fontFamily": "$font-ui",
-                                  "fontSize": 10,
-                                  "fontWeight": "600"
-                                }
-                              ]
+                              "type": "text",
+                              "id": "byloN",
+                              "name": "Dash",
+                              "fill": "$text-muted",
+                              "content": "—",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -2514,18 +2804,18 @@
                             {
                               "type": "text",
                               "id": "z3KeMC",
-                              "fill": "$text",
-                              "content": "49",
+                              "fill": "$text-muted",
+                              "content": "—",
                               "fontFamily": "$font-mono",
                               "fontSize": 12,
-                              "fontWeight": "600"
+                              "fontWeight": "normal"
                             }
                           ]
                         },
                         {
                           "type": "frame",
                           "id": "BZ1qI",
-                          "width": 200,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2534,8 +2824,8 @@
                               "id": "rjjhB",
                               "fill": "$text-muted",
                               "textGrowth": "fixed-width",
-                              "width": 190,
-                              "content": "土耳其一般贸易",
+                              "width": 140,
+                              "content": "R1 新发现 · 建材贸易商候选",
                               "fontFamily": "$font-ui",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -2552,8 +2842,8 @@
                             {
                               "type": "text",
                               "id": "C9fs6Y",
-                              "fill": "$accent",
-                              "content": "写邮件",
+                              "fill": "$text-secondary",
+                              "content": "查看",
                               "fontFamily": "$font-ui",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -2582,7 +2872,7 @@
                         {
                           "type": "frame",
                           "id": "YXGvH",
-                          "width": 180,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2591,7 +2881,7 @@
                               "id": "Mi2OQ",
                               "fill": "$text",
                               "textGrowth": "fixed-width",
-                              "width": 170,
+                              "width": 140,
                               "content": "Cape Industrial SA",
                               "fontFamily": "$font-ui",
                               "fontSize": 12,
@@ -2601,8 +2891,42 @@
                         },
                         {
                           "type": "frame",
+                          "id": "Sxd0N",
+                          "name": "C 状态",
+                          "width": 72,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "PMZHF",
+                              "name": "Badge",
+                              "fill": "#fbbf2414",
+                              "cornerRadius": 4,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "dNbEE",
+                                  "name": "BadgeText",
+                                  "fill": "$warning",
+                                  "content": "未评分",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
                           "id": "R3pU9",
-                          "width": 140,
+                          "width": 120,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2611,7 +2935,7 @@
                               "id": "QkCWK",
                               "fill": "$text-secondary",
                               "textGrowth": "fixed-width",
-                              "width": 130,
+                              "width": 110,
                               "content": "capeind.co.za",
                               "fontFamily": "$font-mono",
                               "fontSize": 11,
@@ -2622,7 +2946,7 @@
                         {
                           "type": "frame",
                           "id": "g46Vf",
-                          "width": 70,
+                          "width": 48,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2639,32 +2963,21 @@
                         },
                         {
                           "type": "frame",
-                          "id": "rSpjN",
+                          "id": "o0XQq",
+                          "name": "C Tier",
                           "width": 50,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
                             {
-                              "type": "frame",
-                              "id": "QMPze",
-                              "fill": "#6b6b6b14",
-                              "cornerRadius": 4,
-                              "padding": [
-                                2,
-                                6
-                              ],
-                              "alignItems": "center",
-                              "children": [
-                                {
-                                  "type": "text",
-                                  "id": "PNQQK",
-                                  "fill": "$text-muted",
-                                  "content": "C",
-                                  "fontFamily": "$font-ui",
-                                  "fontSize": 10,
-                                  "fontWeight": "600"
-                                }
-                              ]
+                              "type": "text",
+                              "id": "mQk67",
+                              "name": "Dash",
+                              "fill": "$text-muted",
+                              "content": "—",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
                             }
                           ]
                         },
@@ -2678,18 +2991,18 @@
                             {
                               "type": "text",
                               "id": "RUFWb",
-                              "fill": "$text",
-                              "content": "45",
+                              "fill": "$text-muted",
+                              "content": "—",
                               "fontFamily": "$font-mono",
                               "fontSize": 12,
-                              "fontWeight": "600"
+                              "fontWeight": "normal"
                             }
                           ]
                         },
                         {
                           "type": "frame",
                           "id": "YE64x",
-                          "width": 200,
+                          "width": 150,
                           "height": "fill_container",
                           "alignItems": "center",
                           "children": [
@@ -2698,8 +3011,8 @@
                               "id": "kZcAc",
                               "fill": "$text-muted",
                               "textGrowth": "fixed-width",
-                              "width": 190,
-                              "content": "南非工业供应",
+                              "width": 140,
+                              "content": "R1 新发现 · 待评分去重",
                               "fontFamily": "$font-ui",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -2716,8 +3029,382 @@
                             {
                               "type": "text",
                               "id": "JdAFE",
-                              "fill": "$accent",
-                              "content": "写邮件",
+                              "fill": "$text-secondary",
+                              "content": "查看",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "iLzSA",
+                      "name": "Row Maple Deck Supply",
+                      "width": "fill_container",
+                      "height": 40,
+                      "fill": "#00000000",
+                      "stroke": "$border-subtle",
+                      "strokeWidth": {
+                        "bottom": 1
+                      },
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "c6l4t",
+                          "width": 150,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "dWjXJ",
+                              "fill": "$text",
+                              "textGrowth": "fixed-width",
+                              "width": 140,
+                              "content": "Maple Deck Supply",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "BaH1o",
+                          "name": "C 状态",
+                          "width": 72,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "dXGOZ",
+                              "name": "Badge",
+                              "fill": "#fbbf2414",
+                              "cornerRadius": 4,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "e1qXh",
+                                  "name": "BadgeText",
+                                  "fill": "$warning",
+                                  "content": "未评分",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Or9KG",
+                          "width": 120,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "OVZYx",
+                              "fill": "$text-secondary",
+                              "textGrowth": "fixed-width",
+                              "width": 110,
+                              "content": "mapledeck.ca",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Z0Ifst",
+                          "width": 48,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "to3IV",
+                              "fill": "$text-secondary",
+                              "content": "CA",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "IRLN4",
+                          "name": "C Tier",
+                          "width": 50,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "q8n1uF",
+                              "name": "Dash",
+                              "fill": "$text-muted",
+                              "content": "—",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "v9Ar4s",
+                          "width": 50,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Uquvj",
+                              "fill": "$text-muted",
+                              "content": "—",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "yvy98",
+                          "width": 150,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "eGx58",
+                              "fill": "$text-muted",
+                              "textGrowth": "fixed-width",
+                              "width": 140,
+                              "content": "R1 新发现 · 加拿大户外地板",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "O8fbM",
+                          "width": 70,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "GuC96",
+                              "fill": "$text-secondary",
+                              "content": "查看",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "JHG7s",
+                      "name": "Row Baltic WPC Import",
+                      "width": "fill_container",
+                      "height": 40,
+                      "fill": "#00000000",
+                      "stroke": "$border-subtle",
+                      "strokeWidth": {
+                        "bottom": 1
+                      },
+                      "padding": [
+                        0,
+                        12
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "D32LG5",
+                          "width": 150,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "E68p2T",
+                              "fill": "$text",
+                              "textGrowth": "fixed-width",
+                              "width": 140,
+                              "content": "Baltic WPC Import",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "trJJJ",
+                          "name": "C 状态",
+                          "width": 72,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "PcJQm",
+                              "name": "Badge",
+                              "fill": "#fbbf2414",
+                              "cornerRadius": 4,
+                              "padding": [
+                                2,
+                                6
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "ByfwH",
+                                  "name": "BadgeText",
+                                  "fill": "$warning",
+                                  "content": "未评分",
+                                  "fontFamily": "$font-ui",
+                                  "fontSize": 10,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ytCcD",
+                          "width": 120,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "py0IC",
+                              "fill": "$text-secondary",
+                              "textGrowth": "fixed-width",
+                              "width": 110,
+                              "content": "balticwpc.lt",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "AYn4I",
+                          "width": 48,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "a3pRqm",
+                              "fill": "$text-secondary",
+                              "content": "LT",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pd8Vm",
+                          "name": "C Tier",
+                          "width": 50,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "HzxoO",
+                              "name": "Dash",
+                              "fill": "$text-muted",
+                              "content": "—",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "nY4GG",
+                          "width": 50,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "dCjP5",
+                              "fill": "$text-muted",
+                              "content": "—",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "vGZeI",
+                          "width": 150,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "MA6T7",
+                              "fill": "$text-muted",
+                              "textGrowth": "fixed-width",
+                              "width": 140,
+                              "content": "R1 新发现 · 波罗的海进口商",
+                              "fontFamily": "$font-ui",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "s1edW",
+                          "width": 70,
+                          "height": "fill_container",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "FX3Qi",
+                              "fill": "$text-secondary",
+                              "content": "查看",
                               "fontFamily": "$font-ui",
                               "fontSize": 11,
                               "fontWeight": "normal"
@@ -14228,7 +14915,7 @@
                           "type": "text",
                           "id": "mEisZ",
                           "fill": "$text-muted",
-                          "content": "关键词就绪 1 · 运行中 1 · 已完成 1",
+                          "content": "关键词就绪 1 · 运行中 1 · 已完成待评分 1",
                           "fontFamily": "$font-ui",
                           "fontSize": 11,
                           "fontWeight": "normal"
@@ -14851,7 +15538,7 @@
                                       "type": "text",
                                       "id": "viWsN",
                                       "fill": "$text-muted",
-                                      "content": "R1 完成 · 20 词 · 35 线索 · 去重后 25",
+                                      "content": "R1 完成 · 20 词 · 35 条原始线索 · 尚未评分去重",
                                       "fontFamily": "$font-ui",
                                       "fontSize": 11,
                                       "fontWeight": "normal"
@@ -14861,7 +15548,7 @@
                                 {
                                   "type": "frame",
                                   "id": "CuFSB",
-                                  "fill": "$bg-active",
+                                  "fill": "#fbbf2414",
                                   "cornerRadius": 4,
                                   "padding": [
                                     4,
@@ -14871,10 +15558,81 @@
                                     {
                                       "type": "text",
                                       "id": "u1zDO",
-                                      "fill": "$text-secondary",
-                                      "content": "已完成",
+                                      "fill": "$warning",
+                                      "content": "待评分",
                                       "fontFamily": "$font-ui",
                                       "fontSize": 10,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "YZSY7",
+                              "name": "TaskActions",
+                              "width": "fill_container",
+                              "gap": 8,
+                              "justifyContent": "end",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "uVwh4",
+                                  "name": "BtnViewLeads",
+                                  "cornerRadius": 6,
+                                  "stroke": "$border",
+                                  "strokeWidth": 1,
+                                  "padding": [
+                                    6,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "y0ztOv",
+                                      "name": "Label",
+                                      "fill": "$text-secondary",
+                                      "content": "查看线索",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 12,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "Aefgg",
+                                  "name": "BtnScoreTask",
+                                  "fill": "$accent",
+                                  "cornerRadius": 6,
+                                  "gap": 6,
+                                  "padding": [
+                                    6,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon",
+                                      "id": "lb7Xe",
+                                      "name": "Icon",
+                                      "width": 12,
+                                      "height": 12,
+                                      "icon": "sparkles",
+                                      "library": "lucide",
+                                      "fill": "#FFFFFF"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "K3ch5M",
+                                      "name": "Label",
+                                      "fill": "#FFFFFF",
+                                      "content": "评分去重",
+                                      "fontFamily": "$font-ui",
+                                      "fontSize": 12,
                                       "fontWeight": "600"
                                     }
                                   ]

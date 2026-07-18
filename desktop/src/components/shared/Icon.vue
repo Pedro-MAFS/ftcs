@@ -23,6 +23,7 @@ defineProps<{
     | 'folder'
     | 'folder-plus'
     | 'chevron-left'
+    | 'x'
   size?: number
 }>()
 </script>
@@ -150,6 +151,10 @@ defineProps<{
     </template>
     <template v-else-if="name === 'chevron-left'">
       <path d="m15 18-6-6 6-6" />
+    </template>
+    <template v-else-if="name === 'x'">
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
     </template>
   </svg>
 </template>

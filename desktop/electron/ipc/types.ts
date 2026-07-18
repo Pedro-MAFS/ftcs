@@ -26,6 +26,7 @@ export const IPC = {
   KEYWORDS_SAVE: 'keywords:save',
   EXPLORATION_LIST_TASKS: 'exploration:list-tasks',
   EXPLORATION_START_R1: 'exploration:start-r1',
+  LEADS_LIST: 'leads:list',
   AGENT_EVENT: 'agent:event',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
@@ -216,6 +217,76 @@ export interface ExploreTasksSnapshotDto {
     failed: number
   }
   expansion: KeywordExpansionDto | null
+}
+
+export type LeadPhaseDto = 'raw' | 'scored'
+export type LeadTierDto = 'high' | 'medium' | 'low' | null
+
+export interface LeadContactDto {
+  type: string
+  value: string
+  confidence?: string
+}
+
+export interface LeadCompanyDetailDto {
+  name: string
+  website: string
+  country: string
+  description: string
+}
+
+export interface LeadSourceDetailDto {
+  url: string
+  type: string
+  snippet: string
+}
+
+export interface LeadScoreBreakdownDto {
+  product_match: number
+  purchase_intent: number
+  size_fit: number
+  geo_match: number
+  reachability: number
+  competition: number
+}
+
+export interface LeadRowDto {
+  id: string
+  productId: string
+  phase: LeadPhaseDto
+  companyName: string
+  domain: string
+  country: string
+  tier: LeadTierDto
+  tierLabel: string
+  score: number | null
+  matchReason: string
+  sourceUrl: string
+  round: string
+  status: string | null
+  discoveredAt: string
+  queryId: string
+  rawScore: number | null
+  dedupeKey: string
+  company: LeadCompanyDetailDto
+  source: LeadSourceDetailDto
+  scoreBreakdown: LeadScoreBreakdownDto | null
+  contacts: LeadContactDto[]
+  contactLabel: string
+  record: Record<string, unknown>
+}
+
+export interface LeadsSnapshotDto {
+  productId: string
+  updatedAt?: string
+  rows: LeadRowDto[]
+  stats: {
+    total: number
+    raw: number
+    scored: number
+    byTier: { high: number; medium: number; low: number }
+    pendingMail: number
+  }
 }
 
 export type AgentTimelineItem = {

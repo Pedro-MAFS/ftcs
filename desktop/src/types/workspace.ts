@@ -83,7 +83,7 @@ export const SECTION_META: Record<
   leads: {
     label: '线索',
     title: '线索库',
-    subtitle: '去重评分后的线索 · 按 Tier 筛选',
+    subtitle: '原始与已评分线索 · 可按状态筛选',
   },
   email: {
     label: '邮件',

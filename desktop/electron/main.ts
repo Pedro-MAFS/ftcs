@@ -45,6 +45,7 @@ import { listProductSummaries, loadProfile } from './profile/profile-reader'
 import { createEmptyDraftProfile, saveProductProfile, softDeleteProductProfile } from './profile/profile-writer'
 import { loadExpansion, saveExpansion } from './keywords/keywords-reader'
 import { listExploreTasks } from './exploration/explore-tasks'
+import { listLeadsSnapshot } from './leads/leads-reader'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -445,6 +446,38 @@ function registerIpcHandlers(): void {
           failed: 0,
         },
         expansion: null,
+        error: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.LEADS_LIST, (_event, productId: string) => {
+    try {
+      if (!productId || typeof productId !== 'string') {
+        return {
+          productId: '',
+          rows: [],
+          stats: {
+            total: 0,
+            raw: 0,
+            scored: 0,
+            byTier: { high: 0, medium: 0, low: 0 },
+            pendingMail: 0,
+          },
+        }
+      }
+      return listLeadsSnapshot(productId)
+    } catch (err) {
+      return {
+        productId,
+        rows: [],
+        stats: {
+          total: 0,
+          raw: 0,
+          scored: 0,
+          byTier: { high: 0, medium: 0, low: 0 },
+          pendingMail: 0,
+        },
         error: err instanceof Error ? err.message : String(err),
       }
     }

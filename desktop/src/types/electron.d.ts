@@ -220,6 +220,76 @@ export interface ExploreTasksSnapshotDto {
   expansion: KeywordExpansionDto | null
 }
 
+export type LeadPhaseDto = 'raw' | 'scored'
+export type LeadTierDto = 'high' | 'medium' | 'low' | null
+
+export interface LeadContactDto {
+  type: string
+  value: string
+  confidence?: string
+}
+
+export interface LeadCompanyDetailDto {
+  name: string
+  website: string
+  country: string
+  description: string
+}
+
+export interface LeadSourceDetailDto {
+  url: string
+  type: string
+  snippet: string
+}
+
+export interface LeadScoreBreakdownDto {
+  product_match: number
+  purchase_intent: number
+  size_fit: number
+  geo_match: number
+  reachability: number
+  competition: number
+}
+
+export interface LeadRowDto {
+  id: string
+  productId: string
+  phase: LeadPhaseDto
+  companyName: string
+  domain: string
+  country: string
+  tier: LeadTierDto
+  tierLabel: string
+  score: number | null
+  matchReason: string
+  sourceUrl: string
+  round: string
+  status: string | null
+  discoveredAt: string
+  queryId: string
+  rawScore: number | null
+  dedupeKey: string
+  company: LeadCompanyDetailDto
+  source: LeadSourceDetailDto
+  scoreBreakdown: LeadScoreBreakdownDto | null
+  contacts: LeadContactDto[]
+  contactLabel: string
+  record: Record<string, unknown>
+}
+
+export interface LeadsSnapshotDto {
+  productId: string
+  updatedAt?: string
+  rows: LeadRowDto[]
+  stats: {
+    total: number
+    raw: number
+    scored: number
+    byTier: { high: number; medium: number; low: number }
+    pendingMail: number
+  }
+}
+
 declare global {
   interface Window {
     ftcs?: {
@@ -259,6 +329,7 @@ declare global {
       saveKeywords: (input: KeywordsSaveInput) => Promise<KeywordsSaveResult>
       listExploreTasks: (productId: string) => Promise<ExploreTasksSnapshotDto>
       startExploreR1: (input: DiscoverLeadsInput) => Promise<DiscoverLeadsResult>
+      listLeads: (productId: string) => Promise<LeadsSnapshotDto>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
       getSidecarLogs: () => Promise<string[]>
