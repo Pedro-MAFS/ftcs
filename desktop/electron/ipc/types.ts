@@ -38,6 +38,7 @@ export const IPC = {
   EMAIL_DRAFT_REJECT: 'email:draft-reject',
   EMAIL_DRAFT_APPROVE: 'email:draft-approve',
   AGENT_EVENT: 'agent:event',
+  APP_OPEN_EXTERNAL: 'app:open-external',
   AUTH_GET_SESSION: 'auth:get-session',
   AUTH_LOGIN: 'auth:login',
   AUTH_CANCEL_LOGIN: 'auth:cancel-login',

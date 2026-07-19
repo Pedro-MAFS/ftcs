@@ -42,6 +42,8 @@ import type {
 const api = {
   platform: process.platform as NodeJS.Platform,
   getAppStatus: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.APP_GET_STATUS),
+  openExternal: (url: string): Promise<{ ok: boolean; message: string }> =>
+    ipcRenderer.invoke(IPC.APP_OPEN_EXTERNAL, url),
   checkAgentPreflight: (kind: AgentPreflightKind): Promise<AgentPreflightResult> =>
     ipcRenderer.invoke(IPC.APP_AGENT_PREFLIGHT, kind),
   startOpenCode: (): Promise<OpenCodeActionResult> =>

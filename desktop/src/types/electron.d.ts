@@ -452,6 +452,7 @@ declare global {
     ftcs?: {
       platform: NodeJS.Platform
       getAppStatus: () => Promise<AppStatus>
+      openExternal: (url: string) => Promise<{ ok: boolean; message: string }>
       checkAgentPreflight: (kind: AgentPreflightKind) => Promise<AgentPreflightResult>
       startOpenCode: () => Promise<OpenCodeActionResult>
       stopOpenCode: () => Promise<OpenCodeActionResult>

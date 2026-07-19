@@ -8,6 +8,7 @@ import { SECTION_META } from '../types/workspace'
 import type { ModelProviderId, SettingsSnapshot } from '../types/settings'
 import { MODEL_CATALOG } from '../types/settings'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
+import { PRODUCT_LINKS } from '../config/links'
 
 const meta = SECTION_META.settings
 const { status, runtimeHealthy, runtimeLabel, loading, restartOpenCode, refresh } =
@@ -89,6 +90,19 @@ async function onAuthLogout(): Promise<void> {
   confirmLogout.value = false
   const res = await logout()
   authHint.value = res.message
+}
+
+async function openProductLink(url: string): Promise<void> {
+  if (!window.ftcs?.openExternal) {
+    error.value = '当前环境无法打开外链'
+    return
+  }
+  try {
+    const res = await window.ftcs.openExternal(url)
+    if (!res.ok) error.value = res.message
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  }
 }
 
 const isCustom = computed(() => form.providerId === 'custom')
@@ -568,6 +582,36 @@ onMounted(() => {
             <span class="muted">OpenCode 模板</span>
             <span class="mono">{{ snapshot?.opencodeConfigPath ?? '—' }}</span>
           </div>
+
+          <label class="field-label">官网与帮助</label>
+          <div class="settings-actions-row">
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              @click="openProductLink(PRODUCT_LINKS.website)"
+            >
+              <Icon name="globe" :size="12" />
+              打开官网
+            </button>
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              @click="openProductLink(PRODUCT_LINKS.docs)"
+            >
+              <Icon name="file-text" :size="12" />
+              帮助文档
+            </button>
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              @click="openProductLink(PRODUCT_LINKS.download)"
+            >
+              <Icon name="package" :size="12" />
+              下载页
+            </button>
+          </div>
+          <p class="hint-line mono">{{ PRODUCT_LINKS.website }}</p>
+
           <p class="settings-foot">
             <Icon name="info" :size="14" />
             API Key 与模型偏好均写入本地 workspace/.env；opencode.json 由模板托管，同步不会覆盖你的设置。

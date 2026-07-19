@@ -250,6 +250,20 @@ function broadcastAuthChanged(): void {
 function registerIpcHandlers(): void {
   setAuthSessionListener(broadcastAuthChanged)
   ipcMain.handle(IPC.APP_GET_STATUS, async () => buildAppStatus())
+  ipcMain.handle(IPC.APP_OPEN_EXTERNAL, async (_event, url: string) => {
+    const raw = String(url || '').trim()
+    let parsed: URL
+    try {
+      parsed = new URL(raw)
+    } catch {
+      return { ok: false, message: '无效的链接' }
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return { ok: false, message: '仅支持 http(s) 链接' }
+    }
+    await shell.openExternal(parsed.toString())
+    return { ok: true, message: '已打开浏览器' }
+  })
   ipcMain.handle(IPC.AUTH_GET_SESSION, () => getAuthSession())
   ipcMain.handle(IPC.AUTH_LOGIN, async () => {
     const result = await startLogin()

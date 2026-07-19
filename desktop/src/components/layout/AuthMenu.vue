@@ -5,6 +5,7 @@ import Icon from '../shared/Icon.vue'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import { useAuth } from '../../composables/useAuth'
 import { useSettingsNav } from '../../composables/useSettingsNav'
+import { PRODUCT_LINKS } from '../../config/links'
 
 const open = ref(false)
 const confirmLogout = ref(false)
@@ -78,6 +79,23 @@ async function onFeedback(): Promise<void> {
   const res = await openFeedback()
   hint.value = res.message
   if (res.ok) close()
+}
+
+async function openLink(url: string): Promise<void> {
+  if (!window.ftcs?.openExternal) {
+    hint.value = '当前环境无法打开外链'
+    return
+  }
+  const res = await window.ftcs.openExternal(url)
+  hint.value = res.ok ? '已在浏览器打开' : res.message
+}
+
+function openDocs(): void {
+  void openLink(PRODUCT_LINKS.docs)
+}
+
+function openWebsite(): void {
+  void openLink(PRODUCT_LINKS.website)
 }
 
 async function confirmLoginThenFeedback(): Promise<void> {
@@ -161,6 +179,14 @@ onUnmounted(() => {
         <button type="button" class="auth-menu__item" :disabled="busy" @click="onFeedback">
           <Icon name="message-square" :size="14" />
           意见反馈
+        </button>
+        <button type="button" class="auth-menu__item" @click="openWebsite">
+          <Icon name="globe" :size="14" />
+          产品官网
+        </button>
+        <button type="button" class="auth-menu__item" @click="openDocs">
+          <Icon name="file-text" :size="14" />
+          帮助文档
         </button>
         <button type="button" class="auth-menu__item is-danger" @click="requestLogout">
           <Icon name="log-out" :size="14" />
