@@ -395,6 +395,26 @@ export interface ApproveEmailDraftResult {
   leadId?: string
 }
 
+export type AgentPreflightKind =
+  | 'extract-profile'
+  | 'expand-keywords'
+  | 'discover-leads'
+  | 'score-and-dedupe'
+  | 'draft-email'
+
+export interface AgentPreflightCheck {
+  id: string
+  label: string
+  ok: boolean
+  detail?: string
+}
+
+export interface AgentPreflightResult {
+  ok: boolean
+  message: string
+  checks: AgentPreflightCheck[]
+}
+
 export interface RawLeadContactEditDto {
   type: string
   value: string
@@ -431,6 +451,7 @@ declare global {
     ftcs?: {
       platform: NodeJS.Platform
       getAppStatus: () => Promise<AppStatus>
+      checkAgentPreflight: (kind: AgentPreflightKind) => Promise<AgentPreflightResult>
       restartOpenCode: () => Promise<AppStatus>
       getOpenCodeLogs: () => Promise<string[]>
       getSettings: () => Promise<SettingsSnapshot>

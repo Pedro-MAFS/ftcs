@@ -53,6 +53,10 @@ import { listLeadsSnapshot } from './leads/leads-reader'
 import { saveRawLead } from './leads/lead-writer'
 import { listEmailDraftsSnapshot } from './emails/emails-reader'
 import { approveEmailDraft, rejectEmailDraft } from './emails/emails-writer'
+import {
+  runAgentPreflight,
+  type AgentPreflightKind,
+} from './preflight/agent-preflight'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -214,8 +218,26 @@ function libraryFail(err: unknown, cwd = '') {
   }
 }
 
+async function gateAgentStart(kind: AgentPreflightKind) {
+  return runAgentPreflight(kind, {
+    runtime,
+    isAgentRunning: () => getAgentRunner().isRunning(),
+  })
+}
+
 function registerIpcHandlers(): void {
   ipcMain.handle(IPC.APP_GET_STATUS, async () => buildAppStatus())
+  ipcMain.handle(IPC.APP_AGENT_PREFLIGHT, async (_event, kind: AgentPreflightKind) => {
+    try {
+      return await gateAgentStart(kind)
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+        checks: [],
+      }
+    }
+  })
   ipcMain.handle(IPC.OPENCODE_RESTART, async () => {
     if (!runtime) {
       runtime = new OpenCodeRuntime()
@@ -518,17 +540,9 @@ function registerIpcHandlers(): void {
       if (!productId || typeof productId !== 'string') {
         return { ok: false, message: '缺少 productId' }
       }
-      if (getAgentRunner().isRunning()) {
-        return {
-          ok: false,
-          message: '已有 Agent 任务在运行',
-        }
-      }
-      if (runtime?.getStatus().state !== 'running' || !runtime.getClient()) {
-        return {
-          ok: false,
-          message: 'OpenCode 未就绪，请先在设置页确认运行时或点击「重启 OpenCode」',
-        }
+      const preflight = await gateAgentStart('expand-keywords')
+      if (!preflight.ok) {
+        return { ok: false, message: preflight.message }
       }
 
       const sender = event.sender
@@ -561,17 +575,9 @@ function registerIpcHandlers(): void {
       if (!productId || typeof productId !== 'string') {
         return { ok: false, message: '缺少 productId' }
       }
-      if (getAgentRunner().isRunning()) {
-        return {
-          ok: false,
-          message: '已有 Agent 任务在运行',
-        }
-      }
-      if (runtime?.getStatus().state !== 'running' || !runtime.getClient()) {
-        return {
-          ok: false,
-          message: 'OpenCode 未就绪，请先在设置页确认运行时或点击「重启 OpenCode」',
-        }
+      const preflight = await gateAgentStart('score-and-dedupe')
+      if (!preflight.ok) {
+        return { ok: false, message: preflight.message }
       }
 
       const sender = event.sender
@@ -649,14 +655,9 @@ function registerIpcHandlers(): void {
       if (!productId || typeof productId !== 'string') {
         return { ok: false, message: '缺少 productId' }
       }
-      if (getAgentRunner().isRunning()) {
-        return { ok: false, message: '已有 Agent 任务在运行' }
-      }
-      if (runtime?.getStatus().state !== 'running' || !runtime.getClient()) {
-        return {
-          ok: false,
-          message: 'OpenCode 未就绪，请先在设置页确认运行时或点击「重启 OpenCode」',
-        }
+      const preflight = await gateAgentStart('draft-email')
+      if (!preflight.ok) {
+        return { ok: false, message: preflight.message }
       }
 
       const leadIds = Array.isArray(input.leadIds)
@@ -702,17 +703,9 @@ function registerIpcHandlers(): void {
       if (!productId || typeof productId !== 'string') {
         return { ok: false, message: '缺少 productId' }
       }
-      if (getAgentRunner().isRunning()) {
-        return {
-          ok: false,
-          message: '已有 Agent 任务在运行',
-        }
-      }
-      if (runtime?.getStatus().state !== 'running' || !runtime.getClient()) {
-        return {
-          ok: false,
-          message: 'OpenCode 未就绪，请先在设置页确认运行时或点击「重启 OpenCode」',
-        }
+      const preflight = await gateAgentStart('discover-leads')
+      if (!preflight.ok) {
+        return { ok: false, message: preflight.message }
       }
 
       const sender = event.sender
@@ -754,17 +747,9 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.PROFILE_GENERATE, async (event, input: ProfileGenerateInput) => {
     try {
-      if (getAgentRunner().isRunning()) {
-        return {
-          ok: false,
-          message: '已有 Agent 任务在运行',
-        }
-      }
-      if (runtime?.getStatus().state !== 'running' || !runtime.getClient()) {
-        return {
-          ok: false,
-          message: 'OpenCode 未就绪，请先在设置页确认运行时或点击「重启 OpenCode」',
-        }
+      const preflight = await gateAgentStart('extract-profile')
+      if (!preflight.ok) {
+        return { ok: false, message: preflight.message }
       }
 
       const bootstrap = bootstrapProductFromLibrary({

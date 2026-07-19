@@ -912,6 +912,8 @@ button:focus-visible {
   color: var(--text);
   font-size: 12px;
   flex-shrink: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
 }
 
 .leads-table__header,
@@ -2486,6 +2488,8 @@ select.text-input {
 .library-feedback {
   margin: 0;
   font-size: 12px;
+  white-space: pre-wrap;
+  line-height: 1.45;
 }
 
 .library-feedback.ok {
@@ -2954,6 +2958,8 @@ select.text-input {
   background: color-mix(in srgb, var(--warning) 18%, transparent);
   color: var(--text);
   font-size: 12px;
+  white-space: pre-wrap;
+  line-height: 1.45;
 }
 
 .explore-summary {

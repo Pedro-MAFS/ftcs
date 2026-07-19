@@ -1,5 +1,6 @@
 export const IPC = {
   APP_GET_STATUS: 'app:get-status',
+  APP_AGENT_PREFLIGHT: 'app:agent-preflight',
   OPENCODE_RESTART: 'opencode:restart',
   OPENCODE_GET_LOGS: 'opencode:get-logs',
   SETTINGS_GET: 'settings:get',
@@ -499,6 +500,26 @@ export interface AppStatus {
   mcpServers: McpServerStatus[]
   devMode: boolean
   requiresLocalOpenCode: boolean
+}
+
+export type AgentPreflightKind =
+  | 'extract-profile'
+  | 'expand-keywords'
+  | 'discover-leads'
+  | 'score-and-dedupe'
+  | 'draft-email'
+
+export interface AgentPreflightCheck {
+  id: string
+  label: string
+  ok: boolean
+  detail?: string
+}
+
+export interface AgentPreflightResult {
+  ok: boolean
+  message: string
+  checks: AgentPreflightCheck[]
 }
 
 export type ModelProviderId = 'anthropic' | 'openai' | 'google' | 'custom'

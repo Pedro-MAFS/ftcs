@@ -21,6 +21,8 @@ import type {
   RejectEmailDraftResult,
   ApproveEmailDraftInput,
   ApproveEmailDraftResult,
+  AgentPreflightKind,
+  AgentPreflightResult,
   LibraryMutationResult,
   LibrarySnapshot,
   ProfileDetail,
@@ -37,6 +39,8 @@ import type {
 const api = {
   platform: process.platform as NodeJS.Platform,
   getAppStatus: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.APP_GET_STATUS),
+  checkAgentPreflight: (kind: AgentPreflightKind): Promise<AgentPreflightResult> =>
+    ipcRenderer.invoke(IPC.APP_AGENT_PREFLIGHT, kind),
   restartOpenCode: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.OPENCODE_RESTART),
   getOpenCodeLogs: (): Promise<string[]> => ipcRenderer.invoke(IPC.OPENCODE_GET_LOGS),
   getSettings: (): Promise<SettingsSnapshot> => ipcRenderer.invoke(IPC.SETTINGS_GET),

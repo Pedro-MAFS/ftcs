@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import type { FileEntry, LibrarySnapshot, WebsiteItem } from '../types/library'
 import { useWorkspace } from '../composables/useWorkspace'
+import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
 
 const meta = SECTION_META.input
@@ -332,6 +333,12 @@ async function generateProfile() {
   )
   if (!websitePaths.length && !filePaths.length) {
     error.value = '请先勾选至少一个公司网站或资料文件'
+    return
+  }
+
+  const preflightError = await ensureAgentReady('extract-profile')
+  if (preflightError) {
+    error.value = preflightError
     return
   }
 

@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import type { EmailDraftRowDto, EmailDraftsSnapshotDto } from '../types/electron'
@@ -218,6 +219,12 @@ async function onBatchDraft(): Promise<void> {
   }
   if (pendingHigh.value.length <= 0) {
     actionMessage.value = '暂无待起草的 high 线索'
+    return
+  }
+
+  const preflightError = await ensureAgentReady('draft-email')
+  if (preflightError) {
+    actionMessage.value = preflightError
     return
   }
 

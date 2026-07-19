@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
 import LeadDetailDrawer from '../components/shared/LeadDetailDrawer.vue'
 import type { LeadRowDto, LeadsSnapshotDto } from '../types/electron'
@@ -253,6 +254,12 @@ async function onScoreClick(): Promise<void> {
     return
   }
 
+  const preflightError = await ensureAgentReady('score-and-dedupe')
+  if (preflightError) {
+    actionMessage.value = preflightError
+    return
+  }
+
   scoring.value = true
   actionMessage.value = ''
   resetAgentForScoreAndDedupe(stats.value.raw)
@@ -283,6 +290,12 @@ async function startDraftEmails(leadIds?: string[]): Promise<void> {
   const targetCount = leadIds?.length ?? pendingHighIds.value.length
   if (!leadIds && targetCount <= 0) {
     actionMessage.value = '暂无待起草的 high 线索'
+    return
+  }
+
+  const preflightError = await ensureAgentReady('draft-email')
+  if (preflightError) {
+    actionMessage.value = preflightError
     return
   }
 

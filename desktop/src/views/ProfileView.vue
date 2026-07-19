@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
 import type { ProfileDetail, ProfileSaveInput } from '../types/electron'
 
@@ -314,6 +315,12 @@ async function createExploreTask(): Promise<void> {
   }
   if (currentProfile.value?.status !== 'ready') {
     expandError.value = '画像未就绪，请补全必填字段并保存后再试'
+    return
+  }
+
+  const preflightError = await ensureAgentReady('expand-keywords')
+  if (preflightError) {
+    expandError.value = preflightError
     return
   }
 

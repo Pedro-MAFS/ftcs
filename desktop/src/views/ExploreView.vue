@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
 import KeywordEditorDialog from '../components/shared/KeywordEditorDialog.vue'
 import type { ExploreTaskDto, KeywordExpansionDto } from '../types/electron'
@@ -207,6 +208,12 @@ async function startR1(): Promise<void> {
     return
   }
 
+  const preflightError = await ensureAgentReady('discover-leads')
+  if (preflightError) {
+    actionMessage.value = preflightError
+    return
+  }
+
   startingR1.value = true
   actionMessage.value = ''
   const maxQueries = Math.min(DEFAULT_MAX_QUERIES, r1QueryCount.value || DEFAULT_MAX_QUERIES)
@@ -247,6 +254,12 @@ async function startScoreAndDedupe(task: ExploreTaskDto): Promise<void> {
   }
   if (task.status !== 'completed' || task.leadsFound <= 0) {
     actionMessage.value = '该任务没有可评分的线索'
+    return
+  }
+
+  const preflightError = await ensureAgentReady('score-and-dedupe')
+  if (preflightError) {
+    actionMessage.value = preflightError
     return
   }
 
