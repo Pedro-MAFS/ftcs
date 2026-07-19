@@ -37,6 +37,7 @@ export interface SettingsSaveResult {
 }
 
 export type SettingsCategory =
+  | 'account'
   | 'model'
   | 'search'
   | 'workspace'

@@ -119,6 +119,17 @@ npx electron-builder --win # 产出 release/
 | `FTCS_REPO_ROOT` | 覆盖仓库根（仅用于定位开发态模板） |
 | `FTCS_OPENCODE_PATH` | 指定 opencode 可执行文件 |
 | `FTCS_OPENCODE_PORT` | Server 端口（默认 4096） |
+| `FTCS_OAUTH_ISSUER` | OAuth AS（默认 `https://user.ai-utills.com`） |
+| `FTCS_OAUTH_CLIENT_ID` | 管理端登记的 Client ID（默认 `ftcs-desktop`） |
+| `FTCS_OAUTH_SCOPES` | 空格分隔 scope（默认 `openid ftcs-desktop email`） |
+| `FTCS_OAUTH_LOOPBACK_PORT` | 可选：强制本机回调端口；**默认不设**，每次登录动态选空闲端口 |
+
+### OAuth 登录（软门禁）
+
+- 主流程（线索 / 画像 / 探索 / 邮件）**不强制登录**。
+- 「意见反馈」「退出登录」等账号能力需登录；协议为 **授权码 + PKCE**，回调为本机 loopback。
+- 回调 URI 形如 `http://127.0.0.1:<port>/callback`，**端口按本机占用情况动态分配**（管理端按 loopback 任意端口策略登记即可，无需写死端口）。
+- Client 须登记 scope：`openid` `ftcs-desktop` `email`；用户标识在 UI 中以**掩码邮箱**展示。
 
 应用启动 OpenCode 时会：
 - 设置 `XDG_CONFIG_HOME` 到 `<userData>/opencode-xdg`（隔离本机 `~/.config/opencode`，避免全局 MCP 如 pencil 渗入）

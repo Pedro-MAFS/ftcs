@@ -24,6 +24,8 @@ import type {
   ApproveEmailDraftResult,
   AgentPreflightKind,
   AgentPreflightResult,
+  AuthActionResult,
+  AuthSessionSnapshot,
   LibraryMutationResult,
   LibrarySnapshot,
   ProfileDetail,
@@ -50,6 +52,23 @@ const api = {
   reconnectMcp: (name: string): Promise<OpenCodeActionResult> =>
     ipcRenderer.invoke(IPC.OPENCODE_MCP_RECONNECT, name),
   getOpenCodeLogs: (): Promise<string[]> => ipcRenderer.invoke(IPC.OPENCODE_GET_LOGS),
+  getAuthSession: (): Promise<AuthSessionSnapshot> =>
+    ipcRenderer.invoke(IPC.AUTH_GET_SESSION),
+  loginWithOAuth: (): Promise<AuthActionResult> => ipcRenderer.invoke(IPC.AUTH_LOGIN),
+  cancelOAuthLogin: (): Promise<AuthActionResult> =>
+    ipcRenderer.invoke(IPC.AUTH_CANCEL_LOGIN),
+  logoutOAuth: (): Promise<AuthActionResult> => ipcRenderer.invoke(IPC.AUTH_LOGOUT),
+  openFeedback: (): Promise<AuthActionResult> =>
+    ipcRenderer.invoke(IPC.AUTH_OPEN_FEEDBACK),
+  onAuthChanged: (handler: (session: AuthSessionSnapshot) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, session: AuthSessionSnapshot) => {
+      handler(session)
+    }
+    ipcRenderer.on(IPC.AUTH_CHANGED, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.AUTH_CHANGED, listener)
+    }
+  },
   getSettings: (): Promise<SettingsSnapshot> => ipcRenderer.invoke(IPC.SETTINGS_GET),
   saveSettings: (
     input: SettingsSaveInput,

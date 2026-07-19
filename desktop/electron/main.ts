@@ -57,6 +57,14 @@ import {
   runAgentPreflight,
   type AgentPreflightKind,
 } from './preflight/agent-preflight'
+import {
+  cancelLogin,
+  getAuthSession,
+  logout as authLogout,
+  openFeedback,
+  setAuthSessionListener,
+  startLogin,
+} from './auth/oauth-service'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -226,8 +234,43 @@ async function gateAgentStart(kind: AgentPreflightKind) {
   })
 }
 
+function broadcastAuthChanged(): void {
+  const session = getAuthSession()
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      try {
+        win.webContents.send(IPC.AUTH_CHANGED, session)
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
 function registerIpcHandlers(): void {
+  setAuthSessionListener(broadcastAuthChanged)
   ipcMain.handle(IPC.APP_GET_STATUS, async () => buildAppStatus())
+  ipcMain.handle(IPC.AUTH_GET_SESSION, () => getAuthSession())
+  ipcMain.handle(IPC.AUTH_LOGIN, async () => {
+    const result = await startLogin()
+    broadcastAuthChanged()
+    return result
+  })
+  ipcMain.handle(IPC.AUTH_CANCEL_LOGIN, async () => {
+    const result = await cancelLogin()
+    broadcastAuthChanged()
+    return result
+  })
+  ipcMain.handle(IPC.AUTH_LOGOUT, async () => {
+    const result = await authLogout()
+    broadcastAuthChanged()
+    return result
+  })
+  ipcMain.handle(IPC.AUTH_OPEN_FEEDBACK, async () => {
+    const result = await openFeedback()
+    broadcastAuthChanged()
+    return result
+  })
   ipcMain.handle(IPC.APP_AGENT_PREFLIGHT, async (_event, kind: AgentPreflightKind) => {
     try {
       return await gateAgentStart(kind)

@@ -2,15 +2,30 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import Icon from '../components/shared/Icon.vue'
 import { useAppStatus } from '../composables/useAppStatus'
+import { useAuth } from '../composables/useAuth'
 import { useSettingsNav } from '../composables/useSettingsNav'
 import { SECTION_META } from '../types/workspace'
 import type { ModelProviderId, SettingsSnapshot } from '../types/settings'
 import { MODEL_CATALOG } from '../types/settings'
+import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 
 const meta = SECTION_META.settings
 const { status, runtimeHealthy, runtimeLabel, loading, restartOpenCode, refresh } =
   useAppStatus()
+const {
+  session: authSession,
+  loggedIn,
+  loginPending,
+  emailMasked,
+  busy: authBusy,
+  login,
+  cancelLogin,
+  logout,
+  openFeedback,
+} = useAuth()
 const { activeCategory, setCategory } = useSettingsNav()
+const confirmLogout = ref(false)
+const authHint = ref('')
 
 const saving = ref(false)
 const message = ref('')
@@ -40,12 +55,41 @@ const providers: Array<{ id: ModelProviderId; label: string }> = [
 ]
 
 const categories: Array<{ id: typeof activeCategory.value; label: string }> = [
+  { id: 'account', label: '账号与授权' },
   { id: 'model', label: '模型与提供商' },
   { id: 'search', label: '搜索服务' },
   { id: 'workspace', label: '工作区' },
   { id: 'opencode', label: 'OpenCode 运行时' },
   { id: 'about', label: '关于与隐私' },
 ]
+
+const accessExpireLabel = computed(() => {
+  const sec = authSession.value.accessExpiresInSec
+  if (sec == null) return '—'
+  if (sec <= 0) return '已过期或即将刷新'
+  const m = Math.floor(sec / 60)
+  return m > 0 ? `约 ${m} 分钟后` : `约 ${sec} 秒后`
+})
+
+async function onAuthLogin(): Promise<void> {
+  authHint.value = '正在打开浏览器…'
+  const res = await login()
+  authHint.value = res.message
+}
+
+async function onAuthFeedback(): Promise<void> {
+  const res = await openFeedback()
+  authHint.value = res.message
+  if (res.needLogin) {
+    authHint.value = '意见反馈需要先登录'
+  }
+}
+
+async function onAuthLogout(): Promise<void> {
+  confirmLogout.value = false
+  const res = await logout()
+  authHint.value = res.message
+}
 
 const isCustom = computed(() => form.providerId === 'custom')
 const usagePct = computed(() => {
@@ -213,6 +257,91 @@ onMounted(() => {
       </nav>
 
       <div class="settings-form">
+        <!-- 账号与授权 -->
+        <section id="settings-account" class="settings-block">
+          <div class="settings-block__head">
+            <h3>账号与授权</h3>
+            <span
+              class="mcp-badge"
+              :class="{ ok: loggedIn }"
+            >
+              {{ loggedIn ? '已登录' : '未登录' }}
+            </span>
+          </div>
+
+          <template v-if="loggedIn">
+            <div class="auth-account-card">
+              <span class="auth-account-card__avatar">
+                {{ (emailMasked || '?').slice(0, 1).toUpperCase() }}
+              </span>
+              <div class="auth-account-card__meta">
+                <strong>{{ emailMasked }}</strong>
+                <span class="muted">掩码展示 · 完整邮箱仅用于反馈提交</span>
+              </div>
+            </div>
+            <div class="about-row">
+              <span class="muted">授权服务器</span>
+              <span class="mono">{{ (authSession.issuer || '').replace(/^https?:\/\//, '') || '—' }}</span>
+            </div>
+            <div class="about-row">
+              <span class="muted">Access 过期</span>
+              <span class="mono">{{ accessExpireLabel }}</span>
+            </div>
+            <div class="about-row">
+              <span class="muted">回调</span>
+              <span class="mono">loopback · {{ authSession.redirectUri }}</span>
+            </div>
+            <div class="settings-actions-row">
+              <button
+                type="button"
+                class="btn-secondary btn-sm"
+                :disabled="authBusy"
+                @click="onAuthFeedback"
+              >
+                <Icon name="message-square" :size="12" />
+                意见反馈
+              </button>
+              <button
+                type="button"
+                class="btn-secondary btn-sm is-danger-outline"
+                :disabled="authBusy"
+                @click="confirmLogout = true"
+              >
+                <Icon name="log-out" :size="12" />
+                退出登录
+              </button>
+            </div>
+          </template>
+          <template v-else>
+            <p class="hint-line">
+              <Icon name="info" :size="12" />
+              未登录也可使用工作区功能。意见反馈等账号能力需要先登录。
+            </p>
+            <div class="settings-actions-row">
+              <button
+                type="button"
+                class="btn-primary btn-sm"
+                :disabled="authBusy || loginPending"
+                @click="onAuthLogin"
+              >
+                <Icon name="log-in" :size="12" />
+                {{ loginPending ? '登录中…' : '使用账号登录' }}
+              </button>
+              <button
+                v-if="loginPending"
+                type="button"
+                class="btn-secondary btn-sm"
+                @click="cancelLogin"
+              >
+                取消
+              </button>
+            </div>
+          </template>
+          <p v-if="authHint" class="hint-line">{{ authHint }}</p>
+        </section>
+
+        <hr class="settings-divider" />
+
         <!-- 模型与提供商 -->
         <section id="settings-model" class="settings-block">
           <div class="settings-block__head">
@@ -446,5 +575,16 @@ onMounted(() => {
         </section>
       </div>
     </div>
+
+    <ConfirmDialog
+      :open="confirmLogout"
+      title="退出登录？"
+      message="退出后本地工作区数据仍保留，意见反馈等账号功能将不可用。"
+      confirm-label="退出"
+      danger
+      :busy="authBusy"
+      @confirm="onAuthLogout"
+      @cancel="confirmLogout = false"
+    />
   </section>
 </template>

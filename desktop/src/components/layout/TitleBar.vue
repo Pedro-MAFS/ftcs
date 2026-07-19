@@ -2,6 +2,7 @@
 import { useRouter } from 'vue-router'
 import Icon from '../shared/Icon.vue'
 import RuntimePopover from './RuntimePopover.vue'
+import AuthMenu from './AuthMenu.vue'
 import { useWorkspace } from '../../composables/useWorkspace'
 import { SECTION_META, type WorkspaceSection } from '../../types/workspace'
 
@@ -43,6 +44,7 @@ function go(section: WorkspaceSection): void {
 
     <div class="title-bar__right">
       <RuntimePopover />
+      <AuthMenu />
       <button
         type="button"
         class="icon-btn"

@@ -1,4 +1,5 @@
 import type { AppStatus, OpenCodeActionResult } from './app'
+import type { AuthActionResult, AuthSessionSnapshot } from './auth'
 import type { LibraryMutationResult, LibrarySnapshot } from './library'
 import type { SettingsSaveInput, SettingsSaveResult, SettingsSnapshot } from './settings'
 
@@ -457,6 +458,12 @@ declare global {
       restartOpenCode: () => Promise<AppStatus>
       reconnectMcp: (name: string) => Promise<OpenCodeActionResult>
       getOpenCodeLogs: () => Promise<string[]>
+      getAuthSession: () => Promise<AuthSessionSnapshot>
+      loginWithOAuth: () => Promise<AuthActionResult>
+      cancelOAuthLogin: () => Promise<AuthActionResult>
+      logoutOAuth: () => Promise<AuthActionResult>
+      openFeedback: () => Promise<AuthActionResult>
+      onAuthChanged: (handler: (session: AuthSessionSnapshot) => void) => () => void
       getSettings: () => Promise<SettingsSnapshot>
       saveSettings: (
         input: SettingsSaveInput,

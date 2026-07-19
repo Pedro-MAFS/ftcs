@@ -38,11 +38,37 @@ export const IPC = {
   EMAIL_DRAFT_REJECT: 'email:draft-reject',
   EMAIL_DRAFT_APPROVE: 'email:draft-approve',
   AGENT_EVENT: 'agent:event',
+  AUTH_GET_SESSION: 'auth:get-session',
+  AUTH_LOGIN: 'auth:login',
+  AUTH_CANCEL_LOGIN: 'auth:cancel-login',
+  AUTH_LOGOUT: 'auth:logout',
+  AUTH_OPEN_FEEDBACK: 'auth:open-feedback',
+  AUTH_CHANGED: 'auth:changed',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_GET_LOGS */
   SIDECAR_GET_LOGS: 'opencode:get-logs',
 } as const
+
+export interface AuthSessionSnapshot {
+  loggedIn: boolean
+  loginPending: boolean
+  emailMasked: string
+  scopes: string[]
+  issuer: string
+  clientId: string
+  redirectUri: string
+  expiresAt: string | null
+  accessExpiresInSec: number | null
+  error: string
+}
+
+export interface AuthActionResult {
+  ok: boolean
+  message: string
+  session: AuthSessionSnapshot
+  needLogin?: boolean
+}
 
 export interface ProfileGenerateInput {
   websitePaths: string[]

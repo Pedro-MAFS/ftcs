@@ -29,6 +29,7 @@ const confirmOpen = ref(false)
 const pendingDelete = ref<{ id: string; label: string } | null>(null)
 
 const settingsCats: Array<{ id: SettingsCategory; label: string }> = [
+  { id: 'account', label: '账号与授权' },
   { id: 'model', label: '模型与提供商' },
   { id: 'search', label: '搜索服务' },
   { id: 'workspace', label: '工作区' },

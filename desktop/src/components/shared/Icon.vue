@@ -26,6 +26,10 @@ defineProps<{
     | 'chevron-down'
     | 'refresh-cw'
     | 'square'
+    | 'user'
+    | 'log-in'
+    | 'log-out'
+    | 'message-square'
     | 'x'
   size?: number
 }>()
@@ -166,6 +170,23 @@ defineProps<{
     </template>
     <template v-else-if="name === 'square'">
       <rect width="14" height="14" x="5" y="5" rx="1" />
+    </template>
+    <template v-else-if="name === 'user'">
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </template>
+    <template v-else-if="name === 'log-in'">
+      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+      <polyline points="10 17 15 12 10 7" />
+      <line x1="15" x2="3" y1="12" y2="12" />
+    </template>
+    <template v-else-if="name === 'log-out'">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" x2="9" y1="12" y2="12" />
+    </template>
+    <template v-else-if="name === 'message-square'">
+      <path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" />
     </template>
     <template v-else-if="name === 'x'">
       <path d="M18 6 6 18" />
