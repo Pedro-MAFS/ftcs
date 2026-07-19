@@ -9,6 +9,7 @@ import {
   findLatestRunAfter,
   type ExplorationRun,
 } from '../exploration/exploration-reader'
+import { failLatestRunningExploration } from '../exploration/exploration-writer'
 import {
   countRawLeads,
   loadScoredArtifact,
@@ -1206,13 +1207,20 @@ export class AgentRunController {
       }
 
       if (idleResult === 'abort') {
-        pushState('error')
+        const abortedRun = failLatestRunningExploration(
+          productId,
+          afterIso,
+          '用户中止了 R1 探索',
+        )
+        pushState('error', abortedRun ?? undefined)
         timeline.addSuffix({
           id: 'sys-abort',
           kind: 'error',
           time: nowTime(),
           title: '已中止',
-          body: '用户中止了 R1 探索',
+          body: abortedRun
+            ? `用户中止了 R1 探索\nrun ${abortedRun.id} 已标记为 failed`
+            : '用户中止了 R1 探索',
         })
         flushTimeline()
         emit({
@@ -1220,17 +1228,27 @@ export class AgentRunController {
           ok: false,
           productId,
           message: '已中止 R1 探索',
+          explorationRun: abortedRun ?? undefined,
         })
-        return { ok: false, message: '已中止 R1 探索' }
+        return {
+          ok: false,
+          message: '已中止 R1 探索',
+          explorationRun: abortedRun ?? undefined,
+        }
       }
 
       if (idleResult === 'timeout') {
+        failLatestRunningExploration(
+          productId,
+          afterIso,
+          '等待 OpenCode 会话 idle 超时',
+        )
         throw new Error('等待 OpenCode 会话 idle 超时')
       }
 
       await bridge.ingestNow().catch(() => undefined)
 
-      const run = await loadWithGrace(
+      let run = await loadWithGrace(
         () => findLatestRunAfter(productId, afterIso),
         { signal, attempts: 12, intervalMs: 500 },
       )
@@ -1241,14 +1259,20 @@ export class AgentRunController {
         )
       }
 
-      if (run.status === 'failed') {
-        const message = `R1 探索失败：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
+      if (run.status === 'running') {
+        run =
+          failLatestRunningExploration(
+            productId,
+            afterIso,
+            '会话已结束但未调用 exploration_finish，已标记为 failed',
+          ) ?? run
+        const message = `R1 探索未完成：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
         timeline.addSuffix({
-          id: 'sys-failed',
+          id: 'sys-incomplete',
           kind: 'error',
           time: nowTime(),
-          title: '失败',
-          body: message,
+          title: '未完成',
+          body: `${message}\n已将 run 标记为 failed`,
         })
         flushTimeline()
         pushState('error', run)
@@ -1262,14 +1286,14 @@ export class AgentRunController {
         return { ok: false, message, explorationRun: run }
       }
 
-      if (run.status === 'running') {
-        const message = `会话已结束，但探索记录仍为 running：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
+      if (run.status === 'failed') {
+        const message = `R1 探索失败：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
         timeline.addSuffix({
-          id: 'sys-incomplete',
+          id: 'sys-failed',
           kind: 'error',
           time: nowTime(),
-          title: '未完成',
-          body: `${message}\n请检查 Agent 是否调用了 exploration_finish`,
+          title: '失败',
+          body: message,
         })
         flushTimeline()
         pushState('error', run)
@@ -1303,6 +1327,7 @@ export class AgentRunController {
       return { ok: true, message, explorationRun: run }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
+      const failedRun = failLatestRunningExploration(productId, afterIso, message)
       timeline.addSuffix({
         id: 'sys-error',
         kind: 'error',
@@ -1311,14 +1336,15 @@ export class AgentRunController {
         body: message,
       })
       flushTimeline()
-      pushState('error')
+      pushState('error', failedRun ?? undefined)
       emit({
         type: 'done',
         ok: false,
         productId,
         message,
+        explorationRun: failedRun ?? undefined,
       })
-      return { ok: false, message }
+      return { ok: false, message, explorationRun: failedRun ?? undefined }
     } finally {
       stopEvents?.()
       this.running = false
