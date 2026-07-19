@@ -16,6 +16,7 @@ const {
 } = useWorkspace()
 
 const timelineEl = ref<HTMLElement | null>(null)
+const composerHint = ref('')
 
 function kindLabel(kind: AgentTimelineItem['kind']): string {
   switch (kind) {
@@ -43,7 +44,8 @@ function preview(body: string, max = 160): string {
 }
 
 async function onSend(): Promise<void> {
-  if (!agentPrompt.value.trim()) return
+  composerHint.value =
+    '当前暂不支持在对话区自由发送指令，请通过左侧流水线按钮启动对应 Agent 任务。'
 }
 
 async function onAbort(): Promise<void> {
@@ -118,9 +120,11 @@ watch(
         v-model="agentPrompt"
         class="composer-input"
         rows="2"
-        placeholder="向 Agent 发送指令…"
+        placeholder="自由对话暂未开放，请用左侧流水线启动任务…"
         :disabled="generating"
+        @keydown.enter.exact.prevent="onSend"
       />
+      <p v-if="composerHint" class="composer-hint" role="status">{{ composerHint }}</p>
       <div class="composer-actions">
         <span class="composer-skill">
           Skill · {{ agentSkill }}

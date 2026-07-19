@@ -2578,6 +2578,16 @@ select.text-input {
   flex-shrink: 0;
 }
 
+.composer-hint {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .composer-input {
   width: 100%;
   min-height: 72px;
