@@ -31,7 +31,7 @@
 
 下一步：审核后发信（`email-sender` / 2.4）、定时探索（`scheduler`）。架构见 [docs/08-产品架构决策-Electron-OpenCode.md](docs/08-产品架构决策-Electron-OpenCode.md)，计划见 [docs/04-实施计划.md](docs/04-实施计划.md)。
 
-**标准工作流目录**：[`workspace/`](workspace/) — Skills、MCP、配置、`data/`、`.env` 的**唯一维护位置**。应用壳在 `desktop/`。`.cursor/`、`.opencode/` 为本机 IDE/工具临时目录（**不进 Git**）。
+**标准工作流目录**：[`workspace/`](workspace/) — Skills、MCP、配置、`data/`、`.env` 的**唯一维护位置**。应用壳在 `desktop/`。产品官网在 [`website/`](website/)（Vue3 静态站）。`.cursor/`、`.opencode/` 为本机 IDE/工具临时目录（**不进 Git**）。
 
 ## 技术原则
 
