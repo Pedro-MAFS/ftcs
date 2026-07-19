@@ -18846,7 +18846,7 @@
                       "id": "TtcxK",
                       "name": "Email",
                       "fill": "$text-secondary",
-                      "content": "来自 UserInfo · email scope",
+                      "content": "掩码展示 · 完整邮箱仅用于反馈提交",
                       "fontFamily": "$font-ui",
                       "fontSize": 12,
                       "fontWeight": "normal"

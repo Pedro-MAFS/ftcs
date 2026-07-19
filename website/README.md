@@ -58,7 +58,7 @@ location /ftcs/ {
 {
   id: 'setup',
   label: 'Windows 安装包',
-  filename: '外贸获客-Setup-0.1.0.exe',
+  filename: '外贸获客-Setup-0.2.0.exe',
   url: 'https://example.com/path/to/Setup.exe', // ← 在此填写
   note: 'NSIS 安装程序',
 }

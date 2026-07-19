@@ -568,7 +568,7 @@ onMounted(() => {
           <h3>关于与隐私</h3>
           <div class="about-row">
             <span class="muted">应用</span>
-            <span class="mono">FTCS Desktop 0.1.0</span>
+            <span class="mono">FTCS Desktop 0.2.0</span>
           </div>
           <div class="about-row">
             <span class="muted">架构</span>
