@@ -3490,6 +3490,20 @@ select.text-input {
   line-height: 1.45;
 }
 
+.explore-max-queries {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.explore-max-queries__input {
+  width: 88px;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
 .explore-summary {
   display: flex;
   align-items: center;

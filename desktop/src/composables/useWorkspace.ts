@@ -369,14 +369,15 @@ export function useWorkspace() {
     ]
   }
 
-  function resetAgentForDiscoverLeads(maxQueries = 10): void {
+  function resetAgentForDiscoverLeads(maxQueries = 0): void {
     agentSkill.value = 'discover-leads'
     agentStatus.value = 'running'
     agentTimeline.value = []
     agentExpanded.value = {}
+    const total = maxQueries > 0 ? String(maxQueries) : '—'
     agentMeta.value = [
       { label: '状态', value: '探索中', tone: 'accent' },
-      { label: '进度', value: `0/${maxQueries}` },
+      { label: '进度', value: `0/${total}` },
       { label: '线索', value: '0' },
       { label: '来源', value: '关键词' },
     ]

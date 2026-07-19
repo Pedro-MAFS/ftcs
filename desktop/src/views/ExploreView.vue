@@ -31,7 +31,9 @@ const startingR1 = ref(false)
 const scoringLeads = ref(false)
 const previewRound = ref('R1')
 const previewDimension = ref('all')
-const DEFAULT_MAX_QUERIES = 10
+/** 最多执行的 R1 词数；null/0 = 不限制，有多少 R1 执行多少 */
+const maxQueriesLimit = ref<number | null>(null)
+const MAX_QUERIES_STORAGE_KEY = 'ftcs.explore.maxQueriesLimit'
 
 let progressTimer: ReturnType<typeof setInterval> | null = null
 
@@ -197,6 +199,39 @@ async function stopAgent(): Promise<void> {
   stopProgressPolling()
 }
 
+/** 默认全部 R1；若填写了正数上限则取 min(上限, R1 数量) */
+function resolveMaxQueries(): number {
+  const available = Math.max(0, r1QueryCount.value)
+  const limit = maxQueriesLimit.value
+  if (limit == null || !Number.isFinite(limit) || limit <= 0) {
+    return Math.max(1, available)
+  }
+  return Math.max(1, Math.min(Math.floor(limit), available || Math.floor(limit)))
+}
+
+function persistMaxQueriesLimit(): void {
+  try {
+    if (maxQueriesLimit.value == null || maxQueriesLimit.value <= 0) {
+      localStorage.removeItem(MAX_QUERIES_STORAGE_KEY)
+    } else {
+      localStorage.setItem(MAX_QUERIES_STORAGE_KEY, String(Math.floor(maxQueriesLimit.value)))
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function onMaxQueriesInput(event: Event): void {
+  const raw = (event.target as HTMLInputElement).value
+  if (raw.trim() === '') {
+    maxQueriesLimit.value = null
+  } else {
+    const n = Number(raw)
+    maxQueriesLimit.value = Number.isFinite(n) ? n : null
+  }
+  persistMaxQueriesLimit()
+}
+
 async function startR1(): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.startExploreR1) return
   if (!canStartR1.value) {
@@ -216,7 +251,7 @@ async function startR1(): Promise<void> {
 
   startingR1.value = true
   actionMessage.value = ''
-  const maxQueries = Math.min(DEFAULT_MAX_QUERIES, r1QueryCount.value || DEFAULT_MAX_QUERIES)
+  const maxQueries = resolveMaxQueries()
   resetAgentForDiscoverLeads(maxQueries)
   startProgressPolling()
 
@@ -344,6 +379,15 @@ watch(agentStatus, (status) => {
 })
 
 onMounted(() => {
+  try {
+    const saved = localStorage.getItem(MAX_QUERIES_STORAGE_KEY)
+    if (saved) {
+      const n = Number(saved)
+      if (Number.isFinite(n) && n > 0) maxQueriesLimit.value = n
+    }
+  } catch {
+    // ignore
+  }
   void refreshExploreTasks()
 })
 
@@ -360,6 +404,19 @@ onUnmounted(() => {
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
+        <label class="explore-max-queries" title="留空表示执行全部 R1 关键词">
+          <span class="muted">最多词数</span>
+          <input
+            class="text-input explore-max-queries__input"
+            type="number"
+            min="1"
+            step="1"
+            :placeholder="r1QueryCount ? `全部 ${r1QueryCount}` : '全部'"
+            :value="maxQueriesLimit ?? ''"
+            :disabled="startingR1 || isDiscovering"
+            @input="onMaxQueriesInput"
+          />
+        </label>
         <button
           type="button"
           class="btn-secondary"

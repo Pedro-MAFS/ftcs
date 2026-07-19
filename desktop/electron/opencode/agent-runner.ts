@@ -1073,13 +1073,14 @@ export class AgentRunController {
     const rounds = (options?.rounds?.length ? options.rounds : ['R1']).map((r) =>
       r.toUpperCase(),
     )
-    const maxQueries = Math.max(1, options?.maxQueries ?? 10)
     const r1Count = expansion.search_queries.filter((q) =>
       rounds.includes(String(q.round).toUpperCase()),
     ).length
     if (r1Count === 0) {
       throw new Error(`expansion.json 中没有 ${rounds.join('/')} 轮次的搜索词`)
     }
+    // 未传 maxQueries 时按当前轮次可用词数全量执行（不再默认截断为 10）
+    const maxQueries = Math.max(1, options?.maxQueries ?? r1Count)
 
     this.running = true
     this.abort = new AbortController()
