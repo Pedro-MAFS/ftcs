@@ -413,6 +413,316 @@ button:focus-visible {
   flex-shrink: 0;
 }
 
+.oc-status--btn {
+  border: 1px solid transparent;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.2;
+}
+
+.oc-status--btn.is-ready {
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+}
+
+.oc-status--btn.is-error {
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.oc-status--btn.is-warn {
+  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+}
+
+.oc-status--btn:hover {
+  filter: brightness(1.08);
+}
+
+.oc-status__chevron {
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.runtime-popover {
+  position: relative;
+}
+
+.runtime-popover__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+  overflow: hidden;
+}
+
+.runtime-popover__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.runtime-popover__head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.runtime-popover__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.runtime-popover__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  background: var(--neutral-bg, var(--bg-hover));
+  color: var(--text-secondary);
+}
+
+.runtime-popover__badge.ok {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.runtime-popover__badge.err {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.runtime-popover__badge.warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.runtime-popover__url {
+  margin: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.runtime-popover__err {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--danger);
+  white-space: pre-wrap;
+  line-height: 1.4;
+  max-height: 72px;
+  overflow: auto;
+}
+
+.runtime-popover__actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+}
+
+.runtime-popover__action {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-hover);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.runtime-popover__action:hover:not(:disabled) {
+  background: var(--bg-active);
+}
+
+.runtime-popover__action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.runtime-popover__action.is-start {
+  background: var(--accent-muted);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--accent);
+}
+
+.runtime-popover__action .is-danger {
+  color: var(--danger);
+}
+
+.runtime-popover__action .is-accent {
+  color: var(--accent);
+}
+
+.runtime-popover__mcp {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 12px 12px;
+}
+
+.runtime-popover__mcp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.runtime-popover__link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.runtime-popover__link-btn:hover:not(:disabled) {
+  background: var(--accent-muted);
+}
+
+.runtime-popover__link-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.runtime-popover__mcp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.runtime-popover__mcp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+}
+
+.runtime-popover__mcp-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+
+.runtime-popover__mcp-dot.ok {
+  background: var(--success);
+}
+
+.runtime-popover__mcp-dot.err {
+  background: var(--danger);
+}
+
+.runtime-popover__mcp-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.runtime-popover__mcp-meta .mono {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.runtime-popover__mcp-meta .muted {
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-popover__mcp-badge {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.runtime-popover__mcp-badge.ok {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.runtime-popover__reconnect {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  background: var(--accent-muted);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.runtime-popover__reconnect:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.runtime-popover__reconnect:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.runtime-popover__mcp-empty {
+  margin: 0;
+  font-size: 11px;
+  padding: 8px 0;
+}
+
+.runtime-popover__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+}
+
+.runtime-popover__foot .muted {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* —— Activity rail —— */
 .activity-rail {
   width: var(--rail-width);

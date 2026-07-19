@@ -184,6 +184,7 @@ async function buildAppStatus(): Promise<AppStatus> {
     sidecar: opencode,
     opencodeHealthy,
     mcpServers,
+    agentRunning: getAgentRunner().isRunning(),
     devMode: !app.isPackaged,
     requiresLocalOpenCode: true,
   }
@@ -238,14 +239,63 @@ function registerIpcHandlers(): void {
       }
     }
   })
+  ipcMain.handle(IPC.OPENCODE_START, async () => {
+    if (!runtime) {
+      runtime = new OpenCodeRuntime()
+    }
+    await runtime.start()
+    return {
+      ok: runtime.getStatus().state === 'running',
+      message:
+        runtime.getStatus().state === 'running'
+          ? 'OpenCode 已启动'
+          : runtime.getStatus().error || '启动失败',
+      status: await buildAppStatus(),
+    }
+  })
+  ipcMain.handle(IPC.OPENCODE_STOP, async () => {
+    if (!runtime) {
+      return {
+        ok: true,
+        message: 'OpenCode 未运行',
+        status: await buildAppStatus(),
+      }
+    }
+    if (getAgentRunner().isRunning()) {
+      await getAgentRunner().abortCurrent()
+    }
+    await runtime.stop()
+    return {
+      ok: true,
+      message: 'OpenCode 已停止',
+      status: await buildAppStatus(),
+    }
+  })
   ipcMain.handle(IPC.OPENCODE_RESTART, async () => {
     if (!runtime) {
       runtime = new OpenCodeRuntime()
+    }
+    if (getAgentRunner().isRunning()) {
+      await getAgentRunner().abortCurrent()
     }
     await runtime.restart()
     return buildAppStatus()
   })
   ipcMain.handle(IPC.OPENCODE_GET_LOGS, () => runtime?.getLogs() ?? [])
+  ipcMain.handle(IPC.OPENCODE_MCP_RECONNECT, async (_event, name: string) => {
+    if (!runtime) {
+      return {
+        ok: false,
+        message: 'OpenCode 未初始化',
+        status: await buildAppStatus(),
+      }
+    }
+    const result = await runtime.reconnectMcp(String(name || ''))
+    return {
+      ...result,
+      status: await buildAppStatus(),
+    }
+  })
 
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettingsSnapshot())
   ipcMain.handle(IPC.SETTINGS_SAVE, async (_event, input: SettingsSaveInput) => {

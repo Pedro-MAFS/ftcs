@@ -180,10 +180,14 @@ export class OpenCodeRuntime {
     }
 
     this.status = {
-      ...this.status,
-      state: this.status.state === 'error' ? 'error' : 'stopped',
-      pid: undefined,
+      state: 'stopped',
+      mode: 'sdk-server-client',
+      port: this.activePort,
+      baseUrl: `http://127.0.0.1:${this.activePort}`,
+      version: this.status.version,
+      binaryPath: this.status.binaryPath,
     }
+    this.appendLog('OpenCode 已停止')
   }
 
   async restart(): Promise<OpenCodeRuntimeStatus> {
@@ -192,7 +196,7 @@ export class OpenCodeRuntime {
     return this.start()
   }
 
-  async getMcpServers(): Promise<Array<{ name: string; status: string }>> {
+  async getMcpServers(): Promise<Array<{ name: string; status: string; error?: string }>> {
     if (this.status.state !== 'running') return []
     return fetchMcpStatus(this.status.baseUrl)
   }
@@ -201,6 +205,42 @@ export class OpenCodeRuntime {
     if (this.status.state !== 'running') return false
     const health = await fetchHealth(this.status.baseUrl)
     return health.ok
+  }
+
+  /**
+   * 对单个 MCP 执行 disconnect → connect，用于失败后重连。
+   */
+  async reconnectMcp(name: string): Promise<{ ok: boolean; message: string }> {
+    const client = this.client
+    if (!client || this.status.state !== 'running') {
+      return { ok: false, message: 'OpenCode 未运行，无法重连 MCP' }
+    }
+    const serverName = name.trim()
+    if (!serverName) {
+      return { ok: false, message: 'MCP 名称无效' }
+    }
+
+    try {
+      this.appendLog(`MCP 重连: ${serverName}（disconnect）`)
+      await client.mcp.disconnect({ name: serverName }).catch(() => undefined)
+      const connected = await client.mcp.connect({ name: serverName })
+      if (connected.error) {
+        const msg =
+          typeof connected.error === 'object' &&
+          connected.error &&
+          'message' in connected.error
+            ? String((connected.error as { message?: string }).message)
+            : `重连 ${serverName} 失败`
+        this.appendLog(`MCP 重连失败: ${msg}`)
+        return { ok: false, message: msg }
+      }
+      this.appendLog(`MCP 重连成功: ${serverName}`)
+      return { ok: true, message: `${serverName} 已重连` }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.appendLog(`MCP 重连异常: ${message}`)
+      return { ok: false, message }
+    }
   }
 
   private async spawnOrFallback(

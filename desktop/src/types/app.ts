@@ -24,6 +24,13 @@ export interface AppStatus {
   sidecar: OpenCodeRuntimeStatus
   opencodeHealthy: boolean
   mcpServers: McpServerStatus[]
+  agentRunning: boolean
   devMode: boolean
   requiresLocalOpenCode: boolean
+}
+
+export interface OpenCodeActionResult {
+  ok: boolean
+  message: string
+  status: AppStatus
 }

@@ -24,6 +24,36 @@ async function refresh(): Promise<void> {
   }
 }
 
+async function startOpenCode(): Promise<void> {
+  if (!window.ftcs?.startOpenCode) return
+  loading.value = true
+  try {
+    const res = await window.ftcs.startOpenCode()
+    status.value = res.status
+    error.value = res.ok ? '' : res.message
+    logs.value = await window.ftcs.getOpenCodeLogs()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function stopOpenCode(): Promise<void> {
+  if (!window.ftcs?.stopOpenCode) return
+  loading.value = true
+  try {
+    const res = await window.ftcs.stopOpenCode()
+    status.value = res.status
+    error.value = res.ok ? '' : res.message
+    logs.value = await window.ftcs.getOpenCodeLogs()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    loading.value = false
+  }
+}
+
 async function restartOpenCode(): Promise<void> {
   if (!window.ftcs) return
   loading.value = true
@@ -33,6 +63,27 @@ async function restartOpenCode(): Promise<void> {
     error.value = status.value.opencode?.error ?? ''
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function reconnectMcp(name: string): Promise<string | null> {
+  if (!window.ftcs?.reconnectMcp) return '当前环境不支持 MCP 重连'
+  loading.value = true
+  try {
+    const res = await window.ftcs.reconnectMcp(name)
+    status.value = res.status
+    if (!res.ok) {
+      error.value = res.message
+      return res.message
+    }
+    error.value = ''
+    return null
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    error.value = message
+    return message
   } finally {
     loading.value = false
   }
@@ -55,6 +106,16 @@ const runtimeLabel = computed(() => {
   }
   return map[runtimeState.value] ?? 'OpenCode'
 })
+
+const mcpServers = computed(() => status.value?.mcpServers ?? [])
+
+const mcpConnectedCount = computed(
+  () => mcpServers.value.filter((s) => (s.status || '').toLowerCase() === 'connected').length,
+)
+
+const mcpTotalCount = computed(() => mcpServers.value.length)
+
+const agentRunning = computed(() => Boolean(status.value?.agentRunning))
 
 export function useAppStatus() {
   onMounted(() => {
@@ -83,7 +144,14 @@ export function useAppStatus() {
     runtimeState,
     runtimeHealthy,
     runtimeLabel,
+    mcpServers,
+    mcpConnectedCount,
+    mcpTotalCount,
+    agentRunning,
     refresh,
+    startOpenCode,
+    stopOpenCode,
     restartOpenCode,
+    reconnectMcp,
   }
 }

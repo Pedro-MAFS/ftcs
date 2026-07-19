@@ -3,6 +3,7 @@ import { IPC } from './ipc/types'
 import type {
   AgentEventPayload,
   AppStatus,
+  OpenCodeActionResult,
   ExploreTasksSnapshotDto,
   KeywordExpansionDto,
   KeywordsExpandResult,
@@ -41,7 +42,13 @@ const api = {
   getAppStatus: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.APP_GET_STATUS),
   checkAgentPreflight: (kind: AgentPreflightKind): Promise<AgentPreflightResult> =>
     ipcRenderer.invoke(IPC.APP_AGENT_PREFLIGHT, kind),
+  startOpenCode: (): Promise<OpenCodeActionResult> =>
+    ipcRenderer.invoke(IPC.OPENCODE_START),
+  stopOpenCode: (): Promise<OpenCodeActionResult> =>
+    ipcRenderer.invoke(IPC.OPENCODE_STOP),
   restartOpenCode: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.OPENCODE_RESTART),
+  reconnectMcp: (name: string): Promise<OpenCodeActionResult> =>
+    ipcRenderer.invoke(IPC.OPENCODE_MCP_RECONNECT, name),
   getOpenCodeLogs: (): Promise<string[]> => ipcRenderer.invoke(IPC.OPENCODE_GET_LOGS),
   getSettings: (): Promise<SettingsSnapshot> => ipcRenderer.invoke(IPC.SETTINGS_GET),
   saveSettings: (

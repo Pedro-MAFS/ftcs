@@ -1,8 +1,11 @@
 export const IPC = {
   APP_GET_STATUS: 'app:get-status',
   APP_AGENT_PREFLIGHT: 'app:agent-preflight',
+  OPENCODE_START: 'opencode:start',
+  OPENCODE_STOP: 'opencode:stop',
   OPENCODE_RESTART: 'opencode:restart',
   OPENCODE_GET_LOGS: 'opencode:get-logs',
+  OPENCODE_MCP_RECONNECT: 'opencode:mcp-reconnect',
   SETTINGS_GET: 'settings:get',
   SETTINGS_SAVE: 'settings:save',
   SETTINGS_PICK_WORKSPACE: 'settings:pick-workspace',
@@ -498,8 +501,16 @@ export interface AppStatus {
   sidecar: OpenCodeRuntimeStatus
   opencodeHealthy: boolean
   mcpServers: McpServerStatus[]
+  /** 是否有 Agent 任务正在运行（停止 OpenCode 前需提示） */
+  agentRunning: boolean
   devMode: boolean
   requiresLocalOpenCode: boolean
+}
+
+export interface OpenCodeActionResult {
+  ok: boolean
+  message: string
+  status: AppStatus
 }
 
 export type AgentPreflightKind =

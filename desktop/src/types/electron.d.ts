@@ -1,4 +1,4 @@
-import type { AppStatus } from './app'
+import type { AppStatus, OpenCodeActionResult } from './app'
 import type { LibraryMutationResult, LibrarySnapshot } from './library'
 import type { SettingsSaveInput, SettingsSaveResult, SettingsSnapshot } from './settings'
 
@@ -452,7 +452,10 @@ declare global {
       platform: NodeJS.Platform
       getAppStatus: () => Promise<AppStatus>
       checkAgentPreflight: (kind: AgentPreflightKind) => Promise<AgentPreflightResult>
+      startOpenCode: () => Promise<OpenCodeActionResult>
+      stopOpenCode: () => Promise<OpenCodeActionResult>
       restartOpenCode: () => Promise<AppStatus>
+      reconnectMcp: (name: string) => Promise<OpenCodeActionResult>
       getOpenCodeLogs: () => Promise<string[]>
       getSettings: () => Promise<SettingsSnapshot>
       saveSettings: (
