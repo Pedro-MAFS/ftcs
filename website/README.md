@@ -52,15 +52,28 @@ location /ftcs/ {
 
 ## 配置下载链接
 
-编辑 [`src/config/site.ts`](src/config/site.ts)，为 `downloads[].url` 填入完整下载地址（留空则页面显示「链接待配置」）：
+编辑 [`src/config/site.ts`](src/config/site.ts)，为每个产物配置 `mirrors`（Gitee / GitHub）。`url` 留空则该镜像按钮禁用；全部为空时显示「链接待配置」：
 
 ```ts
 {
   id: 'setup',
   label: 'Windows 安装包',
   filename: '外贸获客-Setup-0.2.0.exe',
-  url: 'https://example.com/path/to/Setup.exe', // ← 在此填写
   note: 'NSIS 安装程序',
+  mirrors: [
+    {
+      id: 'gitee',
+      label: 'Gitee 下载',
+      badge: '国内更快',
+      primary: true,
+      url: 'https://gitee.com/.../releases/download/0.2.0/foreign-trade-Setup-0.2.0.exe',
+    },
+    {
+      id: 'github',
+      label: 'GitHub 下载',
+      url: 'https://github.com/.../releases/download/0.2.0/foreign-trade-Setup-0.2.0.exe',
+    },
+  ],
 }
 ```
 

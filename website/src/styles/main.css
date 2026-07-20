@@ -581,6 +581,48 @@ img {
   color: var(--text-muted);
 }
 
+.download-tip {
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgb(59 130 246 / 22%);
+  background: var(--accent-soft);
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.download-card__info {
+  min-width: min(100%, 16rem);
+  flex: 1 1 14rem;
+}
+
+.download-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.download-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgb(255 255 255 / 22%);
+  color: inherit;
+  vertical-align: middle;
+}
+
+.btn-secondary .download-badge {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .muted {
   color: var(--text-muted);
 }

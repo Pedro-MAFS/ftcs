@@ -1,8 +1,12 @@
 <script setup lang="ts">
-import { siteConfig } from '../config/site'
+import { siteConfig, type DownloadMirror } from '../config/site'
 
 function isReady(url: string): boolean {
   return Boolean(url && url.trim())
+}
+
+function hasAnyMirror(mirrors: DownloadMirror[]): boolean {
+  return mirrors.some((m) => isReady(m.url))
 }
 </script>
 
@@ -26,36 +30,57 @@ function isReady(url: string): boolean {
         <span>前置：Node 22+ · Chrome · OpenCode</span>
       </div>
 
+      <p v-if="siteConfig.downloadTip" class="download-tip">
+        {{ siteConfig.downloadTip }}
+      </p>
+
       <div class="download-list">
         <article
           v-for="item in siteConfig.downloads"
           :key="item.id"
           class="download-card"
         >
-          <div>
+          <div class="download-card__info">
             <h2>{{ item.label }}</h2>
             <p>
               {{ item.filename }}
               <template v-if="item.note"> · {{ item.note }}</template>
             </p>
-            <p v-if="!isReady(item.url)" class="download-hint">
+            <p v-if="!hasAnyMirror(item.mirrors)" class="download-hint">
               链接待配置 — 请在
-              <code>website/src/config/site.ts</code> 填写
+              <code>website/src/config/site.ts</code> 填写镜像
               <code>url</code> 后重新构建发布。
             </p>
           </div>
-          <a
-            v-if="isReady(item.url)"
-            class="btn btn-primary"
-            :href="item.url"
-            :download="item.filename"
-            rel="noopener noreferrer"
-          >
-            下载
-          </a>
-          <button v-else type="button" class="btn btn-primary" disabled>
-            链接待配置
-          </button>
+          <div class="download-card__actions">
+            <template v-for="mirror in item.mirrors" :key="mirror.id">
+              <a
+                v-if="isReady(mirror.url)"
+                class="btn"
+                :class="mirror.primary ? 'btn-primary' : 'btn-secondary'"
+                :href="mirror.url"
+                :download="item.filename"
+                rel="noopener noreferrer"
+              >
+                <span>{{ mirror.label }}</span>
+                <span v-if="mirror.badge" class="download-badge">{{
+                  mirror.badge
+                }}</span>
+              </a>
+              <button
+                v-else
+                type="button"
+                class="btn"
+                :class="mirror.primary ? 'btn-primary' : 'btn-secondary'"
+                disabled
+              >
+                <span>{{ mirror.label }}</span>
+                <span v-if="mirror.badge" class="download-badge">{{
+                  mirror.badge
+                }}</span>
+              </button>
+            </template>
+          </div>
         </article>
       </div>
 
