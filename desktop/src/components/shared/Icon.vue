@@ -16,6 +16,7 @@ defineProps<{
     | 'check'
     | 'save'
     | 'info'
+    | 'help-circle'
     | 'eye'
     | 'eye-off'
     | 'globe'
@@ -125,6 +126,11 @@ defineProps<{
       <circle cx="12" cy="12" r="10" />
       <path d="M12 16v-4" />
       <path d="M12 8h.01" />
+    </template>
+    <template v-else-if="name === 'help-circle'">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <path d="M12 17h.01" />
     </template>
     <template v-else-if="name === 'eye'">
       <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />

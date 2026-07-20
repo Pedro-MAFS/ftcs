@@ -15,8 +15,8 @@
 
 打开 **设置**：
 
-- 配置大模型 API Key（Anthropic / OpenAI / Google 等）
-- 配置搜索用的 Tavily（或兼容）Key
+- 配置大模型 API Key（推荐 DeepSeek；也支持 Anthropic / OpenAI / Google 等）
+- 配置搜索用的 Tavily Key（免费用户每月约 1000 次调用）
 
 密钥保存在本机工作区 `.env`，不会上传到官网。
 

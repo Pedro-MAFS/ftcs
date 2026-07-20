@@ -2260,6 +2260,44 @@ button:focus-visible {
   margin-bottom: 10px;
 }
 
+.settings-block__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.help-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.help-link-btn:hover {
+  color: var(--accent, #2563eb);
+  background: color-mix(in srgb, var(--accent, #2563eb) 12%, transparent);
+}
+
+.text-link-btn {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent, #2563eb);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .settings-block__head .muted {
   margin: 0;
 }

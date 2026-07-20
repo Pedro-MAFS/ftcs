@@ -1,6 +1,8 @@
 import type { Config } from '@opencode-ai/sdk/v2'
 
 const CUSTOM_ENV_KEY = 'FTCS_CUSTOM_API_KEY'
+const DEEPSEEK_ENV_KEY = 'DEEPSEEK_API_KEY'
+const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/v1'
 
 /**
  * 将用户偏好（.env）叠加到托管模板 opencode.json 上。
@@ -19,16 +21,35 @@ export function applyUserPrefsToOpenCodeConfig(
   if (model) next.model = model
   if (smallModel) next.small_model = smallModel
 
-  if (providerId === 'custom' && model) {
+  const providers =
+    next.provider && typeof next.provider === 'object'
+      ? { ...(next.provider as Record<string, unknown>) }
+      : {}
+
+  if (providerId === 'deepseek' && model) {
     const modelId = model.includes('/') ? model.split('/').slice(1).join('/') : model
     const smallId = smallModel.includes('/')
       ? smallModel.split('/').slice(1).join('/')
       : smallModel || modelId
 
-    const providers =
-      (next.provider as Record<string, unknown> | undefined)
-        ? { ...(next.provider as Record<string, unknown>) }
-        : {}
+    providers.deepseek = {
+      npm: '@ai-sdk/openai-compatible',
+      name: 'DeepSeek',
+      options: {
+        baseURL: DEEPSEEK_BASE_URL,
+        apiKey: `{env:${DEEPSEEK_ENV_KEY}}`,
+      },
+      models: {
+        [modelId]: { name: modelId },
+        ...(smallId !== modelId ? { [smallId]: { name: smallId } } : {}),
+      },
+    }
+    next.provider = providers as Config['provider']
+  } else if (providerId === 'custom' && model) {
+    const modelId = model.includes('/') ? model.split('/').slice(1).join('/') : model
+    const smallId = smallModel.includes('/')
+      ? smallModel.split('/').slice(1).join('/')
+      : smallModel || modelId
 
     providers.custom = {
       npm: '@ai-sdk/openai-compatible',

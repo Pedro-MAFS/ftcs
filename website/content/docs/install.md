@@ -10,7 +10,7 @@
 | **Node.js** | **22 及以上** | 安装 OpenCode、用 `node` 启动 MCP、`npx` 拉取工具 |
 | **Google Chrome** | 已安装并可正常启动 | `chrome-devtools` 浏览网站、探索打开页面（Electron 内置浏览器不能替代） |
 | **OpenCode CLI** | 本机 PATH 可执行 `opencode` | 应用通过 SDK 拉起 `opencode serve`（轻量包不内嵌） |
-| API Key | 大模型 + 搜索（如 Tavily） | 画像 / 探索 / 邮件起草 |
+| API Key | 大模型（推荐 DeepSeek）+ 搜索（Tavily） | 画像 / 探索 / 邮件起草 |
 
 请先确认：
 

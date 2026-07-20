@@ -48,11 +48,11 @@ const showTavilyKey = ref(false)
 const snapshot = ref<SettingsSnapshot | null>(null)
 
 const form = reactive({
-  providerId: 'anthropic' as ModelProviderId,
+  providerId: 'deepseek' as ModelProviderId,
   apiKey: '',
   baseUrl: '',
-  model: 'anthropic/claude-sonnet-4-5',
-  smallModel: 'anthropic/claude-haiku-4-5',
+  model: 'deepseek/deepseek-v4-pro',
+  smallModel: 'deepseek/deepseek-v4-flash',
   customModelId: '',
   customSmallModelId: '',
   searchProvider: 'tavily',
@@ -61,6 +61,7 @@ const form = reactive({
 })
 
 const providers: Array<{ id: ModelProviderId; label: string }> = [
+  { id: 'deepseek', label: 'DeepSeek' },
   { id: 'anthropic', label: 'Anthropic' },
   { id: 'openai', label: 'OpenAI' },
   { id: 'google', label: 'Google' },
@@ -381,7 +382,18 @@ async function onCheckUpdate(): Promise<void> {
         <!-- 模型与提供商 -->
         <section id="settings-model" class="settings-block">
           <div class="settings-block__head">
-            <h3>模型与提供商</h3>
+            <div class="settings-block__title">
+              <h3>模型与提供商</h3>
+              <button
+                type="button"
+                class="help-link-btn"
+                title="为什么需要模型提供商？"
+                aria-label="为什么需要模型提供商？"
+                @click="openProductLink(PRODUCT_LINKS.docsFaqModel)"
+              >
+                <Icon name="help-circle" :size="14" />
+              </button>
+            </div>
             <span class="muted mono">.env · FTCS_MODEL / provider</span>
           </div>
 
@@ -398,6 +410,17 @@ async function onCheckUpdate(): Promise<void> {
               {{ p.label }}
             </button>
           </div>
+          <p v-if="form.providerId === 'deepseek'" class="hint-line">
+            国内推荐。可在
+            <button
+              type="button"
+              class="text-link-btn"
+              @click="openProductLink(PRODUCT_LINKS.deepseek)"
+            >
+              DeepSeek 开放平台
+            </button>
+            注册并创建 API Key。
+          </p>
 
           <label class="field-label">API Key</label>
           <div class="input-row">
@@ -471,7 +494,18 @@ async function onCheckUpdate(): Promise<void> {
         <!-- 搜索 -->
         <section id="settings-search" class="settings-block">
           <div class="settings-block__head">
-            <h3>搜索服务</h3>
+            <div class="settings-block__title">
+              <h3>搜索服务</h3>
+              <button
+                type="button"
+                class="help-link-btn"
+                title="什么是 Tavily？为什么需要搜索 Key？"
+                aria-label="什么是 Tavily？为什么需要搜索 Key？"
+                @click="openProductLink(PRODUCT_LINKS.docsFaqSearch)"
+              >
+                <Icon name="help-circle" :size="14" />
+              </button>
+            </div>
             <span class="muted mono">workspace/.env · SEARCH_*</span>
           </div>
 
@@ -507,6 +541,17 @@ async function onCheckUpdate(): Promise<void> {
               <Icon :name="showTavilyKey ? 'eye' : 'eye-off'" :size="14" />
             </button>
           </div>
+          <p class="hint-line">
+            免费用户每月约 1000 次调用。前往
+            <button
+              type="button"
+              class="text-link-btn"
+              @click="openProductLink(PRODUCT_LINKS.tavily)"
+            >
+              Tavily 官网
+            </button>
+            注册并获取 API Key。
+          </p>
 
           <div class="usage-row">
             <span class="mono">

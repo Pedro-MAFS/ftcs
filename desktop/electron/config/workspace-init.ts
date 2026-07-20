@@ -193,7 +193,8 @@ function migrateModelPrefsToEnv(workspaceRoot: string): string[] {
   }
   if (!env.FTCS_PROVIDER_ID && updates.FTCS_MODEL) {
     const model = updates.FTCS_MODEL
-    if (model.startsWith('anthropic/')) updates.FTCS_PROVIDER_ID = 'anthropic'
+    if (model.startsWith('deepseek/')) updates.FTCS_PROVIDER_ID = 'deepseek'
+    else if (model.startsWith('anthropic/')) updates.FTCS_PROVIDER_ID = 'anthropic'
     else if (model.startsWith('openai/')) updates.FTCS_PROVIDER_ID = 'openai'
     else if (model.startsWith('google/') || model.startsWith('gemini/')) {
       updates.FTCS_PROVIDER_ID = 'google'

@@ -6,6 +6,7 @@ import { PRODUCT_LINKS } from '../../config/links'
 import { MODEL_CATALOG, type ModelProviderId, type SettingsSnapshot } from '../../types/settings'
 import { TOUR_STEPS } from '../../types/onboarding'
 import type { EnvProbeItem } from '../../types/onboarding'
+import Icon from '../shared/Icon.vue'
 
 const router = useRouter()
 const {
@@ -34,11 +35,11 @@ const showTavilyKey = ref(false)
 const snapshot = ref<SettingsSnapshot | null>(null)
 
 const form = reactive({
-  providerId: 'anthropic' as ModelProviderId,
+  providerId: 'deepseek' as ModelProviderId,
   apiKey: '',
   baseUrl: '',
-  model: 'anthropic/claude-sonnet-4-5',
-  smallModel: 'anthropic/claude-haiku-4-5',
+  model: 'deepseek/deepseek-v4-pro',
+  smallModel: 'deepseek/deepseek-v4-flash',
   customModelId: '',
   customSmallModelId: '',
   searchProvider: 'tavily',
@@ -47,6 +48,7 @@ const form = reactive({
 })
 
 const providers: Array<{ id: ModelProviderId; label: string }> = [
+  { id: 'deepseek', label: 'DeepSeek' },
   { id: 'anthropic', label: 'Anthropic' },
   { id: 'openai', label: 'OpenAI' },
   { id: 'google', label: 'Google' },
@@ -271,7 +273,18 @@ onMounted(() => {
 
           <!-- 密钥 -->
           <template v-else-if="phase === 'keys'">
-            <p class="onboarding__section-label">模型提供商与 API Key</p>
+            <div class="onboarding__section-head">
+              <p class="onboarding__section-label">模型提供商与 API Key</p>
+              <button
+                type="button"
+                class="help-link-btn"
+                title="为什么需要模型提供商？"
+                aria-label="为什么需要模型提供商？"
+                @click="openExternal(PRODUCT_LINKS.docsFaqModel)"
+              >
+                <Icon name="help-circle" :size="14" />
+              </button>
+            </div>
             <div class="onboarding__card">
               <label class="field-label">提供商</label>
               <select v-model="form.providerId" class="text-input">
@@ -279,6 +292,17 @@ onMounted(() => {
                   {{ p.label }}
                 </option>
               </select>
+              <p v-if="form.providerId === 'deepseek'" class="hint-line">
+                国内推荐。前往
+                <button
+                  type="button"
+                  class="onboarding__link"
+                  @click="openExternal(PRODUCT_LINKS.deepseek)"
+                >
+                  DeepSeek 开放平台
+                </button>
+                注册并创建 API Key。
+              </p>
 
               <label class="field-label">模型 API Key</label>
               <div class="onboarding__key-row">
@@ -327,8 +351,19 @@ onMounted(() => {
               </div>
             </div>
 
+            <div class="onboarding__section-head">
+              <p class="onboarding__section-label">搜索 API（Tavily）· R1 探索需要</p>
+              <button
+                type="button"
+                class="help-link-btn"
+                title="什么是 Tavily？"
+                aria-label="什么是 Tavily？"
+                @click="openExternal(PRODUCT_LINKS.docsFaqSearch)"
+              >
+                <Icon name="help-circle" :size="14" />
+              </button>
+            </div>
             <div class="onboarding__card">
-              <label class="field-label">搜索 API（Tavily）· R1 探索需要</label>
               <div class="onboarding__key-row">
                 <input
                   v-model="form.tavilyApiKey"
@@ -345,14 +380,23 @@ onMounted(() => {
                 </button>
               </div>
               <p class="hint-line">
-                没有搜索 Key 仍可先完成画像与关键词；探索前再补。安装说明见
+                免费用户每月约 1000 次调用。前往
                 <button
                   type="button"
                   class="onboarding__link"
-                  @click="openExternal(PRODUCT_LINKS.docsInstall)"
+                  @click="openExternal(PRODUCT_LINKS.tavily)"
                 >
-                  帮助文档
+                  Tavily 官网
                 </button>
+                注册获取 Key。说明见
+                <button
+                  type="button"
+                  class="onboarding__link"
+                  @click="openExternal(PRODUCT_LINKS.docsFaqSearch)"
+                >
+                  常见问题
+                </button>
+                。
               </p>
             </div>
             <p v-if="keysMessage" class="onboarding__ok">{{ keysMessage }}</p>
@@ -554,6 +598,12 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+.onboarding__section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .onboarding__dep {

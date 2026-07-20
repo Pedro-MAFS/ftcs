@@ -493,6 +493,7 @@ img {
 .doc-article h2 {
   margin-top: 1.75rem;
   font-size: 1.25rem;
+  scroll-margin-top: 5rem;
 }
 
 .doc-article p,

@@ -12,7 +12,10 @@ const router = createRouter({
     { path: '/docs/:slug', name: 'doc', component: DocView, props: true },
     { path: '/download', name: 'download', component: DownloadView },
   ],
-  scrollBehavior() {
+  scrollBehavior(to) {
+    if (to.hash) {
+      return { el: to.hash, top: 72 }
+    }
     return { top: 0 }
   },
 })

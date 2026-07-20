@@ -1,4 +1,9 @@
-export type ModelProviderId = 'anthropic' | 'openai' | 'google' | 'custom'
+export type ModelProviderId =
+  | 'deepseek'
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'custom'
 
 export interface SettingsSnapshot {
   workspaceRoot: string
@@ -48,6 +53,16 @@ export const MODEL_CATALOG: Record<
   ModelProviderId,
   { models: Array<{ id: string; label: string }>; small: Array<{ id: string; label: string }> }
 > = {
+  deepseek: {
+    models: [
+      { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+      { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    ],
+    small: [
+      { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+      { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+    ],
+  },
   anthropic: {
     models: [
       { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },

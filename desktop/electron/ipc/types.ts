@@ -610,7 +610,12 @@ export interface AgentPreflightResult {
   checks: AgentPreflightCheck[]
 }
 
-export type ModelProviderId = 'anthropic' | 'openai' | 'google' | 'custom'
+export type ModelProviderId =
+  | 'deepseek'
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'custom'
 
 export interface SettingsSnapshot {
   workspaceRoot: string

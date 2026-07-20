@@ -9,7 +9,20 @@ import {
 } from '../config/env-file'
 import { getOpenCodeConfigPath, getWorkspaceRoot } from '../config/paths'
 
-export type ModelProviderId = 'anthropic' | 'openai' | 'google' | 'custom'
+export type ModelProviderId =
+  | 'deepseek'
+  | 'anthropic'
+  | 'openai'
+  | 'google'
+  | 'custom'
+
+const KNOWN_PROVIDER_IDS: ModelProviderId[] = [
+  'deepseek',
+  'anthropic',
+  'openai',
+  'google',
+  'custom',
+]
 
 export interface SettingsSnapshot {
   workspaceRoot: string
@@ -49,6 +62,7 @@ export interface SettingsSaveResult {
 }
 
 const PROVIDER_ENV_KEY: Record<Exclude<ModelProviderId, 'custom'>, string> = {
+  deepseek: 'DEEPSEEK_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
   google: 'GEMINI_API_KEY',
@@ -60,6 +74,16 @@ const MODEL_CATALOG: Record<
   ModelProviderId,
   { models: Array<{ id: string; label: string }>; small: Array<{ id: string; label: string }> }
 > = {
+  deepseek: {
+    models: [
+      { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+      { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    ],
+    small: [
+      { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+      { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+    ],
+  },
   anthropic: {
     models: [
       { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
@@ -116,17 +140,19 @@ function detectProviderId(
   model: string,
 ): ModelProviderId {
   const stored = env.FTCS_PROVIDER_ID as ModelProviderId | undefined
-  if (stored && ['anthropic', 'openai', 'google', 'custom'].includes(stored)) {
+  if (stored && KNOWN_PROVIDER_IDS.includes(stored)) {
     return stored
   }
+  if (model.startsWith('deepseek/')) return 'deepseek'
   if (model.startsWith('anthropic/')) return 'anthropic'
   if (model.startsWith('openai/')) return 'openai'
   if (model.startsWith('google/') || model.startsWith('gemini/')) return 'google'
   if (model.startsWith('custom/')) return 'custom'
+  if (env.DEEPSEEK_API_KEY) return 'deepseek'
   if (env.ANTHROPIC_API_KEY) return 'anthropic'
   if (env.OPENAI_API_KEY) return 'openai'
   if (env.GEMINI_API_KEY) return 'google'
-  return 'anthropic'
+  return 'deepseek'
 }
 
 function resolveApiKey(
@@ -183,16 +209,16 @@ export function getSettingsSnapshot(): SettingsSnapshot {
   const model =
     env.FTCS_MODEL ||
     (typeof config.model === 'string' && config.model ? config.model : '') ||
-    'anthropic/claude-sonnet-4-5'
+    'deepseek/deepseek-v4-pro'
   const smallModel =
     env.FTCS_SMALL_MODEL ||
     (typeof config.small_model === 'string' && config.small_model
       ? config.small_model
       : '') ||
-    'anthropic/claude-haiku-4-5'
+    'deepseek/deepseek-v4-flash'
 
   const providerId =
-    (['anthropic', 'openai', 'google', 'custom'].includes(env.FTCS_PROVIDER_ID)
+    (KNOWN_PROVIDER_IDS.includes(env.FTCS_PROVIDER_ID as ModelProviderId)
       ? (env.FTCS_PROVIDER_ID as ModelProviderId)
       : undefined) || detectProviderId(env, model)
   const apiKey = resolveApiKey(env, providerId)

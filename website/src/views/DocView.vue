@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { marked } from 'marked'
 import { getDoc, listDocs } from '../lib/docs'
 import { rewriteHtmlHrefs } from '../lib/base'
 
 const props = defineProps<{ slug: string }>()
+const route = useRoute()
 
 marked.setOptions({ gfm: true })
 
@@ -14,6 +16,19 @@ const html = computed(() => {
   const raw = marked.parse(doc.value.body, { async: false }) as string
   return rewriteHtmlHrefs(raw)
 })
+
+watch(
+  () => [html.value, route.hash] as const,
+  async ([content, hash]) => {
+    if (!content || !hash) return
+    await nextTick()
+    const el = document.querySelector(hash)
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
