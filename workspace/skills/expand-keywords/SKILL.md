@@ -1,6 +1,6 @@
 ---
 name: expand-keywords
-description: 基于已就绪的产品画像生成五维关键词与搜索查询，并保存至 expansion.json。用户说扩展关键词、生成搜索词、开始获客准备时使用。
+description: 基于已就绪的产品画像，由大模型生成五维关键词与搜索查询，并经 lead-store.keywords_save 落盘。用户说扩展关键词、生成搜索词、开始获客准备时使用。
 phase: 1
 inputs:
   - name: product_id
@@ -13,7 +13,9 @@ outputs:
 
 # expand-keywords
 
-基于**已就绪**的产品画像，生成五维关键词与可执行的搜索查询（`search_queries`），保存至 `data/keywords/{product_id}/expansion.json`。
+基于**已就绪**的产品画像，**由你（大模型）直接生成**丰富、可靠、可执行的获客搜索词，再调用 `lead-store.keywords_save` 写入 `data/keywords/{product_id}/expansion.json`。
+
+**禁止**使用已移除的规则工具 `keywords_expand`。不要用固定模板机械拼接（如一律 `{name} supplier`）；必须结合画像内容与获客目标做推理。
 
 ## 何时使用
 
@@ -34,63 +36,76 @@ outputs:
 1. 调用 `lead-store.product_get`，传入 `product_id`
 2. 若画像不存在 → 停止，提示先运行 `extract-product-profile`
 3. 若 `status != "ready"` → 停止，根据 `readiness.missing_fields` 提示用户补全画像
+4. 仔细阅读：`company`、`products`（品名中英文、材质、规格、场景、HS）、`buyer_personas`、`target_markets`（地区与语言）、`competitors`
 
-### Step 2：生成关键词扩展
+### Step 2：明确获客目标（内化，不必单独提问除非画像严重缺失）
 
-1. 调用 `lead-store.keywords_expand`，传入 `product_id`
-   - 该工具会基于画像自动生成五维关键词与 `search_queries`
-   - 自动分配轮次 R1–R4（约 60% / 20% / 15% / 5%）
-   - 自动保存至 `data/keywords/{product_id}/expansion.json`
-2. 检查返回的 `stats`：
-   - `total_queries >= 30`
-   - `dimensions_covered` 覆盖 ≥ 4 个维度
+围绕以下目标生成搜索词：
 
-### Step 3：智能体审阅与补充（可选）
+- 找到可能采购/经销/进口该产品的海外买家或渠道商
+- 覆盖用户目标市场与买家类型
+- 兼顾广撒网（R1）与更深意图（R2/R3）及少量监控词（R4）
+- 用语贴近真实搜索习惯（Google / 行业站），可含合理行业黑话、缩写、本地语
 
-`keywords_expand` 提供规则化基础结果。智能体应审阅并在必要时补充：
+### Step 3：由你生成完整 KeywordExpansion
 
-- 行业特有术语或缩写（如 WPC、HS 编码相关词）
-- 目标市场本地化表达（德语/西语等，参考 `target_markets.languages`）
-- 更精准的买家场景词
+自己产出完整结构（见下方 Schema），要求：
 
-若需补充或修改：
+#### 五维 `dimensions`（每维若干短语，供展示与复用）
 
-1. 调用 `lead-store.keywords_get` 读取完整 `expansion.json`
-2. 在 `dimensions` 和 `search_queries` 中追加/调整（保持 `id` 唯一）
-3. 调用 `lead-store.keywords_save` 保存更新后的结果
+| 维度 | 生成要求 |
+|------|----------|
+| product | 品名、材质、品类、供应/出口侧表达；中英文按市场需要 |
+| scenario | 应用场景 × 产品，贴近真实采购语境 |
+| buyer | 买家类型、角色、进口商/分销商等 |
+| geo | 目标国家/地区 × 产品 × 采购意图；可用 `target_markets.languages` 做本地化 |
+| competitor | 竞品替代、竞品客户；无竞品时用品类头部品牌/替代方案词，勿编造不存在的具体公司名 |
 
-**约束**：
-- Phase 1 总查询数建议 ≤ 50
-- 每条 `search_query` 必须包含：`id`、`query`、`dimension`、`language`、`priority`、`round`
-- `dimension` 取值：`product` | `scenario` | `buyer` | `geo` | `competitor`
+#### `search_queries`（可执行搜索句）
 
-### Step 4：五维关键词说明
+- 总数 **30～50**（Phase 1 上限 50）
+- 至少覆盖 **4** 个维度（争取 5 个）
+- 轮次建议比例：R1 ~60%、R2 ~20%、R3 ~15%、R4 ~5%（可按画像微调，但 R1 应占多数）
+- 每条必须含：`id`、`query`、`dimension`、`language`、`priority`、`round`
+- `dimension`：`product` \| `scenario` \| `buyer` \| `geo` \| `competitor`
+- `priority`：`high` \| `medium` \| `low`
+- `round`：`R1` \| `R2` \| `R3` \| `R4`
+- `language`：如 `en` / `zh` / `de` 等，与 query 实际语言一致
+- `id` 唯一，建议 `q_001` 起连续编号
+- **去重**：语义高度重复的合并；避免空泛无产品信息的词
+- **可靠**：不要捏造画像中不存在的认证、规格或竞品专名；不确定时用品类级表述
 
-| 维度 | 生成逻辑 | 示例 |
-|------|---------|------|
-| product | 中英文品名、材质、品类、供应商词 | `WPC Decking supplier` |
-| scenario | 应用场景 × 产品 | `landscape WPC Decking distributor` |
-| buyer | 买家类型、角色、进口商 | `building materials supplier WPC Decking` |
-| geo | 目标国家/地区 × 产品 × 买家意图 | `WPC Decking importer Germany` |
-| competitor | 竞品替代、竞品客户（无竞品时用品类竞品词） | `top WPC Decking competitors` |
+#### `stats`
 
-### Step 5：轮次分配
+可省略，`keywords_save` 会按 `search_queries` 自动汇总；若自行填写须与列表一致。
 
-| 轮次 | 占比 | 用途 |
-|------|------|------|
-| R1 | ~60% | 广撒网：产品词、场景词、买家词、地理词 |
-| R2 | ~20% | 深挖掘：进口商、海关/HS 编码相关 |
-| R3 | ~15% | 精匹配：竞品、采购角色 |
-| R4 | ~5% | 持续监控：新分销商、采购公告 |
+### Step 4：保存
+
+调用 `lead-store.keywords_save`：
+
+- `product_id`
+- `expansion`：含 `dimensions`、`search_queries`（可含 `generated_at`；**不要**在 expansion 里再传冲突的 `product_id` 字段——工具侧会写入）
+
+若保存失败（校验错误），根据报错修正后重试，**禁止**写入残缺文件后假装成功。
+
+### Step 5：自检
+
+保存后可 `keywords_get` 核对：
+
+- `stats.total_queries >= 30`
+- `by_dimension` 中至少 4 个维度 count > 0
+- 抽查 3～5 条是否像真人会搜的词
+
+不足则继续推理补充并再次 `keywords_save`。
 
 ### Step 6：输出摘要
 
 向用户展示：
 
 - 产品 ID 与保存路径
-- 总查询数与各轮次/维度分布（`stats`）
-- 每个维度 2–3 条代表性 `search_queries`
-- 下一步建议：执行 `discover-leads`（默认 R1 轮次）
+- 总查询数与各轮次/维度分布
+- 每个维度 2～3 条代表性 `search_queries`
+- 下一步建议：执行 `discover-leads`（默认 R1）
 
 ## 输出要求
 
@@ -105,8 +120,8 @@ outputs:
 |------|------|
 | 画像不存在 | 提示先运行 `extract-product-profile` |
 | 画像为 `draft` | 列出 `missing_fields`，引导补全 |
-| `keywords_expand` 失败 | 展示错误信息，不写入空文件 |
-| 查询数 < 30 | 智能体补充行业词后 `keywords_save` |
+| `keywords_save` 校验失败 | 展示错误并修正后重试，不宣称已完成 |
+| 查询数 < 30 或维度不足 | 继续生成并再次保存 |
 
 ## 输出 Schema（KeywordExpansion）
 
@@ -136,12 +151,10 @@ outputs:
   "stats": {
     "total_queries": 45,
     "by_round": { "R1": 27, "R2": 9, "R3": 7, "R4": 2 },
-    "dimensions_covered": 5
+    "by_dimension": { "product": 10, "scenario": 8, "buyer": 12, "geo": 10, "competitor": 5 }
   }
 }
 ```
-
-`priority` 取值：`high` | `medium` | `low`。
 
 ## 示例对话
 

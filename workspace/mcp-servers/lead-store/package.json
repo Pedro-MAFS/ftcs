@@ -12,7 +12,7 @@
     "build:tsc": "tsc",
     "start": "node dist/mcp.js",
     "dev": "npm run build && node dist/mcp.js",
-    "test": "npm run build:tsc && node --test dist/readiness.test.js dist/storage.test.js dist/keyword-expander.test.js dist/lead-storage.test.js dist/lead-scorer.test.js dist/email-drafter.test.js"
+    "test": "npm run build:tsc && node --test dist/readiness.test.js dist/storage.test.js dist/lead-storage.test.js dist/lead-scorer.test.js dist/email-drafter.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

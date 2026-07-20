@@ -13,9 +13,8 @@
 | `profile_compute_readiness` | 预览就绪度（不保存） |
 | `file_classify` | 判断输入文件是否支持 |
 | `inputs_ensure_dir` | 创建 `inputs/` 归档目录 |
-| `keywords_expand` | 基于 ready 画像生成五维关键词与搜索查询并保存 |
 | `keywords_get` | 读取关键词扩展结果 |
-| `keywords_save` | 手动保存/更新关键词扩展（智能体补充后） |
+| `keywords_save` | 保存大模型生成的关键词扩展（校验 schema，要求画像 ready） |
 | `lead_generate_id` | 生成线索 ID |
 | `lead_append_raw` | 追加原始线索至 `raw/{round}.jsonl` |
 | `lead_list_raw` | 列出原始线索 |

@@ -19,7 +19,6 @@ import {
 } from "./paths.js";
 import type { KeywordExpansion, KeywordExpansionInput } from "./keyword-types.js";
 import { KeywordExpansionSchema } from "./keyword-types.js";
-import { assertProfileReadyForExpansion, expandKeywords } from "./keyword-expander.js";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -168,26 +167,6 @@ export function saveKeywords(
   mkdirSync(dirname(keywordsPath), { recursive: true });
   writeFileSync(keywordsPath, `${JSON.stringify(expansion, null, 2)}\n`, "utf8");
   return expansion;
-}
-
-export function expandAndSaveKeywords(root: string, productId: string): {
-  expansion: KeywordExpansion;
-  created: boolean;
-} {
-  const profile = loadProfile(root, productId);
-  if (!profile) {
-    throw new Error(`Product not found: ${productId}`);
-  }
-
-  const readinessError = assertProfileReadyForExpansion(profile);
-  if (readinessError) {
-    throw new Error(readinessError);
-  }
-
-  const existing = loadKeywords(root, productId);
-  const expansion = expandKeywords(profile);
-  saveKeywords(root, productId, expansion);
-  return { expansion, created: !existing };
 }
 
 export function getProjectRoot(): string {

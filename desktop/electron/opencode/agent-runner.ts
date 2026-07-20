@@ -105,9 +105,10 @@ function buildExpandKeywordsPrompt(productId: string): string {
     '',
     '执行要求：',
     '1. 调用 lead-store.product_get 确认画像存在且 status == "ready"。',
-    '2. 调用 lead-store.keywords_expand（传入上述 product_id）生成并保存 expansion.json。',
-    '3. 检查 stats：total_queries >= 30，维度覆盖 ≥ 4；不足则审阅补充后 keywords_save。',
-    '4. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例搜索词、下一步建议（discover-leads / R1）。',
+    '2. 根据画像与获客目标，由你（大模型）直接生成五维关键词与 30～50 条 search_queries（覆盖 ≥4 维，R1 占多数）；禁止调用 keywords_expand（该规则工具已移除）。',
+    '3. 调用 lead-store.keywords_save 保存完整 expansion；若校验失败则修正后重试。',
+    '4. 可用 keywords_get 核对 stats；不足则补充后再 save。',
+    '5. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例搜索词、下一步建议（discover-leads / R1）。',
     '',
     `输出路径：data/keywords/${productId}/expansion.json`,
   ].join('\n')

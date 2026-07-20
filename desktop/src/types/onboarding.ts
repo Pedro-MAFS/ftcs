@@ -46,9 +46,9 @@ export const TOUR_STEPS = [
     id: 'keywords',
     route: 'profile',
     title: '关键字扩展',
-    desc: '生成 R1 搜索词',
+    desc: '大模型生成搜索词',
     detail:
-      '画像就绪后，在画像页扩展搜索关键词（多维度 query）。这些词是后续 R1 探索的输入。',
+      '画像就绪后，在画像页扩展搜索关键词。由大模型根据画像与获客目标生成五维 query，再经 keywords_save 落盘，供后续 R1 探索使用。',
   },
   {
     id: 'explore',

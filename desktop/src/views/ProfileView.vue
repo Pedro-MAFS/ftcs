@@ -375,7 +375,7 @@ async function createExploreTask(): Promise<void> {
               ? '请先保存修改'
               : currentProfile?.status !== 'ready'
                 ? '画像就绪后方可新建'
-                : '调用 expand-keywords 生成探索任务'
+                : '由大模型根据画像生成探索关键词'
           "
           @click="createExploreTask"
         >
