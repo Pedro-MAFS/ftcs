@@ -49,60 +49,44 @@ async function findOnPath(command: string): Promise<string | null> {
   }
 }
 
-function parseNodeMajor(versionRaw: string): number | null {
-  const m = versionRaw.trim().match(/^v?(\d+)\./)
-  if (!m) return null
-  const major = Number.parseInt(m[1] ?? '', 10)
-  return Number.isFinite(major) ? major : null
-}
-
 async function probeNode(): Promise<EnvProbeItem> {
-  const bin = await findOnPath('node')
-  if (!bin) {
+  const { resolveBestNode } = await import('../runtime/resolve-node')
+  const { bestOk, bestAny, all } = await resolveBestNode({ minMajor: 22 })
+
+  if (!bestAny) {
     return {
       id: 'node',
       label: 'Node.js 22+',
       status: 'missing',
-      detail: '未在 PATH 中找到 node。MCP 与 npx 依赖本机 Node。',
+      detail:
+        '未找到 node（PATH / 注册表 / 常见安装目录均无）。MCP 与 npx 依赖本机 Node。',
       installUrl: NODE_INSTALL_URL,
     }
   }
-  try {
-    const { stdout } = await execFileAsync(bin, ['-v'], { windowsHide: true })
-    const version = stdout.trim() || 'unknown'
-    const major = parseNodeMajor(version)
-    if (major == null) {
-      return {
-        id: 'node',
-        label: 'Node.js 22+',
-        status: 'error',
-        detail: `已找到 node，但无法解析版本：${version}`,
-        installUrl: NODE_INSTALL_URL,
-      }
-    }
-    if (major < 22) {
-      return {
-        id: 'node',
-        label: 'Node.js 22+',
-        status: 'outdated',
-        detail: `当前 ${version}，需要 ≥ 22。路径：${bin}`,
-        installUrl: NODE_INSTALL_URL,
-      }
-    }
+
+  if (!bestOk) {
     return {
       id: 'node',
       label: 'Node.js 22+',
-      status: 'ok',
-      detail: `${version} · ${bin}`,
-    }
-  } catch (err) {
-    return {
-      id: 'node',
-      label: 'Node.js 22+',
-      status: 'error',
-      detail: err instanceof Error ? err.message : String(err),
+      status: 'outdated',
+      detail: `当前最高 ${bestAny.version}（${bestAny.exe}），需要 ≥ 22。`,
       installUrl: NODE_INSTALL_URL,
     }
+  }
+
+  const pathOnes = all.filter((n) => n.source === 'PATH')
+  const pathHint =
+    pathOnes.length > 0 &&
+    pathOnes[0] &&
+    pathOnes[0].exe.toLowerCase() !== bestOk.exe.toLowerCase()
+      ? `；PATH 上另有 ${pathOnes[0].version}（${pathOnes[0].exe}），应用将优先使用合格版本`
+      : ''
+
+  return {
+    id: 'node',
+    label: 'Node.js 22+',
+    status: 'ok',
+    detail: `${bestOk.version} · ${bestOk.exe}（${bestOk.source}）${pathHint}`,
   }
 }
 

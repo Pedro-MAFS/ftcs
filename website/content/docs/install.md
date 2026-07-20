@@ -30,9 +30,23 @@ node -v          # 应显示 v22.x 或更高
 
 ## Node.js 22+
 
-从 [Node.js 官网](https://nodejs.org/) 安装 **22 LTS 或更新** 版本，安装时勾选将 Node 加入 PATH。
+本应用需要本机 **Node.js 22 及以上**（MCP / `npx` / 安装 OpenCode 依赖它）。
 
-装好后验证：
+### Windows 一键安装（推荐）
+
+1. 启动应用，打开首次引导「环境监测」（或在 **设置** 中重新打开引导）
+2. 若 Node 显示缺失或过旧，点击 **一键安装 Node.js 24.18.0**
+3. 若弹出系统权限（UAC）请点「是」
+4. 看到安装成功提示后，**完全退出应用并重新打开**
+5. 再点「重新检测」，Node 应变为就绪
+
+一键安装会优先使用 Windows winget；若不可用则自动下载官方 MSI（失败时可改用 npmmirror 镜像）。安装日志在用户数据目录的 `logs/node-install-*.log`。
+
+### 手动安装
+
+从 [Node.js 官网](https://nodejs.org/) 安装 **22 LTS 或更新** 版本（推荐 24.18.0），安装时勾选将 Node 加入 PATH。
+
+装好后**重启本应用**，再验证：
 
 ```powershell
 node -v

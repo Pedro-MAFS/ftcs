@@ -25,6 +25,51 @@ export interface EnvProbeResult {
   items: EnvProbeItem[]
 }
 
+export type NodeInstallMethod = 'winget' | 'msi' | 'already-ok'
+
+export type NodeInstallErrorCode =
+  | 'unsupported-platform'
+  | 'already-ok'
+  | 'winget-missing'
+  | 'winget-failed'
+  | 'download-failed'
+  | 'checksum-failed'
+  | 'msiexec-failed'
+  | 'elevation-denied'
+  | 'busy'
+  | 'cancelled'
+  | 'unknown'
+
+export type NodeInstallProgressPhase =
+  | 'checking'
+  | 'winget'
+  | 'downloading'
+  | 'installing'
+  | 'done'
+  | 'failed'
+
+export interface NodeInstallProgress {
+  phase: NodeInstallProgressPhase
+  message: string
+}
+
+export type NodeInstallResult =
+  | {
+      ok: true
+      version: string
+      method: NodeInstallMethod
+      message: string
+      needsRestart: true
+      logPath?: string
+    }
+  | {
+      ok: false
+      code: NodeInstallErrorCode
+      message: string
+      logPath?: string
+      manualUrl: string
+    }
+
 export const TOUR_STEPS = [
   {
     id: 'input',

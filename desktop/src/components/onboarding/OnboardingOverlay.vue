@@ -5,7 +5,7 @@ import { useOnboarding } from '../../composables/useOnboarding'
 import { PRODUCT_LINKS } from '../../config/links'
 import { MODEL_CATALOG, type ModelProviderId, type SettingsSnapshot } from '../../types/settings'
 import { TOUR_STEPS } from '../../types/onboarding'
-import type { EnvProbeItem } from '../../types/onboarding'
+import type { EnvProbeItem, NodeInstallResult } from '../../types/onboarding'
 import Icon from '../shared/Icon.vue'
 
 const router = useRouter()
@@ -33,6 +33,10 @@ const keysError = ref('')
 const showApiKey = ref(false)
 const showTavilyKey = ref(false)
 const snapshot = ref<SettingsSnapshot | null>(null)
+const installingNode = ref(false)
+const nodeInstallProgress = ref('')
+const nodeInstallResult = ref<NodeInstallResult | null>(null)
+let stopNodeProgress: (() => void) | null = null
 
 const form = reactive({
   providerId: 'deepseek' as ModelProviderId,
@@ -87,7 +91,7 @@ const header = computed(() => {
     eyebrow: 'FTCS 首次设置 · 步骤 1 / 3',
     title: '先检查运行环境',
     subtitle:
-      '安装包保持轻量，以下依赖需本机就绪。缺什么就装什么，装好后点重新检测。',
+      '安装包保持轻量，以下依赖需本机就绪。Node.js 可一键安装；装成功后请退出并重启应用，再点重新检测。',
   }
 })
 
@@ -96,6 +100,63 @@ function statusLabel(item: EnvProbeItem): string {
   if (item.status === 'outdated') return '过旧'
   if (item.status === 'error') return '异常'
   return '缺失'
+}
+
+function canOneClickInstallNode(item: EnvProbeItem): boolean {
+  return (
+    item.id === 'node' &&
+    item.status !== 'ok' &&
+    Boolean(window.ftcs?.installNode) &&
+    window.ftcs?.platform === 'win32'
+  )
+}
+
+function canUpgradeNode(item: EnvProbeItem): boolean {
+  if (item.id !== 'node' || item.status !== 'ok') return false
+  if (!window.ftcs?.installNode || window.ftcs?.platform !== 'win32') return false
+  const m = item.detail.match(/v?(\d+)\./)
+  if (!m) return false
+  const major = Number.parseInt(m[1] ?? '', 10)
+  return Number.isFinite(major) && major >= 22 && major < 24
+}
+
+async function openExternal(url: string): Promise<void> {
+  if (!window.ftcs?.openExternal || !url) return
+  await window.ftcs.openExternal(url)
+}
+
+async function onInstallNode(): Promise<void> {
+  if (!window.ftcs?.installNode || installingNode.value) return
+  installingNode.value = true
+  nodeInstallProgress.value = '准备安装…'
+  nodeInstallResult.value = null
+  error.value = ''
+  stopNodeProgress?.()
+  stopNodeProgress = window.ftcs.onNodeInstallProgress?.((p) => {
+    nodeInstallProgress.value = p.message
+  }) ?? null
+  try {
+    const result = await window.ftcs.installNode()
+    nodeInstallResult.value = result
+    if (!result.ok) {
+      error.value = result.message
+      nodeInstallProgress.value = ''
+    } else {
+      nodeInstallProgress.value = ''
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+    nodeInstallProgress.value = ''
+  } finally {
+    stopNodeProgress?.()
+    stopNodeProgress = null
+    installingNode.value = false
+  }
+}
+
+async function onQuitApp(): Promise<void> {
+  if (!window.ftcs?.quitApp) return
+  await window.ftcs.quitApp()
 }
 
 function applySnapshot(data: SettingsSnapshot): void {
@@ -126,11 +187,6 @@ async function loadSettings(): Promise<void> {
   } catch (err) {
     keysError.value = err instanceof Error ? err.message : String(err)
   }
-}
-
-async function openExternal(url: string): Promise<void> {
-  if (!window.ftcs?.openExternal || !url) return
-  await window.ftcs.openExternal(url)
 }
 
 async function onSaveKeys(andContinue: boolean): Promise<void> {
@@ -259,16 +315,67 @@ onMounted(() => {
                   <p>{{ item.detail }}</p>
                 </div>
               </div>
-              <button
-                v-if="item.installUrl"
-                type="button"
-                class="btn-secondary btn-sm"
-                @click="openExternal(item.installUrl!)"
-              >
-                {{ item.id === 'node' ? '打开 Node 官网' : item.id === 'chrome' ? '打开 Chrome 下载' : '查看安装说明' }}
-              </button>
+              <div class="onboarding__dep-actions">
+                <button
+                  v-if="canOneClickInstallNode(item)"
+                  type="button"
+                  class="btn-primary btn-sm"
+                  :disabled="installingNode"
+                  @click="onInstallNode"
+                >
+                  {{ installingNode ? '安装中…' : '一键安装 Node.js 24.18.0' }}
+                </button>
+                <button
+                  v-else-if="canUpgradeNode(item)"
+                  type="button"
+                  class="btn-secondary btn-sm"
+                  :disabled="installingNode"
+                  @click="onInstallNode"
+                >
+                  {{ installingNode ? '安装中…' : '升级到 24.18.0（推荐）' }}
+                </button>
+                <button
+                  v-if="item.installUrl"
+                  type="button"
+                  class="btn-secondary btn-sm"
+                  :disabled="installingNode"
+                  @click="openExternal(item.installUrl!)"
+                >
+                  {{
+                    item.id === 'node'
+                      ? '打开 Node 官网'
+                      : item.id === 'chrome'
+                        ? '打开 Chrome 下载'
+                        : '查看安装说明'
+                  }}
+                </button>
+              </div>
             </article>
+            <p v-if="nodeInstallProgress" class="onboarding__muted">
+              {{ nodeInstallProgress }}
+            </p>
+            <div
+              v-if="nodeInstallResult?.ok"
+              class="onboarding__restart"
+            >
+              <p class="onboarding__ok">{{ nodeInstallResult.message }}</p>
+              <button
+                type="button"
+                class="btn-primary btn-sm"
+                @click="onQuitApp"
+              >
+                退出应用
+              </button>
+            </div>
             <p v-if="error" class="onboarding__error">{{ error }}</p>
+            <button
+              v-if="nodeInstallResult && !nodeInstallResult.ok && nodeInstallResult.manualUrl"
+              type="button"
+              class="btn-secondary btn-sm"
+              @click="openExternal(nodeInstallResult.manualUrl)"
+            >
+              打开 Node 官网手动安装
+            </button>
           </template>
 
           <!-- 密钥 -->
@@ -451,7 +558,7 @@ onMounted(() => {
               <button
                 type="button"
                 class="btn-secondary"
-                :disabled="probing"
+                :disabled="probing || installingNode"
                 @click="runProbe"
               >
                 {{ probing ? '检测中…' : '重新检测' }}
@@ -459,7 +566,7 @@ onMounted(() => {
               <button
                 type="button"
                 class="btn-primary"
-                :disabled="busy"
+                :disabled="busy || installingNode"
                 @click="onEnvContinue"
               >
                 {{ envOk ? '继续' : '继续（仍有缺失）' }}
@@ -616,6 +723,26 @@ onMounted(() => {
   border-radius: 8px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
+}
+
+.onboarding__dep-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.onboarding__restart {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgb(74 222 128 / 12%);
+  border: 1px solid rgb(74 222 128 / 28%);
 }
 
 .onboarding__dep-main {

@@ -90,6 +90,17 @@ export class OpenCodeRuntime {
       }
       ensureWorkspaceDataDirs(workspaceRoot)
 
+      // 多 Node 并存时先注入合格 Node，再构建 MCP / 启动 OpenCode
+      const { ensurePreferredNodeOnPath } = await import('../runtime/resolve-node')
+      const preferredNode = await ensurePreferredNodeOnPath()
+      if (preferredNode) {
+        this.appendLog(
+          `Node: ${preferredNode.version} · ${preferredNode.exe}（${preferredNode.source}）`,
+        )
+      } else {
+        this.appendLog('警告: 未解析到 Node.js ≥22，MCP/npx 可能失败')
+      }
+
       const mcpReady = await ensureMcpServersReady(workspaceRoot, (line) =>
         this.appendLog(line),
       )
@@ -105,6 +116,8 @@ export class OpenCodeRuntime {
       delete process.env.OPENCODE_SERVER_PASSWORD
       // 强制 MCP 子进程认准纯净工作区（勿落到仓库根）
       process.env.FTCS_WORKSPACE = workspaceRoot
+      // loadWorkspaceEnv 可能改写 PATH，再次确保合格 Node 在最前
+      await ensurePreferredNodeOnPath()
 
       const binaryPath = await ensureOpenCodeOnPath()
       const configPath = getOpenCodeConfigPath(workspaceRoot)

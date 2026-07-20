@@ -71,6 +71,8 @@ import {
   type OnboardingState,
 } from './onboarding/onboarding-service'
 import { probeEnvironment } from './onboarding/env-probe'
+import { installNodeRuntime } from './runtime/install-node-service'
+import type { NodeInstallProgress } from './ipc/types'
 import {
   checkForAppUpdate,
   dismissAppUpdate,
@@ -373,6 +375,19 @@ function registerIpcHandlers(): void {
     (_event, patch: Partial<OnboardingState>) => patchOnboardingState(patch ?? {}),
   )
   ipcMain.handle(IPC.ONBOARDING_PROBE_ENV, () => probeEnvironment())
+  ipcMain.handle(IPC.RUNTIME_INSTALL_NODE, async (event) => {
+    return installNodeRuntime({
+      onProgress: (progress: NodeInstallProgress) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC.RUNTIME_INSTALL_NODE_PROGRESS, progress)
+        }
+      },
+    })
+  })
+  ipcMain.handle(IPC.APP_QUIT, () => {
+    app.quit()
+    return { ok: true }
+  })
   ipcMain.handle(IPC.APP_GET_VERSION, () => getAppVersion())
   ipcMain.handle(IPC.UPDATE_CHECK, async (_event, opts?: { forceNotify?: boolean }) =>
     checkForAppUpdate({ forceNotify: Boolean(opts?.forceNotify) }),

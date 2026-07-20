@@ -39,6 +39,8 @@ import type {
   SettingsSnapshot,
   OnboardingState,
   EnvProbeResult,
+  NodeInstallProgress,
+  NodeInstallResult,
   UpdateCheckResult,
 } from './ipc/types'
 
@@ -81,6 +83,23 @@ const api = {
     ipcRenderer.invoke(IPC.ONBOARDING_SET_STATE, patch),
   probeEnvironment: (): Promise<EnvProbeResult> =>
     ipcRenderer.invoke(IPC.ONBOARDING_PROBE_ENV),
+  installNode: (): Promise<NodeInstallResult> =>
+    ipcRenderer.invoke(IPC.RUNTIME_INSTALL_NODE),
+  onNodeInstallProgress: (
+    handler: (progress: NodeInstallProgress) => void,
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      progress: NodeInstallProgress,
+    ) => {
+      handler(progress)
+    }
+    ipcRenderer.on(IPC.RUNTIME_INSTALL_NODE_PROGRESS, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.RUNTIME_INSTALL_NODE_PROGRESS, listener)
+    }
+  },
+  quitApp: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.APP_QUIT),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke(IPC.APP_GET_VERSION),
   checkForUpdate: (opts?: { forceNotify?: boolean }): Promise<UpdateCheckResult> =>
     ipcRenderer.invoke(IPC.UPDATE_CHECK, opts ?? {}),

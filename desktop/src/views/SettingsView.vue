@@ -692,7 +692,7 @@ async function onCheckUpdate(): Promise<void> {
               打开业务引导
             </button>
           </div>
-          <p class="hint-line">用于检测 Node / OpenCode / Chrome，并引导配置密钥与主流程。</p>
+          <p class="hint-line">用于检测 Node / OpenCode / Chrome，并引导配置密钥与主流程。Windows 上可在引导中一键安装 Node.js 24.18.0（装完需重启应用）。</p>
 
           <label class="field-label">官网与帮助</label>
           <div class="settings-actions-row">
