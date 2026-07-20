@@ -59,7 +59,20 @@ npm -v
 
 ## OpenCode CLI
 
-轻量安装包**不内嵌** OpenCode。在已安装 Node 22+ 的前提下：
+轻量安装包**不内嵌** OpenCode。OpenCode **依赖 Node.js 22+**，请先完成上一节 Node 安装并重启应用。
+
+### Windows 一键安装（推荐）
+
+1. 确认引导里 Node.js 已显示就绪（≥22）
+2. 点击 **一键安装 OpenCode 1.18.4**
+3. 安装成功后**完全退出并重新打开应用**
+4. 再点「重新检测」，OpenCode 应变为就绪
+
+一键安装会把 CLI 装到应用数据目录（`opencode-runtime`），不使用 `npm -g`，避免与 nvm 等全局环境冲突。日志在用户数据目录的 `logs/opencode-install-*.log`。
+
+### 手动安装
+
+在已安装 Node 22+ 的前提下：
 
 ```powershell
 npm install -g opencode-ai

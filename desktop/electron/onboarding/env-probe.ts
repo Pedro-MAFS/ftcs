@@ -91,22 +91,25 @@ async function probeNode(): Promise<EnvProbeItem> {
 }
 
 async function probeOpenCode(): Promise<EnvProbeItem> {
-  if (process.env.FTCS_OPENCODE_PATH) {
-    const custom = path.resolve(process.env.FTCS_OPENCODE_PATH)
-    if (fs.existsSync(custom)) {
-      return {
-        id: 'opencode',
-        label: 'OpenCode CLI',
-        status: 'ok',
-        detail: `FTCS_OPENCODE_PATH · ${custom}`,
-      }
+  const { resolveConfiguredOpenCodeBin } = await import('../runtime/opencode-paths')
+  const configured = resolveConfiguredOpenCodeBin()
+  if (configured) {
+    let version = ''
+    try {
+      const { stdout } = await execFileAsync(configured.exe, ['--version'], {
+        windowsHide: true,
+      })
+      version = stdout.trim().split(/\r?\n/)[0] ?? ''
+    } catch {
+      // ignore
     }
     return {
       id: 'opencode',
       label: 'OpenCode CLI',
-      status: 'missing',
-      detail: `FTCS_OPENCODE_PATH 指向的文件不存在：${custom}`,
-      installUrl: OPENCODE_DOCS_URL,
+      status: 'ok',
+      detail: version
+        ? `${version} · ${configured.exe}（${configured.source}）`
+        : `${configured.exe}（${configured.source}）`,
     }
   }
 
@@ -116,7 +119,8 @@ async function probeOpenCode(): Promise<EnvProbeItem> {
       id: 'opencode',
       label: 'OpenCode CLI',
       status: 'missing',
-      detail: '未在 PATH 中找到 opencode。可执行：npm install -g opencode-ai',
+      detail:
+        '未找到 opencode。可在本引导一键安装到应用目录（需先就绪 Node.js 22+），或手动：npm install -g opencode-ai',
       installUrl: OPENCODE_DOCS_URL,
     }
   }

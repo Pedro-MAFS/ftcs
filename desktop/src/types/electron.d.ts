@@ -2,7 +2,14 @@ import type { AppStatus, OpenCodeActionResult } from './app'
 import type { AuthActionResult, AuthSessionSnapshot } from './auth'
 import type { LibraryMutationResult, LibrarySnapshot } from './library'
 import type { SettingsSaveInput, SettingsSaveResult, SettingsSnapshot } from './settings'
-import type { EnvProbeResult, NodeInstallProgress, NodeInstallResult, OnboardingState } from './onboarding'
+import type {
+  EnvProbeResult,
+  NodeInstallProgress,
+  NodeInstallResult,
+  OnboardingState,
+  OpenCodeInstallProgress,
+  OpenCodeInstallResult,
+} from './onboarding'
 import type { UpdateCheckResult } from './update'
 
 export type AgentTimelineItem = {
@@ -473,6 +480,10 @@ declare global {
       probeEnvironment: () => Promise<EnvProbeResult>
       installNode: () => Promise<NodeInstallResult>
       onNodeInstallProgress: (handler: (progress: NodeInstallProgress) => void) => () => void
+      installOpenCode: () => Promise<OpenCodeInstallResult>
+      onOpenCodeInstallProgress: (
+        handler: (progress: OpenCodeInstallProgress) => void,
+      ) => () => void
       quitApp: () => Promise<{ ok: boolean }>
       getAppVersion: () => Promise<string>
       checkForUpdate: (opts?: { forceNotify?: boolean }) => Promise<UpdateCheckResult>

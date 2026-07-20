@@ -5,6 +5,8 @@ import type { OnboardingState } from '../ipc/types'
 
 interface UserPrefs {
   workspaceRoot?: string
+  /** 一键安装的 OpenCode 可执行文件绝对路径 */
+  opencodePath?: string
   onboarding?: OnboardingState
   update?: {
     dismissedVersion?: string

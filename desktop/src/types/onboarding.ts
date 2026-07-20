@@ -70,6 +70,47 @@ export type NodeInstallResult =
       manualUrl: string
     }
 
+export type OpenCodeInstallMethod = 'npm-prefix' | 'already-ok'
+
+export type OpenCodeInstallErrorCode =
+  | 'unsupported-platform'
+  | 'need-node'
+  | 'npm-failed'
+  | 'verify-failed'
+  | 'busy'
+  | 'cancelled'
+  | 'unknown'
+
+export type OpenCodeInstallProgressPhase =
+  | 'checking'
+  | 'installing'
+  | 'verifying'
+  | 'done'
+  | 'failed'
+
+export interface OpenCodeInstallProgress {
+  phase: OpenCodeInstallProgressPhase
+  message: string
+}
+
+export type OpenCodeInstallResult =
+  | {
+      ok: true
+      version: string
+      method: OpenCodeInstallMethod
+      binaryPath: string
+      message: string
+      needsRestart: true
+      logPath?: string
+    }
+  | {
+      ok: false
+      code: OpenCodeInstallErrorCode
+      message: string
+      logPath?: string
+      manualUrl: string
+    }
+
 export const TOUR_STEPS = [
   {
     id: 'input',

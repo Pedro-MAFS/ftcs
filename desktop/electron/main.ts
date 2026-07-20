@@ -72,7 +72,8 @@ import {
 } from './onboarding/onboarding-service'
 import { probeEnvironment } from './onboarding/env-probe'
 import { installNodeRuntime } from './runtime/install-node-service'
-import type { NodeInstallProgress } from './ipc/types'
+import { installOpenCodeRuntime } from './runtime/install-opencode-service'
+import type { NodeInstallProgress, OpenCodeInstallProgress } from './ipc/types'
 import {
   checkForAppUpdate,
   dismissAppUpdate,
@@ -380,6 +381,15 @@ function registerIpcHandlers(): void {
       onProgress: (progress: NodeInstallProgress) => {
         if (!event.sender.isDestroyed()) {
           event.sender.send(IPC.RUNTIME_INSTALL_NODE_PROGRESS, progress)
+        }
+      },
+    })
+  })
+  ipcMain.handle(IPC.RUNTIME_INSTALL_OPENCODE, async (event) => {
+    return installOpenCodeRuntime({
+      onProgress: (progress: OpenCodeInstallProgress) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC.RUNTIME_INSTALL_OPENCODE_PROGRESS, progress)
         }
       },
     })

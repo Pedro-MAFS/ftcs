@@ -24,7 +24,8 @@
 | 06 | [MCP 工具规范](docs/06-MCP工具规范.md) | 工具接口与实现优先级 |
 | 07 | [目录结构约定](docs/07-目录结构约定.md) | 仓库目录与文件命名规范 |
 | 08 | [产品架构决策：Electron + OpenCode](docs/08-产品架构决策-Electron-OpenCode.md) | Phase 2 桌面产品形态与集成方案 |
-| 09 | [Node.js 一键安装方案](docs/09-Node.js一键安装方案.md) | 降低安装摩擦：winget 安装 24.18.0，探测 ≥22 |
+| 09 | [Node.js 一键安装方案](docs/09-Node.js一键安装方案.md) | 降低安装摩擦：winget/MSI 安装 24.18.0，探测 ≥22 |
+| 10 | [OpenCode 一键安装方案](docs/10-OpenCode一键安装方案.md) | userData 本地前缀安装 opencode-ai；**硬依赖合格 Node** |
 
 ## 当前阶段
 

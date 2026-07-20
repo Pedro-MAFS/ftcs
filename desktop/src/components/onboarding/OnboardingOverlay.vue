@@ -5,7 +5,7 @@ import { useOnboarding } from '../../composables/useOnboarding'
 import { PRODUCT_LINKS } from '../../config/links'
 import { MODEL_CATALOG, type ModelProviderId, type SettingsSnapshot } from '../../types/settings'
 import { TOUR_STEPS } from '../../types/onboarding'
-import type { EnvProbeItem, NodeInstallResult } from '../../types/onboarding'
+import type { EnvProbeItem, NodeInstallResult, OpenCodeInstallResult } from '../../types/onboarding'
 import Icon from '../shared/Icon.vue'
 
 const router = useRouter()
@@ -37,6 +37,10 @@ const installingNode = ref(false)
 const nodeInstallProgress = ref('')
 const nodeInstallResult = ref<NodeInstallResult | null>(null)
 let stopNodeProgress: (() => void) | null = null
+const installingOpenCode = ref(false)
+const openCodeInstallProgress = ref('')
+const openCodeInstallResult = ref<OpenCodeInstallResult | null>(null)
+let stopOpenCodeProgress: (() => void) | null = null
 
 const form = reactive({
   providerId: 'deepseek' as ModelProviderId,
@@ -91,7 +95,7 @@ const header = computed(() => {
     eyebrow: 'FTCS 首次设置 · 步骤 1 / 3',
     title: '先检查运行环境',
     subtitle:
-      '安装包保持轻量，以下依赖需本机就绪。Node.js 可一键安装；装成功后请退出并重启应用，再点重新检测。',
+      '安装包保持轻量，以下依赖需本机就绪。请先就绪 Node.js，再一键安装 OpenCode；装成功后请退出并重启应用，再点重新检测。',
   }
 })
 
@@ -120,16 +124,30 @@ function canUpgradeNode(item: EnvProbeItem): boolean {
   return Number.isFinite(major) && major >= 22 && major < 24
 }
 
+const nodeReady = computed(
+  () => probe.value?.items.find((i) => i.id === 'node')?.status === 'ok',
+)
+
+function canOneClickInstallOpenCode(item: EnvProbeItem): boolean {
+  return (
+    item.id === 'opencode' &&
+    item.status !== 'ok' &&
+    Boolean(window.ftcs?.installOpenCode) &&
+    window.ftcs?.platform === 'win32'
+  )
+}
+
 async function openExternal(url: string): Promise<void> {
   if (!window.ftcs?.openExternal || !url) return
   await window.ftcs.openExternal(url)
 }
 
 async function onInstallNode(): Promise<void> {
-  if (!window.ftcs?.installNode || installingNode.value) return
+  if (!window.ftcs?.installNode || installingNode.value || installingOpenCode.value) return
   installingNode.value = true
   nodeInstallProgress.value = '准备安装…'
   nodeInstallResult.value = null
+  openCodeInstallResult.value = null
   error.value = ''
   stopNodeProgress?.()
   stopNodeProgress = window.ftcs.onNodeInstallProgress?.((p) => {
@@ -151,6 +169,42 @@ async function onInstallNode(): Promise<void> {
     stopNodeProgress?.()
     stopNodeProgress = null
     installingNode.value = false
+  }
+}
+
+async function onInstallOpenCode(): Promise<void> {
+  if (!window.ftcs?.installOpenCode || installingOpenCode.value || installingNode.value) return
+  if (!nodeReady.value) {
+    error.value =
+      'OpenCode 依赖 Node.js。请先完成 Node.js 一键安装（或确保已安装 ≥22），完全退出并重启本应用后，再安装 OpenCode。'
+    return
+  }
+  installingOpenCode.value = true
+  openCodeInstallProgress.value = '准备安装…'
+  openCodeInstallResult.value = null
+  nodeInstallResult.value = null
+  error.value = ''
+  stopOpenCodeProgress?.()
+  stopOpenCodeProgress =
+    window.ftcs.onOpenCodeInstallProgress?.((p) => {
+      openCodeInstallProgress.value = p.message
+    }) ?? null
+  try {
+    const result = await window.ftcs.installOpenCode()
+    openCodeInstallResult.value = result
+    if (!result.ok) {
+      error.value = result.message
+      openCodeInstallProgress.value = ''
+    } else {
+      openCodeInstallProgress.value = ''
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+    openCodeInstallProgress.value = ''
+  } finally {
+    stopOpenCodeProgress?.()
+    stopOpenCodeProgress = null
+    installingOpenCode.value = false
   }
 }
 
@@ -320,7 +374,7 @@ onMounted(() => {
                   v-if="canOneClickInstallNode(item)"
                   type="button"
                   class="btn-primary btn-sm"
-                  :disabled="installingNode"
+                  :disabled="installingNode || installingOpenCode"
                   @click="onInstallNode"
                 >
                   {{ installingNode ? '安装中…' : '一键安装 Node.js 24.18.0' }}
@@ -329,16 +383,36 @@ onMounted(() => {
                   v-else-if="canUpgradeNode(item)"
                   type="button"
                   class="btn-secondary btn-sm"
-                  :disabled="installingNode"
+                  :disabled="installingNode || installingOpenCode"
                   @click="onInstallNode"
                 >
                   {{ installingNode ? '安装中…' : '升级到 24.18.0（推荐）' }}
                 </button>
                 <button
+                  v-if="canOneClickInstallOpenCode(item)"
+                  type="button"
+                  class="btn-primary btn-sm"
+                  :disabled="installingOpenCode || installingNode || !nodeReady"
+                  :title="
+                    nodeReady
+                      ? ''
+                      : '需先就绪 Node.js 22+，并建议重启应用后再装 OpenCode'
+                  "
+                  @click="onInstallOpenCode"
+                >
+                  {{
+                    installingOpenCode
+                      ? '安装中…'
+                      : nodeReady
+                        ? '一键安装 OpenCode 1.18.4'
+                        : '需先就绪 Node.js'
+                  }}
+                </button>
+                <button
                   v-if="item.installUrl"
                   type="button"
                   class="btn-secondary btn-sm"
-                  :disabled="installingNode"
+                  :disabled="installingNode || installingOpenCode"
                   @click="openExternal(item.installUrl!)"
                 >
                   {{
@@ -354,11 +428,27 @@ onMounted(() => {
             <p v-if="nodeInstallProgress" class="onboarding__muted">
               {{ nodeInstallProgress }}
             </p>
+            <p v-if="openCodeInstallProgress" class="onboarding__muted">
+              {{ openCodeInstallProgress }}
+            </p>
             <div
               v-if="nodeInstallResult?.ok"
               class="onboarding__restart"
             >
               <p class="onboarding__ok">{{ nodeInstallResult.message }}</p>
+              <button
+                type="button"
+                class="btn-primary btn-sm"
+                @click="onQuitApp"
+              >
+                退出应用
+              </button>
+            </div>
+            <div
+              v-else-if="openCodeInstallResult?.ok"
+              class="onboarding__restart"
+            >
+              <p class="onboarding__ok">{{ openCodeInstallResult.message }}</p>
               <button
                 type="button"
                 class="btn-primary btn-sm"
@@ -375,6 +465,14 @@ onMounted(() => {
               @click="openExternal(nodeInstallResult.manualUrl)"
             >
               打开 Node 官网手动安装
+            </button>
+            <button
+              v-if="openCodeInstallResult && !openCodeInstallResult.ok && openCodeInstallResult.manualUrl"
+              type="button"
+              class="btn-secondary btn-sm"
+              @click="openExternal(openCodeInstallResult.manualUrl)"
+            >
+              查看 OpenCode 安装说明
             </button>
           </template>
 
@@ -558,7 +656,7 @@ onMounted(() => {
               <button
                 type="button"
                 class="btn-secondary"
-                :disabled="probing || installingNode"
+                :disabled="probing || installingNode || installingOpenCode"
                 @click="runProbe"
               >
                 {{ probing ? '检测中…' : '重新检测' }}
@@ -566,7 +664,7 @@ onMounted(() => {
               <button
                 type="button"
                 class="btn-primary"
-                :disabled="busy || installingNode"
+                :disabled="busy || installingNode || installingOpenCode"
                 @click="onEnvContinue"
               >
                 {{ envOk ? '继续' : '继续（仍有缺失）' }}

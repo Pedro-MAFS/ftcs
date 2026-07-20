@@ -41,6 +41,8 @@ import type {
   EnvProbeResult,
   NodeInstallProgress,
   NodeInstallResult,
+  OpenCodeInstallProgress,
+  OpenCodeInstallResult,
   UpdateCheckResult,
 } from './ipc/types'
 
@@ -97,6 +99,22 @@ const api = {
     ipcRenderer.on(IPC.RUNTIME_INSTALL_NODE_PROGRESS, listener)
     return () => {
       ipcRenderer.removeListener(IPC.RUNTIME_INSTALL_NODE_PROGRESS, listener)
+    }
+  },
+  installOpenCode: (): Promise<OpenCodeInstallResult> =>
+    ipcRenderer.invoke(IPC.RUNTIME_INSTALL_OPENCODE),
+  onOpenCodeInstallProgress: (
+    handler: (progress: OpenCodeInstallProgress) => void,
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      progress: OpenCodeInstallProgress,
+    ) => {
+      handler(progress)
+    }
+    ipcRenderer.on(IPC.RUNTIME_INSTALL_OPENCODE_PROGRESS, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.RUNTIME_INSTALL_OPENCODE_PROGRESS, listener)
     }
   },
   quitApp: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.APP_QUIT),

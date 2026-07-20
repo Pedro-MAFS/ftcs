@@ -3,20 +3,20 @@ import fs from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { resolveConfiguredOpenCodeBin } from '../runtime/opencode-paths'
 
 const execFileAsync = promisify(execFile)
 
 /**
  * 确保系统能解析到 `opencode` 命令（SDK 固定 spawn 命令名 `opencode`）。
- * 当前阶段不使用内嵌二进制；可选通过 FTCS_OPENCODE_PATH 注入 PATH。
+ * 优先：prefs / FTCS_OPENCODE_PATH / userData 本地前缀，再 PATH。
  */
 export async function ensureOpenCodeOnPath(): Promise<string> {
-  if (process.env.FTCS_OPENCODE_PATH) {
-    const custom = path.resolve(process.env.FTCS_OPENCODE_PATH)
-    if (!fs.existsSync(custom)) {
-      throw new Error(`FTCS_OPENCODE_PATH 指向的文件不存在: ${custom}`)
-    }
-    prependPathDir(path.dirname(custom))
+  const configured = resolveConfiguredOpenCodeBin()
+  if (configured) {
+    prependPathDir(path.dirname(configured.exe))
+    process.env.FTCS_OPENCODE_PATH = configured.exe
+    return configured.exe
   }
 
   const fromPath = await findOnPath('opencode')
@@ -26,7 +26,7 @@ export async function ensureOpenCodeOnPath(): Promise<string> {
     [
       '未找到 OpenCode CLI。',
       '当前采用 SDK Server+Client，暂不内嵌二进制，需要本机已安装 opencode。',
-      '安装: npm install -g opencode-ai',
+      '可在应用引导中一键安装，或：npm install -g opencode-ai',
       '或设置环境变量 FTCS_OPENCODE_PATH。',
     ].join('\n'),
   )

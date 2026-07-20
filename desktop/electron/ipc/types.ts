@@ -50,6 +50,8 @@ export const IPC = {
   ONBOARDING_PROBE_ENV: 'onboarding:probe-env',
   RUNTIME_INSTALL_NODE: 'runtime:install-node',
   RUNTIME_INSTALL_NODE_PROGRESS: 'runtime:install-node-progress',
+  RUNTIME_INSTALL_OPENCODE: 'runtime:install-opencode',
+  RUNTIME_INSTALL_OPENCODE_PROGRESS: 'runtime:install-opencode-progress',
   APP_QUIT: 'app:quit',
   UPDATE_CHECK: 'update:check',
   UPDATE_SNOOZE: 'update:snooze',
@@ -144,6 +146,47 @@ export type NodeInstallResult =
   | {
       ok: false
       code: NodeInstallErrorCode
+      message: string
+      logPath?: string
+      manualUrl: string
+    }
+
+export type OpenCodeInstallMethod = 'npm-prefix' | 'already-ok'
+
+export type OpenCodeInstallErrorCode =
+  | 'unsupported-platform'
+  | 'need-node'
+  | 'npm-failed'
+  | 'verify-failed'
+  | 'busy'
+  | 'cancelled'
+  | 'unknown'
+
+export type OpenCodeInstallProgressPhase =
+  | 'checking'
+  | 'installing'
+  | 'verifying'
+  | 'done'
+  | 'failed'
+
+export interface OpenCodeInstallProgress {
+  phase: OpenCodeInstallProgressPhase
+  message: string
+}
+
+export type OpenCodeInstallResult =
+  | {
+      ok: true
+      version: string
+      method: OpenCodeInstallMethod
+      binaryPath: string
+      message: string
+      needsRestart: true
+      logPath?: string
+    }
+  | {
+      ok: false
+      code: OpenCodeInstallErrorCode
       message: string
       logPath?: string
       manualUrl: string
