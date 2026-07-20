@@ -3,6 +3,7 @@ import type { AuthActionResult, AuthSessionSnapshot } from './auth'
 import type { LibraryMutationResult, LibrarySnapshot } from './library'
 import type { SettingsSaveInput, SettingsSaveResult, SettingsSnapshot } from './settings'
 import type { EnvProbeResult, OnboardingState } from './onboarding'
+import type { UpdateCheckResult } from './update'
 
 export type AgentTimelineItem = {
   id: string
@@ -470,6 +471,10 @@ declare global {
       getOnboardingState: () => Promise<OnboardingState>
       setOnboardingState: (patch: Partial<OnboardingState>) => Promise<OnboardingState>
       probeEnvironment: () => Promise<EnvProbeResult>
+      getAppVersion: () => Promise<string>
+      checkForUpdate: (opts?: { forceNotify?: boolean }) => Promise<UpdateCheckResult>
+      snoozeUpdate: () => Promise<{ ok: boolean }>
+      dismissUpdate: (version: string) => Promise<{ ok: boolean }>
       saveSettings: (
         input: SettingsSaveInput,
       ) => Promise<SettingsSaveResult & { status: AppStatus }>

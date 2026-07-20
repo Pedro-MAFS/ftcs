@@ -48,11 +48,31 @@ export const IPC = {
   ONBOARDING_GET_STATE: 'onboarding:get-state',
   ONBOARDING_SET_STATE: 'onboarding:set-state',
   ONBOARDING_PROBE_ENV: 'onboarding:probe-env',
+  UPDATE_CHECK: 'update:check',
+  UPDATE_SNOOZE: 'update:snooze',
+  UPDATE_DISMISS: 'update:dismiss',
+  APP_GET_VERSION: 'app:get-version',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_GET_LOGS */
   SIDECAR_GET_LOGS: 'opencode:get-logs',
 } as const
+
+export interface UpdateCheckResult {
+  ok: boolean
+  message: string
+  currentVersion: string
+  latestVersion: string | null
+  hasUpdate: boolean
+  shouldNotify: boolean
+  mandatory: boolean
+  title: string
+  notes: string[]
+  downloadPage: string
+  releasedAt: string | null
+  checkedAt: string
+  manifestUrl: string
+}
 
 export type OnboardingPhase = 'env' | 'keys' | 'tour' | 'done'
 

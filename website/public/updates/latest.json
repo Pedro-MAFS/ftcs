@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "releasedAt": "2026-07-19",
+  "minVersion": "0.1.0",
+  "title": "FTCS Desktop 0.2.0",
+  "notes": [
+    "OAuth 软门禁登录与意见反馈",
+    "首次引导：环境检测、密钥配置与业务流程说明",
+    "官网支持 Gitee / GitHub 双镜像下载"
+  ],
+  "downloadPage": "https://ai-utills.com/ftcs/download/"
+}

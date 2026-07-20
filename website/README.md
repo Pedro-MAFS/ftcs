@@ -79,6 +79,23 @@ location /ftcs/ {
 
 无需后端；改完后重新 `npm run build` 并发布 `dist/`。
 
+## 桌面端更新清单
+
+发版时同步更新 [`public/updates/latest.json`](public/updates/latest.json)（部署后地址：`https://ai-utills.com/ftcs/updates/latest.json`）：
+
+```json
+{
+  "version": "0.3.0",
+  "releasedAt": "2026-07-20",
+  "minVersion": "0.1.0",
+  "title": "FTCS Desktop 0.3.0",
+  "notes": ["更新说明条目"],
+  "downloadPage": "https://ai-utills.com/ftcs/download/"
+}
+```
+
+桌面端启动后会拉取该文件；若远程 `version` 高于本地 `app.getVersion()`，在标题栏下方提示并引导打开下载页。
+
 ## 帮助文档
 
 Markdown 源文件：`content/docs/*.md`  

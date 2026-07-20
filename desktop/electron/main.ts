@@ -71,6 +71,12 @@ import {
   type OnboardingState,
 } from './onboarding/onboarding-service'
 import { probeEnvironment } from './onboarding/env-probe'
+import {
+  checkForAppUpdate,
+  dismissAppUpdate,
+  getAppVersion,
+  snoozeAppUpdate,
+} from './update/update-check'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -367,6 +373,18 @@ function registerIpcHandlers(): void {
     (_event, patch: Partial<OnboardingState>) => patchOnboardingState(patch ?? {}),
   )
   ipcMain.handle(IPC.ONBOARDING_PROBE_ENV, () => probeEnvironment())
+  ipcMain.handle(IPC.APP_GET_VERSION, () => getAppVersion())
+  ipcMain.handle(IPC.UPDATE_CHECK, async (_event, opts?: { forceNotify?: boolean }) =>
+    checkForAppUpdate({ forceNotify: Boolean(opts?.forceNotify) }),
+  )
+  ipcMain.handle(IPC.UPDATE_SNOOZE, () => {
+    snoozeAppUpdate()
+    return { ok: true }
+  })
+  ipcMain.handle(IPC.UPDATE_DISMISS, (_event, version: string) => {
+    dismissAppUpdate(String(version || ''))
+    return { ok: true }
+  })
   ipcMain.handle(IPC.SETTINGS_SAVE, async (_event, input: SettingsSaveInput) => {
     const result = saveSettings(input)
     if (!runtime) {

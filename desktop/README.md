@@ -95,6 +95,10 @@ npx electron-builder --win # 产出 release/
 
 > 内嵌 OpenCode 二进制见实施计划 2.0.6，不在本轻量包范围。
 
+### 应用内检查更新
+
+启动后会请求官网 `https://ai-utills.com/ftcs/updates/latest.json`；若远程版本高于本地，标题栏下方提示并引导打开下载页。发版时请同步更新官网 `website/public/updates/latest.json`，并在设置 → 关于中可手动「检查更新」。
+
 ## 工作区初始化
 
 启动 OpenCode 前会执行 `initializeWorkspace`：

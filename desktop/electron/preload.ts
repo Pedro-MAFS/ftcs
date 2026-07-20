@@ -39,6 +39,7 @@ import type {
   SettingsSnapshot,
   OnboardingState,
   EnvProbeResult,
+  UpdateCheckResult,
 } from './ipc/types'
 
 const api = {
@@ -80,6 +81,12 @@ const api = {
     ipcRenderer.invoke(IPC.ONBOARDING_SET_STATE, patch),
   probeEnvironment: (): Promise<EnvProbeResult> =>
     ipcRenderer.invoke(IPC.ONBOARDING_PROBE_ENV),
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke(IPC.APP_GET_VERSION),
+  checkForUpdate: (opts?: { forceNotify?: boolean }): Promise<UpdateCheckResult> =>
+    ipcRenderer.invoke(IPC.UPDATE_CHECK, opts ?? {}),
+  snoozeUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.UPDATE_SNOOZE),
+  dismissUpdate: (version: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.UPDATE_DISMISS, version),
   saveSettings: (
     input: SettingsSaveInput,
   ): Promise<SettingsSaveResult & { status: AppStatus }> =>

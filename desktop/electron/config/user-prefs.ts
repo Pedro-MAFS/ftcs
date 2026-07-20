@@ -6,6 +6,10 @@ import type { OnboardingState } from '../ipc/types'
 interface UserPrefs {
   workspaceRoot?: string
   onboarding?: OnboardingState
+  update?: {
+    dismissedVersion?: string
+    snoozeUntil?: string
+  }
 }
 
 function prefsPath(): string {

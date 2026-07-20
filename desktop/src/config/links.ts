@@ -4,6 +4,8 @@ export const PRODUCT_LINKS = {
   docs: 'https://ai-utills.com/ftcs/docs/',
   docsInstall: 'https://ai-utills.com/ftcs/docs/install',
   download: 'https://ai-utills.com/ftcs/download/',
+  /** 桌面端检查更新用的版本清单 */
+  updateManifest: 'https://ai-utills.com/ftcs/updates/latest.json',
   nodejs: 'https://nodejs.org/',
   chrome: 'https://www.google.com/chrome/',
 } as const

@@ -10,6 +10,7 @@ import { MODEL_CATALOG } from '../types/settings'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import { PRODUCT_LINKS } from '../config/links'
 import { useOnboarding } from '../composables/useOnboarding'
+import { useUpdateCheck } from '../composables/useUpdateCheck'
 
 const meta = SECTION_META.settings
 const { status, runtimeHealthy, runtimeLabel, loading, restartOpenCode, refresh } =
@@ -27,6 +28,15 @@ const {
 } = useAuth()
 const { activeCategory, setCategory } = useSettingsNav()
 const { reopen: reopenOnboarding } = useOnboarding()
+const {
+  appVersion,
+  checking: updateChecking,
+  result: updateResult,
+  checkForUpdate,
+  openDownloadPage,
+  refreshAppVersion,
+} = useUpdateCheck()
+const updateHint = ref('')
 const confirmLogout = ref(false)
 const authHint = ref('')
 
@@ -234,7 +244,17 @@ function scrollTo(category: typeof activeCategory.value): void {
 
 onMounted(() => {
   void loadSettings()
+  void refreshAppVersion()
 })
+
+async function onCheckUpdate(): Promise<void> {
+  updateHint.value = '正在检查…'
+  const res = await checkForUpdate({ forceNotify: true })
+  updateHint.value = res.message
+  if (res.ok && res.hasUpdate) {
+    updateHint.value = `${res.message}。可点击「前往下载页」获取安装包。`
+  }
+}
 </script>
 
 <template>
@@ -570,7 +590,7 @@ onMounted(() => {
           <h3>关于与隐私</h3>
           <div class="about-row">
             <span class="muted">应用</span>
-            <span class="mono">FTCS Desktop 0.2.0</span>
+            <span class="mono">FTCS Desktop {{ appVersion || '—' }}</span>
           </div>
           <div class="about-row">
             <span class="muted">架构</span>
@@ -584,6 +604,29 @@ onMounted(() => {
             <span class="muted">OpenCode 模板</span>
             <span class="mono">{{ snapshot?.opencodeConfigPath ?? '—' }}</span>
           </div>
+
+          <label class="field-label">软件更新</label>
+          <div class="settings-actions-row">
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              :disabled="updateChecking"
+              @click="onCheckUpdate"
+            >
+              <Icon name="refresh-cw" :size="12" />
+              {{ updateChecking ? '检查中…' : '检查更新' }}
+            </button>
+            <button
+              v-if="updateResult.hasUpdate"
+              type="button"
+              class="btn-primary btn-sm"
+              @click="openDownloadPage"
+            >
+              前往下载页
+            </button>
+          </div>
+          <p v-if="updateHint" class="hint-line">{{ updateHint }}</p>
+          <p class="hint-line mono">清单：{{ PRODUCT_LINKS.updateManifest }}</p>
 
           <label class="field-label">首次引导</label>
           <div class="settings-actions-row">
