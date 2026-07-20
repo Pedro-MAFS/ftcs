@@ -37,6 +37,8 @@ import type {
   SettingsSaveInput,
   SettingsSaveResult,
   SettingsSnapshot,
+  OnboardingState,
+  EnvProbeResult,
 } from './ipc/types'
 
 const api = {
@@ -72,6 +74,12 @@ const api = {
     }
   },
   getSettings: (): Promise<SettingsSnapshot> => ipcRenderer.invoke(IPC.SETTINGS_GET),
+  getOnboardingState: (): Promise<OnboardingState> =>
+    ipcRenderer.invoke(IPC.ONBOARDING_GET_STATE),
+  setOnboardingState: (patch: Partial<OnboardingState>): Promise<OnboardingState> =>
+    ipcRenderer.invoke(IPC.ONBOARDING_SET_STATE, patch),
+  probeEnvironment: (): Promise<EnvProbeResult> =>
+    ipcRenderer.invoke(IPC.ONBOARDING_PROBE_ENV),
   saveSettings: (
     input: SettingsSaveInput,
   ): Promise<SettingsSaveResult & { status: AppStatus }> =>

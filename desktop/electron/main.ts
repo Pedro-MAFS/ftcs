@@ -65,6 +65,12 @@ import {
   setAuthSessionListener,
   startLogin,
 } from './auth/oauth-service'
+import {
+  getOnboardingState,
+  patchOnboardingState,
+  type OnboardingState,
+} from './onboarding/onboarding-service'
+import { probeEnvironment } from './onboarding/env-probe'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -355,6 +361,12 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettingsSnapshot())
+  ipcMain.handle(IPC.ONBOARDING_GET_STATE, () => getOnboardingState())
+  ipcMain.handle(
+    IPC.ONBOARDING_SET_STATE,
+    (_event, patch: Partial<OnboardingState>) => patchOnboardingState(patch ?? {}),
+  )
+  ipcMain.handle(IPC.ONBOARDING_PROBE_ENV, () => probeEnvironment())
   ipcMain.handle(IPC.SETTINGS_SAVE, async (_event, input: SettingsSaveInput) => {
     const result = saveSettings(input)
     if (!runtime) {

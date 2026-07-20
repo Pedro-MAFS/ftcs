@@ -45,11 +45,41 @@ export const IPC = {
   AUTH_LOGOUT: 'auth:logout',
   AUTH_OPEN_FEEDBACK: 'auth:open-feedback',
   AUTH_CHANGED: 'auth:changed',
+  ONBOARDING_GET_STATE: 'onboarding:get-state',
+  ONBOARDING_SET_STATE: 'onboarding:set-state',
+  ONBOARDING_PROBE_ENV: 'onboarding:probe-env',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_GET_LOGS */
   SIDECAR_GET_LOGS: 'opencode:get-logs',
 } as const
+
+export type OnboardingPhase = 'env' | 'keys' | 'tour' | 'done'
+
+export interface OnboardingState {
+  version: 1
+  completed: boolean
+  skipped: boolean
+  phase: OnboardingPhase
+  tourStep: number
+  updatedAt: string
+}
+
+export type EnvProbeStatus = 'ok' | 'missing' | 'outdated' | 'error'
+
+export interface EnvProbeItem {
+  id: 'node' | 'opencode' | 'chrome'
+  label: string
+  status: EnvProbeStatus
+  detail: string
+  installUrl?: string
+}
+
+export interface EnvProbeResult {
+  ok: boolean
+  checkedAt: string
+  items: EnvProbeItem[]
+}
 
 export interface AuthSessionSnapshot {
   loggedIn: boolean

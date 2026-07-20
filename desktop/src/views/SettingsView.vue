@@ -9,6 +9,7 @@ import type { ModelProviderId, SettingsSnapshot } from '../types/settings'
 import { MODEL_CATALOG } from '../types/settings'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import { PRODUCT_LINKS } from '../config/links'
+import { useOnboarding } from '../composables/useOnboarding'
 
 const meta = SECTION_META.settings
 const { status, runtimeHealthy, runtimeLabel, loading, restartOpenCode, refresh } =
@@ -25,6 +26,7 @@ const {
   openFeedback,
 } = useAuth()
 const { activeCategory, setCategory } = useSettingsNav()
+const { reopen: reopenOnboarding } = useOnboarding()
 const confirmLogout = ref(false)
 const authHint = ref('')
 
@@ -582,6 +584,27 @@ onMounted(() => {
             <span class="muted">OpenCode 模板</span>
             <span class="mono">{{ snapshot?.opencodeConfigPath ?? '—' }}</span>
           </div>
+
+          <label class="field-label">首次引导</label>
+          <div class="settings-actions-row">
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              @click="reopenOnboarding('env')"
+            >
+              <Icon name="play" :size="12" />
+              打开环境与配置引导
+            </button>
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              @click="reopenOnboarding('tour')"
+            >
+              <Icon name="sparkles" :size="12" />
+              打开业务引导
+            </button>
+          </div>
+          <p class="hint-line">用于检测 Node / OpenCode / Chrome，并引导配置密钥与主流程。</p>
 
           <label class="field-label">官网与帮助</label>
           <div class="settings-actions-row">

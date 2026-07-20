@@ -1,9 +1,11 @@
 import { app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
+import type { OnboardingState } from '../ipc/types'
 
 interface UserPrefs {
   workspaceRoot?: string
+  onboarding?: OnboardingState
 }
 
 function prefsPath(): string {

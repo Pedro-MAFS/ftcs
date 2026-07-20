@@ -2,6 +2,7 @@ import type { AppStatus, OpenCodeActionResult } from './app'
 import type { AuthActionResult, AuthSessionSnapshot } from './auth'
 import type { LibraryMutationResult, LibrarySnapshot } from './library'
 import type { SettingsSaveInput, SettingsSaveResult, SettingsSnapshot } from './settings'
+import type { EnvProbeResult, OnboardingState } from './onboarding'
 
 export type AgentTimelineItem = {
   id: string
@@ -466,6 +467,9 @@ declare global {
       openFeedback: () => Promise<AuthActionResult>
       onAuthChanged: (handler: (session: AuthSessionSnapshot) => void) => () => void
       getSettings: () => Promise<SettingsSnapshot>
+      getOnboardingState: () => Promise<OnboardingState>
+      setOnboardingState: (patch: Partial<OnboardingState>) => Promise<OnboardingState>
+      probeEnvironment: () => Promise<EnvProbeResult>
       saveSettings: (
         input: SettingsSaveInput,
       ) => Promise<SettingsSaveResult & { status: AppStatus }>
