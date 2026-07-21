@@ -15,7 +15,7 @@ import { getDailyUsage, incrementSearchUsage } from "./usage.js";
 
 const server = new McpServer({
   name: "search-api",
-  version: "0.2.1",
+  version: "0.2.2",
 });
 
 server.tool(

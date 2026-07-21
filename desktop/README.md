@@ -83,8 +83,8 @@ npx electron-builder --win # 产出 release/
 
 产物目录：`desktop/release/`，例如：
 
-- `外贸获客-Setup-0.2.1.exe`（NSIS 安装包）
-- `外贸获客-Portable-0.2.1.exe`（便携版）
+- `外贸获客-Setup-0.2.2.exe`（NSIS 安装包）
+- `外贸获客-Portable-0.2.2.exe`（便携版）
 
 ### 安装包使用方前置
 

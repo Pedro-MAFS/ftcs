@@ -1,7 +1,7 @@
 {
   "name": "@ftcs/website",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "FTCS 外贸获客官网（Vue3 静态站）",
   "scripts": {
