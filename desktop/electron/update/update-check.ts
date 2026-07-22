@@ -67,10 +67,17 @@ async function fetchManifest(url: string): Promise<UpdateManifest> {
       typeof net.fetch === 'function'
         ? net.fetch.bind(net)
         : globalThis.fetch.bind(globalThis)
-    const res = await doFetch(url, {
+    // 防 CDN/代理缓存旧清单：查询参数 + 禁用缓存头
+    const bustUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`
+    const res = await doFetch(bustUrl, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
       signal: controller.signal,
+      cache: 'no-store',
     })
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`)
