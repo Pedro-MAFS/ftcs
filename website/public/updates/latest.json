@@ -1,12 +1,13 @@
 {
-  "version": "0.2.2",
-  "releasedAt": "2026-07-21",
+  "version": "0.3.0",
+  "releasedAt": "2026-07-26",
   "minVersion": "0.1.0",
-  "title": "FTCS Desktop 0.2.2",
+  "title": "FTCS Desktop 0.3.0",
   "notes": [
-    "支持 Windows 一键安装 Node.js 24.18.0（多版本并存时优先使用合格 Node）",
-    "支持一键安装 OpenCode CLI 到应用本地目录（依赖合格 Node，失败可回退国内镜像）",
-    "将 chrome-devtools-mcp 固定为 1.6.0，避免 @latest 不可控升级"
+    "新增用户触达：站内信拉取与右下角弹窗（关闭/知道了即确认，稍后不确认）",
+    "新增分享应用：一键复制官网下载页链接，便于转发给他人",
+    "修复 OpenCode 一键安装在部分 Windows 环境下失败的问题（含路径含空格等场景）",
+    "官网与账号域名支持环境变量配置，便于开发与部署切换"
   ],
   "downloadPage": "https://ai-utills.com/ftcs/download/"
 }
