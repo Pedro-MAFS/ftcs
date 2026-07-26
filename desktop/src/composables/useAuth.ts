@@ -92,6 +92,9 @@ const loggedIn = computed(() => session.value.loggedIn)
 const loginPending = computed(() => session.value.loginPending || busy.value)
 const emailMasked = computed(() => session.value.emailMasked)
 
+/** 供站内信等模块在 setup 外监听登录态 */
+export const authLoggedIn = loggedIn
+
 export function useAuth() {
   onMounted(() => {
     subscribers += 1

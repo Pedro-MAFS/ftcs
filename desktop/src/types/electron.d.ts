@@ -473,6 +473,12 @@ declare global {
       cancelOAuthLogin: () => Promise<AuthActionResult>
       logoutOAuth: () => Promise<AuthActionResult>
       openFeedback: () => Promise<AuthActionResult>
+      getInboxConfig: () => Promise<import('./inbox').InboxConfig>
+      pullInbox: (limit?: number) => Promise<import('./inbox').InboxPullResult>
+      ackInbox: (input: {
+        messageId: string
+        answers?: import('./inbox').InboxAnswer[]
+      }) => Promise<import('./inbox').InboxAckResult>
       onAuthChanged: (handler: (session: AuthSessionSnapshot) => void) => () => void
       getSettings: () => Promise<SettingsSnapshot>
       getOnboardingState: () => Promise<OnboardingState>

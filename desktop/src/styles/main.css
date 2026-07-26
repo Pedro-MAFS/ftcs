@@ -492,6 +492,26 @@ button:focus-visible {
   flex-shrink: 0;
 }
 
+.auth-chip__badge,
+.auth-menu__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.auth-menu__badge {
+  margin-left: auto;
+}
+
 .auth-chip__label {
   overflow: hidden;
   text-overflow: ellipsis;

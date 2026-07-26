@@ -81,3 +81,11 @@ export function getRevokeUrl(config = getOAuthConfig()): string {
 export function getFeedbackUrl(config = getOAuthConfig()): string {
   return `${config.issuer}/oauth2/feedback`
 }
+
+export function getMessagePullUrl(config = getOAuthConfig()): string {
+  return `${config.issuer}/oauth2/message/pull`
+}
+
+export function getMessageAckUrl(config = getOAuthConfig()): string {
+  return `${config.issuer}/oauth2/message/ack`
+}

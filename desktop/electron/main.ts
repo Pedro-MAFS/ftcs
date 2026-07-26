@@ -67,6 +67,12 @@ import {
   startLogin,
 } from './auth/oauth-service'
 import {
+  ackMessage,
+  getInboxConfig,
+  pullMessages,
+} from './auth/inbox-service'
+import type { InboxAnswer } from './auth/inbox-types'
+import {
   getOnboardingState,
   patchOnboardingState,
   type OnboardingState,
@@ -344,6 +350,23 @@ function registerIpcHandlers(): void {
     broadcastAuthChanged()
     return result
   })
+  ipcMain.handle(IPC.INBOX_GET_CONFIG, () => getInboxConfig())
+  ipcMain.handle(IPC.INBOX_PULL, async (_event, limit?: number) => {
+    const n =
+      typeof limit === 'number' && Number.isFinite(limit) && limit > 0
+        ? Math.min(50, Math.floor(limit))
+        : 20
+    return pullMessages(n)
+  })
+  ipcMain.handle(
+    IPC.INBOX_ACK,
+    async (
+      _event,
+      input: { messageId?: string; answers?: InboxAnswer[] },
+    ) => {
+      return ackMessage(input?.messageId ?? '', input?.answers ?? [])
+    },
+  )
   ipcMain.handle(IPC.APP_AGENT_PREFLIGHT, async (_event, kind: AgentPreflightKind) => {
     try {
       return await gateAgentStart(kind)

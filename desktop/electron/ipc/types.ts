@@ -45,6 +45,9 @@ export const IPC = {
   AUTH_LOGOUT: 'auth:logout',
   AUTH_OPEN_FEEDBACK: 'auth:open-feedback',
   AUTH_CHANGED: 'auth:changed',
+  INBOX_GET_CONFIG: 'inbox:get-config',
+  INBOX_PULL: 'inbox:pull',
+  INBOX_ACK: 'inbox:ack',
   ONBOARDING_GET_STATE: 'onboarding:get-state',
   ONBOARDING_SET_STATE: 'onboarding:set-state',
   ONBOARDING_PROBE_ENV: 'onboarding:probe-env',
@@ -211,6 +214,15 @@ export interface AuthActionResult {
   session: AuthSessionSnapshot
   needLogin?: boolean
 }
+
+export type {
+  InboxAnswer,
+  InboxBlock,
+  InboxConfig,
+  InboxMessage,
+  InboxAckResult,
+  InboxPullResult,
+} from '../auth/inbox-types'
 
 export interface ProfileGenerateInput {
   websitePaths: string[]

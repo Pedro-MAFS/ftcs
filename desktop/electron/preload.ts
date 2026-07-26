@@ -26,6 +26,10 @@ import type {
   AgentPreflightResult,
   AuthActionResult,
   AuthSessionSnapshot,
+  InboxAckResult,
+  InboxAnswer,
+  InboxConfig,
+  InboxPullResult,
   LibraryMutationResult,
   LibrarySnapshot,
   ProfileDetail,
@@ -69,6 +73,14 @@ const api = {
   logoutOAuth: (): Promise<AuthActionResult> => ipcRenderer.invoke(IPC.AUTH_LOGOUT),
   openFeedback: (): Promise<AuthActionResult> =>
     ipcRenderer.invoke(IPC.AUTH_OPEN_FEEDBACK),
+  getInboxConfig: (): Promise<InboxConfig> =>
+    ipcRenderer.invoke(IPC.INBOX_GET_CONFIG),
+  pullInbox: (limit?: number): Promise<InboxPullResult> =>
+    ipcRenderer.invoke(IPC.INBOX_PULL, limit),
+  ackInbox: (input: {
+    messageId: string
+    answers?: InboxAnswer[]
+  }): Promise<InboxAckResult> => ipcRenderer.invoke(IPC.INBOX_ACK, input),
   onAuthChanged: (handler: (session: AuthSessionSnapshot) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, session: AuthSessionSnapshot) => {
       handler(session)

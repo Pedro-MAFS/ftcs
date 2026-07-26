@@ -2,8 +2,11 @@
 import { onMounted, ref } from 'vue'
 import { RouterView } from 'vue-router'
 import OnboardingOverlay from './components/onboarding/OnboardingOverlay.vue'
+import InboxToast from './components/inbox/InboxToast.vue'
+import { useInbox } from './composables/useInbox'
 
 const platform = ref('win32')
+useInbox()
 
 onMounted(() => {
   platform.value = window.ftcs?.platform ?? 'win32'
@@ -15,5 +18,6 @@ onMounted(() => {
   <div class="app-root" :data-platform="platform">
     <RouterView />
     <OnboardingOverlay />
+    <InboxToast />
   </div>
 </template>

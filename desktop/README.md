@@ -129,6 +129,7 @@ npx electron-builder --win # 产出 release/
 | `FTCS_OAUTH_CLIENT_ID` | 管理端登记的 Client ID（默认 `ftcs-desktop`） |
 | `FTCS_OAUTH_SCOPES` | 空格分隔 scope（默认 `openid ftcs-desktop email`） |
 | `FTCS_OAUTH_LOOPBACK_PORT` | 可选：强制本机回调端口；**默认不设**，每次登录动态选空闲端口 |
+| `FTCS_INBOX_POLL_MS` | 站内信轮询间隔毫秒（默认 `3600000` / 1 小时）；开发自测可调小 |
 
 开发时把上述变量写在 [`desktop/.env`](.env.example) 即可（勿提交密钥）。主进程启动时会加载该文件；渲染进程由 `electron.vite.config` 注入。修改 `.env` 后需重启 `npm run dev`。也可直接设系统环境变量，或使用 `VITE_FTCS_SITE_ORIGIN` / `VITE_FTCS_USER_ORIGIN`。
 

@@ -202,13 +202,17 @@ export async function openFeedback(): Promise<AuthActionResult> {
   }
 }
 
-/** 确保 access_token 可用（临近过期则 refresh） */
-export async function ensureFreshTokens(): Promise<StoredTokenBundle | null> {
+/** 确保 access_token 可用（临近过期则 refresh；force 时强制 refresh） */
+export async function ensureFreshTokens(options?: {
+  force?: boolean
+}): Promise<StoredTokenBundle | null> {
   let bundle = loadTokenBundle()
   if (!bundle?.accessToken) return null
 
   const skewMs = 60_000
-  if (bundle.expiresAt && bundle.expiresAt - Date.now() > skewMs) {
+  const stillFresh =
+    Boolean(bundle.expiresAt) && bundle.expiresAt! - Date.now() > skewMs
+  if (!options?.force && stillFresh) {
     return bundle
   }
   if (!bundle.refreshToken) return bundle

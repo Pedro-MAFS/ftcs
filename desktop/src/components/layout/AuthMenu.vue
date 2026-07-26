@@ -4,12 +4,14 @@ import { useRouter } from 'vue-router'
 import Icon from '../shared/Icon.vue'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import { useAuth } from '../../composables/useAuth'
+import { openInboxPanel, useInbox } from '../../composables/useInbox'
 import { useSettingsNav } from '../../composables/useSettingsNav'
 import { PRODUCT_LINKS } from '../../config/links'
 
 const open = ref(false)
 const confirmLogout = ref(false)
 const confirmLoginForFeedback = ref(false)
+const confirmLoginForInbox = ref(false)
 const hint = ref('')
 const rootEl = ref<HTMLElement | null>(null)
 
@@ -26,6 +28,7 @@ const {
   logout,
   openFeedback,
 } = useAuth()
+const { badgeLabel, unreadCount } = useInbox()
 
 function toggle(): void {
   open.value = !open.value
@@ -79,6 +82,26 @@ async function onFeedback(): Promise<void> {
   const res = await openFeedback()
   hint.value = res.message
   if (res.ok) close()
+}
+
+function onMessages(): void {
+  if (!loggedIn.value) {
+    confirmLoginForInbox.value = true
+    return
+  }
+  close()
+  openInboxPanel()
+}
+
+async function confirmLoginThenInbox(): Promise<void> {
+  confirmLoginForInbox.value = false
+  const res = await login()
+  if (!res.ok) {
+    hint.value = res.message
+    return
+  }
+  close()
+  openInboxPanel()
 }
 
 async function openLink(url: string): Promise<void> {
@@ -145,6 +168,7 @@ onUnmounted(() => {
     >
       <span class="auth-chip__avatar">{{ (emailMasked || '?').slice(0, 1).toUpperCase() }}</span>
       <span class="auth-chip__label">{{ emailMasked || '已登录' }}</span>
+      <span v-if="unreadCount > 0" class="auth-chip__badge">{{ badgeLabel }}</span>
       <Icon name="chevron-down" :size="12" />
     </button>
     <button
@@ -175,6 +199,11 @@ onUnmounted(() => {
         <button type="button" class="auth-menu__item" @click="goAccount">
           <Icon name="user" :size="14" />
           账号与授权
+        </button>
+        <button type="button" class="auth-menu__item" @click="onMessages">
+          <Icon name="mail" :size="14" />
+          消息
+          <span v-if="unreadCount > 0" class="auth-menu__badge">{{ badgeLabel }}</span>
         </button>
         <button type="button" class="auth-menu__item" :disabled="busy" @click="onFeedback">
           <Icon name="message-square" :size="14" />
@@ -224,6 +253,15 @@ onUnmounted(() => {
       :busy="busy"
       @confirm="confirmLoginThenFeedback"
       @cancel="confirmLoginForFeedback = false"
+    />
+    <ConfirmDialog
+      :open="confirmLoginForInbox"
+      title="需要先登录"
+      message="查看站内信需要登录账号。是否打开浏览器完成授权？"
+      confirm-label="去登录"
+      :busy="busy"
+      @confirm="confirmLoginThenInbox"
+      @cancel="confirmLoginForInbox = false"
     />
   </div>
 </template>
