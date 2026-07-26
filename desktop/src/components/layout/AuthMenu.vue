@@ -7,6 +7,7 @@ import { useAuth } from '../../composables/useAuth'
 import { openInboxPanel, useInbox } from '../../composables/useInbox'
 import { useSettingsNav } from '../../composables/useSettingsNav'
 import { PRODUCT_LINKS } from '../../config/links'
+import { shareAppDownload } from '../../composables/useShareApp'
 
 const open = ref(false)
 const confirmLogout = ref(false)
@@ -121,6 +122,11 @@ function openWebsite(): void {
   void openLink(PRODUCT_LINKS.website)
 }
 
+async function onShareApp(): Promise<void> {
+  const res = await shareAppDownload()
+  hint.value = res.message
+}
+
 async function confirmLoginThenFeedback(): Promise<void> {
   confirmLoginForFeedback.value = false
   const res = await login()
@@ -171,17 +177,28 @@ onUnmounted(() => {
       <span v-if="unreadCount > 0" class="auth-chip__badge">{{ badgeLabel }}</span>
       <Icon name="chevron-down" :size="12" />
     </button>
-    <button
-      v-else
-      type="button"
-      class="auth-chip auth-chip--guest"
-      :disabled="busy || loginPending"
-      title="登录"
-      @click="onLogin"
-    >
-      <Icon name="log-in" :size="12" />
-      <span>{{ loginPending ? '登录中…' : '登录' }}</span>
-    </button>
+    <template v-else>
+      <button
+        type="button"
+        class="auth-chip auth-chip--guest"
+        title="分享应用（复制下载链接）"
+        @click="onShareApp"
+      >
+        <Icon name="share-2" :size="12" />
+        <span>分享</span>
+      </button>
+      <button
+        type="button"
+        class="auth-chip auth-chip--guest"
+        :disabled="busy || loginPending"
+        title="登录"
+        @click="onLogin"
+      >
+        <Icon name="log-in" :size="12" />
+        <span>{{ loginPending ? '登录中…' : '登录' }}</span>
+      </button>
+      <p v-if="hint && !open" class="auth-menu__toast">{{ hint }}</p>
+    </template>
 
     <div
       v-if="open && loggedIn"
@@ -208,6 +225,10 @@ onUnmounted(() => {
         <button type="button" class="auth-menu__item" :disabled="busy" @click="onFeedback">
           <Icon name="message-square" :size="14" />
           意见反馈
+        </button>
+        <button type="button" class="auth-menu__item" @click="onShareApp">
+          <Icon name="share-2" :size="14" />
+          分享应用
         </button>
         <button type="button" class="auth-menu__item" @click="openWebsite">
           <Icon name="globe" :size="14" />

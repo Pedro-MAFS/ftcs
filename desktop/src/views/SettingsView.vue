@@ -9,6 +9,7 @@ import type { ModelProviderId, SettingsSnapshot } from '../types/settings'
 import { MODEL_CATALOG } from '../types/settings'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import { PRODUCT_LINKS } from '../config/links'
+import { shareAppDownload } from '../composables/useShareApp'
 import { useOnboarding } from '../composables/useOnboarding'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
 
@@ -116,6 +117,13 @@ async function openProductLink(url: string): Promise<void> {
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   }
+}
+
+const shareHint = ref('')
+
+async function onShareApp(): Promise<void> {
+  const res = await shareAppDownload()
+  shareHint.value = res.message
 }
 
 const isCustom = computed(() => form.providerId === 'custom')
@@ -720,8 +728,13 @@ async function onCheckUpdate(): Promise<void> {
               <Icon name="package" :size="12" />
               下载页
             </button>
+            <button type="button" class="btn-secondary btn-sm" @click="onShareApp">
+              <Icon name="share-2" :size="12" />
+              分享应用
+            </button>
           </div>
-          <p class="hint-line mono">{{ PRODUCT_LINKS.website }}</p>
+          <p class="hint-line mono">{{ PRODUCT_LINKS.download }}</p>
+          <p v-if="shareHint" class="hint-line">{{ shareHint }}</p>
 
           <p class="settings-foot">
             <Icon name="info" :size="14" />
