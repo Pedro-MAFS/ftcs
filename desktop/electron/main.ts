@@ -186,25 +186,32 @@ async function createWindow(): Promise<void> {
   const win = mainWindow
 
   /**
-   * Windows + titleBarOverlay 时 ready-to-show 可能永不触发（electron#42409），
-   * 或首帧未绘制就 show → 黑屏；第二次启动又正常。用多路径兜底只 show 一次。
+   * Windows + titleBarOverlay：
+   * - ready-to-show 可能丢失（electron#42409）
+   * - loadURL resolve 后立刻 show 也常首帧未合成 → 黑屏（IPC/逻辑已在跑）
+   * 策略：跳过过早的 ready-to-show；did-finish-load 后再延迟 show，并强制 DWM 重绘。
    */
   let shown = false
-  const showOnce = (): void => {
+  const showOnce = (reason: string): void => {
     if (shown || win.isDestroyed()) return
     shown = true
+    console.log('[window] show', reason)
     win.show()
     if (process.platform === 'win32') {
-      // 促使 DWM 合成一帧，减轻自定义标题栏首启黑屏
-      win.setBackgroundColor('#141414')
+      forceWin32WindowPaint(win)
     }
   }
 
-  win.once('ready-to-show', showOnce)
-  win.webContents.once('did-finish-load', showOnce)
+  if (process.platform !== 'win32') {
+    win.once('ready-to-show', () => showOnce('ready-to-show'))
+  }
+
+  win.webContents.once('did-finish-load', () => {
+    setTimeout(() => showOnce('did-finish-load'), 80)
+  })
   win.webContents.once('did-fail-load', (_e, code, desc, url) => {
     console.error('[window] did-fail-load', { code, desc, url })
-    showOnce()
+    showOnce('did-fail-load')
   })
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -213,8 +220,28 @@ async function createWindow(): Promise<void> {
   })
 
   await loadRenderer(win)
-  // load 完成后仍未 show（ready-to-show 丢失）时立即显示
-  showOnce()
+  // 事件丢失时的兜底（勿在 load 瞬间立刻 show）
+  setTimeout(() => showOnce('load-fallback'), 800)
+}
+
+/** Windows 自定义标题栏首启黑屏：用尺寸微扰 + 透明度触发合成 */
+function forceWin32WindowPaint(win: BrowserWindow): void {
+  try {
+    win.setBackgroundColor('#141414')
+    const [w, h] = win.getSize()
+    win.setSize(w, h + 1)
+    win.setSize(w, h)
+    const prev = win.getOpacity()
+    win.setOpacity(0.99)
+    setTimeout(() => {
+      if (!win.isDestroyed()) {
+        win.setOpacity(prev > 0 ? prev : 1)
+        win.focus()
+      }
+    }, 32)
+  } catch (err) {
+    console.warn('[window] forceWin32WindowPaint failed', err)
+  }
 }
 
 /** 开发态 Vite 偶发未就绪时重试，避免首启白/黑屏、二次启动才正常 */
