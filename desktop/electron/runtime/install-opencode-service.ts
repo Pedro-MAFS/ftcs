@@ -19,6 +19,27 @@ const execFileAsync = promisify(execFile)
 
 let installing = false
 
+type NpmLaunch = {
+  exe: string
+  argsPrefix: string[]
+  display: string
+  nodeDir: string
+  /**
+   * Windows 回退到 npm.cmd 时需 shell，并对含空格路径加引号。
+   * 主路径（node + npm-cli.js）保持 shell:false。
+   */
+  windowsShellQuoted?: boolean
+}
+
+type NpmInstallOutcome = {
+  ok: boolean
+  exitCode: number | null
+  stdout: string
+  stderr: string
+  /** 本地启动失败（路径/可执行文件），不应再换镜像重试 */
+  localFailure?: boolean
+}
+
 function logsDir(): string {
   return path.join(app.getPath('userData'), 'logs')
 }
@@ -36,16 +57,41 @@ function withLogHint(message: string, logPath: string): string {
   return `${message}（日志：${logPath}）`
 }
 
-function resolveNpmCmd(nodeExe: string): string {
-  const dir = path.dirname(nodeExe)
-  if (process.platform === 'win32') {
-    const cmd = path.join(dir, 'npm.cmd')
-    if (fs.existsSync(cmd)) return cmd
-    return 'npm.cmd'
+/**
+ * 优先用 node + npm-cli.js（shell:false），避免 Windows 上
+ * `C:\Program Files\...` 经 cmd 启动时被空格截断。
+ */
+function resolveNpmLaunch(nodeExe: string): NpmLaunch | null {
+  const nodeDir = path.dirname(nodeExe)
+  const npmCli = path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')
+  if (fs.existsSync(npmCli)) {
+    return {
+      exe: nodeExe,
+      argsPrefix: [npmCli],
+      display: `${nodeExe} ${npmCli}`,
+      nodeDir,
+    }
   }
-  const npm = path.join(dir, 'npm')
-  if (fs.existsSync(npm)) return npm
-  return 'npm'
+
+  if (process.platform === 'win32') {
+    const cmd = path.join(nodeDir, 'npm.cmd')
+    if (fs.existsSync(cmd)) {
+      return {
+        exe: cmd,
+        argsPrefix: [],
+        display: cmd,
+        nodeDir,
+        windowsShellQuoted: true,
+      }
+    }
+    return null
+  }
+
+  const npm = path.join(nodeDir, 'npm')
+  if (fs.existsSync(npm)) {
+    return { exe: npm, argsPrefix: [], display: npm, nodeDir }
+  }
+  return null
 }
 
 function registryLabel(registry?: string): string {
@@ -55,14 +101,41 @@ function registryLabel(registry?: string): string {
   return registry
 }
 
+function withNodeDirOnPath(nodeDir: string): NodeJS.ProcessEnv {
+  const sep = path.delimiter
+  const prev = process.env.PATH ?? ''
+  const parts = prev.split(sep).filter(Boolean)
+  const normalized = path.resolve(nodeDir)
+  const rest = parts.filter(
+    (p) => path.resolve(p).toLowerCase() !== normalized.toLowerCase(),
+  )
+  return {
+    ...process.env,
+    PATH: [normalized, ...rest].join(sep),
+  }
+}
+
+function looksLikeLocalLaunchFailure(text: string): boolean {
+  const t = text.toLowerCase()
+  return (
+    /not recognized as an internal or external command/i.test(text) ||
+    /不是内部或外部命令/.test(text) ||
+    /'c:\\program'/i.test(t) ||
+    /\benoent\b/.test(t) ||
+    /spawn .* enoent/i.test(text) ||
+    (/npm-cli\.js/.test(t) && /not found|不存在|enoent/.test(t))
+  )
+}
+
 async function runNpmInstall(options: {
-  npmCmd: string
+  launch: NpmLaunch
   prefix: string
   registry?: string
   logPath: string
   onProgress?: (message: string) => void
-}): Promise<{ ok: boolean; exitCode: number | null; stdout: string; stderr: string }> {
+}): Promise<NpmInstallOutcome> {
   const args = [
+    ...options.launch.argsPrefix,
     'install',
     `${OPENCODE_INSTALL.packageName}@${OPENCODE_INSTALL.version}`,
     '--prefix',
@@ -78,20 +151,29 @@ async function runNpmInstall(options: {
   }
 
   const label = registryLabel(options.registry)
+  const cmdline = `${options.launch.exe} ${args.join(' ')}`
   await appendLog(
     options.logPath,
-    `npm: ${options.npmCmd} ${args.join(' ')}\nregistry=${label}\n`,
+    `npm: ${cmdline}\nregistry=${label}\nshell=false\n`,
   )
   options.onProgress?.(
     `正在通过 ${label} 下载并安装 OpenCode（可能需要几分钟）…`,
   )
 
   return new Promise((resolve) => {
-    const child = spawn(options.npmCmd, args, {
-      windowsHide: true,
-      shell: process.platform === 'win32',
-      env: process.env,
-    })
+    const env = withNodeDirOnPath(options.launch.nodeDir)
+    // Windows + npm.cmd：必须 shell，且可执行路径加引号，否则 Program Files 会被截断
+    const child = options.launch.windowsShellQuoted
+      ? spawn(`"${options.launch.exe}"`, args, {
+          windowsHide: true,
+          shell: true,
+          env,
+        })
+      : spawn(options.launch.exe, args, {
+          windowsHide: true,
+          shell: false,
+          env,
+        })
 
     let stdout = ''
     let stderr = ''
@@ -162,6 +244,7 @@ async function runNpmInstall(options: {
         exitCode: null,
         stdout,
         stderr: err.message,
+        localFailure: true,
       })
     })
 
@@ -171,6 +254,7 @@ async function runNpmInstall(options: {
       clearTimeout(timeout)
       clearInterval(heartbeat)
       const exitCode = code ?? null
+      const combined = `${stdout}\n${stderr}`
       void appendLog(
         options.logPath,
         `\nnpm finished exit=${exitCode}\n`,
@@ -180,6 +264,8 @@ async function runNpmInstall(options: {
           exitCode,
           stdout,
           stderr,
+          localFailure:
+            exitCode !== 0 && looksLikeLocalLaunchFailure(combined),
         })
       })
     })
@@ -211,6 +297,16 @@ async function verifyOpenCodeBin(
     )
     return { ok: true, version: OPENCODE_INSTALL.version }
   }
+}
+
+function npmFailureMessage(result: NpmInstallOutcome): string {
+  if (result.localFailure) {
+    return '无法启动本机 npm（常见原因：Node 安装路径含空格且安装器调用方式不正确）。请确认 Node.js 安装完整后重试，或按文档手动安装。'
+  }
+  if (result.stderr.includes('timed out')) {
+    return 'npm 安装超时。请检查网络后重试，或按文档手动安装。'
+  }
+  return `npm 安装失败${result.exitCode != null ? `（退出码 ${result.exitCode}）` : ''}。请检查网络后重试，或按文档手动安装。`
 }
 
 export async function installOpenCodeRuntime(options?: {
@@ -279,37 +375,57 @@ export async function installOpenCodeRuntime(options?: {
     await appendLog(logPath, `prefix: ${prefix}\n`)
     emit('installing', `安装目录：${prefix}`)
 
-    const npmCmd = resolveNpmCmd(bestOk.exe)
-    emit('installing', `使用 npm：${npmCmd}`)
+    const launch = resolveNpmLaunch(bestOk.exe)
+    if (!launch) {
+      await appendLog(
+        logPath,
+        `npm launcher not found beside node: ${path.dirname(bestOk.exe)}\n`,
+      )
+      return {
+        ok: false,
+        code: 'npm-failed',
+        message: withLogHint(
+          `未在 Node 安装目录找到 npm（${path.dirname(bestOk.exe)}）。请重新安装 Node.js 后重试。`,
+          logPath,
+        ),
+        logPath,
+        manualUrl: OPENCODE_INSTALL.manualDocsUrl,
+      }
+    }
+
+    emit('installing', `使用 npm：${launch.display}`)
+    await appendLog(logPath, `npm launch: ${launch.display}\n`)
 
     let npmResult = await runNpmInstall({
-      npmCmd,
+      launch,
       prefix,
       registry: OPENCODE_INSTALL.registryOfficial,
       logPath,
       onProgress: (message) => emit('installing', message),
     })
 
-    if (!npmResult.ok) {
+    if (!npmResult.ok && !npmResult.localFailure) {
       emit('installing', '官方源失败或超时，切换国内镜像重试…')
       await appendLog(logPath, 'official registry failed, retry mirror\n')
       npmResult = await runNpmInstall({
-        npmCmd,
+        launch,
         prefix,
         registry: OPENCODE_INSTALL.registryMirror,
         logPath,
         onProgress: (message) => emit('installing', message),
       })
+    } else if (!npmResult.ok && npmResult.localFailure) {
+      await appendLog(
+        logPath,
+        'local launch failure detected, skip mirror retry\n',
+      )
     }
 
     if (!npmResult.ok) {
       return {
         ok: false,
         code: 'npm-failed',
-        message: withLogHint(
-          `npm 安装失败${npmResult.exitCode != null ? `（退出码 ${npmResult.exitCode}）` : ''}。请检查网络后重试，或按文档手动安装。`,
-          logPath,
-        ),
+        message: withLogHint(npmFailureMessage(npmResult), logPath),
         logPath,
         manualUrl: OPENCODE_INSTALL.manualDocsUrl,
       }
