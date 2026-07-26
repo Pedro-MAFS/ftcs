@@ -8,6 +8,7 @@ import {
 } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadDesktopEnvFile } from './config/load-desktop-env'
 import { IPC } from './ipc/types'
 import type { AppStatus } from './ipc/types'
 import { getWorkspaceRoot } from './config/paths'
@@ -80,6 +81,9 @@ import {
   getAppVersion,
   snoozeAppUpdate,
 } from './update/update-check'
+
+// 尽早加载 desktop/.env（electron-vite 不会把 FTCS_* 写入 process.env）
+loadDesktopEnvFile()
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -173,21 +177,61 @@ function getWindowOptions(): BrowserWindowConstructorOptions {
 
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow(getWindowOptions())
+  const win = mainWindow
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
+  /**
+   * Windows + titleBarOverlay 时 ready-to-show 可能永不触发（electron#42409），
+   * 或首帧未绘制就 show → 黑屏；第二次启动又正常。用多路径兜底只 show 一次。
+   */
+  let shown = false
+  const showOnce = (): void => {
+    if (shown || win.isDestroyed()) return
+    shown = true
+    win.show()
+    if (process.platform === 'win32') {
+      // 促使 DWM 合成一帧，减轻自定义标题栏首启黑屏
+      win.setBackgroundColor('#141414')
+    }
+  }
+
+  win.once('ready-to-show', showOnce)
+  win.webContents.once('did-finish-load', showOnce)
+  win.webContents.once('did-fail-load', (_e, code, desc, url) => {
+    console.error('[window] did-fail-load', { code, desc, url })
+    showOnce()
   })
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
   })
 
-  if (process.env.ELECTRON_RENDERER_URL) {
-    await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
-  } else {
-    await mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+  await loadRenderer(win)
+  // load 完成后仍未 show（ready-to-show 丢失）时立即显示
+  showOnce()
+}
+
+/** 开发态 Vite 偶发未就绪时重试，避免首启白/黑屏、二次启动才正常 */
+async function loadRenderer(win: BrowserWindow): Promise<void> {
+  const devUrl = process.env.ELECTRON_RENDERER_URL
+  if (devUrl) {
+    const attempts = 20
+    for (let i = 0; i < attempts; i++) {
+      try {
+        await win.loadURL(devUrl)
+        return
+      } catch (err) {
+        if (i === attempts - 1) {
+          console.error('[window] loadURL failed:', err)
+          throw err
+        }
+        await new Promise((r) => setTimeout(r, 150))
+      }
+    }
+    return
   }
+
+  await win.loadFile(path.join(__dirname, '../renderer/index.html'))
 }
 
 async function buildAppStatus(): Promise<AppStatus> {

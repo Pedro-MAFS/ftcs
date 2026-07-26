@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { getDocsInstallUrl } from '../config/site-origins'
 
 const execFileAsync = promisify(execFile)
 
@@ -24,7 +25,6 @@ export interface EnvProbeResult {
 
 const NODE_INSTALL_URL = 'https://nodejs.org/'
 const CHROME_INSTALL_URL = 'https://www.google.com/chrome/'
-const OPENCODE_DOCS_URL = 'https://ai-utills.com/ftcs/docs/install'
 
 async function findOnPath(command: string): Promise<string | null> {
   if (process.platform === 'win32') {
@@ -121,7 +121,7 @@ async function probeOpenCode(): Promise<EnvProbeItem> {
       status: 'missing',
       detail:
         '未找到 opencode。可在本引导一键安装到应用目录（需先就绪 Node.js 22+），或手动：npm install -g opencode-ai',
-      installUrl: OPENCODE_DOCS_URL,
+      installUrl: getDocsInstallUrl(),
     }
   }
 

@@ -1,3 +1,5 @@
+import { getUserOrigin } from '../config/site-origins'
+
 /**
  * OAuth 2.0（授权码 + PKCE）配置。
  * 回调为 loopback；端口默认每次登录动态分配（管理端按 RFC 8252 允许任意端口）。
@@ -17,8 +19,9 @@ export interface OAuthConfig {
 }
 
 export function getOAuthConfig(): OAuthConfig {
+  // FTCS_OAUTH_ISSUER 优先；否则 FTCS_USER_ORIGIN；再默认 user.ai-utills.com
   const issuer = (
-    process.env.FTCS_OAUTH_ISSUER || 'https://user.ai-utills.com'
+    process.env.FTCS_OAUTH_ISSUER?.trim() || getUserOrigin()
   ).replace(/\/$/, '')
   const clientId = process.env.FTCS_OAUTH_CLIENT_ID || 'ftcs-desktop'
   const preferredRaw = process.env.FTCS_OAUTH_LOOPBACK_PORT

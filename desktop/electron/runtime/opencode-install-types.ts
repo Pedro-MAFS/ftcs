@@ -1,13 +1,17 @@
+import { getDocsInstallUrl } from '../config/site-origins'
+
 /** OpenCode CLI 一键安装常量（见 docs/10） */
 export const OPENCODE_INSTALL = {
-  packageName: 'opencode-ai',
-  version: '1.18.4',
-  prefixDirName: 'opencode-runtime',
-  registryOfficial: 'https://registry.npmjs.org',
-  registryMirror: 'https://registry.npmmirror.com',
-  manualDocsUrl: 'https://ai-utills.com/ftcs/docs/install',
+  packageName: 'opencode-ai' as const,
+  version: '1.18.4' as const,
+  prefixDirName: 'opencode-runtime' as const,
+  registryOfficial: 'https://registry.npmjs.org' as const,
+  registryMirror: 'https://registry.npmmirror.com' as const,
   installTimeoutMs: 15 * 60 * 1000,
-} as const
+  get manualDocsUrl(): string {
+    return getDocsInstallUrl()
+  },
+}
 
 export type OpenCodeInstallMethod = 'npm-prefix' | 'already-ok'
 

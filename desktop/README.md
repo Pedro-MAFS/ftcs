@@ -97,7 +97,7 @@ npx electron-builder --win # 产出 release/
 
 ### 应用内检查更新
 
-启动后会请求官网 `https://ai-utills.com/ftcs/updates/latest.json`；若远程版本高于本地，标题栏下方提示并引导打开下载页。发版时请同步更新官网 `website/public/updates/latest.json`，并在设置 → 关于中可手动「检查更新」。
+启动后会请求官网 `{FTCS_SITE_ORIGIN}/ftcs/updates/latest.json`（默认 `https://ai-utills.com/...`）；若远程版本高于本地，标题栏下方提示并引导打开下载页。发版时请同步更新官网 `website/public/updates/latest.json`，并在设置 → 关于中可手动「检查更新」。
 
 ## 工作区初始化
 
@@ -123,10 +123,14 @@ npx electron-builder --win # 产出 release/
 | `FTCS_REPO_ROOT` | 覆盖仓库根（仅用于定位开发态模板） |
 | `FTCS_OPENCODE_PATH` | 指定 opencode 可执行文件 |
 | `FTCS_OPENCODE_PORT` | Server 端口（默认 4096） |
-| `FTCS_OAUTH_ISSUER` | OAuth AS（默认 `https://user.ai-utills.com`） |
+| `FTCS_SITE_ORIGIN` | 产品官网根（默认 `https://ai-utills.com`）；派生 `/ftcs` 文档、下载、更新清单 |
+| `FTCS_USER_ORIGIN` | 账号中心根（默认 `https://user.ai-utills.com`）；OAuth 默认 issuer |
+| `FTCS_OAUTH_ISSUER` | 可选，单独覆盖 OAuth AS（未设时等于 `FTCS_USER_ORIGIN`） |
 | `FTCS_OAUTH_CLIENT_ID` | 管理端登记的 Client ID（默认 `ftcs-desktop`） |
 | `FTCS_OAUTH_SCOPES` | 空格分隔 scope（默认 `openid ftcs-desktop email`） |
 | `FTCS_OAUTH_LOOPBACK_PORT` | 可选：强制本机回调端口；**默认不设**，每次登录动态选空闲端口 |
+
+开发时把上述变量写在 [`desktop/.env`](.env.example) 即可（勿提交密钥）。主进程启动时会加载该文件；渲染进程由 `electron.vite.config` 注入。修改 `.env` 后需重启 `npm run dev`。也可直接设系统环境变量，或使用 `VITE_FTCS_SITE_ORIGIN` / `VITE_FTCS_USER_ORIGIN`。
 
 ### OAuth 登录（软门禁）
 

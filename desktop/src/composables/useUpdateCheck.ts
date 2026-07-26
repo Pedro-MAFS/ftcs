@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { PRODUCT_LINKS } from '../config/links'
 import type { UpdateCheckResult } from '../types/update'
 
 const emptyResult = (): UpdateCheckResult => ({
@@ -11,7 +12,7 @@ const emptyResult = (): UpdateCheckResult => ({
   mandatory: false,
   title: '',
   notes: [],
-  downloadPage: 'https://ai-utills.com/ftcs/download/',
+  downloadPage: PRODUCT_LINKS.download,
   releasedAt: null,
   checkedAt: '',
   manifestUrl: '',
@@ -77,7 +78,7 @@ async function bootstrapUpdateCheck(): Promise<void> {
 }
 
 async function openDownloadPage(): Promise<void> {
-  const url = result.value.downloadPage || 'https://ai-utills.com/ftcs/download/'
+  const url = result.value.downloadPage || PRODUCT_LINKS.download
   if (!window.ftcs?.openExternal) return
   await window.ftcs.openExternal(url)
 }

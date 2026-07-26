@@ -1,6 +1,11 @@
 # 环境
 .env
+.env.local
+.env.development
+.env.production
+.env.*.local
 workspace/.env
+workspace/.env.*
 node_modules/
 __pycache__/
 *.pyc

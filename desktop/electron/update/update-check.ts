@@ -1,11 +1,11 @@
 import { app, net } from 'electron'
+import {
+  getDownloadPageUrl,
+  getUpdateManifestUrl,
+} from '../config/site-origins'
 import { readUserPrefs, writeUserPrefs } from '../config/user-prefs'
 import { isNewerVersion } from './semver'
 
-/** 与官网 public/updates/latest.json 对应（base=/ftcs/） */
-export const UPDATE_MANIFEST_URL = 'https://ai-utills.com/ftcs/updates/latest.json'
-
-const DEFAULT_DOWNLOAD_PAGE = 'https://ai-utills.com/ftcs/download/'
 const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000
 const FETCH_TIMEOUT_MS = 8000
 
@@ -121,7 +121,9 @@ export async function checkForAppUpdate(options?: {
   const prefs = readUpdatePrefs()
 
   try {
-    const manifest = await fetchManifest(UPDATE_MANIFEST_URL)
+    const manifestUrl = getUpdateManifestUrl()
+    const defaultDownloadPage = getDownloadPageUrl()
+    const manifest = await fetchManifest(manifestUrl)
     const latestVersion = manifest.version.trim()
     const hasUpdate = isNewerVersion(latestVersion, currentVersion)
     const minVersion = manifest.minVersion?.trim()
@@ -133,7 +135,7 @@ export async function checkForAppUpdate(options?: {
       : []
     const downloadPage =
       (manifest.downloadPage && String(manifest.downloadPage).trim()) ||
-      DEFAULT_DOWNLOAD_PAGE
+      defaultDownloadPage
 
     return {
       ok: true,
@@ -152,7 +154,7 @@ export async function checkForAppUpdate(options?: {
       downloadPage,
       releasedAt: manifest.releasedAt?.trim() || null,
       checkedAt,
-      manifestUrl: UPDATE_MANIFEST_URL,
+      manifestUrl,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -166,10 +168,10 @@ export async function checkForAppUpdate(options?: {
       mandatory: false,
       title: '',
       notes: [],
-      downloadPage: DEFAULT_DOWNLOAD_PAGE,
+      downloadPage: getDownloadPageUrl(),
       releasedAt: null,
       checkedAt,
-      manifestUrl: UPDATE_MANIFEST_URL,
+      manifestUrl: getUpdateManifestUrl(),
     }
   }
 }
