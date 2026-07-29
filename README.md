@@ -26,6 +26,11 @@
 | 08 | [产品架构决策：Electron + OpenCode](docs/08-产品架构决策-Electron-OpenCode.md) | Phase 2 桌面产品形态与集成方案 |
 | 09 | [Node.js 一键安装方案](docs/09-Node.js一键安装方案.md) | 降低安装摩擦：winget/MSI 安装 24.18.0，探测 ≥22 |
 | 10 | [OpenCode 一键安装方案](docs/10-OpenCode一键安装方案.md) | userData 本地前缀安装 opencode-ai；**硬依赖合格 Node** |
+| 11 | [官方模型通道对接](docs/11-官方模型通道对接.md) | Desktop ↔ Token 网关对接（消费方） |
+| 12 | [官方模型通道用户故事](docs/12-官方模型通道用户故事.md) | 桌面端 G1 用户故事 |
+
+网关侧需求与故事在 [`token-gateway/docs/`](token-gateway/docs/)（[需求](token-gateway/docs/01-需求.md) · [用户故事](token-gateway/docs/02-用户故事.md)）。
+
 
 ## 当前阶段
 
@@ -33,7 +38,7 @@
 
 下一步：审核后发信（`email-sender` / 2.4）、定时探索（`scheduler`）。架构见 [docs/08-产品架构决策-Electron-OpenCode.md](docs/08-产品架构决策-Electron-OpenCode.md)，计划见 [docs/04-实施计划.md](docs/04-实施计划.md)。
 
-**标准工作流目录**：[`workspace/`](workspace/) — Skills、MCP、配置、`data/`、`.env` 的**唯一维护位置**。应用壳在 `desktop/`。产品官网在 [`website/`](website/)（Vue3 静态站）。`.cursor/`、`.opencode/` 为本机 IDE/工具临时目录（**不进 Git**）。
+**标准工作流目录**：[`workspace/`](workspace/) — Skills、MCP、配置、`data/`、`.env` 的**唯一维护位置**。应用壳在 `desktop/`。产品官网在 [`website/`](website/)（Vue3 静态站）。Token 网关在 [`token-gateway/`](token-gateway/)（[需求](token-gateway/docs/01-需求.md)）；桌面端对接见 [`docs/11-官方模型通道对接.md`](docs/11-官方模型通道对接.md)。`.cursor/`、`.opencode/` 为本机 IDE/工具临时目录（**不进 Git**）。
 
 ## 技术原则
 

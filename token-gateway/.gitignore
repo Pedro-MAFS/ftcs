@@ -1,0 +1,31 @@
+# Token Gateway（多模块）
+
+## 忽略
+target/
+**/target/
+.idea/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+.vscode/
+.DS_Store
+*.log
+
+# 本地配置与密钥
+.env
+**/.env
+**/application-local.yml
+**/application-*.local.yml
+
+# Maven
+.flattened-pom.xml
+**/.flattened-pom.xml
+.mvn/wrapper/maven-wrapper.jar
+!token-gateway-server/.mvn/wrapper/maven-wrapper.jar
+
+# Node（admin-ui 后续）
+**/node_modules/
+**/dist/

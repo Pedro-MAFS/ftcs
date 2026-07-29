@@ -1,0 +1,32 @@
+server:
+  port: ${SERVER_PORT:8088}
+
+spring:
+  application:
+    name: token-gateway-server
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+  health:
+    # 无库时避免整体 DOWN；联库后可在 local profile 打开
+    db:
+      enabled: false
+
+token-gateway:
+  upstream:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+  user-center:
+    issuer-uri: ${UC_ISSUER_URI:https://user.ai-utills.com}
+
+logging:
+  level:
+    root: INFO
+    com.mfs.tokengateway: INFO
