@@ -30,43 +30,48 @@ token-gateway/                      # 外层：文档 + Maven 父工程
 ├── README.md
 ├── pom.xml
 ├── docs/
-├── ops/                            # 改库 SQL 示例等（运维，随 G0-15）
+├── ops/                            # 改库 SQL 示例等（运维）
 ├── token-gateway-server/           # ★ 可运行 RS 服务（默认端口 8088）
 ├── token-gateway-db/               # 共享表结构 / Mapper / PO（供 server 与未来 admin）
 ├── token-gateway-admin/            # 管理端后端占位（本期不打包可执行应用）
 └── tokengateway-admin-ui/          # 管理端前端占位（Vue3，本期不实现）
 ```
 
-## 启动（骨架验收）
+## 启动
 
-本机若 **C: 磁盘已满**，把本地仓库指到 D:（或其它盘）：
+```bash
+cd token-gateway
+# 先准备 MySQL 库 token_gateway（utf8mb4 / utf8mb4_bin），并配置 MYSQL_*（见 .env.example）
+mvn -q -DskipTests package
+java -jar token-gateway-server/target/token-gateway-server-1.0.0-SNAPSHOT.jar
+# 另开终端（PowerShell 用 curl.exe）
+curl.exe -s http://127.0.0.1:8088/health
+# 期望：{"status":"UP"}（含 DB 探活）
+```
+
+本机若 **C: 磁盘已满**，把本地仓库指到 D:：
 
 ```bash
 mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 ```
 
-```bash
-cd token-gateway
-# PowerShell：mvn --% -DskipTests package
-mvn -q -DskipTests package
-# 推荐：直接跑 fat jar（避免 ${revision} / -pl 解析坑）
-java -jar token-gateway-server/target/token-gateway-server-1.0.0-SNAPSHOT.jar
-# 或：mvn -pl token-gateway-server -am install 后再
-#     mvn -pl token-gateway-server spring-boot:run
-# 另开终端（PowerShell 用 curl.exe）
-curl.exe -s http://127.0.0.1:8088/health
-# 期望：{"status":"UP"}
-```
+本地覆盖：复制 `application-local.yml.example` → `application-local.yml`，按需改账号后加 `--spring.profiles.active=local`。
 
-本地覆盖：
+### 数据库（G0-02 起必连）
 
-1. 复制 `token-gateway-server/src/main/resources/application-local.yml.example` → `application-local.yml`
-2. 参考 `token-gateway-server/.env.example` 导出环境变量（可选）
-3. `java -jar ... --spring.profiles.active=local`
+1. 配置可达的 MySQL/TiDB（**可与其它业务共库**；表前缀 `token_*`）
+2. 账号放 `MYSQL_*` 或 `application-local.yml`（勿把密钥写进已提交的 `application.yml`）
+3. 启动即：预建 `token_flyway_schema_history` → 执行 `V1_0_0__init_billing_schema.sql`
 
-默认**不要求 MySQL**（已排除 DataSource 自动配置）；联库见示例与 US-G0-02。
+改库示例：[`ops/topup_example.sql`](./ops/topup_example.sql)、[`ops/disable_key_by_name.sql`](./ops/disable_key_by_name.sql)。
 
-UC Resource Server 依赖默认**不引入**（保证无 RDC 也能编过）。G0-05 起加 `-Puc-rs` 再 package/install。
+### API Key 哈希（约定，实现见 G0-06/08）
+
+- 算法：`SHA-256`（小写 hex，64 字符）← `pepper || raw_sk`
+- Pepper：环境变量 `GATEWAY_KEY_PEPPER`（生产必填，禁止入库）
+- 详情：[US-G0-02 §5](./docs/design/US-G0-02-计费库表与厘单位设计.md)
+
+UC Resource Server 依赖默认**不引入**。G0-05 起加 `-Puc-rs` 再 package/install。
 
 ## 管理端（占位）
 

@@ -4,6 +4,19 @@ server:
 spring:
   application:
     name: token-gateway-server
+  datasource:
+    # 可与其它业务共库（表均为 token_*）。真实地址/账号请用 application-local.yml 或 MYSQL_*，勿把密钥写进本文件。
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:token_gateway}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    enabled: true
+    encoding: UTF-8
+    locations: classpath:db/migration
+    # 与共库方隔离；由 TokenFlywayHistoryBootstrap 预建（兼容 TiDB）
+    table: token_flyway_schema_history
+    baseline-on-migrate: false
 
 management:
   endpoints:
@@ -14,9 +27,8 @@ management:
     health:
       show-details: when_authorized
   health:
-    # 无库时避免整体 DOWN；联库后可在 local profile 打开
     db:
-      enabled: false
+      enabled: true
 
 token-gateway:
   upstream:
