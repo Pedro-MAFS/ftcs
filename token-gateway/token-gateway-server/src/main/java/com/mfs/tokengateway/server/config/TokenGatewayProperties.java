@@ -1,5 +1,8 @@
 package com.mfs.tokengateway.server.config;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "token-gateway")
@@ -7,6 +10,7 @@ public class TokenGatewayProperties {
 
     private final Upstream upstream = new Upstream();
     private final UserCenter userCenter = new UserCenter();
+    private final Observability observability = new Observability();
 
     public Upstream getUpstream() {
         return upstream;
@@ -14,6 +18,10 @@ public class TokenGatewayProperties {
 
     public UserCenter getUserCenter() {
         return userCenter;
+    }
+
+    public Observability getObservability() {
+        return observability;
     }
 
     public static class Upstream {
@@ -56,6 +64,31 @@ public class TokenGatewayProperties {
 
         public void setIssuerUri(String issuerUri) {
             this.issuerUri = issuerUri;
+        }
+    }
+
+    /** US-G0-14 可观测 */
+    public static class Observability {
+        private boolean accessLogEnabled = true;
+        private List<String> accessLogExclude = new ArrayList<>(List.of(
+                "/health",
+                "/actuator/health",
+                "/actuator/health/**"));
+
+        public boolean isAccessLogEnabled() {
+            return accessLogEnabled;
+        }
+
+        public void setAccessLogEnabled(boolean accessLogEnabled) {
+            this.accessLogEnabled = accessLogEnabled;
+        }
+
+        public List<String> getAccessLogExclude() {
+            return accessLogExclude;
+        }
+
+        public void setAccessLogExclude(List<String> accessLogExclude) {
+            this.accessLogExclude = accessLogExclude;
         }
     }
 }

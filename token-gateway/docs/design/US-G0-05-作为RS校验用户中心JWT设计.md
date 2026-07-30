@@ -20,7 +20,7 @@
 | 验签 | **仅本地共享密钥 HS256**：配置与 AS 相同的 `com.mfs.user.oauth.jwk-key`（当前 UC **不支持**非对称 / 不以 JWKS 作 RS 验签主路径） |
 | Principal | Starter 映射为 **`OAuthBearerPrincipal`**；网关再适配为内部 **`UcIdentity`**（`tenantId` + `userCode`） |
 | 保护路径（本故事） | 仅 **UC Bearer** 路径：`/v1/keys/**`、`/v1/auth/**`；Chat / usage **本故事不**用 JWT 保护 |
-| 探活 | `/health`、`/actuator/health/**` 仍 **permitAll**（强制登录见 **US-G0-14**） |
+| 探活 | `/health` 等 **G0-14** 起纳入 `protected-patterns`（UC JWT）；G0-05 本故事不强制 |
 | 构建 | 编码验收与联调使用 **`mvn -Puc-rs …`**（需可达 Aliyun RDC）；无 profile 时保持可编译骨架 |
 
 ---

@@ -41,12 +41,9 @@ token-gateway/                      # 外层：文档 + Maven 父工程
 
 ```bash
 cd token-gateway
-# 先准备 MySQL 库 token_gateway（utf8mb4 / utf8mb4_bin），并配置 MYSQL_*（见 .env.example）
+# 先准备 MySQL（utf8mb4 / utf8mb4_bin），并配置 MYSQL_*（见 .env.example）
 mvn -q -DskipTests package
 java -jar token-gateway-server/target/token-gateway-server-1.0.0-SNAPSHOT.jar
-# 另开终端（PowerShell 用 curl.exe）
-curl.exe -s http://127.0.0.1:8088/health
-# 期望：{"status":"UP"}（含 DB 探活）
 ```
 
 本机若 **C: 磁盘已满**，把本地仓库指到 D:：
@@ -56,6 +53,8 @@ mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 ```
 
 本地覆盖：复制 `application-local.yml.example` → `application-local.yml`，按需改账号后加 `--spring.profiles.active=local`。
+
+> **探活（US-G0-14）**：正式环境须 `-Puc-rs`，`GET /health` 需要 UC JWT（见下文）。未加 `-Puc-rs` 时骨架全放行，仅便于编译冒烟，**不能**当生产鉴权。
 
 ### 数据库（G0-02 起必连）
 
@@ -76,7 +75,7 @@ mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 - 依赖：`embed-oauth-resource-starter`（需 Aliyun RDC）。构建/运行加 **`-Puc-rs`**
 - 验签：与 AS **相同**的 `OAUTH_JWK_KEY`（`com.mfs.user.oauth.jwk-key`，HS256）；当前 UC 不走非对称 JWKS 主路径
 - Issuer：`UC_ISSUER_URI`（同时驱动 `token-gateway.user-center.issuer-uri` 与 `com.mfs.user.oauth.issuer`）
-- JWT 保护路径：`/v1/keys/**`、`/v1/auth/**`（**不含** Chat / usage）
+- JWT 保护路径：`/v1/keys/**`、`/v1/auth/**`、**`/health`**、**`/actuator/health/**`**（**不含** Chat / usage）
 - 冒烟：`GET /v1/auth/whoami` + `Authorization: Bearer {access_token}`
 - 建议 scope（G0-06 起启用）：`token-gateway:keys`（在已有 Client `ftcs-desktop` 登记，不新建 Client）
 - Claim：`tenant_id` + `user_code` → 内部 `UcIdentity`；详见 [US-G0-05 设计](./docs/design/US-G0-05-作为RS校验用户中心JWT设计.md)
@@ -86,9 +85,23 @@ mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 mvn --% -Dmaven.repo.local=D:\maven-repo -Puc-rs -DskipTests package
 # 配置 OAUTH_JWK_KEY 后启动，再：
 curl.exe -s -H "Authorization: Bearer %ACCESS_TOKEN%" http://127.0.0.1:8088/v1/auth/whoami
+curl.exe -s -H "Authorization: Bearer %ACCESS_TOKEN%" http://127.0.0.1:8088/health
+# 期望：{"status":"UP"}；无 Token 应为 401
 ```
 
 未加 `-Puc-rs` 时仅骨架可编译；安全链为临时全放行，**不能**当作正式鉴权。
+
+### 可观测（US-G0-14）
+
+- 响应头 **`X-Request-Id`**（可入站合法值，否则服务端 UUID）；日志 Pattern 含 `[%X{requestId}]`，便于检索
+- Log4j2（对齐 `docs/reference/log4j2-spring.xml`）：
+  - **Console** + **RollingFile**（`logs/{app}.log`，按日/50MB 滚动，保留约 30 份 gzip）
+  - **ErrorFile**（仅 ERROR → `logs/{app}-error.log`）
+  - 目录：`logging.file.path` / 环境变量 `LOGGING_FILE_PATH`（默认 `logs`）
+- `/health`、`/actuator/health/**` 不打访问 INFO（避免探针刷盘）
+- **禁止**日志出现 prompt/completion 正文、Authorization / 上游 Key 明文
+- 进程守护优先端口/进程探测；HTTP 探活须带 UC JWT（勿把个人 Token 写入仓库）
+- 设计：[US-G0-14](./docs/design/US-G0-14-健康检查与结构化日志设计.md)
 
 ## 管理端（占位）
 

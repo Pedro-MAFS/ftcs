@@ -16,3 +16,10 @@ spring:
 # com.mfs.user.oauth:
 #   issuer: ${UC_ISSUER_URI:https://user.ai-utills.com}
 #   jwk-key: ${OAUTH_JWK_KEY}
+
+# 日志（可选）
+# logging:
+#   file:
+#     path: logs
+#   level:
+#     com.mfs.tokengateway: DEBUG

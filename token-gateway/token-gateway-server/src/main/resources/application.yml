@@ -37,8 +37,14 @@ token-gateway:
       base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
   user-center:
     issuer-uri: ${UC_ISSUER_URI:https://user.ai-utills.com}
+  observability:
+    access-log-enabled: true
+    access-log-exclude:
+      - /health
+      - /actuator/health
+      - /actuator/health/**
 
-# UC Resource Server（US-G0-05）。正式联调须 mvn -Puc-rs，且 OAUTH_JWK_KEY 与 AS 完全一致（HS256）。
+# UC Resource Server（US-G0-05/14）。正式联调须 mvn -Puc-rs，且 OAUTH_JWK_KEY 与 AS 完全一致（HS256）。
 com.mfs.user.oauth:
   issuer: ${UC_ISSUER_URI:https://user.ai-utills.com}
   jwk-key: ${OAUTH_JWK_KEY:}
@@ -46,8 +52,14 @@ com.mfs.user.oauth:
     protected-patterns:
       - /v1/keys/**
       - /v1/auth/**
+      - /health
+      - /actuator/health
+      - /actuator/health/**
 
 logging:
+  file:
+    # Log4j2 RollingFile 目录（相对进程工作目录；可用环境变量 LOGGING_FILE_PATH 覆盖）
+    path: ${LOGGING_FILE_PATH:logs}
   level:
     root: INFO
     com.mfs.tokengateway: INFO
