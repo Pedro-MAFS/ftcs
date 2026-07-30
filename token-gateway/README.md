@@ -102,7 +102,7 @@ curl.exe -s -X POST http://127.0.0.1:8088/v1/keys/rotate ^
 - `billing_status=settling`：**观测**本轮处理中行 + 超时回收；**不作**调度互斥主手段
 - 同用户一批成功报价：**一次** `balance_li` 扣减（Σ revenue）；每笔仍写 `charge` 流水并回填日志（含 `amount_li=0`）
 - 缺价等 → `settle_failed`；允许余额为负
-- Flyway：`V1_0_1`（认领列 + ledger UNIQUE）、`V1_0_2`（`token_shedlock`）
+- 库表：结算认领列、ledger `UNIQUE(request_id)`、`token_shedlock` 均写入 `V1_0_0`（未发版，不拆增量）
 - 设计：[US-G0-10](./docs/design/US-G0-10-异步结算扣费设计.md)
 
 ### 用户中心 RS（US-G0-05）

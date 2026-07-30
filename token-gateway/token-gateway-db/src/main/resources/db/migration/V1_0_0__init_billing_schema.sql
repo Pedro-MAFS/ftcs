@@ -63,8 +63,8 @@ CREATE TABLE token_ledger_entries (
   operator         VARCHAR(128) NULL COMMENT 'required for topup/adjust',
   created_at       DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (id),
+  UNIQUE KEY uk_token_ledger_request_id (request_id),
   KEY idx_token_ledger_user_time (user_id, created_at),
-  KEY idx_token_ledger_request (request_id),
   KEY idx_token_ledger_type_time (type, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
   COMMENT='ledger; balance updates must insert in same txn';
@@ -87,7 +87,9 @@ CREATE TABLE token_request_logs (
   upstream_status    INT          NULL,
   error_summary      VARCHAR(512) NULL COMMENT 'summary only; no prompts',
   billing_status     VARCHAR(32)  NOT NULL DEFAULT 'pending'
-                       COMMENT 'charged|skipped_no_usage|pending',
+                       COMMENT 'pending|settling|charged|skipped_no_usage|settle_failed',
+  settle_owner       VARCHAR(64)  NULL COMMENT 'settlement worker id',
+  settle_claimed_at  DATETIME(3)  NULL COMMENT 'claim time UTC',
   created_at         DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (request_id),
   KEY idx_token_req_user_time (user_id, created_at),
@@ -96,6 +98,15 @@ CREATE TABLE token_request_logs (
   KEY idx_token_req_model_time (model, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
   COMMENT='request metering; no prompt/completion bodies';
+
+CREATE TABLE token_shedlock (
+  name       VARCHAR(64)  NOT NULL,
+  lock_until TIMESTAMP(3) NOT NULL,
+  locked_at  TIMESTAMP(3) NOT NULL,
+  locked_by  VARCHAR(255) NOT NULL,
+  PRIMARY KEY (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
+  COMMENT='ShedLock; settlement scheduler mutual exclusion';
 
 -- US-G0-09 placeholder seed prices (li per million tokens).
 -- Ref USD (approx 2026-07-21 DeepSeek public card) × FX 7.2 CNY/USD × 1000 = li/MTok.
