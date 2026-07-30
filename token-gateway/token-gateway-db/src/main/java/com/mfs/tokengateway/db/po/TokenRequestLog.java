@@ -31,5 +31,7 @@ public class TokenRequestLog {
     private Integer upstreamStatus;
     private String errorSummary;
     private String billingStatus;
+    private String settleOwner;
+    private LocalDateTime settleClaimedAt;
     private LocalDateTime createdAt;
 }

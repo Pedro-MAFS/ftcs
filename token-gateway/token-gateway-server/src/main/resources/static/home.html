@@ -302,7 +302,7 @@
           <div class="flow-num">3</div>
           <div>
             <h4>用 sk 调 Chat</h4>
-            <p>调用 <code>POST /v1/chat/completions</code>（非流式 / 流式 SSE）。鉴权为网关 <code>sk-</code>（US-G0-08）。结束后落 <code>token_request_logs</code>（US-G0-09，金额空）；请求内不算价不扣费。</p>
+            <p>调用 <code>POST /v1/chat/completions</code>（非流式 / 流式 SSE）。鉴权 sk（G0-08）；落计量日志（G0-09）；异步结算扣费（G0-10，同用户合并扣余额）。</p>
           </div>
         </div>
       </div>
@@ -492,16 +492,16 @@
 
     <section id="planned">
       <h2>规划中（尚未实现）</h2>
-      <p>下列能力仍待后续故事（Chat sk 鉴权与请求计量落库已落地）。</p>
+      <p>下列能力仍待后续故事（Chat 鉴权、计量落库、异步结算已落地）。</p>
 
       <article class="api">
         <div class="api-head">
           <span class="method post">POST</span>
           <span class="path">/v1/chat/completions</span>
-          <span class="badge soon">扣费</span>
+          <span class="badge soon">预检</span>
         </div>
         <div class="api-body">
-          <p>待补：US-G0-10 异步结算（扫 pending → 算价 → 扣余额 → 回填金额；含中断有 usage 的结算）。</p>
+          <p>待补：US-G0-11 余额预检（<code>balance_li &lt;= 0</code> 拒绝新请求；接受异步滞后透支）。</p>
         </div>
       </article>
 

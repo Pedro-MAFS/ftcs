@@ -13,6 +13,7 @@ public class TokenGatewayProperties {
     private final UserCenter userCenter = new UserCenter();
     private final Observability observability = new Observability();
     private final Key key = new Key();
+    private final Settlement settlement = new Settlement();
 
     public Upstream getUpstream() {
         return upstream;
@@ -28,6 +29,10 @@ public class TokenGatewayProperties {
 
     public Key getKey() {
         return key;
+    }
+
+    public Settlement getSettlement() {
+        return settlement;
     }
 
     public static class Upstream {
@@ -169,6 +174,65 @@ public class TokenGatewayProperties {
 
         public void setAccessLogExclude(List<String> accessLogExclude) {
             this.accessLogExclude = accessLogExclude;
+        }
+    }
+
+    /** US-G0-10 异步结算 */
+    public static class Settlement {
+        private boolean enabled = true;
+        private Duration fixedDelay = Duration.ofSeconds(5);
+        private Duration initialDelay = Duration.ofSeconds(10);
+        private int batchSize = 50;
+        private Duration claimTimeout = Duration.ofMinutes(5);
+        /** 空则启动时生成 UUID */
+        private String instanceId = "";
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public Duration getFixedDelay() {
+            return fixedDelay;
+        }
+
+        public void setFixedDelay(Duration fixedDelay) {
+            this.fixedDelay = fixedDelay;
+        }
+
+        public Duration getInitialDelay() {
+            return initialDelay;
+        }
+
+        public void setInitialDelay(Duration initialDelay) {
+            this.initialDelay = initialDelay;
+        }
+
+        public int getBatchSize() {
+            return batchSize;
+        }
+
+        public void setBatchSize(int batchSize) {
+            this.batchSize = batchSize;
+        }
+
+        public Duration getClaimTimeout() {
+            return claimTimeout;
+        }
+
+        public void setClaimTimeout(Duration claimTimeout) {
+            this.claimTimeout = claimTimeout;
+        }
+
+        public String getInstanceId() {
+            return instanceId;
+        }
+
+        public void setInstanceId(String instanceId) {
+            this.instanceId = instanceId;
         }
     }
 }

@@ -50,6 +50,14 @@ token-gateway:
   key:
     # US-G0-06：API Key 哈希 pepper（生产必填；未配置则 rotate 返回 500）
     pepper: ${GATEWAY_KEY_PEPPER:}
+  settlement:
+    # US-G0-10：异步结算（多实例认领 + 同用户合并扣减）
+    enabled: true
+    fixed-delay: 5s
+    initial-delay: 10s
+    batch-size: 50
+    claim-timeout: 5m
+    instance-id:  dev-1
   observability:
     access-log-enabled: true
     access-log-exclude:
