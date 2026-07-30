@@ -106,6 +106,12 @@ curl.exe -s -X POST http://127.0.0.1:8088/v1/keys/rotate ^
 - 库表：结算认领列、ledger `UNIQUE(request_id)`、`token_shedlock` 均写入 `V1_0_0`（未发版，不拆增量）
 - 设计：[US-G0-10](./docs/design/US-G0-10-异步结算扣费设计.md)
 
+### 余额查询与模型列表（US-G0-16 / US-G0-17）
+
+- `GET /v1/usage/me`：sk 鉴权；返回 `balance_li` 与身份/当前 Key 摘要；**本期不含**今日用量；0/负余额仍 200
+- `GET /v1/models`：sk 鉴权；配置白名单 ∩ 有效价目；OpenAI `list` 形态；不含单价
+- 设计：[US-G0-16](./docs/design/US-G0-16-查询余额usage-me设计.md)、[US-G0-17](./docs/design/US-G0-17-models白名单列表设计.md)
+
 ### 用户中心 RS（US-G0-05）
 
 - 依赖：`embed-oauth-resource-starter`（需 Aliyun RDC）。构建/运行加 **`-Puc-rs`**

@@ -492,22 +492,64 @@
           </table>
         </div>
       </article>
+
+      <article class="api" id="api-usage-me">
+        <div class="api-head">
+          <span class="method get">GET</span>
+          <span class="path">/v1/usage/me</span>
+          <span class="badge live">已落地</span>
+        </div>
+        <div class="api-body">
+          <p>用网关 sk 查询当前账户余额（厘）。本期<strong>不含</strong>今日用量汇总。余额为 0 / 负仍返回 200（不做预检）。</p>
+          <p class="label">请求头</p>
+          <table>
+            <tr><th>Authorization</th><td>必填：<code>Bearer sk-…</code></td></tr>
+          </table>
+          <p class="label">成功响应 · 200</p>
+          <pre>{
+  "user_id": 20,
+  "tenant_id": "1",
+  "user_code": "u_abc",
+  "balance_li": 12340,
+  "currency": "CNY",
+  "currency_subunit": "li",
+  "li_per_yuan": 1000,
+  "key": { "name": "ftcs-desktop", "prefix": "sk-ab12" }
+}</pre>
+          <p class="label">错误</p>
+          <table>
+            <tr><th>401 / 403 / 503</th><td>同 Chat sk 鉴权</td></tr>
+          </table>
+        </div>
+      </article>
+
+      <article class="api" id="api-models">
+        <div class="api-head">
+          <span class="method get">GET</span>
+          <span class="path">/v1/models</span>
+          <span class="badge live">已落地</span>
+        </div>
+        <div class="api-body">
+          <p>返回配置白名单与有效价目的<strong>交集</strong>（OpenAI list 形态）。鉴权：网关 sk。不含单价。</p>
+          <p class="label">请求头</p>
+          <table>
+            <tr><th>Authorization</th><td>必填：<code>Bearer sk-…</code></td></tr>
+          </table>
+          <p class="label">成功响应 · 200</p>
+          <pre>{
+  "object": "list",
+  "data": [
+    { "id": "deepseek-v4-flash", "object": "model", "owned_by": "deepseek" },
+    { "id": "deepseek-v4-pro", "object": "model", "owned_by": "deepseek" }
+  ]
+}</pre>
+        </div>
+      </article>
     </section>
 
     <section id="planned">
       <h2>规划中（尚未实现）</h2>
-      <p>下列能力仍待后续故事（Chat 鉴权、计量、异步结算、余额预检已落地）。</p>
-
-      <article class="api">
-        <div class="api-head">
-          <span class="method get">GET</span>
-          <span class="path">/v1/usage/me</span>
-          <span class="badge soon">规划</span>
-        </div>
-        <div class="api-body">
-          <p>当前用户余额与今日用量汇总（厘）。</p>
-        </div>
-      </article>
+      <p>下列能力仍待后续故事（usage/me 余额、models 列表已落地；今日用量汇总仍属增强）。</p>
 
       <article class="api">
         <div class="api-head">

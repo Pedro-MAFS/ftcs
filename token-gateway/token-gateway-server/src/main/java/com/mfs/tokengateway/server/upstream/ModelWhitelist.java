@@ -1,7 +1,10 @@
 package com.mfs.tokengateway.server.upstream;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 
 import org.springframework.stereotype.Component;
 
@@ -24,5 +27,10 @@ public class ModelWhitelist {
 
     public boolean isAllowed(String model) {
         return model != null && allowed.contains(model);
+    }
+
+    /** 字典序稳定列表（US-G0-17）。 */
+    public List<String> listSorted() {
+        return new ArrayList<>(new TreeSet<>(allowed));
     }
 }
