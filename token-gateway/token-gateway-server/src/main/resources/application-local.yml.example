@@ -17,6 +17,11 @@ spring:
 #   issuer: ${UC_ISSUER_URI:https://user.ai-utills.com}
 #   jwk-key: ${OAUTH_JWK_KEY}
 
+# US-G0-06：签发/重置 Key 时哈希用 pepper（生产必填）。勿把真实 pepper 提交进仓库。
+# token-gateway:
+#   key:
+#     pepper: ${GATEWAY_KEY_PEPPER:dev-only-pepper-change-me}
+
 # 日志（可选）
 # logging:
 #   file:

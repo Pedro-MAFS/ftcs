@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Token Gateway · 对接说明</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f1419;
+      --bg-elev: #171e26;
+      --bg-code: #0b1015;
+      --line: #2a3542;
+      --text: #e7edf4;
+      --muted: #93a4b5;
+      --accent: #3dbea0;
+      --accent-dim: rgba(61, 190, 160, 0.14);
+      --warn: #e0b15a;
+      --danger: #e07a6a;
+      --method-get: #6cb6ff;
+      --method-post: #3dbea0;
+      --radius: 10px;
+      --max: 920px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "Sora", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #1a2a33 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #1a2430 0%, transparent 50%),
+        var(--bg);
+      line-height: 1.65;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .wrap {
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+
+    header.hero {
+      padding: 1.5rem 0 2rem;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 2rem;
+    }
+    .brand {
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+      margin: 0 0 0.75rem;
+    }
+    h1 {
+      font-size: clamp(1.75rem, 4vw, 2.35rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.75rem;
+      line-height: 1.2;
+    }
+    .lead {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 42rem;
+      margin: 0;
+    }
+
+    nav.toc {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      margin-top: 1.5rem;
+      font-size: 0.9rem;
+    }
+    nav.toc a {
+      color: var(--muted);
+      border-bottom: 1px solid transparent;
+    }
+    nav.toc a:hover {
+      color: var(--text);
+      text-decoration: none;
+      border-bottom-color: var(--accent);
+    }
+
+    section {
+      margin: 2.5rem 0;
+    }
+    h2 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin: 0 0 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--line);
+    }
+    h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin: 1.75rem 0 0.75rem;
+    }
+    p, li { color: var(--muted); }
+    strong { color: var(--text); font-weight: 600; }
+
+    .flow {
+      display: grid;
+      gap: 0.75rem;
+      margin: 1.25rem 0;
+    }
+    .flow-step {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.85rem;
+      align-items: start;
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 0.9rem 1rem;
+    }
+    .flow-num {
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: 6px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.85rem;
+      font-weight: 500;
+      display: grid;
+      place-items: center;
+    }
+    .flow-step h4 {
+      margin: 0.1rem 0 0.25rem;
+      font-size: 0.95rem;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .flow-step p {
+      margin: 0;
+      font-size: 0.9rem;
+    }
+
+    .callout {
+      border-left: 3px solid var(--accent);
+      background: var(--accent-dim);
+      padding: 0.85rem 1rem;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      margin: 1rem 0;
+      font-size: 0.92rem;
+      color: var(--text);
+    }
+    .callout.warn {
+      border-left-color: var(--warn);
+      background: rgba(224, 177, 90, 0.12);
+    }
+
+    .api {
+      background: var(--bg-elev);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      margin: 1.25rem 0 1.75rem;
+      overflow: hidden;
+    }
+    .api-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.6rem 0.85rem;
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--line);
+      background: #1c2530;
+    }
+    .method {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 0.2rem 0.45rem;
+      border-radius: 4px;
+      letter-spacing: 0.04em;
+    }
+    .method.get { background: rgba(108, 182, 255, 0.18); color: var(--method-get); }
+    .method.post { background: rgba(61, 190, 160, 0.18); color: var(--method-post); }
+    .path {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.92rem;
+      color: var(--text);
+    }
+    .badge {
+      font-size: 0.72rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      margin-left: auto;
+    }
+    .badge.live { border-color: rgba(61, 190, 160, 0.45); color: var(--accent); }
+    .badge.soon { border-color: rgba(224, 177, 90, 0.45); color: var(--warn); }
+    .api-body { padding: 1rem 1.1rem 1.15rem; }
+    .api-body > p:first-child { margin-top: 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin: 0.75rem 0 1rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.5rem 0.55rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 500; width: 28%; }
+    td { color: var(--text); }
+    td code, p code, li code {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.84em;
+      background: var(--bg-code);
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      color: #c5d6e6;
+    }
+
+    pre {
+      margin: 0.75rem 0;
+      padding: 0.9rem 1rem;
+      background: var(--bg-code);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.8rem;
+      line-height: 1.55;
+      color: #c8d6e4;
+    }
+    .label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 1rem 0 0.35rem;
+      font-weight: 600;
+    }
+
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--line);
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    @media (max-width: 560px) {
+      th { width: 36%; }
+      .badge { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <p class="brand">token-gateway</p>
+      <h1>对接说明</h1>
+      <p class="lead">
+        Token Gateway 是 DeepSeek 等上游模型的中转计费网关：先用用户中心 JWT 签发/重置网关 API Key（<code>sk-</code>），再用该 Key 调用 Chat；余额以「厘」计量。本页描述当前已落地能力与接口契约，便于客户端自行对接。
+      </p>
+      <nav class="toc" aria-label="目录">
+        <a href="#logic">基本逻辑</a>
+        <a href="#auth">鉴权模型</a>
+        <a href="#apis">已实现接口</a>
+        <a href="#planned">规划中</a>
+        <a href="#errors">常见错误</a>
+        <a href="#tips">对接注意</a>
+      </nav>
+    </header>
+
+    <section id="logic">
+      <h2>基本逻辑</h2>
+      <div class="flow">
+        <div class="flow-step">
+          <div class="flow-num">1</div>
+          <div>
+            <h4>用户中心登录</h4>
+            <p>客户端经用户中心（OAuth / AS）拿到 <code>access_token</code>（JWT）。网关作为 Resource Server 校验该 JWT（与 AS 共享 HS256 密钥）。</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">2</div>
+          <div>
+            <h4>按 name 签发 / 重置 Key</h4>
+            <p>调用 <code>POST /v1/keys/rotate</code>，带 UC JWT 与 Key 名称（如 <code>ftcs-desktop</code>）。无则创建、有则重置；响应里<strong>仅此一次</strong>返回明文 <code>api_key</code>。服务端只存哈希，自动确保计费账户存在（默认余额 0）。</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">3</div>
+          <div>
+            <h4>用 sk 调业务接口（规划中）</h4>
+            <p>后续 Chat / usage 等接口使用 <code>Authorization: Bearer sk-…</code>，按哈希查 Key → 用户 → 扣费。健康检查与 Key 管理仍用 UC JWT，不能用 sk。</p>
+          </div>
+        </div>
+      </div>
+      <div class="callout">
+        金额单位为<strong>厘</strong>（CNY li）：1 元 = 1000 厘。接口字段形如 <code>balance_li</code>，禁止用浮点表示金额。
+      </div>
+    </section>
+
+    <section id="auth">
+      <h2>鉴权模型</h2>
+      <table>
+        <thead>
+          <tr><th>凭证</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>UC JWT<br /><code>Authorization: Bearer &lt;access_token&gt;</code></td>
+            <td>已保护：<code>/v1/keys/**</code>、<code>/v1/auth/**</code>、<code>/health</code>、<code>/actuator/health/**</code></td>
+          </tr>
+          <tr>
+            <td>网关 API Key<br /><code>sk-…</code></td>
+            <td>规划：Chat、用量等；明文只在 rotate 成功响应出现一次</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>JWT 身份映射：claim <code>tenant_id</code> + <code>user_code</code> → 计费账户键。缺 claim 时接口返回 401。</p>
+      <p>正式环境须以 <code>-Puc-rs</code> 构建并配置与 AS 一致的 <code>OAUTH_JWK_KEY</code>。未加该 profile 时骨架为全放行，仅便于编译，不能当生产鉴权。</p>
+    </section>
+
+    <section id="apis">
+      <h2>已实现接口</h2>
+
+      <article class="api" id="api-health">
+        <div class="api-head">
+          <span class="method get">GET</span>
+          <span class="path">/health</span>
+          <span class="badge live">已落地</span>
+        </div>
+        <div class="api-body">
+          <p>存活探活。正式环境需 UC JWT；响应头可带 <code>X-Request-Id</code>。</p>
+          <p class="label">请求头</p>
+          <table>
+            <tr><th>Authorization</th><td>必填（正式 RS）：<code>Bearer &lt;UC access_token&gt;</code></td></tr>
+          </table>
+          <p class="label">入参</p>
+          <p>无 Query / Body。</p>
+          <p class="label">成功响应 · 200</p>
+          <pre>{
+  "status": "UP"
+}</pre>
+          <p class="label">错误</p>
+          <table>
+            <tr><th>401</th><td>无/无效 JWT</td></tr>
+          </table>
+        </div>
+      </article>
+
+      <article class="api" id="api-whoami">
+        <div class="api-head">
+          <span class="method get">GET</span>
+          <span class="path">/v1/auth/whoami</span>
+          <span class="badge live">已落地</span>
+        </div>
+        <div class="api-body">
+          <p>校验 UC JWT 并回显解析到的身份。不建户、不返回余额，适合联调冒烟。</p>
+          <p class="label">请求头</p>
+          <table>
+            <tr><th>Authorization</th><td>必填：<code>Bearer &lt;UC access_token&gt;</code></td></tr>
+          </table>
+          <p class="label">入参</p>
+          <p>无 Query / Body。</p>
+          <p class="label">成功响应 · 200</p>
+          <pre>{
+  "tenantId": "1",
+  "userCode": "u_abc",
+  "subject": "…",
+  "clientId": "ftcs-desktop"
+}</pre>
+          <table>
+            <tr><th>tenantId / userCode</th><td>必有；计费账户绑定键</td></tr>
+            <tr><th>subject / clientId</th><td>有 claim 时返回</td></tr>
+          </table>
+          <p class="label">错误</p>
+          <table>
+            <tr><th>401</th><td>无/坏 Token，或缺少 <code>tenant_id</code> / <code>user_code</code></td></tr>
+          </table>
+        </div>
+      </article>
+
+      <article class="api" id="api-rotate">
+        <div class="api-head">
+          <span class="method post">POST</span>
+          <span class="path">/v1/keys/rotate</span>
+          <span class="badge live">已落地</span>
+        </div>
+        <div class="api-body">
+          <p>按 <code>name</code> 签发或重置网关 API Key。无该 name → 创建（<code>action=created</code>）；已有 → 原地更新哈希，旧 sk 立即失效（<code>action=rotated</code>）。每次成功响应都含新明文。</p>
+          <p class="label">请求头</p>
+          <table>
+            <tr><th>Authorization</th><td>必填：<code>Bearer &lt;UC access_token&gt;</code></td></tr>
+            <tr><th>Content-Type</th><td><code>application/json</code></td></tr>
+          </table>
+          <p class="label">入参 · Body</p>
+          <pre>{
+  "name": "ftcs-desktop"
+}</pre>
+          <table>
+            <tr>
+              <th>name</th>
+              <td>必填。trim 后转小写，再校验：长度 1～64，仅 <code>[a-z0-9._-]</code>。非法 → 400 <code>invalid_name</code>。</td>
+            </tr>
+          </table>
+          <p class="label">成功响应 · 200</p>
+          <pre>{
+  "action": "created",
+  "name": "ftcs-desktop",
+  "api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "prefix": "sk-xxxx",
+  "status": "active",
+  "user": {
+    "tenant_id": "1",
+    "user_code": "u_abc",
+    "balance_li": 0,
+    "status": "active"
+  }
+}</pre>
+          <table>
+            <tr><th>action</th><td><code>created</code> | <code>rotated</code></td></tr>
+            <tr><th>api_key</th><td>明文 sk；仅本响应返回，勿记入日志</td></tr>
+            <tr><th>prefix</th><td>与库中展示前缀一致（明文前 10 字符）</td></tr>
+            <tr><th>user.*</th><td>账户摘要；新建余额为 0</td></tr>
+          </table>
+          <p class="label">错误</p>
+          <table>
+            <tr><th>401</th><td>无/坏 UC JWT</td></tr>
+            <tr><th>400</th><td><code>name</code> 缺失或非法（<code>invalid_name</code>）</td></tr>
+            <tr><th>403</th><td>账户 <code>disabled</code>（<code>account_disabled</code>）</td></tr>
+            <tr><th>409</th><td>唯一冲突重试耗尽（极少）</td></tr>
+            <tr><th>500</th><td>未配置 <code>GATEWAY_KEY_PEPPER</code></td></tr>
+          </table>
+          <div class="callout warn">
+            每次成功 rotate 都会作废旧 sk。本地已有可用 Key 时，不要在每次启动时盲目调用；宜在「本地无 Key / Chat 鉴权失败 / 用户主动重置」时再调。
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section id="planned">
+      <h2>规划中（尚未实现）</h2>
+      <p>以下接口在需求/故事中已规划，便于提前设计客户端；当前调用会 404 或未保护。</p>
+
+      <article class="api">
+        <div class="api-head">
+          <span class="method post">POST</span>
+          <span class="path">/v1/chat/completions</span>
+          <span class="badge soon">规划</span>
+        </div>
+        <div class="api-body">
+          <p>转发上游 Chat（DeepSeek 兼容）。鉴权预期为网关 <code>sk-</code>；含模型白名单、计量扣费。细节以后续设计为准。</p>
+        </div>
+      </article>
+
+      <article class="api">
+        <div class="api-head">
+          <span class="method get">GET</span>
+          <span class="path">/v1/usage/me</span>
+          <span class="badge soon">规划</span>
+        </div>
+        <div class="api-body">
+          <p>当前用户余额与今日用量汇总（厘）。</p>
+        </div>
+      </article>
+
+      <article class="api">
+        <div class="api-head">
+          <span class="method get">GET</span>
+          <span class="path">/v1/keys</span>
+          <span class="badge soon">规划</span>
+        </div>
+        <div class="api-body">
+          <p>列出当前用户 Key 元信息（不含明文）。</p>
+        </div>
+      </article>
+    </section>
+
+    <section id="errors">
+      <h2>常见错误与约定</h2>
+      <ul>
+        <li>业务错误常通过 HTTP 状态码 + Spring 默认错误体中的 <code>message</code>（短码，如 <code>invalid_name</code>）表达。</li>
+        <li>响应可含 <code>X-Request-Id</code>；排障请带上该值检索日志。</li>
+        <li>禁止在日志或工单中粘贴完整 <code>api_key</code>、UC Token、上游供应商 Key。</li>
+      </ul>
+    </section>
+
+    <section id="tips">
+      <h2>对接注意</h2>
+      <ul>
+        <li>桌面端建议固定 Key <code>name=ftcs-desktop</code>，将 rotate 返回的 <code>api_key</code> 安全持久化。</li>
+        <li>服务依赖：可达 MySQL/TiDB（表前缀 <code>token_*</code>）、<code>GATEWAY_KEY_PEPPER</code>、<code>OAUTH_JWK_KEY</code>（与用户中心一致）。</li>
+        <li>默认端口 <code>8088</code>（可用 <code>SERVER_PORT</code> 覆盖）。</li>
+        <li>更细设计见仓库 <code>token-gateway/docs/</code>；本页随已实现接口更新。</li>
+      </ul>
+      <p class="label">示例 · rotate（PowerShell）</p>
+      <pre>curl.exe -s -X POST http://127.0.0.1:8088/v1/keys/rotate `
+  -H "Authorization: Bearer %ACCESS_TOKEN%" `
+  -H "Content-Type: application/json" `
+  -d "{\"name\":\"ftcs-desktop\"}"</pre>
+    </section>
+
+    <footer>
+      Token Gateway · 本页为静态说明，无需登录即可阅读。接口鉴权以运行配置与 RS Starter 为准。
+    </footer>
+  </div>
+</body>
+</html>

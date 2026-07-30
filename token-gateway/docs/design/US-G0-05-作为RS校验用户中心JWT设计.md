@@ -32,13 +32,13 @@
 1. 携带合法 UC `access_token` 的请求可通过验签，并得到稳定的 `(tenant_id, user_code)`。  
 2. 无 Token / 过期 / 伪造 / 签名错误 → **401**。  
 3. claim 与 scope 约定写入本设计 + README，对齐 D-01/D-02（编码前用真实 JWT 抽样核对一次）。  
-4. 为 US-G0-06（provision/rotate）提供可注入的身份上下文，无需再造验签逻辑。
+4. 为 US-G0-06（`keys/rotate`：无则创建/有则重置）提供可注入的身份上下文，无需再造验签逻辑。
 
 ### 2.2 非目标
 
 | 不做 | 说明 |
 |------|------|
-| `POST /v1/keys/provision` / `rotate` | US-G0-06 / 07 |
+| `POST /v1/keys/rotate` | US-G0-06（无则创建 / 有则重置；不做独立 provision） |
 | Chat `sk-` 鉴权 | US-G0-08 |
 | 自动建 `token_users` | G0-06（本故事只识别主体，不落户） |
 | `/health` 强制 UC JWT | US-G0-14 |
@@ -288,7 +288,7 @@ Authorization: Bearer {user_center_access_token}
 | A3 | 篡改签名或随机串 | 同上 | 401 |
 | A4 | 过期 Token | 同上 | 401 |
 | A4b | RS `jwk-key` 与 AS 不一致 | 合法 Token 调 whoami | 401 |
-| A5 | 配置 `protected-patterns` 含 `/v1/keys/**` | 无 Token 调 `POST /v1/keys/provision` | 401（即使业务未实现） |
+| A5 | 配置 `protected-patterns` 含 `/v1/keys/**` | 无 Token 调 `POST /v1/keys/rotate` | 401（即使业务未实现） |
 | A6 | （文档）Chat 路径 | 确认 **未**列入 JWT protected-patterns | 与 G0-08 不冲突 |
 | A7 | README / 本设计 | 查阅 | D-01 建议 scope、D-02 claim 表已写明；抽样 JWT 核对记录可附 |
 
@@ -309,7 +309,7 @@ Authorization: Bearer {user_center_access_token}
 
 | 后续故事 | 衔接点 |
 |----------|--------|
-| US-G0-06 / 07 | 同 UC JWT；`UcIdentity` → 确保 `token_users` + 按 name 发 sk |
+| US-G0-06 | 同 UC JWT；`UcIdentity` → 确保 `token_users` + 按 name `rotate` 发 sk |
 | US-G0-08 | **另一套**鉴权（sk）；勿复用 JWT Filter 挡 Chat |
 | US-G0-14 | `/health` 改为 UC JWT |
 | US-G0-18 | `GET /v1/keys` 列表 |

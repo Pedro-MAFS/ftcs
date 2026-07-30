@@ -37,6 +37,9 @@ token-gateway:
       base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
   user-center:
     issuer-uri: ${UC_ISSUER_URI:https://user.ai-utills.com}
+  key:
+    # US-G0-06：API Key 哈希 pepper（生产必填；未配置则 rotate 返回 500）
+    pepper: ${GATEWAY_KEY_PEPPER:}
   observability:
     access-log-enabled: true
     access-log-exclude:

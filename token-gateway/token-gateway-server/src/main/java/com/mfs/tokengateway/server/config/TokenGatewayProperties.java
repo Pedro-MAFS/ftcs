@@ -11,6 +11,7 @@ public class TokenGatewayProperties {
     private final Upstream upstream = new Upstream();
     private final UserCenter userCenter = new UserCenter();
     private final Observability observability = new Observability();
+    private final Key key = new Key();
 
     public Upstream getUpstream() {
         return upstream;
@@ -22,6 +23,10 @@ public class TokenGatewayProperties {
 
     public Observability getObservability() {
         return observability;
+    }
+
+    public Key getKey() {
+        return key;
     }
 
     public static class Upstream {
@@ -64,6 +69,20 @@ public class TokenGatewayProperties {
 
         public void setIssuerUri(String issuerUri) {
             this.issuerUri = issuerUri;
+        }
+    }
+
+    /** US-G0-06 API Key 哈希 pepper */
+    public static class Key {
+        /** 与 env {@code GATEWAY_KEY_PEPPER} 对齐；空则拒绝签发 */
+        private String pepper = "";
+
+        public String getPepper() {
+            return pepper;
+        }
+
+        public void setPepper(String pepper) {
+            this.pepper = pepper;
         }
     }
 

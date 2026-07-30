@@ -6,6 +6,7 @@
 
 | 文档 | 说明 |
 |------|------|
+| **服务内对接页** | 启动后打开 `http://127.0.0.1:8088/` 或 `/home.html`（基本逻辑 + 已实现接口出入参；**无需登录**） |
 | [docs/01-需求.md](./docs/01-需求.md) | 网关需求规格（权威） |
 | [docs/02-用户故事.md](./docs/02-用户故事.md) | G0 / G2 用户故事与依赖 |
 | [docs/design/](./docs/design/) | 详细设计（按用户故事） |
@@ -64,11 +65,23 @@ mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 
 改库示例：[`ops/topup_example.sql`](./ops/topup_example.sql)、[`ops/disable_key_by_name.sql`](./ops/disable_key_by_name.sql)。
 
-### API Key 哈希（约定，实现见 G0-06/08）
+### API Key 哈希与签发（US-G0-06）
 
-- 算法：`SHA-256`（小写 hex，64 字符）← `pepper || raw_sk`
-- Pepper：环境变量 `GATEWAY_KEY_PEPPER`（生产必填，禁止入库）
-- 详情：[US-G0-02 §5](./docs/design/US-G0-02-计费库表与厘单位设计.md)
+- 算法：`SHA-256`（小写 hex，64 字符）← `pepper || raw_sk`（无分隔符）
+- Pepper：环境变量 `GATEWAY_KEY_PEPPER` → `token-gateway.key.pepper`（生产必填；未配置则 `rotate` 返回 500）
+- 接口：`POST /v1/keys/rotate` + UC JWT + `{"name":"ftcs-desktop"}`
+  - 无该 name → 创建账户（若需要）并 **创建** Key，`action=created`，响应含明文 `api_key`
+  - 已有该 name → **原地重置** hash（旧 sk 立即失效），`action=rotated`，响应含新明文
+- **客户端注意**：每次成功都会作废旧 sk；本地已有可用 Key 时勿在每次启动盲目调用
+- 详情：[US-G0-06 设计](./docs/design/US-G0-06-按名签发重置Key设计.md)
+
+```bash
+# 需 -Puc-rs、OAUTH_JWK_KEY、GATEWAY_KEY_PEPPER、可达 MySQL
+curl.exe -s -X POST http://127.0.0.1:8088/v1/keys/rotate ^
+  -H "Authorization: Bearer %ACCESS_TOKEN%" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"name\":\"ftcs-desktop\"}"
+```
 
 ### 用户中心 RS（US-G0-05）
 
@@ -77,13 +90,13 @@ mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 - Issuer：`UC_ISSUER_URI`（同时驱动 `token-gateway.user-center.issuer-uri` 与 `com.mfs.user.oauth.issuer`）
 - JWT 保护路径：`/v1/keys/**`、`/v1/auth/**`、**`/health`**、**`/actuator/health/**`**（**不含** Chat / usage）
 - 冒烟：`GET /v1/auth/whoami` + `Authorization: Bearer {access_token}`
-- 建议 scope（G0-06 起启用）：`token-gateway:keys`（在已有 Client `ftcs-desktop` 登记，不新建 Client）
+- Scope：本故事暂不强制 `@RequireScope`；后续可收紧 `token-gateway:keys`
 - Claim：`tenant_id` + `user_code` → 内部 `UcIdentity`；详见 [US-G0-05 设计](./docs/design/US-G0-05-作为RS校验用户中心JWT设计.md)
 
 ```bash
 # PowerShell
 mvn --% -Dmaven.repo.local=D:\maven-repo -Puc-rs -DskipTests package
-# 配置 OAUTH_JWK_KEY 后启动，再：
+# 配置 OAUTH_JWK_KEY、GATEWAY_KEY_PEPPER 后启动，再：
 curl.exe -s -H "Authorization: Bearer %ACCESS_TOKEN%" http://127.0.0.1:8088/v1/auth/whoami
 curl.exe -s -H "Authorization: Bearer %ACCESS_TOKEN%" http://127.0.0.1:8088/health
 # 期望：{"status":"UP"}；无 Token 应为 401
