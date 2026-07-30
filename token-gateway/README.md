@@ -83,6 +83,13 @@ curl.exe -s -X POST http://127.0.0.1:8088/v1/keys/rotate ^
   -d "{\"name\":\"ftcs-desktop\"}"
 ```
 
+### Chat 非流式代理（US-G0-03）
+
+- 接口：`POST /v1/chat/completions`（`stream=false`）；白名单默认 `deepseek-v4-flash` / `deepseek-v4-pro`
+- 上游：`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`（仅服务端；不泄露）
+- **鉴权占位**：当前恒 **401** `sk_auth_pending`（无测试 Key / 免鉴权）；真联调等 **US-G0-08**
+- 编码验收：Mock 上游单测；设计见 [US-G0-03](./docs/design/US-G0-03-DeepSeek非流式白名单代理设计.md)
+
 ### 用户中心 RS（US-G0-05）
 
 - 依赖：`embed-oauth-resource-starter`（需 Aliyun RDC）。构建/运行加 **`-Puc-rs`**

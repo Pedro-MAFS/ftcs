@@ -35,6 +35,12 @@ token-gateway:
     deepseek:
       api-key: ${DEEPSEEK_API_KEY:}
       base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      # US-G0-03：模型白名单（区分大小写）
+      allowed-models:
+        - deepseek-v4-flash
+        - deepseek-v4-pro
+      connect-timeout: 5s
+      read-timeout: 120s
   user-center:
     issuer-uri: ${UC_ISSUER_URI:https://user.ai-utills.com}
   key:
