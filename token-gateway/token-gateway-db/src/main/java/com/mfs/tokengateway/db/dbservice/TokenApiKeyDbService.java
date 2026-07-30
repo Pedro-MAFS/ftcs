@@ -17,4 +17,9 @@ public class TokenApiKeyDbService extends ServiceImpl<TokenApiKeyMapper, TokenAp
                 .eq(TokenApiKey::getUserId, userId)
                 .eq(TokenApiKey::getName, name));
     }
+
+    /** 按 key_hash 查；不存在返回 {@code null}。 */
+    public TokenApiKey findByKeyHash(String keyHash) {
+        return getOne(new LambdaQueryWrapper<TokenApiKey>().eq(TokenApiKey::getKeyHash, keyHash));
+    }
 }

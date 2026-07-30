@@ -302,7 +302,7 @@
           <div class="flow-num">3</div>
           <div>
             <h4>用 sk 调 Chat</h4>
-            <p>调用 <code>POST /v1/chat/completions</code>（非流式 / 流式 SSE 均已落地）。当前鉴权占位恒 401（<code>sk_auth_pending</code>），待 US-G0-08 校验网关 sk 后统一联调；勿依赖临时免鉴权。</p>
+            <p>调用 <code>POST /v1/chat/completions</code>（非流式 / 流式 SSE）。鉴权为网关 <code>sk-</code>（US-G0-08）：<code>Authorization: Bearer sk-…</code>；非法 401，禁用 403。</p>
           </div>
         </div>
       </div>
@@ -324,7 +324,7 @@
           </tr>
           <tr>
             <td>网关 API Key<br /><code>sk-…</code></td>
-            <td>Chat 契约为 <code>sk-</code>（G0-08 起生效；当前占位 401）；用量等规划中</td>
+            <td>Chat（及后续 usage 等）：<code>Authorization: Bearer sk-…</code>；非法 401，禁用 403</td>
           </tr>
         </tbody>
       </table>
@@ -458,11 +458,11 @@
         <div class="api-body">
           <p>OpenAI 兼容 Chat：非流式 JSON 或 <code>stream=true</code> SSE，转发 DeepSeek 白名单模型。默认白名单：<code>deepseek-v4-flash</code>、<code>deepseek-v4-pro</code>（可配）。</p>
           <div class="callout warn">
-            <strong>鉴权</strong>：正式契约为网关 <code>sk-</code>（US-G0-08）。当前占位一律 <strong>401</strong> <code>sk_auth_pending</code>，无测试 Key / 免鉴权开关。真上游统一联调等 G0-08。
+            <strong>鉴权</strong>：<code>Authorization: Bearer sk-…</code>（与 <code>rotate</code> 返回的明文一致）。无效 / 作废 sk → 401；Key 或账户 disabled → 403。无测试 Key / 免鉴权开关。
           </div>
-          <p class="label">请求头（契约）</p>
+          <p class="label">请求头</p>
           <table>
-            <tr><th>Authorization</th><td><code>Bearer sk-…</code>（G0-08 起校验；现在任意请求 → 401）</td></tr>
+            <tr><th>Authorization</th><td>必填：<code>Bearer sk-…</code></td></tr>
             <tr><th>Content-Type</th><td><code>application/json</code></td></tr>
           </table>
           <p class="label">入参 · Body（代理层规则）</p>
@@ -480,9 +480,10 @@
           <p>非流式：透传上游 JSON。流式：<code>text/event-stream</code>，透传 <code>data:</code> 事件至 <code>[DONE]</code>。</p>
           <p class="label">本阶段常见错误</p>
           <table>
-            <tr><th>401</th><td><code>sk_auth_pending</code>（占位）</td></tr>
+            <tr><th>401</th><td><code>missing_authorization</code> / <code>invalid_authorization</code> / <code>invalid_api_key</code></td></tr>
+            <tr><th>403</th><td><code>key_disabled</code> / <code>account_disabled</code></td></tr>
             <tr><th>400</th><td><code>model_required</code> / <code>model_not_allowed</code></td></tr>
-            <tr><th>503</th><td>未配置 <code>DEEPSEEK_API_KEY</code></td></tr>
+            <tr><th>503</th><td>未配置 <code>DEEPSEEK_API_KEY</code> 或 <code>GATEWAY_KEY_PEPPER</code></td></tr>
             <tr><th>502/504</th><td>上游错误 / 超时</td></tr>
           </table>
         </div>
@@ -491,16 +492,16 @@
 
     <section id="planned">
       <h2>规划中（尚未实现）</h2>
-      <p>Chat 代理（非流式 / SSE）已落地；下列能力仍待后续故事。</p>
+      <p>下列能力仍待后续故事（Chat sk 鉴权已落地）。</p>
 
       <article class="api">
         <div class="api-head">
           <span class="method post">POST</span>
           <span class="path">/v1/chat/completions</span>
-          <span class="badge soon">鉴权·扣费</span>
+          <span class="badge soon">扣费</span>
         </div>
         <div class="api-body">
-          <p>待补：US-G0-08 网关 <code>sk-</code> 鉴权、US-G0-10 按 usage 计量扣费（含流式结束/中断结算）。</p>
+          <p>待补：US-G0-10 按 usage 计量扣费（含流式结束/中断结算）。</p>
         </div>
       </article>
 

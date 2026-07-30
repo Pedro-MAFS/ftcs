@@ -5,15 +5,16 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mfs.tokengateway.server.application.ChatProxyApplication;
 import com.mfs.tokengateway.server.security.ChatAuthFacade;
+import com.mfs.tokengateway.server.security.ChatCaller;
 
 /**
- * OpenAI 兼容 Chat Completions（US-G0-03 非流式 / US-G0-04 流式）。
- * <p>
- * 鉴权由 {@link ChatAuthFacade} 负责；G0-08 前占位恒 401。
+ * OpenAI 兼容 Chat Completions（US-G0-03/04 代理 + US-G0-08 sk 鉴权）。
  */
 @RestController
 @RequestMapping("/v1/chat")
@@ -30,7 +31,11 @@ public class ChatCompletionsController {
 
     @PostMapping("/completions")
     public Object completions(@RequestBody(required = false) JsonNode body) {
-        chatAuthFacade.requireAuthenticated();
+        ChatCaller caller = chatAuthFacade.requireAuthenticated();
+        RequestAttributes attrs = RequestContextHolder.getRequestAttributes();
+        if (attrs != null) {
+            attrs.setAttribute(ChatCaller.REQUEST_ATTR, caller, RequestAttributes.SCOPE_REQUEST);
+        }
         if (isStream(body)) {
             return chatProxyApplication.completeStream(body);
         }
