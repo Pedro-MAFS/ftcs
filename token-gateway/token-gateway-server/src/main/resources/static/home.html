@@ -302,7 +302,7 @@
           <div class="flow-num">3</div>
           <div>
             <h4>用 sk 调 Chat</h4>
-            <p>调用 <code>POST /v1/chat/completions</code>（非流式已落地）。当前鉴权占位恒 401（<code>sk_auth_pending</code>），待 US-G0-08 校验网关 sk 后统一联调；勿依赖临时免鉴权。</p>
+            <p>调用 <code>POST /v1/chat/completions</code>（非流式 / 流式 SSE 均已落地）。当前鉴权占位恒 401（<code>sk_auth_pending</code>），待 US-G0-08 校验网关 sk 后统一联调；勿依赖临时免鉴权。</p>
           </div>
         </div>
       </div>
@@ -456,7 +456,7 @@
           <span class="badge live">代理已落地</span>
         </div>
         <div class="api-body">
-          <p>OpenAI 兼容非流式 Chat，转发 DeepSeek 白名单模型。默认白名单：<code>deepseek-v4-flash</code>、<code>deepseek-v4-pro</code>（可配）。</p>
+          <p>OpenAI 兼容 Chat：非流式 JSON 或 <code>stream=true</code> SSE，转发 DeepSeek 白名单模型。默认白名单：<code>deepseek-v4-flash</code>、<code>deepseek-v4-pro</code>（可配）。</p>
           <div class="callout warn">
             <strong>鉴权</strong>：正式契约为网关 <code>sk-</code>（US-G0-08）。当前占位一律 <strong>401</strong> <code>sk_auth_pending</code>，无测试 Key / 免鉴权开关。真上游统一联调等 G0-08。
           </div>
@@ -473,15 +473,15 @@
 }</pre>
           <table>
             <tr><th>model</th><td>必填；须在白名单，否则 400 <code>model_not_allowed</code></td></tr>
-            <tr><th>stream</th><td>缺省 false；为 true → 400 <code>stream_not_supported</code>（流式见 G0-04）</td></tr>
+            <tr><th>stream</th><td>缺省 / false → JSON；true → SSE（出站强制 <code>include_usage=true</code>）</td></tr>
             <tr><th>其他</th><td>透传上游</td></tr>
           </table>
           <p class="label">成功响应</p>
-          <p>透传上游 JSON（鉴权就绪且上游成功时，一般为 200）。</p>
+          <p>非流式：透传上游 JSON。流式：<code>text/event-stream</code>，透传 <code>data:</code> 事件至 <code>[DONE]</code>。</p>
           <p class="label">本阶段常见错误</p>
           <table>
             <tr><th>401</th><td><code>sk_auth_pending</code>（占位）</td></tr>
-            <tr><th>400</th><td><code>model_required</code> / <code>model_not_allowed</code> / <code>stream_not_supported</code></td></tr>
+            <tr><th>400</th><td><code>model_required</code> / <code>model_not_allowed</code></td></tr>
             <tr><th>503</th><td>未配置 <code>DEEPSEEK_API_KEY</code></td></tr>
             <tr><th>502/504</th><td>上游错误 / 超时</td></tr>
           </table>
@@ -491,16 +491,16 @@
 
     <section id="planned">
       <h2>规划中（尚未实现）</h2>
-      <p>以下能力仍在规划；Chat 非流式代理逻辑已落地，但 sk 鉴权 / 流式 / 扣费未完成。</p>
+      <p>Chat 代理（非流式 / SSE）已落地；下列能力仍待后续故事。</p>
 
       <article class="api">
         <div class="api-head">
           <span class="method post">POST</span>
           <span class="path">/v1/chat/completions</span>
-          <span class="badge soon">鉴权·流式·扣费</span>
+          <span class="badge soon">鉴权·扣费</span>
         </div>
         <div class="api-body">
-          <p>待补：US-G0-08 sk 鉴权、US-G0-04 SSE、<code>stream=true</code>、US-G0-10 计量扣费。</p>
+          <p>待补：US-G0-08 网关 <code>sk-</code> 鉴权、US-G0-10 按 usage 计量扣费（含流式结束/中断结算）。</p>
         </div>
       </article>
 

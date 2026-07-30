@@ -43,7 +43,7 @@ public class DeepSeekChatClient {
         ObjectNode outbound = requestBody.deepCopy();
         outbound.put("stream", false);
 
-        String url = chatCompletionsUrl();
+        String url = DeepSeekEndpoints.chatCompletionsUrl(properties);
         try {
             return restClient.post()
                     .uri(url)
@@ -74,17 +74,6 @@ public class DeepSeekChatClient {
             log.warn("upstream chat unexpected failure: {}", e.toString());
             throw UpstreamException.unreachable();
         }
-    }
-
-    String chatCompletionsUrl() {
-        String base = properties.getUpstream().getDeepseek().getBaseUrl();
-        if (base == null || base.isBlank()) {
-            base = "https://api.deepseek.com";
-        }
-        while (base.endsWith("/")) {
-            base = base.substring(0, base.length() - 1);
-        }
-        return base + "/chat/completions";
     }
 
     private static UpstreamException mapHttpError(int code) {

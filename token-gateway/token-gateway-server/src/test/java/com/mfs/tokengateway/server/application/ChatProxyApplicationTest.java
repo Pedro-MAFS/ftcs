@@ -8,7 +8,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,8 +23,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.mfs.tokengateway.server.config.TokenGatewayProperties;
 import com.mfs.tokengateway.server.upstream.DeepSeekChatClient;
+import com.mfs.tokengateway.server.upstream.DeepSeekStreamClient;
 import com.mfs.tokengateway.server.upstream.ModelWhitelist;
+import com.mfs.tokengateway.server.upstream.StreamFinishListener;
 import com.mfs.tokengateway.server.upstream.UpstreamChatResponse;
 import com.mfs.tokengateway.server.upstream.UpstreamException;
 
@@ -35,11 +41,33 @@ class ChatProxyApplicationTest {
     @Mock
     private DeepSeekChatClient deepSeekChatClient;
 
+    @Mock
+    private DeepSeekStreamClient deepSeekStreamClient;
+
+    @Mock
+    private StreamFinishListener streamFinishListener;
+
+    private ExecutorService streamExecutor;
     private ChatProxyApplication application;
+    private TokenGatewayProperties properties;
 
     @BeforeEach
     void setUp() {
-        application = new ChatProxyApplication(whitelist, deepSeekChatClient);
+        streamExecutor = Executors.newSingleThreadExecutor();
+        properties = new TokenGatewayProperties();
+        application = new ChatProxyApplication(
+                whitelist,
+                deepSeekChatClient,
+                deepSeekStreamClient,
+                properties,
+                streamExecutor,
+                streamFinishListener,
+                mapper);
+    }
+
+    @AfterEach
+    void tearDown() {
+        streamExecutor.shutdownNow();
     }
 
     @Test
@@ -70,15 +98,16 @@ class ChatProxyApplicationTest {
     }
 
     @Test
-    void rejectsStreamTrueWithoutUpstreamCall() {
+    void streamMissingUpstreamKeyRejectedBeforeOpen() {
         ObjectNode body = mapper.createObjectNode();
         body.put("model", "deepseek-v4-flash");
         body.put("stream", true);
+        properties.getUpstream().getDeepseek().setApiKey("");
 
         ResponseStatusException ex =
-                assertThrows(ResponseStatusException.class, () -> application.complete(body));
-        assertEquals("stream_not_supported", ex.getReason());
-        verify(deepSeekChatClient, never()).postChat(any());
+                assertThrows(ResponseStatusException.class, () -> application.completeStream(body));
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatusCode());
+        assertEquals("upstream_not_configured", ex.getReason());
     }
 
     @Test

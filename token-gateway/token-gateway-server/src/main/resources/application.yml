@@ -41,6 +41,10 @@ token-gateway:
         - deepseek-v4-pro
       connect-timeout: 5s
       read-timeout: 120s
+      # US-G0-04：流式
+      stream-read-timeout: 300s
+      stream-emitter-timeout: 300s
+      stream-pool-size: 64
   user-center:
     issuer-uri: ${UC_ISSUER_URI:https://user.ai-utills.com}
   key:

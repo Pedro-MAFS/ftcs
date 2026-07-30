@@ -48,6 +48,12 @@ public class TokenGatewayProperties {
                 "deepseek-v4-pro"));
         private Duration connectTimeout = Duration.ofSeconds(5);
         private Duration readTimeout = Duration.ofSeconds(120);
+        /** 流式整段请求超时（HttpClient） */
+        private Duration streamReadTimeout = Duration.ofSeconds(300);
+        /** SseEmitter 超时 */
+        private Duration streamEmitterTimeout = Duration.ofSeconds(300);
+        /** 流式泵送线程池大小 */
+        private int streamPoolSize = 64;
 
         public String getApiKey() {
             return apiKey;
@@ -87,6 +93,30 @@ public class TokenGatewayProperties {
 
         public void setReadTimeout(Duration readTimeout) {
             this.readTimeout = readTimeout;
+        }
+
+        public Duration getStreamReadTimeout() {
+            return streamReadTimeout;
+        }
+
+        public void setStreamReadTimeout(Duration streamReadTimeout) {
+            this.streamReadTimeout = streamReadTimeout;
+        }
+
+        public Duration getStreamEmitterTimeout() {
+            return streamEmitterTimeout;
+        }
+
+        public void setStreamEmitterTimeout(Duration streamEmitterTimeout) {
+            this.streamEmitterTimeout = streamEmitterTimeout;
+        }
+
+        public int getStreamPoolSize() {
+            return streamPoolSize;
+        }
+
+        public void setStreamPoolSize(int streamPoolSize) {
+            this.streamPoolSize = streamPoolSize;
         }
     }
 
