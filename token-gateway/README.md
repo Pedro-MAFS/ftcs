@@ -71,7 +71,24 @@ mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 - Pepper：环境变量 `GATEWAY_KEY_PEPPER`（生产必填，禁止入库）
 - 详情：[US-G0-02 §5](./docs/design/US-G0-02-计费库表与厘单位设计.md)
 
-UC Resource Server 依赖默认**不引入**。G0-05 起加 `-Puc-rs` 再 package/install。
+### 用户中心 RS（US-G0-05）
+
+- 依赖：`embed-oauth-resource-starter`（需 Aliyun RDC）。构建/运行加 **`-Puc-rs`**
+- 验签：与 AS **相同**的 `OAUTH_JWK_KEY`（`com.mfs.user.oauth.jwk-key`，HS256）；当前 UC 不走非对称 JWKS 主路径
+- Issuer：`UC_ISSUER_URI`（同时驱动 `token-gateway.user-center.issuer-uri` 与 `com.mfs.user.oauth.issuer`）
+- JWT 保护路径：`/v1/keys/**`、`/v1/auth/**`（**不含** Chat / usage）
+- 冒烟：`GET /v1/auth/whoami` + `Authorization: Bearer {access_token}`
+- 建议 scope（G0-06 起启用）：`token-gateway:keys`（在已有 Client `ftcs-desktop` 登记，不新建 Client）
+- Claim：`tenant_id` + `user_code` → 内部 `UcIdentity`；详见 [US-G0-05 设计](./docs/design/US-G0-05-作为RS校验用户中心JWT设计.md)
+
+```bash
+# PowerShell
+mvn --% -Dmaven.repo.local=D:\maven-repo -Puc-rs -DskipTests package
+# 配置 OAUTH_JWK_KEY 后启动，再：
+curl.exe -s -H "Authorization: Bearer %ACCESS_TOKEN%" http://127.0.0.1:8088/v1/auth/whoami
+```
+
+未加 `-Puc-rs` 时仅骨架可编译；安全链为临时全放行，**不能**当作正式鉴权。
 
 ## 管理端（占位）
 

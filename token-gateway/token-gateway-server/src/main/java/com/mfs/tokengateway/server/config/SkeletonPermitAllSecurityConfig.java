@@ -1,5 +1,6 @@
 package com.mfs.tokengateway.server.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -8,22 +9,21 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * 骨架期安全链：仅放行探活。业务路径鉴权在 G0-05（UC JWT）/ G0-08（sk-）落地。
+ * 未引入 RS Starter（未加 {@code -Puc-rs}）时全放行，避免 Boot 默认安全挡住探活。
+ * <p>
+ * 正式联调请 {@code -Puc-rs}：类路径出现 RS JWT 配置类后本 Bean 不加载，安全链完全由 Starter 提供。
  */
 @Configuration
-public class SecurityConfig {
+@ConditionalOnMissingClass("com.mfs.oauth.rs.service.config.OAuthResourceJwtConfiguration")
+public class SkeletonPermitAllSecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain skeletonPermitAllSecurityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/health", "/actuator/health", "/actuator/health/**")
-                        .permitAll()
-                        .anyRequest()
-                        .authenticated());
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
         return http.build();
     }
 }

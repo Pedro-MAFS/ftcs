@@ -38,6 +38,15 @@ token-gateway:
   user-center:
     issuer-uri: ${UC_ISSUER_URI:https://user.ai-utills.com}
 
+# UC Resource Server（US-G0-05）。正式联调须 mvn -Puc-rs，且 OAUTH_JWK_KEY 与 AS 完全一致（HS256）。
+com.mfs.user.oauth:
+  issuer: ${UC_ISSUER_URI:https://user.ai-utills.com}
+  jwk-key: ${OAUTH_JWK_KEY:}
+  resource:
+    protected-patterns:
+      - /v1/keys/**
+      - /v1/auth/**
+
 logging:
   level:
     root: INFO

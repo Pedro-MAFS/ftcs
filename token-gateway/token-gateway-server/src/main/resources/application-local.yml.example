@@ -10,3 +10,9 @@ spring:
     url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:token_gateway}?useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&serverTimezone=UTC
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:}
+
+# US-G0-05：与用户中心 AS 相同的 OAuth JWT 密钥（HS256）。勿把真实密钥提交进仓库。
+# 构建/运行须加 -Puc-rs。
+# com.mfs.user.oauth:
+#   issuer: ${UC_ISSUER_URI:https://user.ai-utills.com}
+#   jwk-key: ${OAUTH_JWK_KEY}
