@@ -10,22 +10,27 @@ import org.springframework.web.context.request.RequestContextHolder;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mfs.tokengateway.server.application.ChatProxyApplication;
+import com.mfs.tokengateway.server.billing.BalanceGuard;
 import com.mfs.tokengateway.server.security.ChatAuthFacade;
 import com.mfs.tokengateway.server.security.ChatCaller;
 
 /**
- * OpenAI 兼容 Chat Completions（US-G0-03/04 代理 + US-G0-08 sk 鉴权）。
+ * OpenAI 兼容 Chat Completions（US-G0-03/04 代理 + US-G0-08 sk 鉴权 + US-G0-11 余额预检）。
  */
 @RestController
 @RequestMapping("/v1/chat")
 public class ChatCompletionsController {
 
     private final ChatAuthFacade chatAuthFacade;
+    private final BalanceGuard balanceGuard;
     private final ChatProxyApplication chatProxyApplication;
 
     public ChatCompletionsController(
-            ChatAuthFacade chatAuthFacade, ChatProxyApplication chatProxyApplication) {
+            ChatAuthFacade chatAuthFacade,
+            BalanceGuard balanceGuard,
+            ChatProxyApplication chatProxyApplication) {
         this.chatAuthFacade = chatAuthFacade;
+        this.balanceGuard = balanceGuard;
         this.chatProxyApplication = chatProxyApplication;
     }
 
@@ -36,6 +41,7 @@ public class ChatCompletionsController {
         if (attrs != null) {
             attrs.setAttribute(ChatCaller.REQUEST_ATTR, caller, RequestAttributes.SCOPE_REQUEST);
         }
+        balanceGuard.requireSufficientBalance(caller.getUserId());
         if (isStream(body)) {
             return chatProxyApplication.completeStream(body);
         }

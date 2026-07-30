@@ -302,7 +302,7 @@
           <div class="flow-num">3</div>
           <div>
             <h4>用 sk 调 Chat</h4>
-            <p>调用 <code>POST /v1/chat/completions</code>（非流式 / 流式 SSE）。鉴权 sk（G0-08）；落计量日志（G0-09）；异步结算扣费（G0-10，同用户合并扣余额）。</p>
+            <p>调用 <code>POST /v1/chat/completions</code>（非流式 / 流式 SSE）。鉴权 sk（G0-08）；余额预检（G0-11）；落计量日志（G0-09）；异步结算扣费（G0-10）。</p>
           </div>
         </div>
       </div>
@@ -324,7 +324,7 @@
           </tr>
           <tr>
             <td>网关 API Key<br /><code>sk-…</code></td>
-            <td>Chat（及后续 usage 等）：<code>Authorization: Bearer sk-…</code>；非法 401，禁用 403</td>
+            <td>Chat（及后续 usage 等）：<code>Authorization: Bearer sk-…</code>；非法 401，禁用 403；余额不足 402</td>
           </tr>
         </tbody>
       </table>
@@ -460,6 +460,9 @@
           <div class="callout warn">
             <strong>鉴权</strong>：<code>Authorization: Bearer sk-…</code>（与 <code>rotate</code> 返回的明文一致）。无效 / 作废 sk → 401；Key 或账户 disabled → 403。无测试 Key / 免鉴权开关。
           </div>
+          <div class="callout">
+            <strong>余额预检（G0-11）</strong>：鉴权后检查账户 <code>balance_li</code>（默认须 ≥ 1）。不足 → <code>402 insufficient_balance</code>，不转发上游。接受异步结算透支；与上游失败（通常 <code>502 upstream_*</code>）用状态码区分。
+          </div>
           <p class="label">请求头</p>
           <table>
             <tr><th>Authorization</th><td>必填：<code>Bearer sk-…</code></td></tr>
@@ -482,9 +485,10 @@
           <table>
             <tr><th>401</th><td><code>missing_authorization</code> / <code>invalid_authorization</code> / <code>invalid_api_key</code></td></tr>
             <tr><th>403</th><td><code>key_disabled</code> / <code>account_disabled</code></td></tr>
+            <tr><th>402</th><td><code>insufficient_balance</code>（网关用户余额不足；非上游额度）</td></tr>
             <tr><th>400</th><td><code>model_required</code> / <code>model_not_allowed</code></td></tr>
             <tr><th>503</th><td>未配置 <code>DEEPSEEK_API_KEY</code> 或 <code>GATEWAY_KEY_PEPPER</code></td></tr>
-            <tr><th>502/504</th><td>上游错误 / 超时</td></tr>
+            <tr><th>502/504</th><td>上游错误 / 超时（含上游限流等，短码 <code>upstream_*</code>）</td></tr>
           </table>
         </div>
       </article>
@@ -492,18 +496,7 @@
 
     <section id="planned">
       <h2>规划中（尚未实现）</h2>
-      <p>下列能力仍待后续故事（Chat 鉴权、计量落库、异步结算已落地）。</p>
-
-      <article class="api">
-        <div class="api-head">
-          <span class="method post">POST</span>
-          <span class="path">/v1/chat/completions</span>
-          <span class="badge soon">预检</span>
-        </div>
-        <div class="api-body">
-          <p>待补：US-G0-11 余额预检（<code>balance_li &lt;= 0</code> 拒绝新请求；接受异步滞后透支）。</p>
-        </div>
-      </article>
+      <p>下列能力仍待后续故事（Chat 鉴权、计量、异步结算、余额预检已落地）。</p>
 
       <article class="api">
         <div class="api-head">

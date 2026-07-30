@@ -91,10 +91,11 @@ curl.exe -s -X POST http://127.0.0.1:8088/v1/keys/rotate ^
   - `stream=false`（或缺省）：JSON 透传（G0-03）
   - `stream=true`：SSE 透传（G0-04）；出站强制 `stream_options.include_usage=true`
 - **鉴权**：`Authorization: Bearer sk-…`（US-G0-08）；非法 → 401；Key/账户禁用 → 403；无测试 Key / 免鉴权
+- **余额预检（G0-11）**：鉴权后、代理前检查 `balance_li >= min-balance-li`（默认 1）；不足 → **402** `insufficient_balance`（不上游、不写计量日志）。接受异步结算透支；与上游失败（`upstream_*` / 502）用状态码区分
 - **计量（G0-09）**：请求结束后写 `token_request_logs`（用量/状态；金额为空；`billing_status=pending|skipped_no_usage`）。**请求内不算价、不扣费**；`PricingService` 供 G0-10 异步结算
 - 白名单默认：`deepseek-v4-flash` / `deepseek-v4-pro`（与 `V1_0_0` 占位价目对齐）
 - 上游：`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`（仅服务端；不泄露）
-- 设计：[US-G0-03](./docs/design/US-G0-03-DeepSeek非流式白名单代理设计.md)、[US-G0-04](./docs/design/US-G0-04-流式SSE代理设计.md)、[US-G0-08](./docs/design/US-G0-08-Chat使用sk鉴权设计.md)、[US-G0-09](./docs/design/US-G0-09-价目表与两档计价设计.md)
+- 设计：[US-G0-03](./docs/design/US-G0-03-DeepSeek非流式白名单代理设计.md)、[US-G0-04](./docs/design/US-G0-04-流式SSE代理设计.md)、[US-G0-08](./docs/design/US-G0-08-Chat使用sk鉴权设计.md)、[US-G0-09](./docs/design/US-G0-09-价目表与两档计价设计.md)、[US-G0-11](./docs/design/US-G0-11-余额预检与拒绝设计.md)
 
 ### 异步结算（US-G0-10）
 

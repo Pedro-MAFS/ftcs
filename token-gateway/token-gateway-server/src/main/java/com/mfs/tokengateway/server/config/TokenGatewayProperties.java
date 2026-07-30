@@ -14,6 +14,7 @@ public class TokenGatewayProperties {
     private final Observability observability = new Observability();
     private final Key key = new Key();
     private final Settlement settlement = new Settlement();
+    private final Billing billing = new Billing();
 
     public Upstream getUpstream() {
         return upstream;
@@ -33,6 +34,10 @@ public class TokenGatewayProperties {
 
     public Settlement getSettlement() {
         return settlement;
+    }
+
+    public Billing getBilling() {
+        return billing;
     }
 
     public static class Upstream {
@@ -233,6 +238,20 @@ public class TokenGatewayProperties {
 
         public void setInstanceId(String instanceId) {
             this.instanceId = instanceId;
+        }
+    }
+
+    /** US-G0-11 余额预检 */
+    public static class Billing {
+        /** 放行条件：balance_li >= minBalanceLi；默认 1 即拒绝 <= 0 */
+        private long minBalanceLi = 1L;
+
+        public long getMinBalanceLi() {
+            return minBalanceLi;
+        }
+
+        public void setMinBalanceLi(long minBalanceLi) {
+            this.minBalanceLi = minBalanceLi;
         }
     }
 }

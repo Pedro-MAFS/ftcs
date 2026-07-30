@@ -58,6 +58,9 @@ token-gateway:
     batch-size: 50
     claim-timeout: 5m
     instance-id:  dev-1
+  billing:
+    # US-G0-11：余额预检；balance_li >= min-balance-li 才放行（默认 1 → 拒绝 <= 0）
+    min-balance-li: 1
   observability:
     access-log-enabled: true
     access-log-exclude:
