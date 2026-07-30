@@ -24,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mfs.tokengateway.server.config.TokenGatewayProperties;
+import com.mfs.tokengateway.server.metering.RequestMeterService;
 import com.mfs.tokengateway.server.upstream.DeepSeekChatClient;
 import com.mfs.tokengateway.server.upstream.DeepSeekStreamClient;
 import com.mfs.tokengateway.server.upstream.ModelWhitelist;
@@ -47,6 +48,9 @@ class ChatProxyApplicationTest {
     @Mock
     private StreamFinishListener streamFinishListener;
 
+    @Mock
+    private RequestMeterService requestMeterService;
+
     private ExecutorService streamExecutor;
     private ChatProxyApplication application;
     private TokenGatewayProperties properties;
@@ -62,6 +66,7 @@ class ChatProxyApplicationTest {
                 properties,
                 streamExecutor,
                 streamFinishListener,
+                requestMeterService,
                 mapper);
     }
 
@@ -83,10 +88,11 @@ class ChatProxyApplicationTest {
         assertEquals(200, resp.getStatusCode().value());
         assertEquals("{\"id\":\"x\"}", resp.getBody());
         verify(deepSeekChatClient).postChat(any());
+        verify(requestMeterService).record(any());
     }
 
     @Test
-    void rejectsDisallowedModelWithoutUpstreamCall() {
+    void rejectsDisallowedModelWithoutUpstreamCallOrMeter() {
         ObjectNode body = mapper.createObjectNode();
         body.put("model", "gpt-4o");
 
@@ -95,6 +101,7 @@ class ChatProxyApplicationTest {
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
         assertEquals("model_not_allowed", ex.getReason());
         verify(deepSeekChatClient, never()).postChat(any());
+        verify(requestMeterService, never()).record(any());
     }
 
     @Test

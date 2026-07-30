@@ -63,7 +63,9 @@ mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 2. 账号放 `MYSQL_*` 或 `application-local.yml`（勿把密钥写进已提交的 `application.yml`）
 3. 启动即：预建 `token_flyway_schema_history` → 执行 `V1_0_0__init_billing_schema.sql`
 
-改库示例：[`ops/topup_example.sql`](./ops/topup_example.sql)、[`ops/disable_key_by_name.sql`](./ops/disable_key_by_name.sql)。
+改库示例：[`ops/topup_example.sql`](./ops/topup_example.sql)、[`ops/disable_key_by_name.sql`](./ops/disable_key_by_name.sql)、[`ops/insert_price_rule_example.sql`](./ops/insert_price_rule_example.sql)。
+
+`V1_0_0` 含白名单模型 **占位价目**（厘/MTok）；上线前复核后 INSERT 新 `effective_from` 行，勿当生产终价。
 
 ### API Key 哈希与签发（US-G0-06）
 
@@ -83,15 +85,16 @@ curl.exe -s -X POST http://127.0.0.1:8088/v1/keys/rotate ^
   -d "{\"name\":\"ftcs-desktop\"}"
 ```
 
-### Chat 代理（US-G0-03 / US-G0-04）+ sk 鉴权（US-G0-08）
+### Chat 代理（US-G0-03 / US-G0-04）+ sk 鉴权（US-G0-08）+ 计量（US-G0-09）
 
 - 接口：`POST /v1/chat/completions`
   - `stream=false`（或缺省）：JSON 透传（G0-03）
   - `stream=true`：SSE 透传（G0-04）；出站强制 `stream_options.include_usage=true`
 - **鉴权**：`Authorization: Bearer sk-…`（US-G0-08）；非法 → 401；Key/账户禁用 → 403；无测试 Key / 免鉴权
-- 白名单默认：`deepseek-v4-flash` / `deepseek-v4-pro`
+- **计量（G0-09）**：请求结束后写 `token_request_logs`（用量/状态；金额为空；`billing_status=pending|skipped_no_usage`）。**请求内不算价、不扣费**；`PricingService` 供 G0-10 异步结算
+- 白名单默认：`deepseek-v4-flash` / `deepseek-v4-pro`（与 `V1_0_0` 占位价目对齐）
 - 上游：`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`（仅服务端；不泄露）
-- 设计：[US-G0-03](./docs/design/US-G0-03-DeepSeek非流式白名单代理设计.md)、[US-G0-04](./docs/design/US-G0-04-流式SSE代理设计.md)、[US-G0-08](./docs/design/US-G0-08-Chat使用sk鉴权设计.md)
+- 设计：[US-G0-03](./docs/design/US-G0-03-DeepSeek非流式白名单代理设计.md)、[US-G0-04](./docs/design/US-G0-04-流式SSE代理设计.md)、[US-G0-08](./docs/design/US-G0-08-Chat使用sk鉴权设计.md)、[US-G0-09](./docs/design/US-G0-09-价目表与两档计价设计.md)
 
 ### 用户中心 RS（US-G0-05）
 

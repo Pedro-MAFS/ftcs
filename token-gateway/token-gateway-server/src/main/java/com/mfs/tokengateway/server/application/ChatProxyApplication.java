@@ -16,6 +16,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -23,6 +25,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mfs.tokengateway.server.config.TokenGatewayProperties;
+import com.mfs.tokengateway.server.metering.RequestMeterCommand;
+import com.mfs.tokengateway.server.metering.RequestMeterService;
+import com.mfs.tokengateway.server.security.ChatCaller;
 import com.mfs.tokengateway.server.upstream.DeepSeekChatClient;
 import com.mfs.tokengateway.server.upstream.DeepSeekStreamClient;
 import com.mfs.tokengateway.server.upstream.ModelWhitelist;
@@ -34,7 +39,7 @@ import com.mfs.tokengateway.server.upstream.UpstreamException;
 import com.mfs.tokengateway.server.web.RequestIds;
 
 /**
- * Chat 代理用例：非流式（US-G0-03）+ 流式 SSE（US-G0-04）。不含鉴权、扣费。
+ * Chat 代理：非流式（G0-03）+ 流式 SSE（G0-04）+ 请求计量落库（G0-09，不算价不扣费）。
  */
 @Service
 public class ChatProxyApplication {
@@ -47,6 +52,7 @@ public class ChatProxyApplication {
     private final TokenGatewayProperties properties;
     private final ExecutorService streamExecutor;
     private final StreamFinishListener streamFinishListener;
+    private final RequestMeterService requestMeterService;
     private final ObjectMapper objectMapper;
 
     public ChatProxyApplication(
@@ -56,6 +62,7 @@ public class ChatProxyApplication {
             TokenGatewayProperties properties,
             @Qualifier("deepSeekStreamExecutor") ExecutorService streamExecutor,
             StreamFinishListener streamFinishListener,
+            RequestMeterService requestMeterService,
             ObjectMapper objectMapper) {
         this.modelWhitelist = modelWhitelist;
         this.deepSeekChatClient = deepSeekChatClient;
@@ -63,6 +70,7 @@ public class ChatProxyApplication {
         this.properties = properties;
         this.streamExecutor = streamExecutor;
         this.streamFinishListener = streamFinishListener;
+        this.requestMeterService = requestMeterService;
         this.objectMapper = objectMapper;
     }
 
@@ -72,12 +80,36 @@ public class ChatProxyApplication {
         }
         assertModelAllowed(body);
 
+        String model = body.get("model").asText();
+        ChatCaller caller = currentCaller();
+        String requestId = currentRequestId();
+        long startedNs = System.nanoTime();
+
         try {
             UpstreamChatResponse upstream = deepSeekChatClient.postChat(body);
+            JsonNode usage = extractUsageFromBody(upstream.body());
+            meterNonStream(
+                    requestId,
+                    caller,
+                    model,
+                    RequestMeterService.STATUS_SUCCESS,
+                    usage,
+                    latencyMs(startedNs),
+                    upstream.statusCode(),
+                    null);
             return ResponseEntity.status(upstream.statusCode())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(upstream.body());
         } catch (UpstreamException e) {
+            meterNonStream(
+                    requestId,
+                    caller,
+                    model,
+                    RequestMeterService.STATUS_ERROR,
+                    null,
+                    latencyMs(startedNs),
+                    e.getStatus() != null ? e.getStatus().value() : null,
+                    e.getCode());
             throw new ResponseStatusException(e.getStatus(), e.getCode(), e);
         }
     }
@@ -93,11 +125,14 @@ public class ChatProxyApplication {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "upstream_not_configured");
         }
 
+        String model = body.get("model").asText();
+        ChatCaller caller = currentCaller();
         ObjectNode outbound = deepSeekStreamClient.prepareOutbound(body);
         long emitterMs = properties.getUpstream().getDeepseek().getStreamEmitterTimeout().toMillis();
         SseEmitter emitter = new SseEmitter(emitterMs);
 
         String requestId = currentRequestId();
+        long startedNs = System.nanoTime();
         AtomicReference<JsonNode> lastUsage = new AtomicReference<>();
         AtomicBoolean cancelled = new AtomicBoolean(false);
         AtomicBoolean finishedNotified = new AtomicBoolean(false);
@@ -115,27 +150,71 @@ public class ChatProxyApplication {
         emitter.onTimeout(() -> {
             log.warn("chat stream emitter timeout requestId={}", requestId);
             cancelUpstream.run();
-            notifyFinished(requestId, lastUsage.get(), true, finishedNotified);
+            notifyFinished(
+                    requestId,
+                    lastUsage.get(),
+                    true,
+                    finishedNotified,
+                    caller,
+                    model,
+                    latencyMs(startedNs),
+                    null,
+                    "emitter_timeout");
         });
         emitter.onError(ex -> {
             cancelUpstream.run();
-            notifyFinished(requestId, lastUsage.get(), true, finishedNotified);
+            notifyFinished(
+                    requestId,
+                    lastUsage.get(),
+                    true,
+                    finishedNotified,
+                    caller,
+                    model,
+                    latencyMs(startedNs),
+                    null,
+                    ex != null ? ex.getClass().getSimpleName() : "emitter_error");
         });
         emitter.onCompletion(() -> {
-            // 正常 complete 也会触发；若泵送已 notify 则 no-op
             if (cancelled.get()) {
-                notifyFinished(requestId, lastUsage.get(), true, finishedNotified);
+                notifyFinished(
+                        requestId,
+                        lastUsage.get(),
+                        true,
+                        finishedNotified,
+                        caller,
+                        model,
+                        latencyMs(startedNs),
+                        null,
+                        null);
             }
         });
 
         try {
             streamExecutor.execute(() -> pumpStream(
-                    emitter, outbound, requestId, lastUsage, cancelled, finishedNotified, connectionRef));
+                    emitter,
+                    outbound,
+                    requestId,
+                    lastUsage,
+                    cancelled,
+                    finishedNotified,
+                    connectionRef,
+                    caller,
+                    model,
+                    startedNs));
         } catch (RejectedExecutionException e) {
             log.warn("chat stream pool rejected requestId={}", requestId);
             cancelUpstream.run();
             emitter.completeWithError(e);
-            notifyFinished(requestId, null, true, finishedNotified);
+            notifyFinished(
+                    requestId,
+                    null,
+                    true,
+                    finishedNotified,
+                    caller,
+                    model,
+                    latencyMs(startedNs),
+                    null,
+                    "pool_rejected");
         }
 
         return emitter;
@@ -148,7 +227,10 @@ public class ChatProxyApplication {
             AtomicReference<JsonNode> lastUsage,
             AtomicBoolean cancelled,
             AtomicBoolean finishedNotified,
-            AtomicReference<DeepSeekStreamClient.UpstreamSseConnection> connectionRef) {
+            AtomicReference<DeepSeekStreamClient.UpstreamSseConnection> connectionRef,
+            ChatCaller caller,
+            String model,
+            long startedNs) {
         boolean interrupted = false;
         try {
             DeepSeekStreamClient.UpstreamSseConnection connection = deepSeekStreamClient.open(outbound);
@@ -172,9 +254,27 @@ public class ChatProxyApplication {
                 } catch (Exception ignored) {
                     // already completed
                 }
-                notifyFinished(requestId, lastUsage.get(), false, finishedNotified);
+                notifyFinished(
+                        requestId,
+                        lastUsage.get(),
+                        false,
+                        finishedNotified,
+                        caller,
+                        model,
+                        latencyMs(startedNs),
+                        200,
+                        null);
             } else {
-                notifyFinished(requestId, lastUsage.get(), true, finishedNotified);
+                notifyFinished(
+                        requestId,
+                        lastUsage.get(),
+                        true,
+                        finishedNotified,
+                        caller,
+                        model,
+                        latencyMs(startedNs),
+                        200,
+                        null);
             }
         } catch (UpstreamException e) {
             interrupted = cancelled.get();
@@ -188,7 +288,16 @@ public class ChatProxyApplication {
             } catch (Exception ignored) {
                 // ignore
             }
-            notifyFinished(requestId, lastUsage.get(), interrupted || cancelled.get(), finishedNotified);
+            notifyFinished(
+                    requestId,
+                    lastUsage.get(),
+                    interrupted || cancelled.get(),
+                    finishedNotified,
+                    caller,
+                    model,
+                    latencyMs(startedNs),
+                    e.getStatus() != null ? e.getStatus().value() : null,
+                    e.getCode());
         } catch (Exception e) {
             interrupted = cancelled.get();
             log.warn(
@@ -201,7 +310,16 @@ public class ChatProxyApplication {
             } catch (Exception ignored) {
                 // ignore
             }
-            notifyFinished(requestId, lastUsage.get(), true, finishedNotified);
+            notifyFinished(
+                    requestId,
+                    lastUsage.get(),
+                    true,
+                    finishedNotified,
+                    caller,
+                    model,
+                    latencyMs(startedNs),
+                    null,
+                    e.getClass().getSimpleName());
         }
     }
 
@@ -209,15 +327,75 @@ public class ChatProxyApplication {
             String requestId,
             JsonNode usage,
             boolean interrupted,
-            AtomicBoolean finishedNotified) {
+            AtomicBoolean finishedNotified,
+            ChatCaller caller,
+            String model,
+            Integer latencyMs,
+            Integer upstreamStatus,
+            String errorSummary) {
         if (!finishedNotified.compareAndSet(false, true)) {
             return;
         }
         try {
-            streamFinishListener.onFinished(new StreamFinishContext(requestId, usage, interrupted));
+            streamFinishListener.onFinished(new StreamFinishContext(
+                    requestId,
+                    usage,
+                    interrupted,
+                    caller,
+                    model,
+                    latencyMs,
+                    upstreamStatus,
+                    errorSummary));
         } catch (Exception e) {
             log.warn("stream finish listener failed requestId={}: {}", requestId, e.toString());
         }
+    }
+
+    private void meterNonStream(
+            String requestId,
+            ChatCaller caller,
+            String model,
+            String status,
+            JsonNode usage,
+            Integer latencyMs,
+            Integer upstreamStatus,
+            String errorSummary) {
+        try {
+            requestMeterService.record(new RequestMeterCommand(
+                    requestId, caller, model, status, usage, latencyMs, upstreamStatus, errorSummary));
+        } catch (Exception e) {
+            log.warn("non-stream meter failed requestId={}: {}", requestId, e.toString());
+        }
+    }
+
+    private JsonNode extractUsageFromBody(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(body);
+            JsonNode usage = root.get("usage");
+            if (usage == null || usage.isNull() || usage.isMissingNode()) {
+                return null;
+            }
+            return usage;
+        } catch (Exception e) {
+            log.warn("failed to parse upstream usage JSON: {}", e.toString());
+            return null;
+        }
+    }
+
+    private static int latencyMs(long startedNs) {
+        return (int) Math.min(Integer.MAX_VALUE, (System.nanoTime() - startedNs) / 1_000_000L);
+    }
+
+    private static ChatCaller currentCaller() {
+        RequestAttributes attrs = RequestContextHolder.getRequestAttributes();
+        if (attrs == null) {
+            return null;
+        }
+        Object value = attrs.getAttribute(ChatCaller.REQUEST_ATTR, RequestAttributes.SCOPE_REQUEST);
+        return value instanceof ChatCaller caller ? caller : null;
     }
 
     private static String currentRequestId() {

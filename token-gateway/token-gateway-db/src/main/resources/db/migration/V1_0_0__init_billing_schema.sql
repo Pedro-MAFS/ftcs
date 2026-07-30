@@ -96,3 +96,39 @@ CREATE TABLE token_request_logs (
   KEY idx_token_req_model_time (model, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
   COMMENT='request metering; no prompt/completion bodies';
+
+-- US-G0-09 placeholder seed prices (li per million tokens).
+-- Ref USD (approx 2026-07-21 DeepSeek public card) × FX 7.2 CNY/USD × 1000 = li/MTok.
+-- flash: miss $0.14 / hit $0.0028 / out $0.28 → COGS 1008 / 20 / 2016; sell 1200 / 2300 (placeholder margin).
+-- pro:   miss $0.435 / hit $0.003625 / out $0.87 → COGS 3132 / 26 / 6264; sell 3600 / 7000.
+-- NOT production final prices — ops must INSERT a new effective_from row after sample review.
+INSERT INTO token_price_rules (
+  model,
+  input_price_li_per_mTok,
+  output_price_li_per_mTok,
+  upstream_input_cost_li_per_mTok,
+  upstream_cache_cost_li_per_mTok,
+  upstream_output_cost_li_per_mTok,
+  effective_from,
+  created_at
+) VALUES
+(
+  'deepseek-v4-flash',
+  1200,
+  2300,
+  1008,
+  20,
+  2016,
+  '2020-01-01 00:00:00.000',
+  UTC_TIMESTAMP(3)
+),
+(
+  'deepseek-v4-pro',
+  3600,
+  7000,
+  3132,
+  26,
+  6264,
+  '2020-01-01 00:00:00.000',
+  UTC_TIMESTAMP(3)
+);
