@@ -10,7 +10,7 @@
 | **Node.js** | **22 及以上** | 安装 OpenCode、用 `node` 启动 MCP、`npx` 拉取工具 |
 | **Google Chrome** | 已安装并可正常启动 | `chrome-devtools` 浏览网站、探索打开页面（Electron 内置浏览器不能替代） |
 | **OpenCode CLI** | 本机 PATH 可执行 `opencode` | 应用通过 SDK 拉起 `opencode serve`（轻量包不内嵌） |
-| API Key | 大模型（推荐 DeepSeek）+ 搜索（Tavily） | 画像 / 探索 / 邮件起草 |
+| API Key / 通道 | 官方通道（登录开通）或自定义上游 Key + 搜索（Tavily） | 画像 / 探索 / 邮件起草 |
 
 请先确认：
 
@@ -84,7 +84,7 @@ opencode --version
 ## 首次启动
 
 1. 启动应用，等待 Sidecar / 运行时就绪  
-2. 在 **设置** 中填写模型与搜索 Key  
+2. 在 **设置 → 模型通道** 选择官方或自定义，并配置搜索 Key  
 3. 工作区默认在用户数据目录下的 `workspace`；可在设置中更改  
 
 模板会同步 skills、MCP 预打包产物与配置；你的 `data/` 与 `.env` 不会被模板覆盖。

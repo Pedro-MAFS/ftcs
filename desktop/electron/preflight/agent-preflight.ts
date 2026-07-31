@@ -104,14 +104,28 @@ export async function runAgentPreflight(
   }
 
   const settings = getSettingsSnapshot()
-  const modelOk = Boolean(settings.apiKeySet && settings.model?.trim())
+  let modelOk = false
+  let modelDetail = ''
+  if (settings.channelMode === 'official') {
+    modelOk = Boolean(settings.officialProvisioned && settings.model?.trim())
+    modelDetail = modelOk
+      ? `官方通道 · ${settings.model}`
+      : settings.officialProvisioned
+        ? '请选择官方通道模型'
+        : '请先登录并开通官方通道（设置 → 模型通道）'
+  } else {
+    modelOk = Boolean(
+      settings.apiKeySet && settings.model?.trim() && settings.baseUrl?.trim(),
+    )
+    modelDetail = modelOk
+      ? `自定义 · ${settings.model}`
+      : '请到设置填写自定义 API Key、Base URL，并确认模型 ID'
+  }
   checks.push({
     id: 'model',
     label: '大模型配置',
     ok: modelOk,
-    detail: modelOk
-      ? `${settings.providerId} · ${settings.model}`
-      : '请到设置页填写模型 API Key，并确认已选择模型',
+    detail: modelDetail,
   })
 
   if (needsSearch(kind)) {

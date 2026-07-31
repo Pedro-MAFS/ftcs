@@ -93,7 +93,7 @@ export const SECTION_META: Record<
   settings: {
     label: '设置',
     title: '设置',
-    subtitle: '模型 · 提供商 · 搜索 API · 工作区 · OpenCode',
+    subtitle: '模型通道 · 搜索 API · 工作区 · OpenCode',
   },
 }
 

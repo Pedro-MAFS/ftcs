@@ -1,4 +1,7 @@
-export type ModelProviderId =
+export type ChannelMode = 'official' | 'custom'
+
+/** @deprecated 仅迁移旧 .env；UI 不再使用 */
+export type LegacyProviderId =
   | 'deepseek'
   | 'anthropic'
   | 'openai'
@@ -7,7 +10,9 @@ export type ModelProviderId =
 
 export interface SettingsSnapshot {
   workspaceRoot: string
-  providerId: ModelProviderId
+  channelMode: ChannelMode
+  /** 是否已配置网关 sk（G1-02 写入） */
+  officialProvisioned: boolean
   apiKeyMasked: string
   apiKeySet: boolean
   baseUrl: string
@@ -25,7 +30,8 @@ export interface SettingsSnapshot {
 }
 
 export interface SettingsSaveInput {
-  providerId: ModelProviderId
+  channelMode: ChannelMode
+  /** 自定义通道：若含掩码字符则保留原值；官方通道可忽略 */
   apiKey: string
   baseUrl: string
   model: string
@@ -49,54 +55,20 @@ export type SettingsCategory =
   | 'opencode'
   | 'about'
 
-export const MODEL_CATALOG: Record<
-  ModelProviderId,
-  { models: Array<{ id: string; label: string }>; small: Array<{ id: string; label: string }> }
-> = {
-  deepseek: {
-    models: [
-      { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
-      { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-    ],
-    small: [
-      { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-      { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
-    ],
-  },
-  anthropic: {
-    models: [
-      { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-      { id: 'anthropic/claude-opus-4-5', label: 'Claude Opus 4.5' },
-      { id: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-    ],
-    small: [
-      { id: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-      { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-    ],
-  },
-  openai: {
-    models: [
-      { id: 'openai/gpt-4o', label: 'GPT-4o' },
-      { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini' },
-      { id: 'openai/o3-mini', label: 'o3-mini' },
-    ],
-    small: [
-      { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini' },
-      { id: 'openai/gpt-4o', label: 'GPT-4o' },
-    ],
-  },
-  google: {
-    models: [
-      { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-      { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-    ],
-    small: [
-      { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-      { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    ],
-  },
-  custom: {
-    models: [],
-    small: [],
-  },
+/** 官方通道可选模型（与网关白名单对齐） */
+export const OFFICIAL_MODEL_CATALOG = {
+  models: [
+    { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+    { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+  ],
+  small: [
+    { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+  ],
+}
+
+/** @deprecated 使用 OFFICIAL_MODEL_CATALOG；保留空表避免旧 import 崩 */
+export const MODEL_CATALOG = {
+  official: OFFICIAL_MODEL_CATALOG,
+  custom: { models: [] as Array<{ id: string; label: string }>, small: [] as Array<{ id: string; label: string }> },
 }

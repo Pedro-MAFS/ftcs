@@ -5,8 +5,8 @@ import { useAppStatus } from '../composables/useAppStatus'
 import { useAuth } from '../composables/useAuth'
 import { useSettingsNav } from '../composables/useSettingsNav'
 import { SECTION_META } from '../types/workspace'
-import type { ModelProviderId, SettingsSnapshot } from '../types/settings'
-import { MODEL_CATALOG } from '../types/settings'
+import type { ChannelMode, SettingsSnapshot } from '../types/settings'
+import { OFFICIAL_MODEL_CATALOG } from '../types/settings'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import { PRODUCT_LINKS } from '../config/links'
 import { shareAppDownload } from '../composables/useShareApp'
@@ -49,7 +49,7 @@ const showTavilyKey = ref(false)
 const snapshot = ref<SettingsSnapshot | null>(null)
 
 const form = reactive({
-  providerId: 'deepseek' as ModelProviderId,
+  channelMode: 'official' as ChannelMode,
   apiKey: '',
   baseUrl: '',
   model: 'deepseek/deepseek-v4-pro',
@@ -61,17 +61,14 @@ const form = reactive({
   searchDailyLimit: 50,
 })
 
-const providers: Array<{ id: ModelProviderId; label: string }> = [
-  { id: 'deepseek', label: 'DeepSeek' },
-  { id: 'anthropic', label: 'Anthropic' },
-  { id: 'openai', label: 'OpenAI' },
-  { id: 'google', label: 'Google' },
-  { id: 'custom', label: '自定义兼容' },
+const channels: Array<{ id: ChannelMode; label: string }> = [
+  { id: 'official', label: '官方通道' },
+  { id: 'custom', label: '自定义' },
 ]
 
 const categories: Array<{ id: typeof activeCategory.value; label: string }> = [
   { id: 'account', label: '账号与授权' },
-  { id: 'model', label: '模型与提供商' },
+  { id: 'model', label: '模型通道' },
   { id: 'search', label: '搜索服务' },
   { id: 'workspace', label: '工作区' },
   { id: 'opencode', label: 'OpenCode 运行时' },
@@ -126,19 +123,20 @@ async function onShareApp(): Promise<void> {
   shareHint.value = res.message
 }
 
-const isCustom = computed(() => form.providerId === 'custom')
+const isCustom = computed(() => form.channelMode === 'custom')
+const isOfficial = computed(() => form.channelMode === 'official')
 const usagePct = computed(() => {
   const limit = form.searchDailyLimit || 1
   const used = snapshot.value?.searchUsedToday ?? 0
   return Math.min(100, Math.round((used / limit) * 100))
 })
 
-const modelOptions = computed(() => MODEL_CATALOG[form.providerId].models)
-const smallModelOptions = computed(() => MODEL_CATALOG[form.providerId].small)
+const modelOptions = computed(() => OFFICIAL_MODEL_CATALOG.models)
+const smallModelOptions = computed(() => OFFICIAL_MODEL_CATALOG.small)
 
 function applySnapshot(data: SettingsSnapshot): void {
   snapshot.value = data
-  form.providerId = data.providerId
+  form.channelMode = data.channelMode
   form.apiKey = data.apiKeyMasked
   form.baseUrl = data.baseUrl
   form.model = data.model
@@ -146,13 +144,20 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.searchProvider = data.searchProvider
   form.tavilyApiKey = data.tavilyApiKeyMasked
   form.searchDailyLimit = data.searchDailyLimit
-  if (data.providerId === 'custom') {
+  if (data.channelMode === 'custom') {
     form.customModelId = data.model.includes('/')
       ? data.model.split('/').slice(1).join('/')
       : data.model
     form.customSmallModelId = data.smallModel.includes('/')
       ? data.smallModel.split('/').slice(1).join('/')
       : data.smallModel
+  } else {
+    if (!OFFICIAL_MODEL_CATALOG.models.some((m) => m.id === form.model)) {
+      form.model = OFFICIAL_MODEL_CATALOG.models[0].id
+    }
+    if (!OFFICIAL_MODEL_CATALOG.small.some((m) => m.id === form.smallModel)) {
+      form.smallModel = OFFICIAL_MODEL_CATALOG.small[0].id
+    }
   }
 }
 
@@ -171,16 +176,15 @@ async function loadSettings(): Promise<void> {
 }
 
 watch(
-  () => form.providerId,
-  (id) => {
-    if (id === 'custom') return
-    const models = MODEL_CATALOG[id].models
-    if (models.length && !models.some((m) => m.id === form.model)) {
-      form.model = models[0].id
-    }
-    const smalls = MODEL_CATALOG[id].small
-    if (smalls.length && !smalls.some((m) => m.id === form.smallModel)) {
-      form.smallModel = smalls[0].id
+  () => form.channelMode,
+  (mode) => {
+    if (mode === 'official') {
+      if (!OFFICIAL_MODEL_CATALOG.models.some((m) => m.id === form.model)) {
+        form.model = OFFICIAL_MODEL_CATALOG.models[0].id
+      }
+      if (!OFFICIAL_MODEL_CATALOG.small.some((m) => m.id === form.smallModel)) {
+        form.smallModel = OFFICIAL_MODEL_CATALOG.small[0].id
+      }
     }
   },
 )
@@ -192,16 +196,16 @@ async function onSave(): Promise<void> {
   error.value = ''
   try {
     const model =
-      form.providerId === 'custom'
+      form.channelMode === 'custom'
         ? form.customModelId.trim() || 'default'
         : form.model
     const smallModel =
-      form.providerId === 'custom'
+      form.channelMode === 'custom'
         ? form.customSmallModelId.trim() || form.customModelId.trim() || 'default'
         : form.smallModel
 
     const result = await window.ftcs.saveSettings({
-      providerId: form.providerId,
+      channelMode: form.channelMode,
       apiKey: form.apiKey,
       baseUrl: form.baseUrl,
       model,
@@ -387,111 +391,149 @@ async function onCheckUpdate(): Promise<void> {
 
         <hr class="settings-divider" />
 
-        <!-- 模型与提供商 -->
+        <!-- 模型通道 -->
         <section id="settings-model" class="settings-block">
           <div class="settings-block__head">
             <div class="settings-block__title">
-              <h3>模型与提供商</h3>
+              <h3>模型通道</h3>
               <button
                 type="button"
                 class="help-link-btn"
-                title="为什么需要模型提供商？"
-                aria-label="为什么需要模型提供商？"
+                title="官方通道与自定义有什么区别？"
+                aria-label="官方通道与自定义有什么区别？"
                 @click="openProductLink(PRODUCT_LINKS.docsFaqModel)"
               >
                 <Icon name="help-circle" :size="14" />
               </button>
             </div>
-            <span class="muted mono">.env · FTCS_MODEL / provider</span>
+            <span class="muted mono">.env · FTCS_CHANNEL_MODE</span>
           </div>
 
-          <label class="field-label">提供商</label>
+          <label class="field-label">通道</label>
           <div class="provider-row">
             <button
-              v-for="p in providers"
-              :key="p.id"
+              v-for="c in channels"
+              :key="c.id"
               type="button"
               class="provider-chip"
-              :class="{ 'is-active': form.providerId === p.id }"
-              @click="form.providerId = p.id"
+              :class="{ 'is-active': form.channelMode === c.id }"
+              @click="form.channelMode = c.id"
             >
-              {{ p.label }}
+              {{ c.label }}
             </button>
           </div>
-          <p v-if="form.providerId === 'deepseek'" class="hint-line">
-            国内推荐。可在
-            <button
-              type="button"
-              class="text-link-btn"
-              @click="openProductLink(PRODUCT_LINKS.deepseek)"
-            >
-              DeepSeek 开放平台
-            </button>
-            注册并创建 API Key。
-          </p>
 
-          <label class="field-label">API Key</label>
-          <div class="input-row">
+          <template v-if="isOfficial">
+            <p class="hint-line">
+              经公司 Token 网关调用 DeepSeek，费用从账户余额扣除；无需自备上游 API Key。
+            </p>
+            <div class="active-banner">
+              <Icon name="info" :size="14" />
+              <span v-if="!loggedIn">
+                官方通道需要登录。请先登录用户中心，登录后即可开通。
+              </span>
+              <span v-else-if="!snapshot?.officialProvisioned">
+                已登录。开通官方通道后即可使用（开通能力将在后续版本提供）。
+              </span>
+              <span v-else>官方通道已开通。</span>
+              <button
+                v-if="!loggedIn"
+                type="button"
+                class="btn-primary"
+                style="margin-left: auto; height: 28px; padding: 0 12px; font-size: 12px"
+                :disabled="authBusy || loginPending"
+                @click="onAuthLogin"
+              >
+                {{ loginPending ? '登录中…' : '去登录' }}
+              </button>
+            </div>
+
+            <div class="field-grid">
+              <div>
+                <label class="field-label">默认模型</label>
+                <select v-model="form.model" class="text-input">
+                  <option v-for="m in modelOptions" :key="m.id" :value="m.id">
+                    {{ m.label }} ({{ m.id }})
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label">轻量模型（small_model）</label>
+                <select v-model="form.smallModel" class="text-input">
+                  <option v-for="m in smallModelOptions" :key="m.id" :value="m.id">
+                    {{ m.label }} ({{ m.id }})
+                  </option>
+                </select>
+              </div>
+            </div>
+          </template>
+
+          <template v-else>
+            <p class="hint-line">
+              使用你自己的 OpenAI 兼容接口（含自备 DeepSeek 等）。请求不经过公司网关计费。可在
+              <button
+                type="button"
+                class="text-link-btn"
+                @click="openProductLink(PRODUCT_LINKS.deepseek)"
+              >
+                DeepSeek 开放平台
+              </button>
+              自备 Key 后填写下方 Base URL。
+            </p>
+
+            <label class="field-label">API Key</label>
+            <div class="input-row">
+              <input
+                v-model="form.apiKey"
+                class="text-input"
+                :type="showApiKey ? 'text' : 'password'"
+                :placeholder="snapshot?.apiKeySet ? '已配置（修改则覆盖）' : '粘贴 API Key'"
+                autocomplete="off"
+              />
+              <button type="button" class="icon-btn" @click="showApiKey = !showApiKey">
+                <Icon :name="showApiKey ? 'eye' : 'eye-off'" :size="14" />
+              </button>
+            </div>
+
+            <label class="field-label">Base URL</label>
             <input
-              v-model="form.apiKey"
+              v-model="form.baseUrl"
               class="text-input"
-              :type="showApiKey ? 'text' : 'password'"
-              :placeholder="snapshot?.apiKeySet ? '已配置（修改则覆盖）' : '粘贴 API Key'"
+              placeholder="https://api.deepseek.com/v1"
               autocomplete="off"
             />
-            <button type="button" class="icon-btn" @click="showApiKey = !showApiKey">
-              <Icon :name="showApiKey ? 'eye' : 'eye-off'" :size="14" />
-            </button>
-          </div>
 
-          <label class="field-label">Base URL（自定义兼容时填写）</label>
-          <input
-            v-model="form.baseUrl"
-            class="text-input"
-            :disabled="!isCustom"
-            :class="{ 'is-disabled': !isCustom }"
-            placeholder="https://api.example.com/v1"
-            autocomplete="off"
-          />
-
-          <div class="field-grid">
-            <div>
-              <label class="field-label">默认模型</label>
-              <select v-if="!isCustom" v-model="form.model" class="text-input">
-                <option v-for="m in modelOptions" :key="m.id" :value="m.id">
-                  {{ m.label }} ({{ m.id }})
-                </option>
-              </select>
-              <input
-                v-else
-                v-model="form.customModelId"
-                class="text-input"
-                placeholder="模型 ID，如 gpt-4o"
-                autocomplete="off"
-              />
+            <div class="field-grid">
+              <div>
+                <label class="field-label">默认模型 ID</label>
+                <input
+                  v-model="form.customModelId"
+                  class="text-input"
+                  placeholder="如 deepseek-v4-pro"
+                  autocomplete="off"
+                />
+              </div>
+              <div>
+                <label class="field-label">轻量模型 ID</label>
+                <input
+                  v-model="form.customSmallModelId"
+                  class="text-input"
+                  placeholder="如 deepseek-v4-flash"
+                  autocomplete="off"
+                />
+              </div>
             </div>
-            <div>
-              <label class="field-label">轻量模型（small_model）</label>
-              <select v-if="!isCustom" v-model="form.smallModel" class="text-input">
-                <option v-for="m in smallModelOptions" :key="m.id" :value="m.id">
-                  {{ m.label }} ({{ m.id }})
-                </option>
-              </select>
-              <input
-                v-else
-                v-model="form.customSmallModelId"
-                class="text-input"
-                placeholder="轻量模型 ID"
-                autocomplete="off"
-              />
-            </div>
-          </div>
+          </template>
 
           <div class="active-banner">
             <Icon name="info" :size="14" />
             <span>
-              当前生效
-              <code>{{ isCustom ? `custom/${form.customModelId || '…'}` : form.model }}</code>
+              当前
+              <code>{{
+                isCustom
+                  ? `自定义 · ${form.customModelId || '…'}`
+                  : `官方 · ${form.model}`
+              }}</code>
               · 保存后自动重启 OpenCode
             </span>
           </div>

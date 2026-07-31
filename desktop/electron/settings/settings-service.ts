@@ -9,24 +9,19 @@ import {
 } from '../config/env-file'
 import { getOpenCodeConfigPath, getWorkspaceRoot } from '../config/paths'
 
-export type ModelProviderId =
+export type ChannelMode = 'official' | 'custom'
+
+type LegacyProviderId =
   | 'deepseek'
   | 'anthropic'
   | 'openai'
   | 'google'
   | 'custom'
 
-const KNOWN_PROVIDER_IDS: ModelProviderId[] = [
-  'deepseek',
-  'anthropic',
-  'openai',
-  'google',
-  'custom',
-]
-
 export interface SettingsSnapshot {
   workspaceRoot: string
-  providerId: ModelProviderId
+  channelMode: ChannelMode
+  officialProvisioned: boolean
   apiKeyMasked: string
   apiKeySet: boolean
   baseUrl: string
@@ -44,8 +39,7 @@ export interface SettingsSnapshot {
 }
 
 export interface SettingsSaveInput {
-  providerId: ModelProviderId
-  /** 若含掩码字符则保留原值 */
+  channelMode: ChannelMode
   apiKey: string
   baseUrl: string
   model: string
@@ -61,7 +55,26 @@ export interface SettingsSaveResult {
   settings: SettingsSnapshot
 }
 
-const PROVIDER_ENV_KEY: Record<Exclude<ModelProviderId, 'custom'>, string> = {
+const OFFICIAL_MODEL_CATALOG = {
+  models: [
+    { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+    { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+  ],
+  small: [
+    { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+    { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+  ],
+}
+
+const LEGACY_PROVIDER_IDS: LegacyProviderId[] = [
+  'deepseek',
+  'anthropic',
+  'openai',
+  'google',
+  'custom',
+]
+
+const LEGACY_PROVIDER_ENV_KEY: Record<Exclude<LegacyProviderId, 'custom'>, string> = {
   deepseek: 'DEEPSEEK_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
@@ -69,58 +82,9 @@ const PROVIDER_ENV_KEY: Record<Exclude<ModelProviderId, 'custom'>, string> = {
 }
 
 const CUSTOM_ENV_KEY = 'FTCS_CUSTOM_API_KEY'
-
-const MODEL_CATALOG: Record<
-  ModelProviderId,
-  { models: Array<{ id: string; label: string }>; small: Array<{ id: string; label: string }> }
-> = {
-  deepseek: {
-    models: [
-      { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
-      { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-    ],
-    small: [
-      { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-      { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
-    ],
-  },
-  anthropic: {
-    models: [
-      { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-      { id: 'anthropic/claude-opus-4-5', label: 'Claude Opus 4.5' },
-      { id: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-    ],
-    small: [
-      { id: 'anthropic/claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-      { id: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5' },
-    ],
-  },
-  openai: {
-    models: [
-      { id: 'openai/gpt-4o', label: 'GPT-4o' },
-      { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini' },
-      { id: 'openai/o3-mini', label: 'o3-mini' },
-    ],
-    small: [
-      { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini' },
-      { id: 'openai/gpt-4o', label: 'GPT-4o' },
-    ],
-  },
-  google: {
-    models: [
-      { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-      { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-    ],
-    small: [
-      { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-      { id: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    ],
-  },
-  custom: {
-    models: [],
-    small: [],
-  },
-}
+const GATEWAY_KEY_ENV = 'FTCS_GATEWAY_API_KEY'
+const CHANNEL_MODE_ENV = 'FTCS_CHANNEL_MODE'
+const DEEPSEEK_DEFAULT_BASE = 'https://api.deepseek.com/v1'
 
 function getEnvPath(workspaceRoot: string): string {
   return path.join(workspaceRoot, '.env')
@@ -133,36 +97,6 @@ function readJsonConfig(configPath: string): Record<string, unknown> {
     }
   }
   return JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>
-}
-
-function detectProviderId(
-  env: Record<string, string>,
-  model: string,
-): ModelProviderId {
-  const stored = env.FTCS_PROVIDER_ID as ModelProviderId | undefined
-  if (stored && KNOWN_PROVIDER_IDS.includes(stored)) {
-    return stored
-  }
-  if (model.startsWith('deepseek/')) return 'deepseek'
-  if (model.startsWith('anthropic/')) return 'anthropic'
-  if (model.startsWith('openai/')) return 'openai'
-  if (model.startsWith('google/') || model.startsWith('gemini/')) return 'google'
-  if (model.startsWith('custom/')) return 'custom'
-  if (env.DEEPSEEK_API_KEY) return 'deepseek'
-  if (env.ANTHROPIC_API_KEY) return 'anthropic'
-  if (env.OPENAI_API_KEY) return 'openai'
-  if (env.GEMINI_API_KEY) return 'google'
-  return 'deepseek'
-}
-
-function resolveApiKey(
-  env: Record<string, string>,
-  providerId: ModelProviderId,
-): string {
-  if (providerId === 'custom') {
-    return env[CUSTOM_ENV_KEY] || env.OPENAI_API_KEY || ''
-  }
-  return env[PROVIDER_ENV_KEY[providerId]] || ''
 }
 
 function readSearchUsage(workspaceRoot: string): number {
@@ -188,49 +122,121 @@ function readSearchUsage(workspaceRoot: string): number {
   }
 }
 
-function ensureModelPrefix(providerId: ModelProviderId, model: string): string {
+function hasSelfServeKey(env: Record<string, string>): boolean {
+  return Boolean(
+    env[CUSTOM_ENV_KEY] ||
+      env.DEEPSEEK_API_KEY ||
+      env.ANTHROPIC_API_KEY ||
+      env.OPENAI_API_KEY ||
+      env.GEMINI_API_KEY,
+  )
+}
+
+function parseChannelMode(raw: string | undefined): ChannelMode | null {
+  if (raw === 'official' || raw === 'custom') return raw
+  return null
+}
+
+/**
+ * 解析通道模式；必要时写回迁移结果（不静默丢 Key）。
+ */
+function resolveChannelMode(
+  envPath: string,
+  env: Record<string, string>,
+): { mode: ChannelMode; env: Record<string, string> } {
+  const existing = parseChannelMode(env[CHANNEL_MODE_ENV])
+  if (existing) {
+    return { mode: existing, env }
+  }
+
+  const legacy = env.FTCS_PROVIDER_ID as LegacyProviderId | undefined
+  const hasLegacyProvider =
+    Boolean(legacy && LEGACY_PROVIDER_IDS.includes(legacy)) || hasSelfServeKey(env)
+
+  const mode: ChannelMode = hasLegacyProvider ? 'custom' : 'official'
+  const updates: Record<string, string> = {
+    [CHANNEL_MODE_ENV]: mode,
+  }
+
+  if (legacy === 'deepseek' && env.DEEPSEEK_API_KEY && !env[CUSTOM_ENV_KEY]) {
+    updates[CUSTOM_ENV_KEY] = env.DEEPSEEK_API_KEY
+    if (!env.FTCS_MODEL_BASE_URL) {
+      updates.FTCS_MODEL_BASE_URL = DEEPSEEK_DEFAULT_BASE
+    }
+  } else if (legacy && legacy !== 'custom' && LEGACY_PROVIDER_ENV_KEY[legacy]) {
+    const keyName = LEGACY_PROVIDER_ENV_KEY[legacy]
+    const keyVal = env[keyName]
+    if (keyVal && !env[CUSTOM_ENV_KEY]) {
+      updates[CUSTOM_ENV_KEY] = keyVal
+    }
+  } else if (!legacy && env.DEEPSEEK_API_KEY && !env[CUSTOM_ENV_KEY]) {
+    updates[CUSTOM_ENV_KEY] = env.DEEPSEEK_API_KEY
+    if (!env.FTCS_MODEL_BASE_URL) {
+      updates.FTCS_MODEL_BASE_URL = DEEPSEEK_DEFAULT_BASE
+    }
+  }
+
+  if (mode === 'custom') {
+    updates.FTCS_PROVIDER_ID = 'custom'
+  }
+
+  upsertEnvFile(envPath, updates)
+  Object.assign(process.env, updates)
+  return { mode, env: { ...env, ...updates } }
+}
+
+function resolveCustomApiKey(env: Record<string, string>): string {
+  return env[CUSTOM_ENV_KEY] || env.OPENAI_API_KEY || env.DEEPSEEK_API_KEY || ''
+}
+
+function ensureModelId(channelMode: ChannelMode, model: string, fallback: string): string {
   const trimmed = model.trim()
-  if (!trimmed) {
-    return MODEL_CATALOG[providerId].models[0]?.id ?? `${providerId}/default`
+  if (!trimmed) return fallback
+  if (channelMode === 'official') {
+    if (trimmed.includes('/')) return trimmed
+    return `deepseek/${trimmed}`
   }
   if (trimmed.includes('/')) return trimmed
-  if (providerId === 'custom') return `custom/${trimmed}`
-  return `${providerId}/${trimmed}`
+  return `custom/${trimmed}`
 }
 
 export function getSettingsSnapshot(): SettingsSnapshot {
   const workspaceRoot = getWorkspaceRoot()
   const envPath = getEnvPath(workspaceRoot)
   const opencodeConfigPath = getOpenCodeConfigPath(workspaceRoot)
-  const env = readEnvFile(envPath)
-  const config = readJsonConfig(opencodeConfigPath)
+  let env = readEnvFile(envPath)
+  const { mode: channelMode, env: migrated } = resolveChannelMode(envPath, env)
+  env = migrated
 
-  // 用户偏好以 .env 为准；旧工作区若只有 opencode.json，则回退读取一次便于迁移
+  const config = readJsonConfig(opencodeConfigPath)
+  const defaultModel = OFFICIAL_MODEL_CATALOG.models[0].id
+  const defaultSmall = OFFICIAL_MODEL_CATALOG.small[0].id
+
   const model =
     env.FTCS_MODEL ||
     (typeof config.model === 'string' && config.model ? config.model : '') ||
-    'deepseek/deepseek-v4-pro'
+    defaultModel
   const smallModel =
     env.FTCS_SMALL_MODEL ||
     (typeof config.small_model === 'string' && config.small_model
       ? config.small_model
       : '') ||
-    'deepseek/deepseek-v4-flash'
+    defaultSmall
 
-  const providerId =
-    (KNOWN_PROVIDER_IDS.includes(env.FTCS_PROVIDER_ID as ModelProviderId)
-      ? (env.FTCS_PROVIDER_ID as ModelProviderId)
-      : undefined) || detectProviderId(env, model)
-  const apiKey = resolveApiKey(env, providerId)
+  const apiKey = channelMode === 'custom' ? resolveCustomApiKey(env) : ''
+  const gatewayKey = (env[GATEWAY_KEY_ENV] || '').trim()
   const tavilyKey = env.TAVILY_API_KEY || ''
-
   const baseUrl = env.FTCS_MODEL_BASE_URL || ''
 
-  const catalog = MODEL_CATALOG[providerId]
+  const catalog =
+    channelMode === 'official'
+      ? OFFICIAL_MODEL_CATALOG
+      : { models: [] as Array<{ id: string; label: string }>, small: [] as Array<{ id: string; label: string }> }
 
   return {
     workspaceRoot,
-    providerId,
+    channelMode,
+    officialProvisioned: Boolean(gatewayKey),
     apiKeyMasked: maskSecret(apiKey),
     apiKeySet: Boolean(apiKey),
     baseUrl,
@@ -253,12 +259,18 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
   const envPath = getEnvPath(workspaceRoot)
   const env = readEnvFile(envPath)
 
-  const providerId = input.providerId
-  const model = ensureModelPrefix(providerId, input.model)
-  const smallModel = ensureModelPrefix(providerId, input.smallModel)
+  const channelMode = input.channelMode === 'custom' ? 'custom' : 'official'
+  const defaultModel = OFFICIAL_MODEL_CATALOG.models[0].id
+  const defaultSmall = OFFICIAL_MODEL_CATALOG.small[0].id
+  const model = ensureModelId(channelMode, input.model, defaultModel)
+  const smallModel = ensureModelId(
+    channelMode,
+    input.smallModel || input.model,
+    defaultSmall,
+  )
 
   const envUpdates: Record<string, string> = {
-    FTCS_PROVIDER_ID: providerId,
+    [CHANNEL_MODE_ENV]: channelMode,
     FTCS_MODEL: model,
     FTCS_SMALL_MODEL: smallModel,
     SEARCH_PROVIDER: input.searchProvider || 'tavily',
@@ -269,17 +281,20 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
     ),
   }
 
-  // API Key：未改掩码则保留
-  const prevApiKey = resolveApiKey(env, providerId)
-  const nextApiKey =
-    input.apiKey && !isMaskedSecret(input.apiKey) ? input.apiKey.trim() : prevApiKey
-
-  if (providerId === 'custom') {
+  if (channelMode === 'custom') {
+    envUpdates.FTCS_PROVIDER_ID = 'custom'
+    const prevApiKey = resolveCustomApiKey(env)
+    const nextApiKey =
+      input.apiKey && !isMaskedSecret(input.apiKey) ? input.apiKey.trim() : prevApiKey
     envUpdates[CUSTOM_ENV_KEY] = nextApiKey
-    // 兼容 OpenAI SDK 适配器
     envUpdates.OPENAI_API_KEY = nextApiKey
+    const baseUrl = input.baseUrl.trim()
+    envUpdates.FTCS_MODEL_BASE_URL = baseUrl
   } else {
-    envUpdates[PROVIDER_ENV_KEY[providerId]] = nextApiKey
+    // 官方：不改写自定义 Key；清空自定义 base 以免干扰（Key 保留）
+    if (env.FTCS_MODEL_BASE_URL) {
+      // keep FTCS_MODEL_BASE_URL for when user switches back — do not clear
+    }
   }
 
   const prevTavily = env.TAVILY_API_KEY || ''
@@ -288,21 +303,9 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
       ? input.tavilyApiKey.trim()
       : prevTavily
 
-  const baseUrl = input.baseUrl.trim()
-  if (providerId === 'custom' && baseUrl) {
-    envUpdates.FTCS_MODEL_BASE_URL = baseUrl
-  } else if (env.FTCS_MODEL_BASE_URL) {
-    // 非自定义时清空自定义 base，避免干扰
-    envUpdates.FTCS_MODEL_BASE_URL = ''
-  }
-
   upsertEnvFile(envPath, envUpdates)
-
-  // 同步进当前进程，便于立即重启 OpenCode / MCP 继承
   Object.assign(process.env, envUpdates)
   process.env.FTCS_WORKSPACE = workspaceRoot
-
-  // 不再改写托管模板 opencode.json（模型等用户偏好只写 .env）
 
   return {
     ok: true,
@@ -320,6 +323,6 @@ export async function pickWorkspaceDirectory(): Promise<string | null> {
   return result.filePaths[0]
 }
 
-export function getModelCatalog(providerId: ModelProviderId) {
-  return MODEL_CATALOG[providerId]
+export function getOfficialModelCatalog() {
+  return OFFICIAL_MODEL_CATALOG
 }

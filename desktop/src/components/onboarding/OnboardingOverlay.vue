@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuth } from '../../composables/useAuth'
 import { useOnboarding } from '../../composables/useOnboarding'
 import { PRODUCT_LINKS } from '../../config/links'
-import { MODEL_CATALOG, type ModelProviderId, type SettingsSnapshot } from '../../types/settings'
+import {
+  OFFICIAL_MODEL_CATALOG,
+  type ChannelMode,
+  type SettingsSnapshot,
+} from '../../types/settings'
 import { TOUR_STEPS } from '../../types/onboarding'
 import type { EnvProbeItem, NodeInstallResult, OpenCodeInstallResult } from '../../types/onboarding'
 import Icon from '../shared/Icon.vue'
@@ -26,10 +31,17 @@ const {
   runProbe,
   persist,
 } = useOnboarding()
+const {
+  loggedIn,
+  loginPending,
+  busy: authBusy,
+  login,
+} = useAuth()
 
 const savingKeys = ref(false)
 const keysMessage = ref('')
 const keysError = ref('')
+const authHint = ref('')
 const showApiKey = ref(false)
 const showTavilyKey = ref(false)
 const snapshot = ref<SettingsSnapshot | null>(null)
@@ -43,7 +55,7 @@ const openCodeInstallResult = ref<OpenCodeInstallResult | null>(null)
 let stopOpenCodeProgress: (() => void) | null = null
 
 const form = reactive({
-  providerId: 'deepseek' as ModelProviderId,
+  channelMode: 'official' as ChannelMode,
   apiKey: '',
   baseUrl: '',
   model: 'deepseek/deepseek-v4-pro',
@@ -55,32 +67,30 @@ const form = reactive({
   searchDailyLimit: 50,
 })
 
-const providers: Array<{ id: ModelProviderId; label: string }> = [
-  { id: 'deepseek', label: 'DeepSeek' },
-  { id: 'anthropic', label: 'Anthropic' },
-  { id: 'openai', label: 'OpenAI' },
-  { id: 'google', label: 'Google' },
-  { id: 'custom', label: '自定义兼容' },
+const channels: Array<{ id: ChannelMode; label: string }> = [
+  { id: 'official', label: '官方通道' },
+  { id: 'custom', label: '自定义' },
 ]
 
 const phases = [
   { id: 'env' as const, label: '1  环境监测' },
-  { id: 'keys' as const, label: '2  密钥配置' },
+  { id: 'keys' as const, label: '2  模型通道' },
   { id: 'tour' as const, label: '3  业务引导' },
 ]
 
-const isCustom = computed(() => form.providerId === 'custom')
-const modelOptions = computed(() => MODEL_CATALOG[form.providerId].models)
-const smallModelOptions = computed(() => MODEL_CATALOG[form.providerId].small)
+const isOfficial = computed(() => form.channelMode === 'official')
+const officialNeedsLogin = computed(() => isOfficial.value && !loggedIn.value)
+const modelOptions = computed(() => OFFICIAL_MODEL_CATALOG.models)
+const smallModelOptions = computed(() => OFFICIAL_MODEL_CATALOG.small)
 const currentTour = computed(() => TOUR_STEPS[tourStep.value] ?? TOUR_STEPS[0])
 
 const header = computed(() => {
   if (phase.value === 'keys') {
     return {
       eyebrow: 'FTCS 首次设置 · 步骤 2 / 3',
-      title: '配置模型与搜索密钥',
+      title: '选择模型通道并配置搜索',
       subtitle:
-        '写入本地 workspace/.env，不会上传。模型用于画像/探索/邮件，搜索 Key 用于 R1 线索探索。',
+        '写入本地 workspace/.env，不会上传。官方通道经公司网关计费；自定义使用自备兼容接口。搜索 Key 用于 R1 线索探索。',
     }
   }
   if (phase.value === 'tour') {
@@ -215,7 +225,7 @@ async function onQuitApp(): Promise<void> {
 
 function applySnapshot(data: SettingsSnapshot): void {
   snapshot.value = data
-  form.providerId = data.providerId
+  form.channelMode = data.channelMode
   form.apiKey = data.apiKeyMasked
   form.baseUrl = data.baseUrl
   form.model = data.model
@@ -223,13 +233,20 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.searchProvider = data.searchProvider
   form.tavilyApiKey = data.tavilyApiKeyMasked
   form.searchDailyLimit = data.searchDailyLimit
-  if (data.providerId === 'custom') {
+  if (data.channelMode === 'custom') {
     form.customModelId = data.model.includes('/')
       ? data.model.split('/').slice(1).join('/')
       : data.model
     form.customSmallModelId = data.smallModel.includes('/')
       ? data.smallModel.split('/').slice(1).join('/')
       : data.smallModel
+  } else {
+    if (!OFFICIAL_MODEL_CATALOG.models.some((m) => m.id === form.model)) {
+      form.model = OFFICIAL_MODEL_CATALOG.models[0].id
+    }
+    if (!OFFICIAL_MODEL_CATALOG.small.some((m) => m.id === form.smallModel)) {
+      form.smallModel = OFFICIAL_MODEL_CATALOG.small[0].id
+    }
   }
 }
 
@@ -243,22 +260,32 @@ async function loadSettings(): Promise<void> {
   }
 }
 
+async function onAuthLogin(): Promise<void> {
+  authHint.value = '正在打开浏览器…'
+  const res = await login()
+  authHint.value = res.message
+}
+
 async function onSaveKeys(andContinue: boolean): Promise<void> {
   if (!window.ftcs?.saveSettings) return
+  if (officialNeedsLogin.value) {
+    keysError.value = '官方通道需要先登录。请点击「去登录」。'
+    return
+  }
   savingKeys.value = true
   keysMessage.value = ''
   keysError.value = ''
   try {
     const model =
-      form.providerId === 'custom'
+      form.channelMode === 'custom'
         ? form.customModelId.trim() || 'default'
         : form.model
     const smallModel =
-      form.providerId === 'custom'
+      form.channelMode === 'custom'
         ? form.customSmallModelId.trim() || form.customModelId.trim() || 'default'
         : form.smallModel
     const result = await window.ftcs.saveSettings({
-      providerId: form.providerId,
+      channelMode: form.channelMode,
       apiKey: form.apiKey,
       baseUrl: form.baseUrl,
       model,
@@ -298,16 +325,14 @@ watch(phase, async (p) => {
 })
 
 watch(
-  () => form.providerId,
-  (id) => {
-    if (id === 'custom') return
-    const models = MODEL_CATALOG[id].models
-    if (models.length && !models.some((m) => m.id === form.model)) {
-      form.model = models[0].id
+  () => form.channelMode,
+  (mode) => {
+    if (mode !== 'official') return
+    if (!OFFICIAL_MODEL_CATALOG.models.some((m) => m.id === form.model)) {
+      form.model = OFFICIAL_MODEL_CATALOG.models[0].id
     }
-    const smalls = MODEL_CATALOG[id].small
-    if (smalls.length && !smalls.some((m) => m.id === form.smallModel)) {
-      form.smallModel = smalls[0].id
+    if (!OFFICIAL_MODEL_CATALOG.small.some((m) => m.id === form.smallModel)) {
+      form.smallModel = OFFICIAL_MODEL_CATALOG.small[0].id
     }
   },
 )
@@ -476,84 +501,137 @@ onMounted(() => {
             </button>
           </template>
 
-          <!-- 密钥 -->
+          <!-- 模型通道 -->
           <template v-else-if="phase === 'keys'">
             <div class="onboarding__section-head">
-              <p class="onboarding__section-label">模型提供商与 API Key</p>
+              <p class="onboarding__section-label">模型通道</p>
               <button
                 type="button"
                 class="help-link-btn"
-                title="为什么需要模型提供商？"
-                aria-label="为什么需要模型提供商？"
+                title="官方通道与自定义有什么区别？"
+                aria-label="官方通道与自定义有什么区别？"
                 @click="openExternal(PRODUCT_LINKS.docsFaqModel)"
               >
                 <Icon name="help-circle" :size="14" />
               </button>
             </div>
             <div class="onboarding__card">
-              <label class="field-label">提供商</label>
-              <select v-model="form.providerId" class="text-input">
-                <option v-for="p in providers" :key="p.id" :value="p.id">
-                  {{ p.label }}
-                </option>
-              </select>
-              <p v-if="form.providerId === 'deepseek'" class="hint-line">
-                国内推荐。前往
+              <label class="field-label">通道</label>
+              <div class="provider-row">
                 <button
+                  v-for="c in channels"
+                  :key="c.id"
                   type="button"
-                  class="onboarding__link"
-                  @click="openExternal(PRODUCT_LINKS.deepseek)"
+                  class="provider-chip"
+                  :class="{ 'is-active': form.channelMode === c.id }"
+                  @click="form.channelMode = c.id"
                 >
-                  DeepSeek 开放平台
+                  {{ c.label }}
                 </button>
-                注册并创建 API Key。
-              </p>
+              </div>
 
-              <label class="field-label">模型 API Key</label>
-              <div class="onboarding__key-row">
+              <template v-if="isOfficial">
+                <p class="hint-line">
+                  经公司 Token 网关调用 DeepSeek，费用从账户余额扣除；无需自备上游 API Key。
+                </p>
+                <div class="active-banner">
+                  <Icon name="info" :size="14" />
+                  <span v-if="!loggedIn">
+                    官方通道需要登录。请先登录，登录后即可开通。
+                  </span>
+                  <span v-else-if="!snapshot?.officialProvisioned">
+                    已登录。开通官方通道后即可使用（开通能力将在后续版本提供）。
+                  </span>
+                  <span v-else>官方通道已开通。</span>
+                  <button
+                    v-if="!loggedIn"
+                    type="button"
+                    class="btn-primary btn-sm"
+                    style="margin-left: auto"
+                    :disabled="authBusy || loginPending"
+                    @click="onAuthLogin"
+                  >
+                    {{ loginPending ? '登录中…' : '去登录' }}
+                  </button>
+                </div>
+                <p v-if="authHint" class="hint-line">{{ authHint }}</p>
+
+                <div class="onboarding__grid2">
+                  <div>
+                    <label class="field-label">默认模型</label>
+                    <select v-model="form.model" class="text-input">
+                      <option v-for="m in modelOptions" :key="m.id" :value="m.id">
+                        {{ m.label }}
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="field-label">轻量模型</label>
+                    <select v-model="form.smallModel" class="text-input">
+                      <option v-for="m in smallModelOptions" :key="m.id" :value="m.id">
+                        {{ m.label }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+              </template>
+
+              <template v-else>
+                <p class="hint-line">
+                  使用自备 OpenAI 兼容接口（含自备 DeepSeek 等），不经公司网关计费。可在
+                  <button
+                    type="button"
+                    class="onboarding__link"
+                    @click="openExternal(PRODUCT_LINKS.deepseek)"
+                  >
+                    DeepSeek 开放平台
+                  </button>
+                  自备 Key 后填写下方。
+                </p>
+
+                <label class="field-label">API Key</label>
+                <div class="onboarding__key-row">
+                  <input
+                    v-model="form.apiKey"
+                    class="text-input"
+                    :type="showApiKey ? 'text' : 'password'"
+                    :placeholder="snapshot?.apiKeySet ? '已配置（修改则覆盖）' : '粘贴 API Key'"
+                  />
+                  <button
+                    type="button"
+                    class="btn-secondary btn-sm"
+                    @click="showApiKey = !showApiKey"
+                  >
+                    {{ showApiKey ? '隐藏' : '显示' }}
+                  </button>
+                </div>
+
+                <label class="field-label">Base URL</label>
                 <input
-                  v-model="form.apiKey"
+                  v-model="form.baseUrl"
                   class="text-input"
-                  :type="showApiKey ? 'text' : 'password'"
-                  :placeholder="snapshot?.apiKeySet ? '已配置（修改则覆盖）' : '粘贴 API Key'"
+                  placeholder="https://api.deepseek.com/v1"
                 />
-                <button
-                  type="button"
-                  class="btn-secondary btn-sm"
-                  @click="showApiKey = !showApiKey"
-                >
-                  {{ showApiKey ? '隐藏' : '显示' }}
-                </button>
-              </div>
 
-              <div v-if="isCustom" class="onboarding__grid2">
-                <div>
-                  <label class="field-label">Base URL</label>
-                  <input v-model="form.baseUrl" class="text-input" placeholder="https://..." />
+                <div class="onboarding__grid2">
+                  <div>
+                    <label class="field-label">默认模型 ID</label>
+                    <input
+                      v-model="form.customModelId"
+                      class="text-input"
+                      placeholder="如 deepseek-v4-pro"
+                    />
+                  </div>
+                  <div>
+                    <label class="field-label">轻量模型 ID</label>
+                    <input
+                      v-model="form.customSmallModelId"
+                      class="text-input"
+                      placeholder="如 deepseek-v4-flash"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label class="field-label">默认模型 ID</label>
-                  <input v-model="form.customModelId" class="text-input" />
-                </div>
-              </div>
-              <div v-else class="onboarding__grid2">
-                <div>
-                  <label class="field-label">默认模型</label>
-                  <select v-model="form.model" class="text-input">
-                    <option v-for="m in modelOptions" :key="m.id" :value="m.id">
-                      {{ m.label }}
-                    </option>
-                  </select>
-                </div>
-                <div>
-                  <label class="field-label">轻量模型</label>
-                  <select v-model="form.smallModel" class="text-input">
-                    <option v-for="m in smallModelOptions" :key="m.id" :value="m.id">
-                      {{ m.label }}
-                    </option>
-                  </select>
-                </div>
-              </div>
+              </template>
             </div>
 
             <div class="onboarding__section-head">
@@ -672,21 +750,32 @@ onMounted(() => {
             </template>
             <template v-else-if="phase === 'keys'">
               <button
-                type="button"
-                class="btn-secondary"
-                :disabled="savingKeys"
-                @click="onSaveKeys(true)"
-              >
-                稍后补搜索 Key，继续
-              </button>
-              <button
+                v-if="officialNeedsLogin"
                 type="button"
                 class="btn-primary"
-                :disabled="savingKeys"
-                @click="onSaveKeys(true)"
+                :disabled="authBusy || loginPending"
+                @click="onAuthLogin"
               >
-                {{ savingKeys ? '保存中…' : '保存并继续' }}
+                {{ loginPending ? '登录中…' : '去登录' }}
               </button>
+              <template v-else>
+                <button
+                  type="button"
+                  class="btn-secondary"
+                  :disabled="savingKeys"
+                  @click="onSaveKeys(true)"
+                >
+                  稍后补搜索 Key，继续
+                </button>
+                <button
+                  type="button"
+                  class="btn-primary"
+                  :disabled="savingKeys"
+                  @click="onSaveKeys(true)"
+                >
+                  {{ savingKeys ? '保存中…' : '保存并继续' }}
+                </button>
+              </template>
             </template>
             <template v-else>
               <button

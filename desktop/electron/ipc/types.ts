@@ -713,16 +713,12 @@ export interface AgentPreflightResult {
   checks: AgentPreflightCheck[]
 }
 
-export type ModelProviderId =
-  | 'deepseek'
-  | 'anthropic'
-  | 'openai'
-  | 'google'
-  | 'custom'
+export type ChannelMode = 'official' | 'custom'
 
 export interface SettingsSnapshot {
   workspaceRoot: string
-  providerId: ModelProviderId
+  channelMode: ChannelMode
+  officialProvisioned: boolean
   apiKeyMasked: string
   apiKeySet: boolean
   baseUrl: string
@@ -740,7 +736,7 @@ export interface SettingsSnapshot {
 }
 
 export interface SettingsSaveInput {
-  providerId: ModelProviderId
+  channelMode: ChannelMode
   apiKey: string
   baseUrl: string
   model: string

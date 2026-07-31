@@ -191,7 +191,9 @@ function migrateModelPrefsToEnv(workspaceRoot: string): string[] {
   ) {
     updates.FTCS_SMALL_MODEL = config.small_model.trim()
   }
-  if (!env.FTCS_PROVIDER_ID && updates.FTCS_MODEL) {
+  if (!env.FTCS_CHANNEL_MODE && !env.FTCS_PROVIDER_ID && updates.FTCS_MODEL) {
+    // 旧版自备 Key 配置：落入自定义通道，交给后续 migrate 读全量 env
+    updates.FTCS_CHANNEL_MODE = 'custom'
     const model = updates.FTCS_MODEL
     if (model.startsWith('deepseek/')) updates.FTCS_PROVIDER_ID = 'deepseek'
     else if (model.startsWith('anthropic/')) updates.FTCS_PROVIDER_ID = 'anthropic'
