@@ -489,6 +489,9 @@ declare global {
       refreshOfficialModels: () => Promise<
         import('./settings').RefreshOfficialModelsResult
       >
+      refreshOfficialUsage: () => Promise<
+        import('./settings').RefreshOfficialUsageResult
+      >
       getOnboardingState: () => Promise<OnboardingState>
       setOnboardingState: (patch: Partial<OnboardingState>) => Promise<OnboardingState>
       probeEnvironment: () => Promise<EnvProbeResult>

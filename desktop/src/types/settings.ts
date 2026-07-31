@@ -10,6 +10,19 @@ export type LegacyProviderId =
   | 'google'
   | 'custom'
 
+export interface OfficialUsageSnapshot {
+  balanceLi: number
+  balanceYuan: number
+  /** 不含 ¥ 前缀 */
+  balanceDisplay: string
+  liPerYuan: number
+  keyPrefix?: string
+  todayPromptTokens: number | null
+  todayCompletionTokens: number | null
+  fetchedAt: number
+  error?: string
+}
+
 export interface SettingsSnapshot {
   workspaceRoot: string
   channelMode: ChannelMode
@@ -19,6 +32,7 @@ export interface SettingsSnapshot {
   gatewayKeyMasked: string
   officialModelsSource: OfficialModelsSource
   officialModelsError?: string
+  officialUsage: OfficialUsageSnapshot | null
   apiKeyMasked: string
   apiKeySet: boolean
   baseUrl: string
@@ -64,6 +78,13 @@ export interface ProvisionOfficialResult {
 export interface RefreshOfficialModelsResult {
   ok: boolean
   message: string
+  settings: SettingsSnapshot
+}
+
+export interface RefreshOfficialUsageResult {
+  ok: boolean
+  message: string
+  usage: OfficialUsageSnapshot | null
   settings: SettingsSnapshot
 }
 

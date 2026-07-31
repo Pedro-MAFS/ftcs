@@ -2418,6 +2418,48 @@ select.text-input {
   margin: 0 4px;
 }
 
+.usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+}
+
+.usage-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.usage-card__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.usage-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.usage-card__balance {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.usage-card__balance.is-warn {
+  color: var(--warning, #c9a227);
+}
+
 .usage-row {
   display: flex;
   align-items: center;

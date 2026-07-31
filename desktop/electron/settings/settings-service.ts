@@ -13,6 +13,8 @@ import {
   getTokenGatewayBaseUrl,
 } from '../gateway/gateway-config'
 import { getOfficialModelsCache } from '../gateway/official-models-cache'
+import { getOfficialUsageCache } from '../gateway/official-usage-cache'
+import type { OfficialUsageSnapshot } from '../gateway/official-usage-cache'
 
 export type ChannelMode = 'official' | 'custom'
 export type OfficialModelsSource = 'gateway' | 'fallback' | 'none'
@@ -32,6 +34,7 @@ export interface SettingsSnapshot {
   gatewayKeyMasked: string
   officialModelsSource: OfficialModelsSource
   officialModelsError?: string
+  officialUsage: OfficialUsageSnapshot | null
   apiKeyMasked: string
   apiKeySet: boolean
   baseUrl: string
@@ -269,6 +272,8 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     gatewayKeyMasked: maskSecret(gatewayKey),
     officialModelsSource,
     officialModelsError,
+    officialUsage:
+      channelMode === 'official' && gatewayKey ? getOfficialUsageCache() : null,
     apiKeyMasked: maskSecret(apiKey),
     apiKeySet: Boolean(apiKey),
     baseUrl,

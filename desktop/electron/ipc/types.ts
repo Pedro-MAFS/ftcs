@@ -11,6 +11,7 @@ export const IPC = {
   SETTINGS_PICK_WORKSPACE: 'settings:pick-workspace',
   GATEWAY_PROVISION_OFFICIAL: 'gateway:provision-official',
   GATEWAY_REFRESH_OFFICIAL_MODELS: 'gateway:refresh-official-models',
+  GATEWAY_REFRESH_OFFICIAL_USAGE: 'gateway:refresh-official-usage',
   LIBRARY_LIST: 'library:list',
   LIBRARY_ADD_WEBSITE: 'library:add-website',
   LIBRARY_DELETE_WEBSITE: 'library:delete-website',
@@ -719,6 +720,18 @@ export type ChannelMode = 'official' | 'custom'
 
 export type OfficialModelsSource = 'gateway' | 'fallback' | 'none'
 
+export interface OfficialUsageSnapshot {
+  balanceLi: number
+  balanceYuan: number
+  balanceDisplay: string
+  liPerYuan: number
+  keyPrefix?: string
+  todayPromptTokens: number | null
+  todayCompletionTokens: number | null
+  fetchedAt: number
+  error?: string
+}
+
 export interface SettingsSnapshot {
   workspaceRoot: string
   channelMode: ChannelMode
@@ -727,6 +740,7 @@ export interface SettingsSnapshot {
   gatewayKeyMasked: string
   officialModelsSource: OfficialModelsSource
   officialModelsError?: string
+  officialUsage: OfficialUsageSnapshot | null
   apiKeyMasked: string
   apiKeySet: boolean
   baseUrl: string
@@ -771,6 +785,13 @@ export interface ProvisionOfficialResult {
 export interface RefreshOfficialModelsResult {
   ok: boolean
   message: string
+  settings: SettingsSnapshot
+}
+
+export interface RefreshOfficialUsageResult {
+  ok: boolean
+  message: string
+  usage: OfficialUsageSnapshot | null
   settings: SettingsSnapshot
 }
 

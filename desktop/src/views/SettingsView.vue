@@ -45,6 +45,7 @@ const authHint = ref('')
 const saving = ref(false)
 const provisioning = ref(false)
 const refreshingModels = ref(false)
+const refreshingUsage = ref(false)
 const message = ref('')
 const error = ref('')
 const showApiKey = ref(false)
@@ -147,6 +148,28 @@ const smallModelOptions = computed(() => {
 const modelsDisabled = computed(
   () => isOfficial.value && !snapshot.value?.officialProvisioned,
 )
+const showUsageCard = computed(
+  () => isOfficial.value && Boolean(snapshot.value?.officialProvisioned),
+)
+const usage = computed(() => snapshot.value?.officialUsage ?? null)
+const balanceDisplay = computed(() => {
+  const u = usage.value
+  if (!u) return '—'
+  const neg = u.balanceLi < 0
+  const body = u.balanceDisplay.startsWith('-')
+    ? u.balanceDisplay.slice(1)
+    : u.balanceDisplay
+  return neg ? `-¥${body}` : `¥${body}`
+})
+const balanceWarn = computed(() => (usage.value?.balanceLi ?? 0) <= 0)
+const todayPromptLabel = computed(() => {
+  const v = usage.value?.todayPromptTokens
+  return v == null ? '—' : String(v)
+})
+const todayCompletionLabel = computed(() => {
+  const v = usage.value?.todayCompletionTokens
+  return v == null ? '—' : String(v)
+})
 
 function applySnapshot(data: SettingsSnapshot): void {
   snapshot.value = data
@@ -191,7 +214,7 @@ async function loadSettings(): Promise<void> {
     applySnapshot(data)
     error.value = ''
     if (data.channelMode === 'official' && data.officialProvisioned) {
-      await refreshOfficialModelsQuiet()
+      await Promise.all([refreshOfficialModelsQuiet(), refreshOfficialUsageQuiet()])
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -209,6 +232,17 @@ async function refreshOfficialModelsQuiet(): Promise<void> {
     }
   } finally {
     refreshingModels.value = false
+  }
+}
+
+async function refreshOfficialUsageQuiet(): Promise<void> {
+  if (!window.ftcs?.refreshOfficialUsage) return
+  refreshingUsage.value = true
+  try {
+    const res = await window.ftcs.refreshOfficialUsage()
+    applySnapshot(res.settings)
+  } finally {
+    refreshingUsage.value = false
   }
 }
 
@@ -252,6 +286,19 @@ watch(
     const smalls = smallModelOptions.value
     if (smalls.length && !smalls.some((m) => m.id === form.smallModel)) {
       form.smallModel = smalls[0].id
+    }
+  },
+)
+
+watch(
+  () => activeCategory.value,
+  (cat) => {
+    if (
+      cat === 'model' &&
+      form.channelMode === 'official' &&
+      snapshot.value?.officialProvisioned
+    ) {
+      void refreshOfficialUsageQuiet()
     }
   },
 )
@@ -556,6 +603,41 @@ async function onCheckUpdate(): Promise<void> {
               </button>
             </p>
             <p v-else-if="modelsDisabled" class="hint-line">开通后从网关加载可选模型</p>
+
+            <div v-if="showUsageCard" class="usage-card">
+              <div class="usage-card__head">
+                <span class="usage-card__title">账户用量</span>
+                <button
+                  type="button"
+                  class="btn-secondary btn-sm"
+                  :disabled="refreshingUsage"
+                  @click="refreshOfficialUsageQuiet"
+                >
+                  {{ refreshingUsage ? '刷新中…' : '刷新' }}
+                </button>
+              </div>
+              <div class="usage-card__row">
+                <span class="muted">账户余额</span>
+                <span
+                  class="mono usage-card__balance"
+                  :class="{ 'is-warn': balanceWarn }"
+                >
+                  {{ refreshingUsage && !usage ? '…' : balanceDisplay }}
+                </span>
+              </div>
+              <div class="usage-card__row">
+                <span class="muted">今日 Token</span>
+                <span class="mono muted">
+                  输入 {{ todayPromptLabel }} · 输出 {{ todayCompletionLabel }}
+                </span>
+              </div>
+              <p v-if="usage?.error" class="hint-line" style="color: var(--danger, #c44)">
+                {{ usage.error }}
+              </p>
+              <p v-else class="hint-line">
+                余额来自 Token 网关；今日用量即将支持
+              </p>
+            </div>
 
             <div class="field-grid">
               <div>

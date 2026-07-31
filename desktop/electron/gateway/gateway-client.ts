@@ -36,10 +36,20 @@ export interface ListModelsSuccess {
   models: Array<{ id: string; ownedBy?: string }>
 }
 
+export interface UsageMeSuccess {
+  ok: true
+  balanceLi: number
+  liPerYuan: number
+  keyPrefix?: string
+  keyName?: string
+  todayPromptTokens: number | null
+  todayCompletionTokens: number | null
+}
+
 function mapReasonToCode(
   httpStatus: number,
   reason: string,
-  kind: 'rotate' | 'models',
+  kind: 'rotate' | 'models' | 'usage',
 ): GatewayHttpErrorCode {
   const r = reason.toLowerCase()
   if (
@@ -48,7 +58,7 @@ function mapReasonToCode(
     r.includes('anonymous') ||
     r.includes('missing_identity')
   ) {
-    return kind === 'models' ? 'invalid_api_key' : 'need_login'
+    return kind === 'rotate' ? 'need_login' : 'invalid_api_key'
   }
   if (r.includes('invalid_api_key') || r.includes('invalid_authorization') || r.includes('missing_authorization')) {
     return 'invalid_api_key'
@@ -219,6 +229,87 @@ export async function listModels(input: {
         'network',
         err instanceof Error ? err.message : String(err),
       ),
+    }
+  }
+}
+
+/**
+ * GET {base}/usage/me — 网关 sk（G0-16：本期仅余额）
+ */
+export async function getUsageMe(input: {
+  apiKey: string
+  baseUrl?: string
+}): Promise<UsageMeSuccess | GatewayClientError> {
+  const base = input.baseUrl || getTokenGatewayBaseUrl()
+  const url = `${base}/usage/me`
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${input.apiKey}`,
+        Accept: 'application/json',
+      },
+    })
+    if (!res.ok) {
+      const { reason } = await readErrorBody(res)
+      const code = mapReasonToCode(res.status, reason, 'usage')
+      return {
+        ok: false,
+        code,
+        message:
+          code === 'invalid_api_key' || code === 'key_disabled'
+            ? userMessage(code, reason)
+            : `无法获取余额：${userMessage(code, reason)}`,
+        httpStatus: res.status,
+        reason,
+      }
+    }
+    const json = (await res.json()) as {
+      balance_li?: number
+      li_per_yuan?: number
+      key?: { prefix?: string; name?: string }
+      today?: {
+        prompt_tokens?: number
+        completion_tokens?: number
+      }
+    }
+    const balanceLi = Number(json.balance_li)
+    if (!Number.isFinite(balanceLi)) {
+      return {
+        ok: false,
+        code: 'unknown',
+        message: '无法获取余额：响应缺少 balance_li',
+        httpStatus: res.status,
+      }
+    }
+    const liPerYuan =
+      typeof json.li_per_yuan === 'number' && json.li_per_yuan > 0
+        ? json.li_per_yuan
+        : 1000
+    const today = json.today
+    return {
+      ok: true,
+      balanceLi,
+      liPerYuan,
+      keyPrefix: json.key?.prefix,
+      keyName: json.key?.name,
+      todayPromptTokens:
+        today && typeof today.prompt_tokens === 'number'
+          ? today.prompt_tokens
+          : null,
+      todayCompletionTokens:
+        today && typeof today.completion_tokens === 'number'
+          ? today.completion_tokens
+          : null,
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'network',
+      message: `无法获取余额：${userMessage(
+        'network',
+        err instanceof Error ? err.message : String(err),
+      )}`,
     }
   }
 }

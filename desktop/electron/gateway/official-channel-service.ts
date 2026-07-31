@@ -7,7 +7,7 @@ import {
   getSettingsSnapshot,
   type SettingsSnapshot,
 } from '../settings/settings-service'
-import { listModels, rotateKey, type GatewayClientError } from './gateway-client'
+import { listModels, rotateKey, getUsageMe, type GatewayClientError } from './gateway-client'
 import {
   FTCS_GATEWAY_KEY_NAME,
   getDefaultTokenGatewayBaseUrl,
@@ -18,6 +18,12 @@ import {
   setOfficialModelsCache,
   type OfficialModelOption,
 } from './official-models-cache'
+import {
+  buildUsageSnapshot,
+  getOfficialUsageCache,
+  setOfficialUsageCache,
+  type OfficialUsageSnapshot,
+} from './official-usage-cache'
 
 const GATEWAY_KEY_ENV = 'FTCS_GATEWAY_API_KEY'
 const CHANNEL_MODE_ENV = 'FTCS_CHANNEL_MODE'
@@ -33,6 +39,13 @@ export interface ProvisionOfficialResult {
 export interface RefreshOfficialModelsResult {
   ok: boolean
   message: string
+  settings: SettingsSnapshot
+}
+
+export interface RefreshOfficialUsageResult {
+  ok: boolean
+  message: string
+  usage: OfficialUsageSnapshot | null
   settings: SettingsSnapshot
 }
 
@@ -173,6 +186,8 @@ export async function provisionOfficialChannel(input?: {
   Object.assign(process.env, envUpdates)
   process.env.FTCS_WORKSPACE = workspaceRoot
 
+  await refreshOfficialUsage()
+
   return {
     ok: true,
     action: rotate.action,
@@ -229,6 +244,66 @@ export async function refreshOfficialModels(): Promise<RefreshOfficialModelsResu
   return {
     ok: true,
     message: `已加载 ${picked.options.length} 个官方模型`,
+    settings: getSettingsSnapshot(),
+  }
+}
+
+/**
+ * 已有 sk 时刷新 GET /usage/me
+ */
+export async function refreshOfficialUsage(): Promise<RefreshOfficialUsageResult> {
+  const workspaceRoot = getWorkspaceRoot()
+  const envPath = getEnvPath(workspaceRoot)
+  const env = readEnvFile(envPath)
+  const apiKey = (env[GATEWAY_KEY_ENV] || process.env[GATEWAY_KEY_ENV] || '').trim()
+  const baseUrl = getTokenGatewayBaseUrl({ ...process.env, ...env })
+  const prev = getOfficialUsageCache()
+
+  if (!apiKey) {
+    return {
+      ok: false,
+      message: '请先开通官方通道',
+      usage: null,
+      settings: getSettingsSnapshot(),
+    }
+  }
+
+  const listed = await getUsageMe({ apiKey, baseUrl })
+  if (!listed.ok) {
+    if (prev) {
+      setOfficialUsageCache({ ...prev, error: listed.message, fetchedAt: Date.now() })
+    } else {
+      setOfficialUsageCache(
+        buildUsageSnapshot({
+          balanceLi: 0,
+          liPerYuan: 1000,
+          todayPromptTokens: null,
+          todayCompletionTokens: null,
+          error: listed.message,
+        }),
+      )
+    }
+    return {
+      ok: false,
+      message: listed.message,
+      usage: getOfficialUsageCache(),
+      settings: getSettingsSnapshot(),
+    }
+  }
+
+  const snap = buildUsageSnapshot({
+    balanceLi: listed.balanceLi,
+    liPerYuan: listed.liPerYuan,
+    keyPrefix: listed.keyPrefix,
+    todayPromptTokens: listed.todayPromptTokens,
+    todayCompletionTokens: listed.todayCompletionTokens,
+  })
+  setOfficialUsageCache(snap)
+
+  return {
+    ok: true,
+    message: `余额 ¥${snap.balanceDisplay}`,
+    usage: snap,
     settings: getSettingsSnapshot(),
   }
 }
