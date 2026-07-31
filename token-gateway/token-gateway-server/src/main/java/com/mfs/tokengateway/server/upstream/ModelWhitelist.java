@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.mfs.tokengateway.server.config.TokenGatewayProperties;
@@ -16,6 +17,7 @@ public class ModelWhitelist {
 
     private final Set<String> allowed;
 
+    @Autowired
     public ModelWhitelist(TokenGatewayProperties properties) {
         this.allowed = new HashSet<>(properties.getUpstream().getDeepseek().getAllowedModels());
     }
