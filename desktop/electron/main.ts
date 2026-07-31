@@ -19,6 +19,10 @@ import {
   saveSettings,
   type SettingsSaveInput,
 } from './settings/settings-service'
+import {
+  provisionOfficialChannel,
+  refreshOfficialModels,
+} from './gateway/official-channel-service'
 import { writeUserPrefs } from './config/user-prefs'
 import { initializeWorkspace, ensureMcpServersReady } from './config/workspace-init'
 import {
@@ -514,6 +518,28 @@ function registerIpcHandlers(): void {
       ...result,
       status: await buildAppStatus(),
     }
+  })
+  ipcMain.handle(
+    IPC.GATEWAY_PROVISION_OFFICIAL,
+    async (_event, input?: { reset?: boolean }) => {
+      const result = await provisionOfficialChannel({
+        reset: Boolean(input?.reset),
+      })
+      if (result.ok) {
+        if (!runtime) {
+          runtime = new OpenCodeRuntime()
+        }
+        await runtime.restart()
+      }
+      return {
+        ...result,
+        status: await buildAppStatus(),
+      }
+    },
+  )
+  ipcMain.handle(IPC.GATEWAY_REFRESH_OFFICIAL_MODELS, async () => {
+    const result = await refreshOfficialModels()
+    return result
   })
   ipcMain.handle(IPC.SETTINGS_PICK_WORKSPACE, async () => {
     const dir = await pickWorkspaceDirectory()

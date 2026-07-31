@@ -481,6 +481,14 @@ declare global {
       }) => Promise<import('./inbox').InboxAckResult>
       onAuthChanged: (handler: (session: AuthSessionSnapshot) => void) => () => void
       getSettings: () => Promise<SettingsSnapshot>
+      provisionOfficialChannel: (input?: {
+        reset?: boolean
+      }) => Promise<
+        import('./settings').ProvisionOfficialResult & { status?: AppStatus }
+      >
+      refreshOfficialModels: () => Promise<
+        import('./settings').RefreshOfficialModelsResult
+      >
       getOnboardingState: () => Promise<OnboardingState>
       setOnboardingState: (patch: Partial<OnboardingState>) => Promise<OnboardingState>
       probeEnvironment: () => Promise<EnvProbeResult>

@@ -1,4 +1,5 @@
 import type { Config } from '@opencode-ai/sdk/v2'
+import { getTokenGatewayBaseUrl } from '../gateway/gateway-config'
 
 const CUSTOM_ENV_KEY = 'FTCS_CUSTOM_API_KEY'
 const GATEWAY_KEY_ENV = 'FTCS_GATEWAY_API_KEY'
@@ -37,12 +38,12 @@ export function applyUserPrefsToOpenCodeConfig(
     const smallId = smallModel.includes('/')
       ? smallModel.split('/').slice(1).join('/')
       : smallModel || modelId
-    const gatewayBase = (env.FTCS_TOKEN_GATEWAY_BASE_URL || '').trim().replace(/\/$/, '')
+    const gatewayBase = getTokenGatewayBaseUrl(env)
     providers['ftcs-gateway'] = {
       npm: '@ai-sdk/openai-compatible',
       name: 'FTCS Official',
       options: {
-        baseURL: gatewayBase || 'http://127.0.0.1:8088/v1',
+        baseURL: gatewayBase,
         apiKey: `{env:${GATEWAY_KEY_ENV}}`,
       },
       models: {

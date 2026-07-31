@@ -1,5 +1,7 @@
 export type ChannelMode = 'official' | 'custom'
 
+export type OfficialModelsSource = 'gateway' | 'fallback' | 'none'
+
 /** @deprecated 仅迁移旧 .env；UI 不再使用 */
 export type LegacyProviderId =
   | 'deepseek'
@@ -13,6 +15,10 @@ export interface SettingsSnapshot {
   channelMode: ChannelMode
   /** 是否已配置网关 sk（G1-02 写入） */
   officialProvisioned: boolean
+  gatewayBaseUrl: string
+  gatewayKeyMasked: string
+  officialModelsSource: OfficialModelsSource
+  officialModelsError?: string
   apiKeyMasked: string
   apiKeySet: boolean
   baseUrl: string
@@ -47,6 +53,20 @@ export interface SettingsSaveResult {
   settings: SettingsSnapshot
 }
 
+export interface ProvisionOfficialResult {
+  ok: boolean
+  needLogin?: boolean
+  message: string
+  action?: string
+  settings: SettingsSnapshot
+}
+
+export interface RefreshOfficialModelsResult {
+  ok: boolean
+  message: string
+  settings: SettingsSnapshot
+}
+
 export type SettingsCategory =
   | 'account'
   | 'model'
@@ -55,7 +75,7 @@ export type SettingsCategory =
   | 'opencode'
   | 'about'
 
-/** 官方通道可选模型（与网关白名单对齐） */
+/** 官方通道离线兜底（主路径为网关 GET /models） */
 export const OFFICIAL_MODEL_CATALOG = {
   models: [
     { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
@@ -70,5 +90,8 @@ export const OFFICIAL_MODEL_CATALOG = {
 /** @deprecated 使用 OFFICIAL_MODEL_CATALOG；保留空表避免旧 import 崩 */
 export const MODEL_CATALOG = {
   official: OFFICIAL_MODEL_CATALOG,
-  custom: { models: [] as Array<{ id: string; label: string }>, small: [] as Array<{ id: string; label: string }> },
+  custom: {
+    models: [] as Array<{ id: string; label: string }>,
+    small: [] as Array<{ id: string; label: string }>,
+  },
 }

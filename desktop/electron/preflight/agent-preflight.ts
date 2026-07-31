@@ -112,7 +112,7 @@ export async function runAgentPreflight(
       ? `官方通道 · ${settings.model}`
       : settings.officialProvisioned
         ? '请选择官方通道模型'
-        : '请先登录并开通官方通道（设置 → 模型通道）'
+        : '请先登录并开通官方通道（设置 → 模型通道 → 开通官方通道）'
   } else {
     modelOk = Boolean(
       settings.apiKeySet && settings.model?.trim() && settings.baseUrl?.trim(),

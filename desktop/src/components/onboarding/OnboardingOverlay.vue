@@ -39,6 +39,7 @@ const {
 } = useAuth()
 
 const savingKeys = ref(false)
+const provisioning = ref(false)
 const keysMessage = ref('')
 const keysError = ref('')
 const authHint = ref('')
@@ -80,8 +81,22 @@ const phases = [
 
 const isOfficial = computed(() => form.channelMode === 'official')
 const officialNeedsLogin = computed(() => isOfficial.value && !loggedIn.value)
-const modelOptions = computed(() => OFFICIAL_MODEL_CATALOG.models)
-const smallModelOptions = computed(() => OFFICIAL_MODEL_CATALOG.small)
+const officialNeedsProvision = computed(
+  () => isOfficial.value && loggedIn.value && !snapshot.value?.officialProvisioned,
+)
+const modelsDisabled = computed(
+  () => isOfficial.value && !snapshot.value?.officialProvisioned,
+)
+const modelOptions = computed(() => {
+  const fromSnap = snapshot.value?.modelOptions
+  if (fromSnap && fromSnap.length > 0) return fromSnap
+  return OFFICIAL_MODEL_CATALOG.models
+})
+const smallModelOptions = computed(() => {
+  const fromSnap = snapshot.value?.smallModelOptions
+  if (fromSnap && fromSnap.length > 0) return fromSnap
+  return OFFICIAL_MODEL_CATALOG.small
+})
 const currentTour = computed(() => TOUR_STEPS[tourStep.value] ?? TOUR_STEPS[0])
 
 const header = computed(() => {
@@ -241,11 +256,17 @@ function applySnapshot(data: SettingsSnapshot): void {
       ? data.smallModel.split('/').slice(1).join('/')
       : data.smallModel
   } else {
-    if (!OFFICIAL_MODEL_CATALOG.models.some((m) => m.id === form.model)) {
-      form.model = OFFICIAL_MODEL_CATALOG.models[0].id
+    const opts = data.modelOptions.length
+      ? data.modelOptions
+      : OFFICIAL_MODEL_CATALOG.models
+    if (!opts.some((m) => m.id === form.model)) {
+      form.model = opts[0]?.id || OFFICIAL_MODEL_CATALOG.models[0].id
     }
-    if (!OFFICIAL_MODEL_CATALOG.small.some((m) => m.id === form.smallModel)) {
-      form.smallModel = OFFICIAL_MODEL_CATALOG.small[0].id
+    const smallOpts = data.smallModelOptions.length
+      ? data.smallModelOptions
+      : OFFICIAL_MODEL_CATALOG.small
+    if (!smallOpts.some((m) => m.id === form.smallModel)) {
+      form.smallModel = smallOpts[0]?.id || OFFICIAL_MODEL_CATALOG.small[0].id
     }
   }
 }
@@ -255,6 +276,14 @@ async function loadSettings(): Promise<void> {
   try {
     applySnapshot(await window.ftcs.getSettings())
     keysError.value = ''
+    if (
+      form.channelMode === 'official' &&
+      snapshot.value?.officialProvisioned &&
+      window.ftcs.refreshOfficialModels
+    ) {
+      const res = await window.ftcs.refreshOfficialModels()
+      applySnapshot(res.settings)
+    }
   } catch (err) {
     keysError.value = err instanceof Error ? err.message : String(err)
   }
@@ -266,10 +295,37 @@ async function onAuthLogin(): Promise<void> {
   authHint.value = res.message
 }
 
+async function onProvisionOfficial(): Promise<void> {
+  if (!window.ftcs?.provisionOfficialChannel) return
+  provisioning.value = true
+  keysMessage.value = '正在开通官方通道…'
+  keysError.value = ''
+  try {
+    const res = await window.ftcs.provisionOfficialChannel({ reset: false })
+    applySnapshot(res.settings)
+    if (res.ok) {
+      keysMessage.value = res.message
+    } else {
+      keysMessage.value = ''
+      keysError.value = res.message
+      if (res.needLogin) authHint.value = '请先登录'
+    }
+  } catch (err) {
+    keysMessage.value = ''
+    keysError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    provisioning.value = false
+  }
+}
+
 async function onSaveKeys(andContinue: boolean): Promise<void> {
   if (!window.ftcs?.saveSettings) return
   if (officialNeedsLogin.value) {
     keysError.value = '官方通道需要先登录。请点击「去登录」。'
+    return
+  }
+  if (officialNeedsProvision.value) {
+    keysError.value = '请先开通官方通道。'
     return
   }
   savingKeys.value = true
@@ -540,7 +596,7 @@ onMounted(() => {
                     官方通道需要登录。请先登录，登录后即可开通。
                   </span>
                   <span v-else-if="!snapshot?.officialProvisioned">
-                    已登录。开通官方通道后即可使用（开通能力将在后续版本提供）。
+                    已登录。请开通官方通道以获取网关凭证。
                   </span>
                   <span v-else>官方通道已开通。</span>
                   <button
@@ -553,13 +609,28 @@ onMounted(() => {
                   >
                     {{ loginPending ? '登录中…' : '去登录' }}
                   </button>
+                  <button
+                    v-else-if="!snapshot?.officialProvisioned"
+                    type="button"
+                    class="btn-primary btn-sm"
+                    style="margin-left: auto"
+                    :disabled="provisioning"
+                    @click="onProvisionOfficial"
+                  >
+                    {{ provisioning ? '开通中…' : '开通官方通道' }}
+                  </button>
                 </div>
                 <p v-if="authHint" class="hint-line">{{ authHint }}</p>
+                <p v-if="modelsDisabled" class="hint-line">开通后从网关加载可选模型</p>
 
                 <div class="onboarding__grid2">
                   <div>
                     <label class="field-label">默认模型</label>
-                    <select v-model="form.model" class="text-input">
+                    <select
+                      v-model="form.model"
+                      class="text-input"
+                      :disabled="modelsDisabled"
+                    >
                       <option v-for="m in modelOptions" :key="m.id" :value="m.id">
                         {{ m.label }}
                       </option>
@@ -567,7 +638,11 @@ onMounted(() => {
                   </div>
                   <div>
                     <label class="field-label">轻量模型</label>
-                    <select v-model="form.smallModel" class="text-input">
+                    <select
+                      v-model="form.smallModel"
+                      class="text-input"
+                      :disabled="modelsDisabled"
+                    >
                       <option v-for="m in smallModelOptions" :key="m.id" :value="m.id">
                         {{ m.label }}
                       </option>
@@ -757,6 +832,15 @@ onMounted(() => {
                 @click="onAuthLogin"
               >
                 {{ loginPending ? '登录中…' : '去登录' }}
+              </button>
+              <button
+                v-else-if="officialNeedsProvision"
+                type="button"
+                class="btn-primary"
+                :disabled="provisioning"
+                @click="onProvisionOfficial"
+              >
+                {{ provisioning ? '开通中…' : '开通官方通道' }}
               </button>
               <template v-else>
                 <button

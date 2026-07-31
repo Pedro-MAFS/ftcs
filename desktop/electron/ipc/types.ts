@@ -9,6 +9,8 @@ export const IPC = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_SAVE: 'settings:save',
   SETTINGS_PICK_WORKSPACE: 'settings:pick-workspace',
+  GATEWAY_PROVISION_OFFICIAL: 'gateway:provision-official',
+  GATEWAY_REFRESH_OFFICIAL_MODELS: 'gateway:refresh-official-models',
   LIBRARY_LIST: 'library:list',
   LIBRARY_ADD_WEBSITE: 'library:add-website',
   LIBRARY_DELETE_WEBSITE: 'library:delete-website',
@@ -715,10 +717,16 @@ export interface AgentPreflightResult {
 
 export type ChannelMode = 'official' | 'custom'
 
+export type OfficialModelsSource = 'gateway' | 'fallback' | 'none'
+
 export interface SettingsSnapshot {
   workspaceRoot: string
   channelMode: ChannelMode
   officialProvisioned: boolean
+  gatewayBaseUrl: string
+  gatewayKeyMasked: string
+  officialModelsSource: OfficialModelsSource
+  officialModelsError?: string
   apiKeyMasked: string
   apiKeySet: boolean
   baseUrl: string
@@ -747,6 +755,20 @@ export interface SettingsSaveInput {
 }
 
 export interface SettingsSaveResult {
+  ok: boolean
+  message: string
+  settings: SettingsSnapshot
+}
+
+export interface ProvisionOfficialResult {
+  ok: boolean
+  needLogin?: boolean
+  message: string
+  action?: string
+  settings: SettingsSnapshot
+}
+
+export interface RefreshOfficialModelsResult {
   ok: boolean
   message: string
   settings: SettingsSnapshot

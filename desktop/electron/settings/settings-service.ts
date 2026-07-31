@@ -8,8 +8,14 @@ import {
   upsertEnvFile,
 } from '../config/env-file'
 import { getOpenCodeConfigPath, getWorkspaceRoot } from '../config/paths'
+import {
+  getDefaultTokenGatewayBaseUrl,
+  getTokenGatewayBaseUrl,
+} from '../gateway/gateway-config'
+import { getOfficialModelsCache } from '../gateway/official-models-cache'
 
 export type ChannelMode = 'official' | 'custom'
+export type OfficialModelsSource = 'gateway' | 'fallback' | 'none'
 
 type LegacyProviderId =
   | 'deepseek'
@@ -22,6 +28,10 @@ export interface SettingsSnapshot {
   workspaceRoot: string
   channelMode: ChannelMode
   officialProvisioned: boolean
+  gatewayBaseUrl: string
+  gatewayKeyMasked: string
+  officialModelsSource: OfficialModelsSource
+  officialModelsError?: string
   apiKeyMasked: string
   apiKeySet: boolean
   baseUrl: string
@@ -227,16 +237,38 @@ export function getSettingsSnapshot(): SettingsSnapshot {
   const gatewayKey = (env[GATEWAY_KEY_ENV] || '').trim()
   const tavilyKey = env.TAVILY_API_KEY || ''
   const baseUrl = env.FTCS_MODEL_BASE_URL || ''
+  const gatewayBaseUrl = getTokenGatewayBaseUrl({ ...process.env, ...env })
+  const cache = getOfficialModelsCache()
 
-  const catalog =
-    channelMode === 'official'
-      ? OFFICIAL_MODEL_CATALOG
-      : { models: [] as Array<{ id: string; label: string }>, small: [] as Array<{ id: string; label: string }> }
+  let modelOptions: Array<{ id: string; label: string }> = []
+  let smallModelOptions: Array<{ id: string; label: string }> = []
+  let officialModelsSource: OfficialModelsSource = 'none'
+  let officialModelsError: string | undefined
+
+  if (channelMode === 'official') {
+    if (cache && cache.options.length > 0) {
+      modelOptions = cache.options.map((o) => ({ id: o.id, label: o.label }))
+      smallModelOptions = modelOptions
+      officialModelsSource = cache.source
+      officialModelsError = cache.error
+    } else if (gatewayKey) {
+      modelOptions = OFFICIAL_MODEL_CATALOG.models
+      smallModelOptions = OFFICIAL_MODEL_CATALOG.small
+      officialModelsSource = 'fallback'
+      officialModelsError = cache?.error
+    } else {
+      officialModelsSource = 'none'
+    }
+  }
 
   return {
     workspaceRoot,
     channelMode,
     officialProvisioned: Boolean(gatewayKey),
+    gatewayBaseUrl: gatewayBaseUrl || getDefaultTokenGatewayBaseUrl(),
+    gatewayKeyMasked: maskSecret(gatewayKey),
+    officialModelsSource,
+    officialModelsError,
     apiKeyMasked: maskSecret(apiKey),
     apiKeySet: Boolean(apiKey),
     baseUrl,
@@ -247,8 +279,8 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     tavilyApiKeySet: Boolean(tavilyKey),
     searchDailyLimit: Number.parseInt(env.SEARCH_DAILY_LIMIT || '50', 10) || 50,
     searchUsedToday: readSearchUsage(workspaceRoot),
-    modelOptions: catalog.models,
-    smallModelOptions: catalog.small,
+    modelOptions,
+    smallModelOptions,
     opencodeConfigPath,
     envPath,
   }

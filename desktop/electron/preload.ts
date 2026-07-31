@@ -41,6 +41,8 @@ import type {
   SettingsSaveInput,
   SettingsSaveResult,
   SettingsSnapshot,
+  ProvisionOfficialResult,
+  RefreshOfficialModelsResult,
   OnboardingState,
   EnvProbeResult,
   NodeInstallProgress,
@@ -91,6 +93,12 @@ const api = {
     }
   },
   getSettings: (): Promise<SettingsSnapshot> => ipcRenderer.invoke(IPC.SETTINGS_GET),
+  provisionOfficialChannel: (input?: {
+    reset?: boolean
+  }): Promise<ProvisionOfficialResult & { status?: AppStatus }> =>
+    ipcRenderer.invoke(IPC.GATEWAY_PROVISION_OFFICIAL, input ?? {}),
+  refreshOfficialModels: (): Promise<RefreshOfficialModelsResult> =>
+    ipcRenderer.invoke(IPC.GATEWAY_REFRESH_OFFICIAL_MODELS),
   getOnboardingState: (): Promise<OnboardingState> =>
     ipcRenderer.invoke(IPC.ONBOARDING_GET_STATE),
   setOnboardingState: (patch: Partial<OnboardingState>): Promise<OnboardingState> =>

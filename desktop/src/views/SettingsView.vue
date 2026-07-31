@@ -39,9 +39,12 @@ const {
 } = useUpdateCheck()
 const updateHint = ref('')
 const confirmLogout = ref(false)
+const confirmResetGateway = ref(false)
 const authHint = ref('')
 
 const saving = ref(false)
+const provisioning = ref(false)
+const refreshingModels = ref(false)
 const message = ref('')
 const error = ref('')
 const showApiKey = ref(false)
@@ -131,8 +134,19 @@ const usagePct = computed(() => {
   return Math.min(100, Math.round((used / limit) * 100))
 })
 
-const modelOptions = computed(() => OFFICIAL_MODEL_CATALOG.models)
-const smallModelOptions = computed(() => OFFICIAL_MODEL_CATALOG.small)
+const modelOptions = computed(() => {
+  const fromSnap = snapshot.value?.modelOptions
+  if (fromSnap && fromSnap.length > 0) return fromSnap
+  return OFFICIAL_MODEL_CATALOG.models
+})
+const smallModelOptions = computed(() => {
+  const fromSnap = snapshot.value?.smallModelOptions
+  if (fromSnap && fromSnap.length > 0) return fromSnap
+  return OFFICIAL_MODEL_CATALOG.small
+})
+const modelsDisabled = computed(
+  () => isOfficial.value && !snapshot.value?.officialProvisioned,
+)
 
 function applySnapshot(data: SettingsSnapshot): void {
   snapshot.value = data
@@ -152,11 +166,17 @@ function applySnapshot(data: SettingsSnapshot): void {
       ? data.smallModel.split('/').slice(1).join('/')
       : data.smallModel
   } else {
-    if (!OFFICIAL_MODEL_CATALOG.models.some((m) => m.id === form.model)) {
-      form.model = OFFICIAL_MODEL_CATALOG.models[0].id
+    const opts = data.modelOptions.length
+      ? data.modelOptions
+      : OFFICIAL_MODEL_CATALOG.models
+    if (!opts.some((m) => m.id === form.model)) {
+      form.model = opts[0]?.id || OFFICIAL_MODEL_CATALOG.models[0].id
     }
-    if (!OFFICIAL_MODEL_CATALOG.small.some((m) => m.id === form.smallModel)) {
-      form.smallModel = OFFICIAL_MODEL_CATALOG.small[0].id
+    const smallOpts = data.smallModelOptions.length
+      ? data.smallModelOptions
+      : OFFICIAL_MODEL_CATALOG.small
+    if (!smallOpts.some((m) => m.id === form.smallModel)) {
+      form.smallModel = smallOpts[0]?.id || OFFICIAL_MODEL_CATALOG.small[0].id
     }
   }
 }
@@ -170,21 +190,68 @@ async function loadSettings(): Promise<void> {
     const data = await window.ftcs.getSettings()
     applySnapshot(data)
     error.value = ''
+    if (data.channelMode === 'official' && data.officialProvisioned) {
+      await refreshOfficialModelsQuiet()
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
+async function refreshOfficialModelsQuiet(): Promise<void> {
+  if (!window.ftcs?.refreshOfficialModels) return
+  refreshingModels.value = true
+  try {
+    const res = await window.ftcs.refreshOfficialModels()
+    applySnapshot(res.settings)
+    if (!res.ok && res.message) {
+      error.value = res.message
+    }
+  } finally {
+    refreshingModels.value = false
+  }
+}
+
+async function onProvisionOfficial(reset = false): Promise<void> {
+  if (!window.ftcs?.provisionOfficialChannel) return
+  if (!loggedIn.value) {
+    error.value = '请先登录后再开通官方通道'
+    return
+  }
+  provisioning.value = true
+  message.value = reset ? '正在重置网关凭证…' : '正在开通官方通道…'
+  error.value = ''
+  try {
+    const res = await window.ftcs.provisionOfficialChannel({ reset })
+    applySnapshot(res.settings)
+    if (res.ok) {
+      message.value = res.message
+      await refresh()
+    } else {
+      message.value = ''
+      error.value = res.message
+      if (res.needLogin) authHint.value = '请先登录'
+    }
+  } catch (err) {
+    message.value = ''
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    provisioning.value = false
+    confirmResetGateway.value = false
   }
 }
 
 watch(
   () => form.channelMode,
   (mode) => {
-    if (mode === 'official') {
-      if (!OFFICIAL_MODEL_CATALOG.models.some((m) => m.id === form.model)) {
-        form.model = OFFICIAL_MODEL_CATALOG.models[0].id
-      }
-      if (!OFFICIAL_MODEL_CATALOG.small.some((m) => m.id === form.smallModel)) {
-        form.smallModel = OFFICIAL_MODEL_CATALOG.small[0].id
-      }
+    if (mode !== 'official') return
+    const opts = modelOptions.value
+    if (opts.length && !opts.some((m) => m.id === form.model)) {
+      form.model = opts[0].id
+    }
+    const smalls = smallModelOptions.value
+    if (smalls.length && !smalls.some((m) => m.id === form.smallModel)) {
+      form.smallModel = smalls[0].id
     }
   },
 )
@@ -426,6 +493,9 @@ async function onCheckUpdate(): Promise<void> {
           <template v-if="isOfficial">
             <p class="hint-line">
               经公司 Token 网关调用 DeepSeek，费用从账户余额扣除；无需自备上游 API Key。
+              <span v-if="snapshot?.gatewayBaseUrl" class="muted mono">
+                · {{ snapshot.gatewayBaseUrl }}
+              </span>
             </p>
             <div class="active-banner">
               <Icon name="info" :size="14" />
@@ -433,25 +503,68 @@ async function onCheckUpdate(): Promise<void> {
                 官方通道需要登录。请先登录用户中心，登录后即可开通。
               </span>
               <span v-else-if="!snapshot?.officialProvisioned">
-                已登录。开通官方通道后即可使用（开通能力将在后续版本提供）。
+                已登录。请开通官方通道以获取网关凭证。
               </span>
-              <span v-else>官方通道已开通。</span>
+              <span v-else>
+                官方通道已开通
+                <template v-if="snapshot.gatewayKeyMasked">
+                  · <code>{{ snapshot.gatewayKeyMasked }}</code>
+                </template>
+              </span>
               <button
                 v-if="!loggedIn"
                 type="button"
-                class="btn-primary"
-                style="margin-left: auto; height: 28px; padding: 0 12px; font-size: 12px"
+                class="btn-primary btn-sm"
+                style="margin-left: auto"
                 :disabled="authBusy || loginPending"
                 @click="onAuthLogin"
               >
                 {{ loginPending ? '登录中…' : '去登录' }}
               </button>
+              <button
+                v-else-if="!snapshot?.officialProvisioned"
+                type="button"
+                class="btn-primary btn-sm"
+                style="margin-left: auto"
+                :disabled="provisioning"
+                @click="onProvisionOfficial(false)"
+              >
+                {{ provisioning ? '开通中…' : '开通官方通道' }}
+              </button>
+              <button
+                v-else
+                type="button"
+                class="btn-secondary btn-sm"
+                style="margin-left: auto"
+                :disabled="provisioning"
+                @click="confirmResetGateway = true"
+              >
+                重置网关凭证
+              </button>
             </div>
+
+            <p v-if="snapshot?.officialModelsError" class="hint-line" style="color: var(--danger, #c44)">
+              {{ snapshot.officialModelsError }}
+              <button
+                v-if="snapshot.officialProvisioned"
+                type="button"
+                class="text-link-btn"
+                :disabled="refreshingModels"
+                @click="refreshOfficialModelsQuiet"
+              >
+                {{ refreshingModels ? '加载中…' : '重试加载模型' }}
+              </button>
+            </p>
+            <p v-else-if="modelsDisabled" class="hint-line">开通后从网关加载可选模型</p>
 
             <div class="field-grid">
               <div>
                 <label class="field-label">默认模型</label>
-                <select v-model="form.model" class="text-input">
+                <select
+                  v-model="form.model"
+                  class="text-input"
+                  :disabled="modelsDisabled"
+                >
                   <option v-for="m in modelOptions" :key="m.id" :value="m.id">
                     {{ m.label }} ({{ m.id }})
                   </option>
@@ -459,7 +572,11 @@ async function onCheckUpdate(): Promise<void> {
               </div>
               <div>
                 <label class="field-label">轻量模型（small_model）</label>
-                <select v-model="form.smallModel" class="text-input">
+                <select
+                  v-model="form.smallModel"
+                  class="text-input"
+                  :disabled="modelsDisabled"
+                >
                   <option v-for="m in smallModelOptions" :key="m.id" :value="m.id">
                     {{ m.label }} ({{ m.id }})
                   </option>
@@ -795,6 +912,16 @@ async function onCheckUpdate(): Promise<void> {
       :busy="authBusy"
       @confirm="onAuthLogout"
       @cancel="confirmLogout = false"
+    />
+    <ConfirmDialog
+      :open="confirmResetGateway"
+      title="重置网关凭证？"
+      message="将重新签发网关 Key，本机及其它设备上的旧凭证立即失效。是否继续？"
+      confirm-label="重置"
+      danger
+      :busy="provisioning"
+      @confirm="onProvisionOfficial(true)"
+      @cancel="confirmResetGateway = false"
     />
   </section>
 </template>
