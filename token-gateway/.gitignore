@@ -22,6 +22,9 @@ logs/
 **/application-local.yml
 **/application-*.local.yml
 
+# 微信支付等商户材料（商户号说明、APIv3 密钥、商户 API 证书等）— 禁止提交
+important/
+
 # Maven
 .flattened-pom.xml
 **/.flattened-pom.xml
