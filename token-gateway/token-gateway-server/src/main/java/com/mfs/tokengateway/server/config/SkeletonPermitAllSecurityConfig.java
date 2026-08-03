@@ -9,12 +9,13 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * 未引入 RS Starter（未加 {@code -Puc-rs}）时全放行，避免 Boot 默认安全挡住探活。
+ * 仅当类路径上<strong>没有</strong> RS JWT 配置类时全放行（应急兜底）。
  * <p>
- * 正式联调请 {@code -Puc-rs}：类路径出现 RS JWT 配置类后本 Bean 不加载，安全链完全由 Starter 提供。
+ * 正常构建已默认依赖 {@code embed-oauth-resource-starter}，本 Bean 不会加载；
+ * 安全链由 Starter 提供。
  */
 @Configuration
-@ConditionalOnMissingClass("com.mfs.oauth.rs.service.config.OAuthResourceJwtConfiguration")
+@ConditionalOnMissingClass("com.mfs.oauth.rs.service.base.config.webmvc.OAuthResourceJwtConfiguration")
 public class SkeletonPermitAllSecurityConfig {
 
     @Bean

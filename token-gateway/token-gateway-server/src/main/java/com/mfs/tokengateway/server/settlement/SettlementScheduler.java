@@ -46,6 +46,7 @@ public class SettlementScheduler {
             lockAtMostFor = "10m")
     public void tick() {
         try {
+            log.info("settlement tick instanceId={}", settlementApplication.getInstanceId());
             settlementApplication.settleBatch();
         } catch (RuntimeException e) {
             log.warn("settlement tick failed: {}", e.toString());

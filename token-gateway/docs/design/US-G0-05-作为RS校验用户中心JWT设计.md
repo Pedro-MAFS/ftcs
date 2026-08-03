@@ -1,7 +1,7 @@
 # US-G0-05 作为 RS 校验用户中心 JWT 设计
 
 > **用户故事**：[../02-用户故事.md](../02-用户故事.md) · US-G0-05  
-> **状态**：编码已落地（`-Puc-rs` + 共享 `jwk-key` + `UcIdentity` + `GET /v1/auth/whoami`；D-02 待用真实 JWT 抽样最终核对）  
+> **状态**：编码已落地（默认依赖 RS + 共享 `jwk-key` + `UcIdentity` + `GET /v1/auth/whoami`；D-02 待用真实 JWT 抽样最终核对）  
 > **范围**：接入 `embed-oauth-resource-starter`、UC JWT 验签、解析身份键、文档化 claim/scope；**不含** provision/rotate、sk 鉴权、health 强制登录  
 > **需求映射**：[../01-需求.md](../01-需求.md) §2.4、§4.3；FR-AUTH-01/10；D-01/D-02  
 > **依赖**：US-G0-01  
@@ -15,13 +15,13 @@
 | 项 | 决定 |
 |----|------|
 | 角色 | token-gateway = 消费方应用的 **OAuth Resource Server**；**不是** OAuth Client，不自建登录 |
-| 集成件 | **`embed-oauth-resource-starter`**（父 POM 已管版本 `2.0.3`；server 模块 `-Puc-rs` 引入） |
+| 集成件 | **`embed-oauth-resource-starter`**（父 POM 已管版本 `2.0.3`；server 模块**默认依赖**） |
 | AS / Issuer | 默认 `https://user.ai-utills.com`（`com.mfs.user.oauth.issuer`；与 `token-gateway.user-center.issuer-uri` 对齐） |
 | 验签 | **仅本地共享密钥 HS256**：配置与 AS 相同的 `com.mfs.user.oauth.jwk-key`（当前 UC **不支持**非对称 / 不以 JWKS 作 RS 验签主路径） |
 | Principal | Starter 映射为 **`OAuthBearerPrincipal`**；网关再适配为内部 **`UcIdentity`**（`tenantId` + `userCode`） |
 | 保护路径（本故事） | 仅 **UC Bearer** 路径：`/v1/keys/**`、`/v1/auth/**`；Chat / usage **本故事不**用 JWT 保护 |
 | 探活 | `/health` 等 **G0-14** 起纳入 `protected-patterns`（UC JWT）；G0-05 本故事不强制 |
-| 构建 | 编码验收与联调使用 **`mvn -Puc-rs …`**（需可达 Aliyun RDC）；无 profile 时保持可编译骨架 |
+| 构建 | 常规 `mvn … package`（需可达 Aliyun Maven / RDC）；starter 为默认依赖 |
 
 ---
 
@@ -80,11 +80,11 @@ sequenceDiagram
 
 | 项 | 约定 |
 |----|------|
-| 依赖 | `token-gateway-server` 继续用 profile **`uc-rs`** 引入 starter；**禁止**同进程引入 `embed-oauth-server-starter`（UC 启动校验会 fail-fast） |
+| 依赖 | `token-gateway-server` **默认**引入 `embed-oauth-resource-starter`；**禁止**同进程引入 `embed-oauth-server-starter`（UC 启动校验会 fail-fast） |
 | 仓库 | starter 在 Aliyun RDC；CI/本机需凭证；无凭证时默认 profile 仍可 `package` 骨架 |
 | 版本 | 与父 POM `embed-oauth-resource-starter` **2.0.3** 对齐；升级时回归 **共享 jwk-key 验签** 与 Principal API |
 
-编码阶段若团队已稳定有 RDC，可将 starter 改为 **默认依赖**（去掉必须 `-Puc-rs`），设计不强制，由实现时择一并更新 README。
+已改为 **默认依赖**（不再使用 `-Puc-rs` profile）；构建需可达 Aliyun Maven / RDC。
 
 ---
 
@@ -126,7 +126,7 @@ com.mfs.user.oauth:
 
 ### 5.3 本地示例
 
-在 `application-local.yml.example` 增加 RS 段注释示例：`issuer` + `jwk-key: ${OAUTH_JWK_KEY}`（真实密钥勿提交）。README 注明：`mvn -Puc-rs …`、issuer、以及 **必须与 UC 相同的 `OAUTH_JWK_KEY`**。
+在 `application-local.yml.example` 增加 RS 段注释示例：`issuer` + `jwk-key: ${OAUTH_JWK_KEY}`（真实密钥勿提交）。README 注明：常规 `mvn …`、issuer、以及 **必须与 UC 相同的 `OAUTH_JWK_KEY`**。
 
 ---
 
@@ -146,8 +146,8 @@ com.mfs.user.oauth:
 
 | 项 | 决定 |
 |----|------|
-| 权威安全链 | **仅使用** `embed-oauth-resource-starter` 提供的 Resource Server `SecurityFilterChain`（`-Puc-rs`） |
-| 无 Starter 时 | 仅保留 `SkeletonPermitAllSecurityConfig`（`@ConditionalOnMissingClass` RS JWT 配置类）：全放行便于无 RDC 编译；**正式环境必须 `-Puc-rs`** |
+| 权威安全链 | **仅使用** `embed-oauth-resource-starter` 提供的 Resource Server `SecurityFilterChain`（默认依赖） |
+| 无 Starter 时 | 保留 `SkeletonPermitAllSecurityConfig`（`@ConditionalOnMissingClass`）作应急兜底；正常构建不会加载 |
 | 路径保护 | 一律通过 `com.mfs.user.oauth.resource.protected-patterns` 声明 |
 | 后续扩展 | G0-08 的 `sk-` 在 RS 链上以 Filter 等方式接入，**不再**平行维护自建全站链 |
 
@@ -259,9 +259,9 @@ Authorization: Bearer {user_center_access_token}
 |----|------|
 | `AuthWhoamiController` | `GET /v1/auth/whoami` |
 | `UcIdentity` / `UcIdentityResolver` | 身份适配（反射读 Principal / claim） |
-| ~~`SecurityConfig`~~ | **已删除**；无 `-Puc-rs` 时临时 `SkeletonPermitAllSecurityConfig` |
+| ~~`SecurityConfig`~~ | **已删除**；仅无 RS 类路径时临时 `SkeletonPermitAllSecurityConfig` |
 | `application.yml` / `application-local.yml.example` | `com.mfs.user.oauth.*`（含 `jwk-key`）+ protected-patterns |
-| README | `-Puc-rs`、共享 jwk-key、whoami 示例、claim / scope 指针 |
+| README | 默认 RS、共享 jwk-key、whoami 示例、claim / scope 指针 |
 
 ---
 
@@ -296,7 +296,7 @@ Authorization: Bearer {user_center_access_token}
 
 ## 13. 编码任务清单
 
-1. ~~`-Puc-rs` 配置 `issuer` + `jwk-key` + `protected-patterns`~~（已写入 `application.yml`；联调需本机 RDC + `OAUTH_JWK_KEY`）  
+1. ~~默认依赖 RS + 配置 `issuer` + `jwk-key` + `protected-patterns`~~（已写入 `application.yml`；联调需本机 RDC + `OAUTH_JWK_KEY`）  
 2. ~~删除骨架 `SecurityConfig`~~；无 Starter 时临时 `SkeletonPermitAllSecurityConfig`  
 3. ~~`UcIdentityResolver` + `GET /v1/auth/whoami`~~（含单测）  
 4. 用真实 `ftcs-desktop` Token 跑 A1～A5；回写 D-02 核对结果（**待联调**）  

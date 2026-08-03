@@ -3,6 +3,24 @@ import {
   getTokenGatewayBaseUrl,
 } from './gateway-config'
 
+const LOG = '[ftcs:gateway]'
+
+function log(...args: unknown[]): void {
+  console.log(LOG, ...args)
+}
+
+function logWarn(...args: unknown[]): void {
+  console.warn(LOG, ...args)
+}
+
+/** 日志用：只露前缀，避免明文 sk / JWT */
+function maskSecretForLog(value: string | undefined): string {
+  const v = (value || '').trim()
+  if (!v) return '(empty)'
+  if (v.length <= 12) return `${v.slice(0, 4)}…(len=${v.length})`
+  return `${v.slice(0, 8)}…${v.slice(-4)}(len=${v.length})`
+}
+
 export type GatewayHttpErrorCode =
   | 'need_login'
   | 'account_disabled'
@@ -118,6 +136,11 @@ export async function rotateKey(input: {
   const base = input.baseUrl || getTokenGatewayBaseUrl()
   const name = (input.name || FTCS_GATEWAY_KEY_NAME).trim()
   const url = `${base}/keys/rotate`
+  log('rotate start', {
+    url,
+    name,
+    accessToken: maskSecretForLog(input.accessToken),
+  })
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -129,8 +152,14 @@ export async function rotateKey(input: {
       body: JSON.stringify({ name }),
     })
     if (!res.ok) {
-      const { reason } = await readErrorBody(res)
+      const { reason, text } = await readErrorBody(res)
       const code = mapReasonToCode(res.status, reason, 'rotate')
+      logWarn('rotate http error', {
+        status: res.status,
+        code,
+        reason,
+        bodyPreview: text.slice(0, 300),
+      })
       return {
         ok: false,
         code,
@@ -148,6 +177,7 @@ export async function rotateKey(input: {
     }
     const apiKey = (json.api_key || '').trim()
     if (!apiKey) {
+      logWarn('rotate missing api_key', { status: res.status, action: json.action })
       return {
         ok: false,
         code: 'unknown',
@@ -155,6 +185,14 @@ export async function rotateKey(input: {
         httpStatus: res.status,
       }
     }
+    log('rotate ok', {
+      action: json.action || 'created',
+      name: json.name || name,
+      prefix: json.prefix || '',
+      apiKey: maskSecretForLog(apiKey),
+      balanceLi:
+        typeof json.user?.balance_li === 'number' ? json.user.balance_li : undefined,
+    })
     return {
       ok: true,
       action: json.action || 'created',
@@ -165,6 +203,7 @@ export async function rotateKey(input: {
         typeof json.user?.balance_li === 'number' ? json.user.balance_li : undefined,
     }
   } catch (err) {
+    logWarn('rotate network error', err instanceof Error ? err.message : String(err))
     return {
       ok: false,
       code: 'network',
@@ -185,6 +224,10 @@ export async function listModels(input: {
 }): Promise<ListModelsSuccess | GatewayClientError> {
   const base = input.baseUrl || getTokenGatewayBaseUrl()
   const url = `${base}/models`
+  log('models start', {
+    url,
+    apiKey: maskSecretForLog(input.apiKey),
+  })
   try {
     const res = await fetch(url, {
       method: 'GET',
@@ -194,8 +237,14 @@ export async function listModels(input: {
       },
     })
     if (!res.ok) {
-      const { reason } = await readErrorBody(res)
+      const { reason, text } = await readErrorBody(res)
       const code = mapReasonToCode(res.status, reason, 'models')
+      logWarn('models http error', {
+        status: res.status,
+        code,
+        reason,
+        bodyPreview: text.slice(0, 300),
+      })
       return {
         ok: false,
         code,
@@ -214,14 +263,20 @@ export async function listModels(input: {
       }))
       .filter((m) => Boolean(m.id))
     if (models.length === 0) {
+      logWarn('models empty list', { status: res.status })
       return {
         ok: false,
         code: 'empty_models',
         message: userMessage('empty_models', ''),
       }
     }
+    log('models ok', {
+      count: models.length,
+      ids: models.map((m) => m.id),
+    })
     return { ok: true, models }
   } catch (err) {
+    logWarn('models network error', err instanceof Error ? err.message : String(err))
     return {
       ok: false,
       code: 'network',
@@ -242,6 +297,10 @@ export async function getUsageMe(input: {
 }): Promise<UsageMeSuccess | GatewayClientError> {
   const base = input.baseUrl || getTokenGatewayBaseUrl()
   const url = `${base}/usage/me`
+  log('usage/me start', {
+    url,
+    apiKey: maskSecretForLog(input.apiKey),
+  })
   try {
     const res = await fetch(url, {
       method: 'GET',
@@ -251,8 +310,14 @@ export async function getUsageMe(input: {
       },
     })
     if (!res.ok) {
-      const { reason } = await readErrorBody(res)
+      const { reason, text } = await readErrorBody(res)
       const code = mapReasonToCode(res.status, reason, 'usage')
+      logWarn('usage/me http error', {
+        status: res.status,
+        code,
+        reason,
+        bodyPreview: text.slice(0, 300),
+      })
       return {
         ok: false,
         code,
@@ -275,6 +340,7 @@ export async function getUsageMe(input: {
     }
     const balanceLi = Number(json.balance_li)
     if (!Number.isFinite(balanceLi)) {
+      logWarn('usage/me missing balance_li', { status: res.status })
       return {
         ok: false,
         code: 'unknown',
@@ -287,6 +353,13 @@ export async function getUsageMe(input: {
         ? json.li_per_yuan
         : 1000
     const today = json.today
+    log('usage/me ok', {
+      balanceLi,
+      liPerYuan,
+      keyPrefix: json.key?.prefix,
+      keyName: json.key?.name,
+      hasToday: Boolean(today),
+    })
     return {
       ok: true,
       balanceLi,
@@ -303,6 +376,7 @@ export async function getUsageMe(input: {
           : null,
     }
   } catch (err) {
+    logWarn('usage/me network error', err instanceof Error ? err.message : String(err))
     return {
       ok: false,
       code: 'network',

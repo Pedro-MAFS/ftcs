@@ -96,6 +96,11 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- UC Resource Server：默认引入（需可达 Aliyun Maven / RDC） -->
+        <dependency>
+            <groupId>com.mfs</groupId>
+            <artifactId>embed-oauth-resource-starter</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
@@ -116,17 +121,4 @@
             </plugin>
         </plugins>
     </build>
-
-    <!-- G0-05：加 -Puc-rs 引入 embed-oauth-resource-starter（需 Aliyun RDC 凭证） -->
-    <profiles>
-        <profile>
-            <id>uc-rs</id>
-            <dependencies>
-                <dependency>
-                    <groupId>com.mfs</groupId>
-                    <artifactId>embed-oauth-resource-starter</artifactId>
-                </dependency>
-            </dependencies>
-        </profile>
-    </profiles>
 </project>

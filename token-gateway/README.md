@@ -55,7 +55,7 @@ mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 
 本地覆盖：复制 `application-local.yml.example` → `application-local.yml`，按需改账号后加 `--spring.profiles.active=local`。
 
-> **探活（US-G0-14）**：正式环境须 `-Puc-rs`，`GET /health` 需要 UC JWT（见下文）。未加 `-Puc-rs` 时骨架全放行，仅便于编译冒烟，**不能**当生产鉴权。
+> **探活（US-G0-14）**：已默认引入 RS；`GET /health` 需要 UC JWT（见下文）。须配置 `OAUTH_JWK_KEY`。
 
 ### 数据库（G0-02 起必连）
 
@@ -78,7 +78,7 @@ mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 - 详情：[US-G0-06 设计](./docs/design/US-G0-06-按名签发重置Key设计.md)
 
 ```bash
-# 需 -Puc-rs、OAUTH_JWK_KEY、GATEWAY_KEY_PEPPER、可达 MySQL
+# 需 OAUTH_JWK_KEY、GATEWAY_KEY_PEPPER、可达 MySQL
 curl.exe -s -X POST http://127.0.0.1:8088/v1/keys/rotate ^
   -H "Authorization: Bearer %ACCESS_TOKEN%" ^
   -H "Content-Type: application/json" ^
@@ -114,7 +114,7 @@ curl.exe -s -X POST http://127.0.0.1:8088/v1/keys/rotate ^
 
 ### 用户中心 RS（US-G0-05）
 
-- 依赖：`embed-oauth-resource-starter`（需 Aliyun RDC）。构建/运行加 **`-Puc-rs`**
+- 依赖：`embed-oauth-resource-starter`（默认引入；需可访问 Aliyun Maven / RDC）
 - 验签：与 AS **相同**的 `OAUTH_JWK_KEY`（`com.mfs.user.oauth.jwk-key`，HS256）；当前 UC 不走非对称 JWKS 主路径
 - Issuer：`UC_ISSUER_URI`（同时驱动 `token-gateway.user-center.issuer-uri` 与 `com.mfs.user.oauth.issuer`）
 - JWT 保护路径：`/v1/keys/**`、`/v1/auth/**`、**`/health`**、**`/actuator/health/**`**（**不含** Chat / usage）
@@ -124,14 +124,12 @@ curl.exe -s -X POST http://127.0.0.1:8088/v1/keys/rotate ^
 
 ```bash
 # PowerShell
-mvn --% -Dmaven.repo.local=D:\maven-repo -Puc-rs -DskipTests package
+mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 # 配置 OAUTH_JWK_KEY、GATEWAY_KEY_PEPPER 后启动，再：
 curl.exe -s -H "Authorization: Bearer %ACCESS_TOKEN%" http://127.0.0.1:8088/v1/auth/whoami
 curl.exe -s -H "Authorization: Bearer %ACCESS_TOKEN%" http://127.0.0.1:8088/health
 # 期望：{"status":"UP"}；无 Token 应为 401
 ```
-
-未加 `-Puc-rs` 时仅骨架可编译；安全链为临时全放行，**不能**当作正式鉴权。
 
 ### 可观测（US-G0-14）
 

@@ -1,7 +1,7 @@
 # US-G0-06 按 name 签发 / 重置 Key（rotate）设计
 
 > **用户故事**：[../02-用户故事.md](../02-用户故事.md) · US-G0-06（**已合并原 US-G0-07**）  
-> **状态**：编码已落地（单测覆盖生成/哈希/name；联调需 `-Puc-rs` + JWT + MySQL + `GATEWAY_KEY_PEPPER`）  
+> **状态**：编码已落地（单测覆盖生成/哈希/name；联调需 JWT + MySQL + `GATEWAY_KEY_PEPPER` + `OAUTH_JWK_KEY`）  
 > **范围**：`POST /v1/keys/rotate`（无则创建 / 有则重置）+ 自动建 `token_users` + Key 明文生成与哈希落库；**不含** Chat sk 鉴权、列表接口、充值  
 > **需求映射**：[../01-需求.md](../01-需求.md) FR-AUTH-01～04/07/09；§4.3；§6.1.2；AT-11/14/15  
 > **依赖**：US-G0-02（表）；US-G0-05（UC JWT + `UcIdentity`）  
@@ -278,7 +278,7 @@ Mapper 仅被 DbService 实现类使用；Application 只依赖 DbService。
 3. ~~`KeyRotateApplication` 事务用例。~~  
 4. ~~`KeysRotateController` + DTO。~~  
 5. ~~README：rotate 示例、pepper、客户端「勿每次启动 rotate」。~~  
-6. 手工 / 集成：K1～K7（需 `-Puc-rs` + 真实或测试 JWT）。
+6. 手工 / 集成：K1～K7（需真实或测试 JWT + `OAUTH_JWK_KEY`）。
 
 ---
 

@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
-import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -16,9 +15,9 @@ class UcIdentityResolverTest {
     private final UcIdentityResolver resolver = new UcIdentityResolver();
 
     @Test
-    void resolvesFromPrincipalAccessors() {
+    void resolvesFromRecordStylePrincipal() {
         Authentication auth = new UsernamePasswordAuthenticationToken(
-                new FakePrincipal("1", "u_abc", "sub-1", "ftcs-desktop"),
+                new RecordStylePrincipal("1", "u_abc", "sub-1", "ftcs-desktop"),
                 "n/a",
                 List.of());
         UcIdentity id = resolver.resolve(auth);
@@ -29,39 +28,35 @@ class UcIdentityResolverTest {
     }
 
     @Test
+    void resolvesFromJavaBeanPrincipal() {
+        Authentication auth = new UsernamePasswordAuthenticationToken(
+                new BeanPrincipal("1", "u_abc", "sub-1", "ftcs-desktop"),
+                "n/a",
+                List.of());
+        UcIdentity id = resolver.resolve(auth);
+        assertEquals("1", id.getTenantId());
+        assertEquals("u_abc", id.getUserCode());
+    }
+
+    @Test
     void rejectsMissingClaims() {
         Authentication auth = new UsernamePasswordAuthenticationToken(
-                new FakePrincipal(null, "u_abc", "sub-1", null),
+                new RecordStylePrincipal(null, "u_abc", "sub-1", null),
                 "n/a",
                 List.of());
         assertThrows(ResponseStatusException.class, () -> resolver.resolve(auth));
     }
 
-    @Test
-    void resolvesFromClaimMapPrincipal() {
-        Authentication auth = new UsernamePasswordAuthenticationToken(
-                new ClaimMapPrincipal(Map.of(
-                        "tenant_id", "1",
-                        "user_code", "u_xyz",
-                        "sub", "99",
-                        "aud", "ftcs-desktop")),
-                "n/a",
-                List.of());
-        UcIdentity id = resolver.resolve(auth);
-        assertEquals("1", id.getTenantId());
-        assertEquals("u_xyz", id.getUserCode());
-        assertEquals("99", id.getSubject());
-        assertEquals("ftcs-desktop", id.getClientId());
-    }
+    private record RecordStylePrincipal(String tenantId, String userCode, String subject, String clientId) {}
 
     @SuppressWarnings("unused")
-    private static final class FakePrincipal {
+    private static final class BeanPrincipal {
         private final String tenantId;
         private final String userCode;
         private final String subject;
         private final String clientId;
 
-        private FakePrincipal(String tenantId, String userCode, String subject, String clientId) {
+        private BeanPrincipal(String tenantId, String userCode, String subject, String clientId) {
             this.tenantId = tenantId;
             this.userCode = userCode;
             this.subject = subject;
@@ -82,19 +77,6 @@ class UcIdentityResolverTest {
 
         public String getClientId() {
             return clientId;
-        }
-    }
-
-    @SuppressWarnings("unused")
-    private static final class ClaimMapPrincipal {
-        private final Map<String, Object> claims;
-
-        private ClaimMapPrincipal(Map<String, Object> claims) {
-            this.claims = claims;
-        }
-
-        public Map<String, Object> getClaims() {
-            return claims;
         }
     }
 }

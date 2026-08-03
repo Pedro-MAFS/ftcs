@@ -329,7 +329,7 @@
         </tbody>
       </table>
       <p>JWT 身份映射：claim <code>tenant_id</code> + <code>user_code</code> → 计费账户键。缺 claim 时接口返回 401。</p>
-      <p>正式环境须以 <code>-Puc-rs</code> 构建并配置与 AS 一致的 <code>OAUTH_JWK_KEY</code>。未加该 profile 时骨架为全放行，仅便于编译，不能当生产鉴权。</p>
+      <p>已默认引入 RS；须配置与 AS 一致的 <code>OAUTH_JWK_KEY</code>。无 Token 访问受保护路径应返回 401。</p>
     </section>
 
     <section id="apis">
