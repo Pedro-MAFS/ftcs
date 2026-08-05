@@ -46,6 +46,7 @@ const saving = ref(false)
 const provisioning = ref(false)
 const refreshingModels = ref(false)
 const refreshingUsage = ref(false)
+const openingRecharge = ref(false)
 const message = ref('')
 const error = ref('')
 const showApiKey = ref(false)
@@ -243,6 +244,28 @@ async function refreshOfficialUsageQuiet(): Promise<void> {
     applySnapshot(res.settings)
   } finally {
     refreshingUsage.value = false
+  }
+}
+
+async function openOfficialRecharge(): Promise<void> {
+  if (!window.ftcs?.openOfficialRecharge) return
+  openingRecharge.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    const res = await window.ftcs.openOfficialRecharge()
+    if (res.ok) {
+      message.value = res.message || '已在浏览器打开充值页'
+      return
+    }
+    if (res.needLogin) {
+      authHint.value = '请先登录后再充值'
+      error.value = '请先登录后再充值'
+      return
+    }
+    error.value = res.message || '无法打开充值页'
+  } finally {
+    openingRecharge.value = false
   }
 }
 
@@ -607,14 +630,24 @@ async function onCheckUpdate(): Promise<void> {
             <div v-if="showUsageCard" class="usage-card">
               <div class="usage-card__head">
                 <span class="usage-card__title">账户用量</span>
-                <button
-                  type="button"
-                  class="btn-secondary btn-sm"
-                  :disabled="refreshingUsage"
-                  @click="refreshOfficialUsageQuiet"
-                >
-                  {{ refreshingUsage ? '刷新中…' : '刷新' }}
-                </button>
+                <div class="usage-card__actions">
+                  <button
+                    type="button"
+                    class="btn-secondary btn-sm"
+                    :disabled="openingRecharge || refreshingUsage"
+                    @click="openOfficialRecharge"
+                  >
+                    {{ openingRecharge ? '打开中…' : '充值' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-secondary btn-sm"
+                    :disabled="refreshingUsage || openingRecharge"
+                    @click="refreshOfficialUsageQuiet"
+                  >
+                    {{ refreshingUsage ? '刷新中…' : '刷新' }}
+                  </button>
+                </div>
               </div>
               <div class="usage-card__row">
                 <span class="muted">账户余额</span>

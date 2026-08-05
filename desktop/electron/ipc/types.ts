@@ -12,6 +12,7 @@ export const IPC = {
   GATEWAY_PROVISION_OFFICIAL: 'gateway:provision-official',
   GATEWAY_REFRESH_OFFICIAL_MODELS: 'gateway:refresh-official-models',
   GATEWAY_REFRESH_OFFICIAL_USAGE: 'gateway:refresh-official-usage',
+  GATEWAY_OPEN_OFFICIAL_RECHARGE: 'gateway:open-official-recharge',
   LIBRARY_LIST: 'library:list',
   LIBRARY_ADD_WEBSITE: 'library:add-website',
   LIBRARY_DELETE_WEBSITE: 'library:delete-website',
@@ -793,6 +794,12 @@ export interface RefreshOfficialUsageResult {
   message: string
   usage: OfficialUsageSnapshot | null
   settings: SettingsSnapshot
+}
+
+export interface OpenOfficialRechargeResult {
+  ok: boolean
+  needLogin?: boolean
+  message: string
 }
 
 export interface WebsiteItem {

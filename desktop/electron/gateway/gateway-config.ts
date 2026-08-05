@@ -22,6 +22,30 @@ export function getTokenGatewayBaseUrl(
   return trimTrailingSlash(raw || DEFAULT_BASE)
 }
 
+/**
+ * 充值页所在 origin：去掉 base 末尾的 `/v1`（及多余 `/`）。
+ * 例：`https://token.ai-utills.com/v1` → `https://token.ai-utills.com`
+ */
+export function getTokenGatewayOrigin(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+): string {
+  const base = getTokenGatewayBaseUrl(env)
+  const withoutV1 = base.replace(/\/v1$/i, '')
+  return trimTrailingSlash(withoutV1 || base)
+}
+
+/**
+ * 系统浏览器打开的充值页 URL（仅带短时 ticket，不含 JWT / sk）。
+ */
+export function buildRechargePageUrl(
+  ticket: string,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+): string {
+  const raw = (ticket || '').trim()
+  const origin = getTokenGatewayOrigin(env)
+  return `${origin}/billing/recharge?ticket=${encodeURIComponent(raw)}`
+}
+
 export function getTokenGatewayEnvKey(): string {
   return ENV_KEY
 }

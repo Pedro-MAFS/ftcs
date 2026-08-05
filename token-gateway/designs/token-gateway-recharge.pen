@@ -1,0 +1,1194 @@
+{
+  "version": "2.15",
+  "children": [
+    {
+      "type": "frame",
+      "id": "q8qN8m",
+      "x": 0,
+      "y": 0,
+      "name": "01 NeedClient · ticket 无效",
+      "clip": true,
+      "width": 960,
+      "height": 780,
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 32,
+      "padding": [
+        48,
+        64
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "Sm4J7",
+          "name": "Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "oOGFV",
+              "name": "Brand",
+              "fill": "$text",
+              "content": "Token 网关",
+              "fontFamily": "$font-display",
+              "fontSize": 15,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "PZPzm",
+              "name": "Title",
+              "fill": "$text",
+              "content": "官方通道预付费充值",
+              "fontFamily": "$font-display",
+              "fontSize": 28,
+              "fontWeight": "700"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "ATCUy",
+          "name": "NeedClientPanel",
+          "width": 480,
+          "fill": "$bg-muted",
+          "cornerRadius": 12,
+          "stroke": "$border",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 28,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "n6yxMn",
+              "name": "NeedTitle",
+              "fill": "$text",
+              "content": "缺少登录凭证",
+              "fontFamily": "$font-display",
+              "fontSize": 18,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "oldrd",
+              "name": "NeedBody",
+              "fill": "$text-secondary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "请从已接入 Token 网关的应用重新进入充值（须携带短时登录凭证）。请勿直接收藏或分享本页链接。",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-ui",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "t9tHmY",
+          "name": "Footer",
+          "width": 480,
+          "layout": "vertical",
+          "gap": 6,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "e6inwK",
+              "name": "RuleAmount",
+              "fill": "$text-muted",
+              "content": "",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "LJv4l",
+              "name": "RuleRefund",
+              "fill": "$text-muted",
+              "content": "",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "e8gNu",
+      "x": 1040,
+      "y": 0,
+      "name": "02 Amount · 输入金额",
+      "clip": true,
+      "width": 960,
+      "height": 780,
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 28,
+      "padding": [
+        48,
+        64
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "zWIiX",
+          "name": "Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "O09qWh",
+              "name": "Brand",
+              "fill": "$text",
+              "content": "Token 网关",
+              "fontFamily": "$font-display",
+              "fontSize": 15,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "eI0UP",
+              "name": "Title",
+              "fill": "$text",
+              "content": "官方通道预付费充值",
+              "fontFamily": "$font-display",
+              "fontSize": 28,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "uRzlh",
+              "name": "Subtitle",
+              "fill": "$text-secondary",
+              "textGrowth": "fixed-width",
+              "width": 480,
+              "content": "支付成功后余额用于调用官方通道模型，按实际用量扣费。",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-ui",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "WFvUO",
+          "name": "BalanceRow",
+          "width": 420,
+          "fill": "$bg-muted",
+          "cornerRadius": 8,
+          "stroke": "$border",
+          "strokeWidth": 1,
+          "padding": [
+            12,
+            14
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "X77k4Z",
+              "name": "BalanceLabel",
+              "fill": "$text-secondary",
+              "content": "当前余额",
+              "fontFamily": "$font-ui",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "uiY2m",
+              "name": "BalanceValue",
+              "fill": "$text",
+              "content": "12.50 元",
+              "fontFamily": "$font-ui",
+              "fontSize": 14,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "GzPnR",
+          "name": "AmountForm",
+          "width": 420,
+          "layout": "vertical",
+          "gap": 10,
+          "children": [
+            {
+              "type": "text",
+              "id": "RLFES",
+              "name": "AmountLabel",
+              "fill": "$text",
+              "content": "充值金额（元）",
+              "fontFamily": "$font-ui",
+              "fontSize": 13,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "UHHh1",
+              "name": "AmountInput",
+              "width": "fill_container",
+              "height": 48,
+              "fill": "$bg",
+              "cornerRadius": 8,
+              "stroke": "$accent",
+              "strokeWidth": 1.5,
+              "gap": 8,
+              "padding": [
+                0,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "f1TES",
+                  "name": "Currency",
+                  "fill": "$text-muted",
+                  "content": "¥",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 18,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "gMMhL",
+                  "name": "AmountValue",
+                  "fill": "$text",
+                  "content": "50.00",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 20,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "Or09j",
+              "name": "AmountHint",
+              "fill": "$text-muted",
+              "content": "单笔可充 1.00～100.00 元",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "gawT3",
+          "name": "PayButton",
+          "width": 420,
+          "height": 48,
+          "fill": "$accent",
+          "cornerRadius": 8,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "V5HOE",
+              "name": "PayLabel",
+              "fill": "#FFFFFF",
+              "content": "微信支付",
+              "fontFamily": "$font-ui",
+              "fontSize": 15,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "q1PnQ5",
+          "name": "Footer",
+          "width": 420,
+          "layout": "vertical",
+          "gap": 6,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "J5Fpm",
+              "name": "RuleRefund",
+              "fill": "$text-muted",
+              "content": "",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "a30fBh",
+      "x": 2080,
+      "y": 0,
+      "name": "03 Paying · 扫码支付",
+      "clip": true,
+      "width": 960,
+      "height": 820,
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 24,
+      "padding": [
+        48,
+        64
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "bxGQ3",
+          "name": "Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "zpcpq",
+              "name": "Brand",
+              "fill": "$text",
+              "content": "Token 网关",
+              "fontFamily": "$font-display",
+              "fontSize": 15,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "j5zD5",
+              "name": "Title",
+              "fill": "$text",
+              "content": "官方通道预付费充值",
+              "fontFamily": "$font-display",
+              "fontSize": 28,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "sfQvi",
+              "name": "PayHint",
+              "fill": "$text-secondary",
+              "content": "请使用微信扫描二维码完成支付",
+              "fontFamily": "$font-ui",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "L5iucg",
+          "name": "OrderSummary",
+          "width": 360,
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "qtqsw",
+              "name": "SumLabel",
+              "fill": "$text-secondary",
+              "content": "应付金额",
+              "fontFamily": "$font-ui",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "BF0Lz",
+              "name": "SumValue",
+              "fill": "$text",
+              "content": "¥ 50.00",
+              "fontFamily": "$font-display",
+              "fontSize": 22,
+              "fontWeight": "700"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "xFOyE",
+          "name": "QrWrap",
+          "width": 280,
+          "height": 280,
+          "fill": "$bg",
+          "cornerRadius": 12,
+          "stroke": "$border",
+          "strokeWidth": 1,
+          "effect": {
+            "type": "shadow",
+            "shadowType": "outer",
+            "color": "#0000000a",
+            "offset": {
+              "x": 0,
+              "y": 1
+            },
+            "blur": 2
+          },
+          "layout": "vertical",
+          "gap": 12,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "xVcGy",
+              "name": "QrPattern",
+              "width": 200,
+              "height": 200,
+              "fill": "$bg-muted",
+              "cornerRadius": 4,
+              "layout": "vertical",
+              "gap": 6,
+              "padding": 8,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "vGhlz",
+                  "name": "QrRow0",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "vWNSO",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "tWkeW",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Kr6Kd",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ybPx8",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$bg",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "MfXFj",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "SmAKt",
+                  "name": "QrRow1",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "qbhKY",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wi3oS",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "cIDR1",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$bg",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "x9rPpk",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Uhu7M",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$bg",
+                      "cornerRadius": 2
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ayRqO",
+                  "name": "QrRow2",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "k0STQU",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "qSq7j",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$bg",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ahEqc",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Ub1X3",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$bg",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "gg15a",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "csp6A",
+                  "name": "QrRow3",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "AtPOl",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$bg",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "AbkcC",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "krHt3",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$bg",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uPwnu",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wl48u",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "xrSVY",
+                  "name": "QrRow4",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "lfUP3",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "uoyl5",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$bg",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "GTTOd",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "b63Bsa",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    },
+                    {
+                      "type": "frame",
+                      "id": "e8TIn",
+                      "name": "Cell",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$text",
+                      "cornerRadius": 2
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "u0YyA",
+          "name": "Actions",
+          "width": 360,
+          "layout": "vertical",
+          "gap": 10,
+          "children": [
+            {
+              "type": "frame",
+              "id": "i0Glb",
+              "name": "PaidButton",
+              "width": "fill_container",
+              "height": 48,
+              "fill": "$accent",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "lV5VA",
+                  "name": "PaidLabel",
+                  "fill": "#FFFFFF",
+                  "content": "我已支付",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 15,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "jUb43",
+              "name": "BackButton",
+              "width": "fill_container",
+              "height": 44,
+              "fill": "$bg",
+              "cornerRadius": 8,
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "GbwMF",
+                  "name": "BackLabel",
+                  "fill": "$text-secondary",
+                  "content": "重新填写金额",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "lPAYG",
+          "name": "PollHint",
+          "fill": "$text-muted",
+          "content": "也可稍候，页面将自动检测支付结果",
+          "fontFamily": "$font-ui",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "t3HaA",
+      "x": 0,
+      "y": 860,
+      "name": "05 Error · 下单失败",
+      "clip": true,
+      "width": 960,
+      "height": 780,
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 28,
+      "padding": [
+        48,
+        64
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "U6SPzB",
+          "name": "Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "pdpuv",
+              "name": "Brand",
+              "fill": "$text",
+              "content": "Token 网关",
+              "fontFamily": "$font-display",
+              "fontSize": 15,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "Oe6Hr",
+              "name": "Title",
+              "fill": "$text",
+              "content": "官方通道预付费充值",
+              "fontFamily": "$font-display",
+              "fontSize": 28,
+              "fontWeight": "700"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "g9qUnh",
+          "name": "ErrorBadge",
+          "fill": "$danger-muted",
+          "cornerRadius": 9999,
+          "gap": 8,
+          "padding": [
+            8,
+            14
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "LMatd",
+              "name": "ErrorMark",
+              "fill": "$danger",
+              "content": "!",
+              "fontFamily": "$font-ui",
+              "fontSize": 14,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "V1isB",
+              "name": "ErrorText",
+              "fill": "$danger",
+              "content": "无法创建支付单",
+              "fontFamily": "$font-ui",
+              "fontSize": 14,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "WwMy8",
+          "name": "ErrorPanel",
+          "width": 420,
+          "fill": "$bg-muted",
+          "cornerRadius": 12,
+          "stroke": "$border",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 12,
+          "padding": 24,
+          "children": [
+            {
+              "type": "text",
+              "id": "waBec",
+              "name": "ErrorBody",
+              "fill": "$text-secondary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "金额须在 1.00～100.00 元之间，或支付服务暂时不可用。请修改后重试。",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-ui",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "c7NWU",
+          "name": "RetryButton",
+          "width": 420,
+          "height": 48,
+          "fill": "$accent",
+          "cornerRadius": 8,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "N3XXlt",
+              "name": "RetryLabel",
+              "fill": "#FFFFFF",
+              "content": "返回修改金额",
+              "fontFamily": "$font-ui",
+              "fontSize": 15,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "KXFm6",
+          "name": "RuleRefund",
+          "fill": "$text-muted",
+          "content": "",
+          "fontFamily": "$font-ui",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "XjJg1",
+      "x": 3120,
+      "y": 0,
+      "name": "04 Success · 充值成功",
+      "clip": true,
+      "width": 960,
+      "height": 780,
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 28,
+      "padding": [
+        48,
+        64
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "xDoOs",
+          "name": "Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "LM4n5",
+              "name": "Brand",
+              "fill": "$text",
+              "content": "Token 网关",
+              "fontFamily": "$font-display",
+              "fontSize": 15,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "p7lHle",
+              "name": "Title",
+              "fill": "$text",
+              "content": "官方通道预付费充值",
+              "fontFamily": "$font-display",
+              "fontSize": 28,
+              "fontWeight": "700"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "c5cGpb",
+          "name": "SuccessBadge",
+          "fill": "$success-muted",
+          "cornerRadius": 9999,
+          "gap": 8,
+          "padding": [
+            8,
+            14
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "F0ywr",
+              "name": "SuccessMark",
+              "fill": "$success",
+              "content": "已入账",
+              "fontFamily": "$font-ui",
+              "fontSize": 14,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "pTcJQ",
+          "name": "ResultPanel",
+          "width": 420,
+          "fill": "$bg-muted",
+          "cornerRadius": 12,
+          "stroke": "$border",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 14,
+          "padding": 24,
+          "children": [
+            {
+              "type": "frame",
+              "id": "LfxU4",
+              "name": "RowCredited",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "D4ARc7",
+                  "name": "L1",
+                  "fill": "$text-secondary",
+                  "content": "本次入账",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "X3bsV6",
+                  "name": "V1",
+                  "fill": "$text",
+                  "content": "+50.00 元",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 15,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "n8D5Mr",
+              "name": "RowBalance",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "SWZ7n",
+                  "name": "L2",
+                  "fill": "$text-secondary",
+                  "content": "当前余额",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "AwRSj",
+                  "name": "V2",
+                  "fill": "$text",
+                  "content": "62.50 元",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 15,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "hQUMV",
+          "name": "CloseHint",
+          "fill": "$text-secondary",
+          "textGrowth": "fixed-width",
+          "width": 420,
+          "content": "可关闭本页，返回原应用刷新余额即可。",
+          "lineHeight": 1.45,
+          "fontFamily": "$font-ui",
+          "fontSize": 14,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "N7hMg",
+          "name": "RuleRefund",
+          "fill": "$text-muted",
+          "content": "",
+          "fontFamily": "$font-ui",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "bg": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "bg-muted": {
+      "type": "color",
+      "value": "#F7F7F7"
+    },
+    "text": {
+      "type": "color",
+      "value": "#1A1A1A"
+    },
+    "text-secondary": {
+      "type": "color",
+      "value": "#666666"
+    },
+    "text-muted": {
+      "type": "color",
+      "value": "#999999"
+    },
+    "border": {
+      "type": "color",
+      "value": "#E5E5E5"
+    },
+    "accent": {
+      "type": "color",
+      "value": "#0066FF"
+    },
+    "accent-muted": {
+      "type": "color",
+      "value": "#E8F1FF"
+    },
+    "success": {
+      "type": "color",
+      "value": "#0A7A3E"
+    },
+    "success-muted": {
+      "type": "color",
+      "value": "#E8F6EE"
+    },
+    "danger": {
+      "type": "color",
+      "value": "#C62828"
+    },
+    "danger-muted": {
+      "type": "color",
+      "value": "#FDECEC"
+    },
+    "font-display": {
+      "type": "string",
+      "value": "Funnel Sans"
+    },
+    "font-ui": {
+      "type": "string",
+      "value": "Geist"
+    }
+  },
+  "fileToken": "3b028921-8ed4-495a-8fb5-f772d402e2bb"
+}

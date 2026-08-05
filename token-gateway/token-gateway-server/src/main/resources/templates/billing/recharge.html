@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>官方通道预付费充值 · Token 网关</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Funnel+Sans:wght@600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-muted: #f7f7f7;
+      --text: #1a1a1a;
+      --text-secondary: #666666;
+      --text-muted: #999999;
+      --border: #e5e5e5;
+      --accent: #0066ff;
+      --accent-muted: #e8f1ff;
+      --success: #0a7a3e;
+      --success-muted: #e8f6ee;
+      --danger: #c62828;
+      --danger-muted: #fdecec;
+      --font-display: "Funnel Sans", "Segoe UI", sans-serif;
+      --font-ui: "DM Sans", "Segoe UI", system-ui, sans-serif;
+      --content: 480px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 480px at 50% -10%, #e8f1ff 0%, transparent 55%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .wrap {
+      width: min(960px, 100%);
+      margin: 0 auto;
+      padding: 48px 24px 64px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 32px;
+    }
+
+    header {
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: var(--content);
+    }
+    .brand {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 600;
+    }
+    h1 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: clamp(1.5rem, 3vw, 1.75rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .lead {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .ttl-hint {
+      margin: 4px 0 0;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.45;
+      max-width: var(--content);
+    }
+
+    .panel {
+      width: min(var(--content), 100%);
+      background: var(--bg-muted);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      text-align: center;
+    }
+    .panel.active { display: flex; }
+
+    .panel h2 {
+      margin: 0;
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .panel p { margin: 0; color: var(--text-secondary); }
+
+    .balance-row {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 12px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .balance-row .label { color: var(--text-muted); }
+    .balance-row .value { font-weight: 600; }
+
+    .field {
+      width: 100%;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .field label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+    .amount-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .amount-box:focus-within { border-color: var(--accent); }
+    .amount-box .yen {
+      color: var(--text-muted);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .amount-box input {
+      flex: 1;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      font-family: var(--font-ui);
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text);
+      min-width: 0;
+    }
+    .hint { font-size: 12px; color: var(--text-muted); }
+
+    .btn {
+      appearance: none;
+      border: 0;
+      border-radius: 8px;
+      padding: 12px 18px;
+      font-family: var(--font-ui);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: 0.92; }
+    .btn-ghost {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-row {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .pay-amount {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .qr-frame {
+      width: 220px;
+      height: 220px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+    }
+    .qr-frame canvas, .qr-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .qr-fallback {
+      font-size: 12px;
+      color: var(--text-muted);
+      word-break: break-all;
+      max-width: 220px;
+    }
+    .poll-hint { font-size: 12px; color: var(--text-muted); }
+    .inline-error {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--danger-muted);
+      color: var(--danger);
+      border-radius: 8px;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .icon-circle {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+    }
+    .icon-circle.danger { background: var(--danger-muted); color: var(--danger); }
+    .icon-circle.success { background: var(--success-muted); color: var(--success); }
+
+    .success-grid {
+      width: 100%;
+      display: grid;
+      gap: 10px;
+    }
+    .success-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .success-row .k { color: var(--text-muted); }
+    .success-row .v { font-weight: 600; }
+    .success-row .v.plus { color: var(--success); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .btn { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <p class="brand">Token 网关</p>
+      <h1>官方通道预付费充值</h1>
+      <p class="lead" id="header-lead">支付成功后余额用于调用官方通道模型，按实际用量扣费。</p>
+      <p class="ttl-hint" id="ttl-hint" hidden></p>
+    </header>
+
+    <!-- S0 NeedClient -->
+    <section class="panel" id="state-need" aria-live="polite">
+      <h2>缺少登录凭证</h2>
+      <p>请从已接入 Token 网关的应用重新进入充值（须携带短时登录凭证）。请勿直接收藏或分享本页链接。</p>
+    </section>
+
+    <!-- S1 Amount -->
+    <section class="panel" id="state-amount" aria-live="polite">
+      <div class="balance-row" id="balance-row" hidden>
+        <span class="label">当前余额</span>
+        <span class="value" id="balance-value">—</span>
+      </div>
+      <div class="field">
+        <label for="amount-input">充值金额（元）</label>
+        <div class="amount-box">
+          <span class="yen">¥</span>
+          <input id="amount-input" type="text" inputmode="decimal" autocomplete="off" placeholder="50.00" maxlength="6" />
+        </div>
+        <p class="hint">单笔可充 1.00～100.00 元</p>
+      </div>
+      <p class="inline-error" id="amount-error" hidden></p>
+      <button type="button" class="btn btn-primary" id="btn-prepay">微信支付</button>
+    </section>
+
+    <!-- S2 Paying -->
+    <section class="panel" id="state-paying" aria-live="polite">
+      <p class="lead" style="color:var(--text-secondary)">请使用微信扫描二维码完成支付</p>
+      <div>
+        <div class="hint">应付金额</div>
+        <div class="pay-amount" id="pay-amount">¥ 0.00</div>
+      </div>
+      <div class="qr-frame" id="qr-frame" aria-label="微信支付二维码"></div>
+      <p class="inline-error" id="paying-hint" hidden></p>
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary" id="btn-sync">我已支付</button>
+        <button type="button" class="btn btn-ghost" id="btn-reset-amount">重新填写金额</button>
+      </div>
+      <p class="poll-hint">也可稍候，页面将自动检测支付结果</p>
+    </section>
+
+    <!-- S4 Error -->
+    <section class="panel" id="state-error" aria-live="polite">
+      <div class="icon-circle danger" aria-hidden="true">!</div>
+      <h2 id="error-title">无法创建支付单</h2>
+      <p id="error-body">金额须在 1.00～100.00 元之间，或支付服务暂时不可用。请修改后重试。</p>
+      <button type="button" class="btn btn-primary" id="btn-back-amount">返回修改金额</button>
+    </section>
+
+    <!-- S3 Success -->
+    <section class="panel" id="state-success" aria-live="polite">
+      <div class="icon-circle success" aria-hidden="true">✓</div>
+      <h2>已入账</h2>
+      <div class="success-grid">
+        <div class="success-row">
+          <span class="k">本次入账</span>
+          <span class="v plus" id="credited-amount">+0.00 元</span>
+        </div>
+        <div class="success-row">
+          <span class="k">当前余额</span>
+          <span class="v" id="credited-balance">0.00 元</span>
+        </div>
+      </div>
+      <p>可关闭本页，返回原应用刷新余额即可。</p>
+    </section>
+  </div>
+
+  <script type="application/json" id="tg-bootstrap">__TG_RECHARGE_BOOTSTRAP__</script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <script>
+(function () {
+  var bootstrap = { ok: false, expires_in: 0 };
+  try {
+    bootstrap = JSON.parse(document.getElementById("tg-bootstrap").textContent);
+  } catch (e) { /* keep default */ }
+
+  var state = {
+    view: bootstrap.ok ? "amount" : "need",
+    amountYuan: "",
+    outTradeNo: null,
+    codeUrl: null,
+    pollTimer: null,
+    pollLeft: 0
+  };
+
+  var els = {
+    need: document.getElementById("state-need"),
+    amount: document.getElementById("state-amount"),
+    paying: document.getElementById("state-paying"),
+    error: document.getElementById("state-error"),
+    success: document.getElementById("state-success"),
+    lead: document.getElementById("header-lead"),
+    ttlHint: document.getElementById("ttl-hint"),
+    balanceRow: document.getElementById("balance-row"),
+    balanceValue: document.getElementById("balance-value"),
+    amountInput: document.getElementById("amount-input"),
+    amountError: document.getElementById("amount-error"),
+    btnPrepay: document.getElementById("btn-prepay"),
+    btnSync: document.getElementById("btn-sync"),
+    btnReset: document.getElementById("btn-reset-amount"),
+    btnBack: document.getElementById("btn-back-amount"),
+    payAmount: document.getElementById("pay-amount"),
+    qrFrame: document.getElementById("qr-frame"),
+    payingHint: document.getElementById("paying-hint"),
+    errorTitle: document.getElementById("error-title"),
+    errorBody: document.getElementById("error-body"),
+    creditedAmount: document.getElementById("credited-amount"),
+    creditedBalance: document.getElementById("credited-balance")
+  };
+
+  function formatYuanFromLi(li) {
+    var n = Number(li);
+    if (!isFinite(n)) return "—";
+    return (Math.round(n) / 1000).toFixed(2) + " 元";
+  }
+
+  function formatTtlMinutes(seconds) {
+    var s = Number(seconds);
+    if (!isFinite(s) || s <= 0) return null;
+    var mins = Math.max(1, Math.round(s / 60));
+    return mins;
+  }
+
+  function applyBootstrapBalance() {
+    if (!bootstrap.ok || bootstrap.balance_li == null || bootstrap.balance_li === "") {
+      els.balanceRow.hidden = true;
+      return;
+    }
+    els.balanceValue.textContent = formatYuanFromLi(bootstrap.balance_li);
+    els.balanceRow.hidden = false;
+  }
+
+  function applyTtlHint(view) {
+    var mins = formatTtlMinutes(bootstrap.ticket_ttl_seconds);
+    var show = Boolean(bootstrap.ok && mins && (view === "amount" || view === "paying" || view === "error"));
+    if (!show) {
+      els.ttlHint.hidden = true;
+      els.ttlHint.textContent = "";
+      return;
+    }
+    els.ttlHint.textContent =
+      "充值登录凭证约 " + mins + " 分钟内有效，请尽快完成充值。";
+    els.ttlHint.hidden = false;
+  }
+
+  function show(view) {
+    state.view = view;
+    ["need", "amount", "paying", "error", "success"].forEach(function (k) {
+      els[k].classList.toggle("active", k === view);
+    });
+    if (view === "need") {
+      els.lead.textContent = "";
+    } else if (view === "paying") {
+      els.lead.textContent = "";
+    } else {
+      els.lead.textContent = "支付成功后余额用于调用官方通道模型，按实际用量扣费。";
+    }
+    applyTtlHint(view);
+  }
+
+  function formatYuan(n) {
+    return (Math.round(n * 100) / 100).toFixed(2);
+  }
+
+  function parseAmount(raw) {
+    if (raw == null) return null;
+    var s = String(raw).trim();
+    if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
+    var n = Number(s);
+    if (!isFinite(n)) return null;
+    if (n < 1 || n > 100) return null;
+    return n;
+  }
+
+  function setAmountError(msg) {
+    if (!msg) {
+      els.amountError.hidden = true;
+      els.amountError.textContent = "";
+      return;
+    }
+    els.amountError.hidden = false;
+    els.amountError.textContent = msg;
+  }
+
+  function stopPoll() {
+    if (state.pollTimer) {
+      clearInterval(state.pollTimer);
+      state.pollTimer = null;
+    }
+    state.pollLeft = 0;
+  }
+
+  function showError(title, body) {
+    stopPoll();
+    els.errorTitle.textContent = title || "无法创建支付单";
+    els.errorBody.textContent = body || "支付服务暂时不可用，请稍后再试。";
+    show("error");
+  }
+
+  function renderQr(codeUrl) {
+    els.qrFrame.innerHTML = "";
+    if (!codeUrl) {
+      var miss = document.createElement("p");
+      miss.className = "qr-fallback";
+      miss.textContent = "暂无付款码";
+      els.qrFrame.appendChild(miss);
+      return;
+    }
+    if (window.QRCode && typeof QRCode.toCanvas === "function") {
+      var canvas = document.createElement("canvas");
+      els.qrFrame.appendChild(canvas);
+      QRCode.toCanvas(canvas, codeUrl, { width: 196, margin: 1, color: { dark: "#1a1a1a", light: "#ffffff" } }, function (err) {
+        if (err) {
+          els.qrFrame.innerHTML = "";
+          var p = document.createElement("p");
+          p.className = "qr-fallback";
+          p.textContent = codeUrl;
+          els.qrFrame.appendChild(p);
+        }
+      });
+      return;
+    }
+    var p = document.createElement("p");
+    p.className = "qr-fallback";
+    p.textContent = codeUrl;
+    els.qrFrame.appendChild(p);
+  }
+
+  function api(path, options) {
+    return fetch(path, Object.assign({
+      credentials: "same-origin",
+      headers: { "Accept": "application/json", "Content-Type": "application/json" }
+    }, options || {})).then(function (res) {
+      return res.text().then(function (text) {
+        var body = null;
+        if (text) {
+          try { body = JSON.parse(text); } catch (e) { body = { raw: text }; }
+        }
+        return { ok: res.ok, status: res.status, body: body };
+      });
+    });
+  }
+
+  function reasonOf(body) {
+    if (!body) return "";
+    return body.reason || body.message || body.error || "";
+  }
+
+  function enterPaying(amountYuan, codeUrl, outTradeNo) {
+    state.amountYuan = amountYuan;
+    state.codeUrl = codeUrl;
+    state.outTradeNo = outTradeNo;
+    els.payAmount.textContent = "¥ " + formatYuan(amountYuan);
+    els.payingHint.hidden = true;
+    renderQr(codeUrl);
+    show("paying");
+    startPoll();
+  }
+
+  function startPoll() {
+    stopPoll();
+    if (!state.outTradeNo) return;
+    state.pollLeft = 40;
+    state.pollTimer = setInterval(function () {
+      if (state.view !== "paying") {
+        stopPoll();
+        return;
+      }
+      if (state.pollLeft-- <= 0) {
+        stopPoll();
+        return;
+      }
+      syncOrder(true);
+    }, 4000);
+  }
+
+  function syncOrder(silent) {
+    if (!state.outTradeNo) return Promise.resolve();
+    if (!silent) {
+      els.btnSync.disabled = true;
+    }
+    return api("/v1/billing/wechat/orders/" + encodeURIComponent(state.outTradeNo) + "/sync", {
+      method: "POST",
+      body: "{}"
+    }).then(function (res) {
+      if (res.status === 401) {
+        stopPoll();
+        show("need");
+        return;
+      }
+      if (!res.ok) {
+        if (!silent) {
+          els.payingHint.hidden = false;
+          els.payingHint.textContent = res.status === 404
+            ? "查单接口尚未开通，请稍后再试。"
+            : ("查单失败：" + (reasonOf(res.body) || ("HTTP " + res.status)));
+        }
+        return;
+      }
+      var status = (res.body && (res.body.status || res.body.order_status || res.body.billing_status)) || "";
+      if (status === "credited" || status === "SUCCESS" || status === "success") {
+        stopPoll();
+        var credited = Number(res.body.credited_yuan != null ? res.body.credited_yuan : state.amountYuan);
+        var balance = res.body.balance_yuan != null
+          ? Number(res.body.balance_yuan)
+          : (res.body.balance_li != null ? Number(res.body.balance_li) / 1000 : null);
+        els.creditedAmount.textContent = "+" + formatYuan(credited) + " 元";
+        els.creditedBalance.textContent = balance == null ? "—" : (formatYuan(balance) + " 元");
+        show("success");
+        return;
+      }
+      if (!silent) {
+        els.payingHint.hidden = false;
+        els.payingHint.textContent = "未检测到支付，请稍后再试";
+      }
+    }).catch(function () {
+      if (!silent) {
+        els.payingHint.hidden = false;
+        els.payingHint.textContent = "网络异常，请稍后重试";
+      }
+    }).finally(function () {
+      if (!silent) els.btnSync.disabled = false;
+    });
+  }
+
+  els.btnPrepay.addEventListener("click", function () {
+    setAmountError("");
+    var amount = parseAmount(els.amountInput.value);
+    if (amount == null) {
+      setAmountError("请输入 1.00～100.00 之间、最多两位小数的金额");
+      return;
+    }
+    els.btnPrepay.disabled = true;
+    els.btnPrepay.textContent = "处理中…";
+    api("/v1/billing/wechat/prepay", {
+      method: "POST",
+      body: JSON.stringify({ amount_yuan: amount })
+    }).then(function (res) {
+      if (res.status === 401) {
+        show("need");
+        return;
+      }
+      if (res.status === 404 || res.status === 501) {
+        showError("无法创建支付单", "微信支付下单尚未开通，请稍后再试。");
+        return;
+      }
+      if (!res.ok) {
+        var reason = reasonOf(res.body);
+        if (reason === "invalid_amount" || res.status === 400) {
+          showError("无法创建支付单", "金额须在 1.00～100.00 元之间，请修改后重试。");
+        } else {
+          showError("无法创建支付单", reason || ("下单失败（HTTP " + res.status + "）"));
+        }
+        return;
+      }
+      var codeUrl = res.body.code_url || res.body.codeUrl;
+      var outTradeNo = res.body.out_trade_no || res.body.outTradeNo;
+      if (!codeUrl) {
+        showError("无法创建支付单", "未返回付款码，请稍后重试。");
+        return;
+      }
+      enterPaying(amount, codeUrl, outTradeNo);
+    }).catch(function () {
+      showError("无法创建支付单", "网络异常，请检查连接后重试。");
+    }).finally(function () {
+      els.btnPrepay.disabled = false;
+      els.btnPrepay.textContent = "微信支付";
+    });
+  });
+
+  els.btnSync.addEventListener("click", function () { syncOrder(false); });
+  els.btnReset.addEventListener("click", function () {
+    stopPoll();
+    state.outTradeNo = null;
+    state.codeUrl = null;
+    setAmountError("");
+    show("amount");
+  });
+  els.btnBack.addEventListener("click", function () {
+    setAmountError("");
+    show("amount");
+  });
+
+  els.amountInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") els.btnPrepay.click();
+  });
+
+  applyBootstrapBalance();
+  show(state.view);
+})();
+  </script>
+</body>
+</html>

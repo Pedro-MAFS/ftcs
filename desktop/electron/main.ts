@@ -23,6 +23,8 @@ import {
   provisionOfficialChannel,
   refreshOfficialModels,
   refreshOfficialUsage,
+  openOfficialRecharge,
+  maybeRefreshUsageAfterRechargeFocus,
 } from './gateway/official-channel-service'
 import { writeUserPrefs } from './config/user-prefs'
 import { initializeWorkspace, ensureMcpServersReady } from './config/workspace-init'
@@ -217,6 +219,10 @@ async function createWindow(): Promise<void> {
   win.webContents.once('did-fail-load', (_e, code, desc, url) => {
     console.error('[window] did-fail-load', { code, desc, url })
     showOnce('did-fail-load')
+  })
+
+  win.on('focus', () => {
+    void maybeRefreshUsageAfterRechargeFocus()
   })
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -545,6 +551,9 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.GATEWAY_REFRESH_OFFICIAL_USAGE, async () => {
     const result = await refreshOfficialUsage()
     return result
+  })
+  ipcMain.handle(IPC.GATEWAY_OPEN_OFFICIAL_RECHARGE, async () => {
+    return openOfficialRecharge()
   })
   ipcMain.handle(IPC.SETTINGS_PICK_WORKSPACE, async () => {
     const dir = await pickWorkspaceDirectory()

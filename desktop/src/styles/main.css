@@ -2436,6 +2436,13 @@ select.text-input {
   gap: 8px;
 }
 
+.usage-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .usage-card__title {
   font-size: 12px;
   font-weight: 600;

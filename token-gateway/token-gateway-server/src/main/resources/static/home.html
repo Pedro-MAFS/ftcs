@@ -269,7 +269,7 @@
       <p class="brand">token-gateway</p>
       <h1>对接说明</h1>
       <p class="lead">
-        Token Gateway 是 DeepSeek 等上游模型的中转计费网关：先用用户中心 JWT 签发/重置网关 API Key（<code>sk-</code>），再用该 Key 调用 Chat；余额以「厘」计量。本页描述当前已落地能力与接口契约，便于客户端自行对接。
+        Token Gateway 是 DeepSeek 等上游模型的中转计费网关：先用用户中心 JWT 签发/重置网关 API Key（<code>sk-</code>），再用该 Key 调用 Chat；余额以「厘」计量。官方通道充值由客户端用 UC JWT 换取短时 <code>rt_</code> ticket（充值页与微信下单仍规划中）。本页描述当前已落地能力与接口契约，便于客户端自行对接。
       </p>
       <nav class="toc" aria-label="目录">
         <a href="#logic">基本逻辑</a>
@@ -320,11 +320,15 @@
         <tbody>
           <tr>
             <td>UC JWT<br /><code>Authorization: Bearer &lt;access_token&gt;</code></td>
-            <td>已保护：<code>/v1/keys/**</code>、<code>/v1/auth/**</code>、<code>/health</code>、<code>/actuator/health/**</code></td>
+            <td>已保护：<code>/v1/keys/**</code>、<code>/v1/auth/**</code>、<code>/v1/billing/recharge/ticket</code>、<code>/health</code>、<code>/actuator/health/**</code></td>
           </tr>
           <tr>
             <td>网关 API Key<br /><code>sk-…</code></td>
-            <td>Chat（及后续 usage 等）：<code>Authorization: Bearer sk-…</code>；非法 401，禁用 403；余额不足 402</td>
+            <td>Chat / usage / models：<code>Authorization: Bearer sk-…</code>；非法 401，禁用 403；余额不足 402</td>
+          </tr>
+          <tr>
+            <td>充值短时 ticket<br /><code>rt_…</code></td>
+            <td>由 UC JWT 换取；明文仅签发响应返回一次。后续充值页 / prepay 将用 Cookie 或 <code>Bearer rt_…</code>（本期仅落地换票）</td>
           </tr>
         </tbody>
       </table>
@@ -449,6 +453,46 @@
         </div>
       </article>
 
+      <article class="api" id="api-recharge-ticket">
+        <div class="api-head">
+          <span class="method post">POST</span>
+          <span class="path">/v1/billing/recharge/ticket</span>
+          <span class="badge live">已落地</span>
+        </div>
+        <div class="api-body">
+          <p>用 UC JWT 换取官方通道充值用的短时 ticket（前缀 <code>rt_</code>）。服务端只存哈希；明文仅本响应返回一次。过期前可多次用于后续充值相关 API（预付费页 / 下单仍规划中）。禁止把长效 access_token 挂在充值 URL。</p>
+          <p class="label">请求头</p>
+          <table>
+            <tr><th>Authorization</th><td>必填：<code>Bearer &lt;UC access_token&gt;</code></td></tr>
+          </table>
+          <p class="label">入参</p>
+          <p>无 Query / Body。</p>
+          <p class="label">成功响应 · 200</p>
+          <pre>{
+  "ticket": "rt_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "expires_in": 300,
+  "expires_at": "2026-08-05T14:22:00.000Z"
+}</pre>
+          <table>
+            <tr><th>ticket</th><td>明文 <code>rt_</code> + Base64URL；仅本响应返回，勿记入日志</td></tr>
+            <tr><th>expires_in</th><td>有效秒数（与配置 TTL 一致；默认 300）</td></tr>
+            <tr><th>expires_at</th><td>UTC 到期时刻（ISO-8601）</td></tr>
+          </table>
+          <p class="label">错误</p>
+          <table>
+            <tr><th>401</th><td>无/坏 UC JWT，或缺少身份 claim</td></tr>
+            <tr><th>429</th><td>同身份每小时签发超过 20 张（<code>recharge_ticket_rate_limited</code>）</td></tr>
+            <tr><th>503</th><td>未配置 <code>GATEWAY_KEY_PEPPER</code>（<code>missing_gateway_key_pepper</code>）</td></tr>
+          </table>
+          <div class="callout">
+            TTL 可配：<code>token-gateway.billing.recharge-ticket-ttl</code> / 环境变量 <code>GATEWAY_RECHARGE_TICKET_TTL</code>（默认 <code>300s</code>；启动校验须在 60s～24h）。已发出的票仍按其行内 <code>expires_at</code>。
+          </div>
+          <div class="callout warn">
+            客户端拿到 ticket 后应尽快打开网关充值页（规划：<code>/billing/recharge?ticket=…</code>），勿长期缓存；勿用 sk 调本接口，也勿用 ticket 调 Chat。
+          </div>
+        </div>
+      </article>
+
       <article class="api" id="api-chat">
         <div class="api-head">
           <span class="method post">POST</span>
@@ -549,7 +593,29 @@
 
     <section id="planned">
       <h2>规划中（尚未实现）</h2>
-      <p>下列能力仍待后续故事（usage/me 余额、models 列表已落地；今日用量汇总仍属增强）。</p>
+      <p>下列能力仍待后续故事（换票与充值页入口已落地；微信下单/回调、今日用量汇总等仍属后续）。</p>
+
+      <article class="api">
+        <div class="api-head">
+          <span class="method get">GET</span>
+          <span class="path">/billing/recharge</span>
+          <span class="badge live">已落地</span>
+        </div>
+        <div class="api-body">
+          <p>网关托管充值页。带 <code>?ticket=rt_…</code> 时验票并 <code>Set-Cookie</code> 后 302 去 query；无有效 Cookie 时展示「缺少登录凭证」。页内可调后续 prepay / 查单（尚未实现时会提示通道未开通）。</p>
+        </div>
+      </article>
+
+      <article class="api">
+        <div class="api-head">
+          <span class="method post">POST</span>
+          <span class="path">/v1/billing/wechat/prepay</span>
+          <span class="badge soon">规划</span>
+        </div>
+        <div class="api-body">
+          <p>微信 Native 预下单；鉴权走 recharge ticket Cookie / Bearer（非 UC JWT / 非 sk）。</p>
+        </div>
+      </article>
 
       <article class="api">
         <div class="api-head">
@@ -568,7 +634,7 @@
       <ul>
         <li>业务错误常通过 HTTP 状态码 + Spring 默认错误体中的 <code>message</code>（短码，如 <code>invalid_name</code>）表达。</li>
         <li>响应可含 <code>X-Request-Id</code>；排障请带上该值检索日志。</li>
-        <li>禁止在日志或工单中粘贴完整 <code>api_key</code>、UC Token、上游供应商 Key。</li>
+        <li>禁止在日志或工单中粘贴完整 <code>api_key</code>、<code>rt_</code> ticket、UC Token、上游供应商 Key。</li>
       </ul>
     </section>
 
@@ -576,6 +642,7 @@
       <h2>对接注意</h2>
       <ul>
         <li>桌面端建议固定 Key <code>name=ftcs-desktop</code>，将 rotate 返回的 <code>api_key</code> 安全持久化。</li>
+        <li>充值入口：用 UC JWT 调换票 → 打开充值页 URL（勿把 JWT 放进 query）。设计见 <code>docs/design/US-G3-04</code> / <code>US-G3-06</code>。</li>
         <li>服务依赖：可达 MySQL/TiDB（表前缀 <code>token_*</code>）、<code>GATEWAY_KEY_PEPPER</code>、<code>OAUTH_JWK_KEY</code>（与用户中心一致）。</li>
         <li>默认端口 <code>8088</code>（可用 <code>SERVER_PORT</code> 覆盖）。</li>
         <li>更细设计见仓库 <code>token-gateway/docs/</code>；本页随已实现接口更新。</li>
@@ -585,6 +652,9 @@
   -H "Authorization: Bearer %ACCESS_TOKEN%" `
   -H "Content-Type: application/json" `
   -d "{\"name\":\"ftcs-desktop\"}"</pre>
+      <p class="label">示例 · 换充值 ticket（PowerShell）</p>
+      <pre>curl.exe -s -X POST http://127.0.0.1:8088/v1/billing/recharge/ticket `
+  -H "Authorization: Bearer %ACCESS_TOKEN%"</pre>
     </section>
 
     <footer>

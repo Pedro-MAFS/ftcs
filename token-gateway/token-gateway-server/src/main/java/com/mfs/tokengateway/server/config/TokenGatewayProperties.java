@@ -241,10 +241,15 @@ public class TokenGatewayProperties {
         }
     }
 
-    /** US-G0-11 余额预检 */
+    /** US-G0-11 余额预检；US-G3-06 充值短时 ticket */
     public static class Billing {
         /** 放行条件：balance_li >= minBalanceLi；默认 1 即拒绝 <= 0 */
         private long minBalanceLi = 1L;
+        /**
+         * 充值短时 ticket TTL（仅影响新签发）；默认 300s。
+         * 启动时校验须在 [60s, 24h]。
+         */
+        private Duration rechargeTicketTtl = Duration.ofSeconds(300);
 
         public long getMinBalanceLi() {
             return minBalanceLi;
@@ -252,6 +257,14 @@ public class TokenGatewayProperties {
 
         public void setMinBalanceLi(long minBalanceLi) {
             this.minBalanceLi = minBalanceLi;
+        }
+
+        public Duration getRechargeTicketTtl() {
+            return rechargeTicketTtl;
+        }
+
+        public void setRechargeTicketTtl(Duration rechargeTicketTtl) {
+            this.rechargeTicketTtl = rechargeTicketTtl;
         }
     }
 }

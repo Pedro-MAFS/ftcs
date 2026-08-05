@@ -67,7 +67,7 @@ export interface UsageMeSuccess {
 function mapReasonToCode(
   httpStatus: number,
   reason: string,
-  kind: 'rotate' | 'models' | 'usage',
+  kind: 'rotate' | 'models' | 'usage' | 'recharge_ticket',
 ): GatewayHttpErrorCode {
   const r = reason.toLowerCase()
   if (
@@ -76,7 +76,9 @@ function mapReasonToCode(
     r.includes('anonymous') ||
     r.includes('missing_identity')
   ) {
-    return kind === 'rotate' ? 'need_login' : 'invalid_api_key'
+    return kind === 'rotate' || kind === 'recharge_ticket'
+      ? 'need_login'
+      : 'invalid_api_key'
   }
   if (r.includes('invalid_api_key') || r.includes('invalid_authorization') || r.includes('missing_authorization')) {
     return 'invalid_api_key'
@@ -85,6 +87,7 @@ function mapReasonToCode(
   if (r.includes('key_disabled')) return 'key_disabled'
   if (r.includes('invalid_name')) return 'invalid_name'
   if (httpStatus === 409 || r.includes('conflict')) return 'conflict'
+  if (httpStatus === 429 || r.includes('rate_limited')) return 'unknown'
   if (httpStatus === 403) return r.includes('key') ? 'key_disabled' : 'account_disabled'
   return 'unknown'
 }
@@ -384,6 +387,104 @@ export async function getUsageMe(input: {
         'network',
         err instanceof Error ? err.message : String(err),
       )}`,
+    }
+  }
+}
+
+export interface RechargeTicketSuccess {
+  ok: true
+  ticket: string
+  expiresIn: number
+  expiresAt?: string
+}
+
+/**
+ * POST {base}/billing/recharge/ticket — UC JWT（US-G3-04 / G3-06）
+ */
+export async function createRechargeTicket(input: {
+  accessToken: string
+  baseUrl?: string
+}): Promise<RechargeTicketSuccess | GatewayClientError> {
+  const base = input.baseUrl || getTokenGatewayBaseUrl()
+  const url = `${base}/billing/recharge/ticket`
+  log('recharge ticket start', {
+    url,
+    accessToken: maskSecretForLog(input.accessToken),
+  })
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${input.accessToken}`,
+        Accept: 'application/json',
+      },
+    })
+    if (!res.ok) {
+      const { reason, text } = await readErrorBody(res)
+      const code = mapReasonToCode(res.status, reason, 'recharge_ticket')
+      logWarn('recharge ticket http error', {
+        status: res.status,
+        code,
+        reason,
+        bodyPreview: text.slice(0, 300),
+      })
+      const message =
+        code === 'need_login'
+          ? '请先登录后再充值'
+          : code === 'network'
+            ? '无法打开充值页，请稍后重试'
+            : reason
+              ? `无法打开充值页：${reason}`
+              : '无法打开充值页，请稍后重试'
+      return {
+        ok: false,
+        code,
+        message,
+        httpStatus: res.status,
+        reason,
+      }
+    }
+    const json = (await res.json()) as {
+      ticket?: string
+      expires_in?: number
+      expires_at?: string
+    }
+    const ticket = (json.ticket || '').trim()
+    if (!ticket.startsWith('rt_')) {
+      logWarn('recharge ticket missing or invalid', {
+        status: res.status,
+        ticket: maskSecretForLog(ticket),
+      })
+      return {
+        ok: false,
+        code: 'unknown',
+        message: '无法打开充值页：网关未返回有效 ticket',
+        httpStatus: res.status,
+      }
+    }
+    const expiresIn =
+      typeof json.expires_in === 'number' && json.expires_in > 0
+        ? Math.floor(json.expires_in)
+        : 300
+    log('recharge ticket ok', {
+      ticket: maskSecretForLog(ticket),
+      expiresIn,
+    })
+    return {
+      ok: true,
+      ticket,
+      expiresIn,
+      expiresAt: typeof json.expires_at === 'string' ? json.expires_at : undefined,
+    }
+  } catch (err) {
+    logWarn(
+      'recharge ticket network error',
+      err instanceof Error ? err.message : String(err),
+    )
+    return {
+      ok: false,
+      code: 'network',
+      message: '无法打开充值页，请稍后重试',
     }
   }
 }

@@ -61,6 +61,8 @@ token-gateway:
   billing:
     # US-G0-11：余额预检；balance_li >= min-balance-li 才放行（默认 1 → 拒绝 <= 0）
     min-balance-li: 1
+    # US-G3-06：充值短时 ticket TTL（新签发；须在 [60s, 24h]）
+    recharge-ticket-ttl: ${GATEWAY_RECHARGE_TICKET_TTL:300s}
   observability:
     access-log-enabled: true
     access-log-exclude:
@@ -68,7 +70,7 @@ token-gateway:
       - /actuator/health
       - /actuator/health/**
 
-# UC Resource Server（US-G0-05/14）。正式联调须 mvn -Puc-rs，且 OAUTH_JWK_KEY 与 AS 完全一致（HS256）。
+# UC Resource Server（US-G0-05/14）。默认依赖 RS；OAUTH_JWK_KEY 须与 AS 完全一致（HS256）。
 com.mfs.user.oauth:
   issuer: ${UC_ISSUER_URI:https://user.ai-utills.com}
   jwk-key: ${OAUTH_JWK_KEY:}
@@ -76,6 +78,7 @@ com.mfs.user.oauth:
     protected-patterns:
       - /v1/keys/**
       - /v1/auth/**
+      - /v1/billing/recharge/ticket
       - /health
       - /actuator/health
       - /actuator/health/**

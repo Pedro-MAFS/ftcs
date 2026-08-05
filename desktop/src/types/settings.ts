@@ -88,6 +88,12 @@ export interface RefreshOfficialUsageResult {
   settings: SettingsSnapshot
 }
 
+export interface OpenOfficialRechargeResult {
+  ok: boolean
+  needLogin?: boolean
+  message: string
+}
+
 export type SettingsCategory =
   | 'account'
   | 'model'

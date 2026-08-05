@@ -17,9 +17,12 @@ spring:
 #   jwk-key: ${OAUTH_JWK_KEY}
 
 # US-G0-06：签发/重置 Key 时哈希用 pepper（生产必填）。勿把真实 pepper 提交进仓库。
+# US-G3-06：充值短时 ticket TTL（可选；默认 300s，须在 [60s, 24h]）。
 # token-gateway:
 #   key:
 #     pepper: ${GATEWAY_KEY_PEPPER:dev-only-pepper-change-me}
+#   billing:
+#     recharge-ticket-ttl: ${GATEWAY_RECHARGE_TICKET_TTL:300s}
 
 # 日志（可选）
 # logging:

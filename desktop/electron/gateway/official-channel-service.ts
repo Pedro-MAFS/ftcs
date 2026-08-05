@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { shell } from 'electron'
 import { ensureFreshTokens } from '../auth/oauth-service'
 import { readEnvFile, upsertEnvFile, maskSecret } from '../config/env-file'
 import { getWorkspaceRoot } from '../config/paths'
@@ -7,12 +8,20 @@ import {
   getSettingsSnapshot,
   type SettingsSnapshot,
 } from '../settings/settings-service'
-import { listModels, rotateKey, getUsageMe, type GatewayClientError } from './gateway-client'
+import {
+  listModels,
+  rotateKey,
+  getUsageMe,
+  createRechargeTicket,
+  type GatewayClientError,
+} from './gateway-client'
 import {
   FTCS_GATEWAY_KEY_NAME,
+  buildRechargePageUrl,
   getDefaultTokenGatewayBaseUrl,
   getTokenGatewayBaseUrl,
   getTokenGatewayEnvKey,
+  getTokenGatewayOrigin,
 } from './gateway-config'
 import {
   setOfficialModelsCache,
@@ -48,6 +57,20 @@ export interface RefreshOfficialUsageResult {
   usage: OfficialUsageSnapshot | null
   settings: SettingsSnapshot
 }
+
+export interface OpenOfficialRechargeResult {
+  ok: boolean
+  needLogin?: boolean
+  message: string
+}
+
+/** 打开充值页后，主窗口 focus 时自动刷余额的窗口 */
+const RECHARGE_FOCUS_REFRESH_WINDOW_MS = 15 * 60 * 1000
+/** focus 自动刷余额最小间隔 */
+const RECHARGE_FOCUS_REFRESH_MIN_GAP_MS = 10 * 1000
+
+let lastRechargeOpenedAt = 0
+let lastFocusUsageRefreshAt = 0
 
 function getEnvPath(workspaceRoot: string): string {
   return path.join(workspaceRoot, '.env')
@@ -305,6 +328,101 @@ export async function refreshOfficialUsage(): Promise<RefreshOfficialUsageResult
     message: `余额 ¥${snap.balanceDisplay}`,
     usage: snap,
     settings: getSettingsSnapshot(),
+  }
+}
+
+/**
+ * UC JWT 换票 → 系统浏览器打开网关充值页（US-G3-04）。
+ */
+export async function openOfficialRecharge(): Promise<OpenOfficialRechargeResult> {
+  const workspaceRoot = getWorkspaceRoot()
+  const envPath = getEnvPath(workspaceRoot)
+  const env = readEnvFile(envPath)
+  const mergedEnv = { ...process.env, ...env }
+  const baseUrl = getTokenGatewayBaseUrl(mergedEnv)
+  const expectedOrigin = getTokenGatewayOrigin(mergedEnv)
+
+  let bundle = await ensureFreshTokens()
+  if (!bundle?.accessToken) {
+    return { ok: false, needLogin: true, message: '请先登录后再充值' }
+  }
+
+  let ticketRes = await createRechargeTicket({
+    accessToken: bundle.accessToken,
+    baseUrl,
+  })
+
+  if (!ticketRes.ok && ticketRes.code === 'need_login') {
+    bundle = await ensureFreshTokens({ force: true })
+    if (!bundle?.accessToken) {
+      return { ok: false, needLogin: true, message: '请先登录后再充值' }
+    }
+    ticketRes = await createRechargeTicket({
+      accessToken: bundle.accessToken,
+      baseUrl,
+    })
+  }
+
+  if (!ticketRes.ok) {
+    return {
+      ok: false,
+      needLogin: ticketRes.code === 'need_login',
+      message: ticketRes.message,
+    }
+  }
+
+  const pageUrl = buildRechargePageUrl(ticketRes.ticket, mergedEnv)
+  let parsed: URL
+  try {
+    parsed = new URL(pageUrl)
+  } catch {
+    return { ok: false, message: '无法打开充值页：地址无效' }
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return { ok: false, message: '无法打开充值页：仅支持 http(s)' }
+  }
+  const originNow = `${parsed.protocol}//${parsed.host}`
+  if (originNow !== expectedOrigin) {
+    console.warn('[ftcs:gateway] recharge origin mismatch', {
+      expected: expectedOrigin,
+      actual: originNow,
+    })
+    return { ok: false, message: '无法打开充值页：网关地址异常' }
+  }
+
+  try {
+    await shell.openExternal(parsed.toString())
+  } catch (err) {
+    console.warn(
+      '[ftcs:gateway] openExternal failed',
+      err instanceof Error ? err.message : String(err),
+    )
+    return {
+      ok: false,
+      message: '无法打开浏览器，请检查系统默认浏览器设置',
+    }
+  }
+
+  lastRechargeOpenedAt = Date.now()
+  return { ok: true, message: '已在浏览器打开充值页' }
+}
+
+/**
+ * 主窗口 focus：若近期打开过充值页，则自动刷一次余额（防抖）。
+ */
+export async function maybeRefreshUsageAfterRechargeFocus(): Promise<void> {
+  const now = Date.now()
+  if (!lastRechargeOpenedAt) return
+  if (now - lastRechargeOpenedAt > RECHARGE_FOCUS_REFRESH_WINDOW_MS) return
+  if (now - lastFocusUsageRefreshAt < RECHARGE_FOCUS_REFRESH_MIN_GAP_MS) return
+  lastFocusUsageRefreshAt = now
+  try {
+    await refreshOfficialUsage()
+  } catch (err) {
+    console.warn(
+      '[ftcs:gateway] focus usage refresh failed',
+      err instanceof Error ? err.message : String(err),
+    )
   }
 }
 
