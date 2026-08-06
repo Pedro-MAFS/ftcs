@@ -256,6 +256,43 @@
       font-size: 0.85rem;
       color: var(--muted);
     }
+    footer .contact,
+    footer .beian {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 14px;
+      margin-top: 0.75rem;
+      font-size: 12px;
+    }
+    footer .contact a,
+    footer .beian a {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--muted);
+      text-decoration: none;
+    }
+    footer .contact a:hover,
+    footer .beian a:hover { text-decoration: underline; }
+    footer .beian img.mps {
+      width: 14px;
+      height: 14px;
+      display: block;
+    }
+    footer .oa {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    footer .oa img {
+      width: 48px;
+      height: 48px;
+      display: block;
+      border-radius: 4px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
 
     @media (max-width: 560px) {
       th { width: 36%; }
@@ -745,6 +782,21 @@
 
     <footer>
       Token Gateway · 本页为静态说明，无需登录即可阅读。接口鉴权以运行配置与 RS Starter 为准。
+      <div class="contact" aria-label="联系方式">
+        <a href="tel:+8617852032649">电话 +86 17852032649</a>
+        <a href="mailto:mfs1998@qq.com">邮箱 mfs1998@qq.com</a>
+        <span class="oa">
+          <img src="/qrcode_for_gh.jpg" width="48" height="48" alt="微信公众号二维码" />
+          <span>公众号</span>
+        </span>
+      </div>
+      <div class="beian" aria-label="网站备案信息">
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">鲁ICP备2026033555号-1</a>
+        <a href="https://beian.mps.gov.cn/#/query/webSearch?code=33010802014603" target="_blank" rel="noopener noreferrer">
+          <img class="mps" src="/mps-beian.png" width="14" height="14" alt="" />
+          浙公网安备33010802014603号
+        </a>
+      </div>
     </footer>
   </div>
 </body>
