@@ -269,7 +269,7 @@
       <p class="brand">token-gateway</p>
       <h1>对接说明</h1>
       <p class="lead">
-        Token Gateway 是 DeepSeek 等上游模型的中转计费网关：先用用户中心 JWT 签发/重置网关 API Key（<code>sk-</code>），再用该 Key 调用 Chat；余额以「厘」计量。官方通道充值由客户端用 UC JWT 换取短时 <code>rt_</code> ticket（充值页与微信下单仍规划中）。本页描述当前已落地能力与接口契约，便于客户端自行对接。
+        Token Gateway 是 DeepSeek 等上游模型的中转计费网关：先用用户中心 JWT 签发/重置网关 API Key（<code>sk-</code>），再用该 Key 调用 Chat；余额以「厘」计量。官方通道充值由客户端用 UC JWT 换取短时 <code>rt_</code> ticket，打开托管充值页后可微信 Native 预下单（支付回调入账仍规划中）。本页描述当前已落地能力与接口契约，便于客户端自行对接。
       </p>
       <nav class="toc" aria-label="目录">
         <a href="#logic">基本逻辑</a>
@@ -328,7 +328,7 @@
           </tr>
           <tr>
             <td>充值短时 ticket<br /><code>rt_…</code></td>
-            <td>由 UC JWT 换取；明文仅签发响应返回一次。后续充值页 / prepay 将用 Cookie 或 <code>Bearer rt_…</code>（本期仅落地换票）</td>
+            <td>由 UC JWT 换取；明文仅签发响应返回一次。充值页 / prepay / 查单用 Cookie 或 <code>Bearer rt_…</code></td>
           </tr>
         </tbody>
       </table>
@@ -460,7 +460,7 @@
           <span class="badge live">已落地</span>
         </div>
         <div class="api-body">
-          <p>用 UC JWT 换取官方通道充值用的短时 ticket（前缀 <code>rt_</code>）。服务端只存哈希；明文仅本响应返回一次。过期前可多次用于后续充值相关 API（预付费页 / 下单仍规划中）。禁止把长效 access_token 挂在充值 URL。</p>
+          <p>用 UC JWT 换取官方通道充值用的短时 ticket（前缀 <code>rt_</code>）。服务端只存哈希；明文仅本响应返回一次。过期前可多次用于充值页、微信 prepay / 查单。禁止把长效 access_token 挂在充值 URL。</p>
           <p class="label">请求头</p>
           <table>
             <tr><th>Authorization</th><td>必填：<code>Bearer &lt;UC access_token&gt;</code></td></tr>
@@ -488,8 +488,66 @@
             TTL 可配：<code>token-gateway.billing.recharge-ticket-ttl</code> / 环境变量 <code>GATEWAY_RECHARGE_TICKET_TTL</code>（默认 <code>300s</code>；启动校验须在 60s～24h）。已发出的票仍按其行内 <code>expires_at</code>。
           </div>
           <div class="callout warn">
-            客户端拿到 ticket 后应尽快打开网关充值页（规划：<code>/billing/recharge?ticket=…</code>），勿长期缓存；勿用 sk 调本接口，也勿用 ticket 调 Chat。
+            客户端拿到 ticket 后应尽快打开网关充值页（<code>/billing/recharge?ticket=…</code>），勿长期缓存；勿用 sk 调本接口，也勿用 ticket 调 Chat。
           </div>
+        </div>
+      </article>
+
+      <article class="api" id="api-billing-recharge-page">
+        <div class="api-head">
+          <span class="method get">GET</span>
+          <span class="path">/billing/recharge</span>
+          <span class="badge live">已落地</span>
+        </div>
+        <div class="api-body">
+          <p>网关托管充值页。带 <code>?ticket=rt_…</code> 时验票并 <code>Set-Cookie</code> 后 302 去 query；无有效 Cookie 时展示「缺少登录凭证」。页内调用下方 prepay / 查单。</p>
+        </div>
+      </article>
+
+      <article class="api" id="api-wechat-prepay">
+        <div class="api-head">
+          <span class="method post">POST</span>
+          <span class="path">/v1/billing/wechat/prepay</span>
+          <span class="badge live">已落地</span>
+        </div>
+        <div class="api-body">
+          <p>微信 Native 预下单，返回付款码串 <code>code_url</code>。鉴权：Cookie <code>tg_recharge_ticket</code> 或 <code>Authorization: Bearer rt_…</code>（Cookie 优先）；不用 UC JWT / sk。</p>
+          <p class="label">Body</p>
+          <pre>{ "amount_yuan": 50.00 }</pre>
+          <table>
+            <tr><th>amount_yuan</th><td>必填；1.00～100.00，最多两位小数</td></tr>
+          </table>
+          <p class="label">成功 · 200</p>
+          <pre>{
+  "out_trade_no": "tg…",
+  "code_url": "weixin://wxpay/bizpayurl?pr=…",
+  "amount_yuan": "50.00",
+  "amount_fen": 5000,
+  "amount_li": 50000,
+  "expires_in": 7200,
+  "status": "created"
+}</pre>
+          <p class="label">错误</p>
+          <table>
+            <tr><th>401</th><td><code>invalid_recharge_ticket</code></td></tr>
+            <tr><th>400</th><td><code>invalid_amount</code> / <code>invalid_body</code></td></tr>
+            <tr><th>503</th><td><code>wechat_pay_unavailable</code>（未启用或缺配置）</td></tr>
+            <tr><th>502</th><td><code>wechat_prepay_failed</code></td></tr>
+          </table>
+          <div class="callout">
+            开关与商户配置：<code>token-gateway.wechat-pay.*</code> / 环境变量 <code>GATEWAY_WECHAT_PAY_ENABLED</code>、<code>WECHAT_*</code>。证书放 <code>important/</code>，勿提交仓库。支付成功入账见后续 notify 故事。
+          </div>
+        </div>
+      </article>
+
+      <article class="api" id="api-wechat-order">
+        <div class="api-head">
+          <span class="method get">GET</span>
+          <span class="path">/v1/billing/wechat/orders/{outTradeNo}</span>
+          <span class="badge live">已落地</span>
+        </div>
+        <div class="api-body">
+          <p>按商户订单号读本地订单（须 ticket 且身份匹配，否则 404）。本期不调微信查单；入账字段待回调故事填充。</p>
         </div>
       </article>
 
@@ -593,29 +651,7 @@
 
     <section id="planned">
       <h2>规划中（尚未实现）</h2>
-      <p>下列能力仍待后续故事（换票与充值页入口已落地；微信下单/回调、今日用量汇总等仍属后续）。</p>
-
-      <article class="api">
-        <div class="api-head">
-          <span class="method get">GET</span>
-          <span class="path">/billing/recharge</span>
-          <span class="badge live">已落地</span>
-        </div>
-        <div class="api-body">
-          <p>网关托管充值页。带 <code>?ticket=rt_…</code> 时验票并 <code>Set-Cookie</code> 后 302 去 query；无有效 Cookie 时展示「缺少登录凭证」。页内可调后续 prepay / 查单（尚未实现时会提示通道未开通）。</p>
-        </div>
-      </article>
-
-      <article class="api">
-        <div class="api-head">
-          <span class="method post">POST</span>
-          <span class="path">/v1/billing/wechat/prepay</span>
-          <span class="badge soon">规划</span>
-        </div>
-        <div class="api-body">
-          <p>微信 Native 预下单；鉴权走 recharge ticket Cookie / Bearer（非 UC JWT / 非 sk）。</p>
-        </div>
-      </article>
+      <p>下列能力仍待后续故事（微信支付回调入账、查单补单、「我已支付」、今日用量汇总等）。</p>
 
       <article class="api">
         <div class="api-head">

@@ -63,6 +63,20 @@ token-gateway:
     min-balance-li: 1
     # US-G3-06：充值短时 ticket TTL（新签发；须在 [60s, 24h]）
     recharge-ticket-ttl: ${GATEWAY_RECHARGE_TICKET_TTL:300s}
+  wechat-pay:
+    # US-G3-01：微信 Native；默认关闭。开启时须配齐商户号/AppID/证书等（见 application-local.yml.example）
+    enabled: ${GATEWAY_WECHAT_PAY_ENABLED:false}
+    mch-id: ${WECHAT_MCH_ID:}
+    app-id: ${WECHAT_APP_ID:}
+    api-v3-key: ${WECHAT_API_V3_KEY:}
+    merchant-serial-no: ${WECHAT_MCH_SERIAL_NO:}
+    private-key-path: ${WECHAT_MCH_PRIVATE_KEY_PATH:}
+    # 新商户无平台证书：填微信支付公钥（商户平台 API 安全下载）及公钥 ID
+    public-key-path: ${WECHAT_PUBLIC_KEY_PATH:}
+    public-key-id: ${WECHAT_PUBLIC_KEY_ID:}
+    notify-url: ${WECHAT_NOTIFY_URL:}
+    description: 官方通道预付费充值
+    code-url-expires-in: 7200s
   observability:
     access-log-enabled: true
     access-log-exclude:

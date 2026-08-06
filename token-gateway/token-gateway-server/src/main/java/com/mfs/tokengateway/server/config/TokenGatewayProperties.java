@@ -15,6 +15,7 @@ public class TokenGatewayProperties {
     private final Key key = new Key();
     private final Settlement settlement = new Settlement();
     private final Billing billing = new Billing();
+    private final WechatPay wechatPay = new WechatPay();
 
     public Upstream getUpstream() {
         return upstream;
@@ -38,6 +39,10 @@ public class TokenGatewayProperties {
 
     public Billing getBilling() {
         return billing;
+    }
+
+    public WechatPay getWechatPay() {
+        return wechatPay;
     }
 
     public static class Upstream {
@@ -265,6 +270,115 @@ public class TokenGatewayProperties {
 
         public void setRechargeTicketTtl(Duration rechargeTicketTtl) {
             this.rechargeTicketTtl = rechargeTicketTtl;
+        }
+    }
+
+    /** US-G3-01 微信 Native 支付 */
+    public static class WechatPay {
+        private boolean enabled = false;
+        private String mchId = "";
+        private String appId = "";
+        private String apiV3Key = "";
+        private String merchantSerialNo = "";
+        /** 商户私钥路径；支持绝对路径或 {@code file:} 前缀 */
+        private String privateKeyPath = "";
+        /**
+         * 微信支付公钥路径（新商户无平台证书时必填；与 {@link #publicKeyId} 成对）。
+         * 见商户平台 API 安全 → 微信支付公钥。
+         */
+        private String publicKeyPath = "";
+        /** 微信支付公钥 ID，形如 {@code PUB_KEY_ID_...} */
+        private String publicKeyId = "";
+        private String notifyUrl = "";
+        private String description = "官方通道预付费充值";
+        private Duration codeUrlExpiresIn = Duration.ofSeconds(7200);
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getMchId() {
+            return mchId;
+        }
+
+        public void setMchId(String mchId) {
+            this.mchId = mchId;
+        }
+
+        public String getAppId() {
+            return appId;
+        }
+
+        public void setAppId(String appId) {
+            this.appId = appId;
+        }
+
+        public String getApiV3Key() {
+            return apiV3Key;
+        }
+
+        public void setApiV3Key(String apiV3Key) {
+            this.apiV3Key = apiV3Key;
+        }
+
+        public String getMerchantSerialNo() {
+            return merchantSerialNo;
+        }
+
+        public void setMerchantSerialNo(String merchantSerialNo) {
+            this.merchantSerialNo = merchantSerialNo;
+        }
+
+        public String getPrivateKeyPath() {
+            return privateKeyPath;
+        }
+
+        public void setPrivateKeyPath(String privateKeyPath) {
+            this.privateKeyPath = privateKeyPath;
+        }
+
+        public String getPublicKeyPath() {
+            return publicKeyPath;
+        }
+
+        public void setPublicKeyPath(String publicKeyPath) {
+            this.publicKeyPath = publicKeyPath;
+        }
+
+        public String getPublicKeyId() {
+            return publicKeyId;
+        }
+
+        public void setPublicKeyId(String publicKeyId) {
+            this.publicKeyId = publicKeyId;
+        }
+
+        public String getNotifyUrl() {
+            return notifyUrl;
+        }
+
+        public void setNotifyUrl(String notifyUrl) {
+            this.notifyUrl = notifyUrl;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public void setDescription(String description) {
+            this.description = description;
+        }
+
+        public Duration getCodeUrlExpiresIn() {
+            return codeUrlExpiresIn;
+        }
+
+        public void setCodeUrlExpiresIn(Duration codeUrlExpiresIn) {
+            this.codeUrlExpiresIn = codeUrlExpiresIn;
         }
     }
 }

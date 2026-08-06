@@ -101,6 +101,12 @@
             <groupId>com.mfs</groupId>
             <artifactId>embed-oauth-resource-starter</artifactId>
         </dependency>
+        <!-- US-G3-01：微信支付官方 Java SDK（Native） -->
+        <dependency>
+            <groupId>com.github.wechatpay-apiv3</groupId>
+            <artifactId>wechatpay-java</artifactId>
+            <version>0.2.17</version>
+        </dependency>
     </dependencies>
 
     <build>

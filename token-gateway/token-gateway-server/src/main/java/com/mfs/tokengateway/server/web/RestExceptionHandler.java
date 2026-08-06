@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
@@ -45,6 +46,16 @@ public class RestExceptionHandler {
                     reason);
         }
         return ResponseEntity.status(status).body(Map.of("reason", reason));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, String>> handleUnreadable(
+            HttpMessageNotReadableException ex, HttpServletRequest request) {
+        log.warn(
+                "api invalid body method={} path={}",
+                request.getMethod(),
+                request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("reason", "invalid_body"));
     }
 
     @ExceptionHandler(Exception.class)

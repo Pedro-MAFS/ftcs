@@ -1,32 +1,49 @@
-# 复制为 application-local.yml（勿提交）后：--spring.profiles.active=local
+# 复制本文件为同目录 application-local.yml（已 gitignore，勿提交）后启动：
 #
-# 可以和其它服务共库（如 oauth 同实例同库）：业务表有 token_ 前缀，Flyway 历史表为 token_flyway_schema_history。
-# 填你的 JDBC 即可，无需再为本地单独建库。
+#   mvn -pl token-gateway-server -am spring-boot:run "-Dspring-boot.run.profiles=local"
+#
+# 或 IDE：Active profiles = local
+#
+# 可与 oauth 等业务共库：表前缀 token_*，Flyway 表 token_flyway_schema_history。
 
 spring:
   application:
     name: token-gateway-server-local
   datasource:
+    # 填你的 TiDB / MySQL；也可用环境变量 MYSQL_* 覆盖下面默认值
     url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:token_gateway}?useUnicode=true&characterEncoding=utf8&connectionTimeZone=UTC&serverTimezone=UTC
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:}
 
-# US-G0-05：与用户中心 AS 相同的 OAuth JWT 密钥（HS256）。勿把真实密钥提交进仓库。
-# com.mfs.user.oauth:
-#   issuer: ${UC_ISSUER_URI:https://user.ai-utills.com}
-#   jwk-key: ${OAUTH_JWK_KEY}
+# 与用户中心 AS 相同的 OAuth JWT 密钥（HS256）。必填。
+com.mfs.user.oauth:
+  issuer: ${UC_ISSUER_URI:https://user.ai-utills.com}
+  jwk-key: ${OAUTH_JWK_KEY:在此填写或改用环境变量}
 
-# US-G0-06：签发/重置 Key 时哈希用 pepper（生产必填）。勿把真实 pepper 提交进仓库。
-# US-G3-06：充值短时 ticket TTL（可选；默认 300s，须在 [60s, 24h]）。
-# token-gateway:
-#   key:
-#     pepper: ${GATEWAY_KEY_PEPPER:dev-only-pepper-change-me}
-#   billing:
-#     recharge-ticket-ttl: ${GATEWAY_RECHARGE_TICKET_TTL:300s}
+token-gateway:
+  key:
+    # API Key / 充值 ticket 哈希 pepper。必填；须与签发过的环境一致，否则旧 sk / ticket 全部验不过。
+    pepper: ${GATEWAY_KEY_PEPPER:在此填写或改用环境变量}
+  upstream:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:}
+  billing:
+    # 可选；默认 300s
+    recharge-ticket-ttl: ${GATEWAY_RECHARGE_TICKET_TTL:300s}
+  # US-G3-01：微信 Native。证书/公钥放 token-gateway/important/（已 gitignore），勿提交真实密钥。
+  # 工作目录一般为 token-gateway/（IDE 跑 server 模块时请用相对该目录的路径，或写绝对路径）。
+  # wechat-pay:
+  #   enabled: true
+  #   mch-id: ${WECHAT_MCH_ID:}
+  #   app-id: ${WECHAT_APP_ID:}
+  #   api-v3-key: ${WECHAT_API_V3_KEY:}
+  #   merchant-serial-no: ${WECHAT_MCH_SERIAL_NO:}
+  #   private-key-path: ${WECHAT_MCH_PRIVATE_KEY_PATH:important/商户证书xxx/apiclient_key.pem}
+  #   public-key-path: ${WECHAT_PUBLIC_KEY_PATH:important/pub_key.pem}
+  #   public-key-id: ${WECHAT_PUBLIC_KEY_ID:PUB_KEY_ID_请填商户平台显示的公钥ID}
+  #   notify-url: ${WECHAT_NOTIFY_URL:https://your-gateway.example/v1/billing/wechat/notify}
 
-# 日志（可选）
+# 可选调试
 # logging:
-#   file:
-#     path: logs
 #   level:
 #     com.mfs.tokengateway: DEBUG
