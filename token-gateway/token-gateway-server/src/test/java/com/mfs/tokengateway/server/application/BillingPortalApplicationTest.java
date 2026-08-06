@@ -26,15 +26,19 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.mfs.tokengateway.db.dbservice.TokenPriceRuleDbService;
 import com.mfs.tokengateway.db.dbservice.TokenRequestLogDbService;
 import com.mfs.tokengateway.db.dbservice.TokenUserDbService;
 import com.mfs.tokengateway.db.dbservice.TokenWechatPayOrderDbService;
+import com.mfs.tokengateway.db.po.TokenPriceRule;
 import com.mfs.tokengateway.db.po.TokenRequestLog;
 import com.mfs.tokengateway.db.po.TokenUser;
 import com.mfs.tokengateway.db.po.TokenWechatPayOrder;
+import com.mfs.tokengateway.server.api.dto.BillingPortalPricesResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse;
 import com.mfs.tokengateway.server.security.RechargeCaller;
+import com.mfs.tokengateway.server.upstream.ModelWhitelist;
 
 @ExtendWith(MockitoExtension.class)
 class BillingPortalApplicationTest {
@@ -45,13 +49,22 @@ class BillingPortalApplicationTest {
     private TokenRequestLogDbService tokenRequestLogDbService;
     @Mock
     private TokenWechatPayOrderDbService tokenWechatPayOrderDbService;
+    @Mock
+    private TokenPriceRuleDbService tokenPriceRuleDbService;
 
+    private ModelWhitelist modelWhitelist;
     private BillingPortalApplication app;
 
     @BeforeEach
     void setUp() {
+        modelWhitelist = new ModelWhitelist(java.util.Set.of(
+                "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-unpriced"));
         app = new BillingPortalApplication(
-                tokenUserDbService, tokenRequestLogDbService, tokenWechatPayOrderDbService);
+                tokenUserDbService,
+                tokenRequestLogDbService,
+                tokenWechatPayOrderDbService,
+                tokenPriceRuleDbService,
+                modelWhitelist);
     }
 
     @Test
@@ -276,6 +289,51 @@ class BillingPortalApplicationTest {
                 ResponseStatusException.class,
                 () -> app.listTopups(caller, 20, null, null, cursor));
         assertEquals("invalid_cursor", ex.getReason());
+    }
+
+    @Test
+    void toPriceItemConvertsYuanAndOmitsUpstream() {
+        TokenPriceRule row = new TokenPriceRule();
+        row.setModel("deepseek-v4-flash");
+        row.setInputPriceLiPerMTok(1200L);
+        row.setOutputPriceLiPerMTok(2300L);
+        row.setUpstreamInputCostLiPerMTok(1008L);
+        row.setUpstreamCacheCostLiPerMTok(20L);
+        row.setUpstreamOutputCostLiPerMTok(2016L);
+        row.setEffectiveFrom(LocalDateTime.ofInstant(Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC));
+
+        var item = BillingPortalApplication.toPriceItem(row);
+        assertEquals("deepseek-v4-flash", item.getModel());
+        assertEquals(0, item.getInputPriceYuanPerMtok().compareTo(new BigDecimal("1.200")));
+        assertEquals(0, item.getOutputPriceYuanPerMtok().compareTo(new BigDecimal("2.300")));
+        assertEquals(Instant.parse("2020-01-01T00:00:00Z"), item.getEffectiveFrom());
+    }
+
+    @Test
+    void listPricesSkipsUnpricedAndKeepsWhitelistOrder() {
+        when(tokenPriceRuleDbService.findEffective(eq("deepseek-unpriced"), any())).thenReturn(null);
+        when(tokenPriceRuleDbService.findEffective(eq("deepseek-v4-flash"), any()))
+                .thenReturn(priceRule("deepseek-v4-flash", 1200L, 2300L));
+        when(tokenPriceRuleDbService.findEffective(eq("deepseek-v4-pro"), any()))
+                .thenReturn(priceRule("deepseek-v4-pro", 3600L, 7000L));
+
+        RechargeCaller caller = new RechargeCaller(1L, "t", "u", null, Instant.now().plusSeconds(60));
+        BillingPortalPricesResponse body = app.listPrices(caller);
+        assertEquals(2, body.getItems().size());
+        assertEquals("deepseek-v4-flash", body.getItems().get(0).getModel());
+        assertEquals("deepseek-v4-pro", body.getItems().get(1).getModel());
+        assertTrue(body.getAsOf() != null);
+        assertEquals(0, body.getItems().get(0).getInputPriceYuanPerMtok().compareTo(new BigDecimal("1.200")));
+    }
+
+    private static TokenPriceRule priceRule(String model, long inputLi, long outputLi) {
+        TokenPriceRule row = new TokenPriceRule();
+        row.setModel(model);
+        row.setInputPriceLiPerMTok(inputLi);
+        row.setOutputPriceLiPerMTok(outputLi);
+        row.setUpstreamInputCostLiPerMTok(1L);
+        row.setEffectiveFrom(LocalDateTime.ofInstant(Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC));
+        return row;
     }
 
     private static TokenWechatPayOrder baseOrder(

@@ -521,7 +521,11 @@
       </section>
       <section class="section" id="tab-prices">
         <h2>模型价格</h2>
-        <p class="placeholder">官方通道用户侧单价即将支持。</p>
+        <p class="usage-hint" id="prices-unit-hint">单价单位：元 / 百万 Token</p>
+        <div class="usage-list" id="prices-list"></div>
+        <p class="placeholder" id="prices-empty" hidden>暂无已定价模型</p>
+        <p class="usage-hint" id="prices-footnote">价格变更不影响已完成请求。</p>
+        <p class="inline-error" id="prices-error" hidden></p>
       </section>
     </div>
   </div>
@@ -597,7 +601,10 @@
     topupsError: document.getElementById("topups-error"),
     topupsMore: document.getElementById("btn-topups-more"),
     topupsWindowHint: document.getElementById("topups-window-hint"),
-    topupsWindowSeg: document.querySelectorAll("#topups-window-seg button")
+    topupsWindowSeg: document.querySelectorAll("#topups-window-seg button"),
+    pricesList: document.getElementById("prices-list"),
+    pricesEmpty: document.getElementById("prices-empty"),
+    pricesError: document.getElementById("prices-error")
   };
 
   var usageState = {
@@ -618,6 +625,12 @@
     from: null,
     to: null,
     days: 30
+  };
+
+  var pricesState = {
+    loaded: false,
+    loading: false,
+    items: []
   };
 
   function daysLabel(days) {
@@ -851,6 +864,66 @@
     });
   }
 
+  function renderPricesList() {
+    els.pricesList.innerHTML = "";
+    pricesState.items.forEach(function (item) {
+      var row = document.createElement("div");
+      row.className = "usage-row";
+
+      var top = document.createElement("div");
+      top.className = "usage-row-top";
+      var model = document.createElement("span");
+      model.className = "model";
+      model.textContent = item.model || "—";
+      var prices = document.createElement("span");
+      prices.className = "charge";
+      prices.textContent =
+        "输入 " + formatChargeYuan(item.input_price_yuan_per_mtok)
+        + " · 输出 " + formatChargeYuan(item.output_price_yuan_per_mtok);
+      top.appendChild(model);
+      top.appendChild(prices);
+
+      var meta = document.createElement("div");
+      meta.className = "usage-row-meta";
+      var eff = document.createElement("span");
+      eff.textContent = "生效 " + formatLocalTime(item.effective_from);
+      meta.appendChild(eff);
+
+      row.appendChild(top);
+      row.appendChild(meta);
+      els.pricesList.appendChild(row);
+    });
+
+    var empty = pricesState.items.length === 0 && pricesState.loaded && !pricesState.loading;
+    els.pricesEmpty.hidden = !empty;
+  }
+
+  function loadPrices() {
+    if (pricesState.loading) return Promise.resolve();
+    pricesState.loading = true;
+    els.pricesError.hidden = true;
+    els.pricesEmpty.hidden = true;
+    return api("/v1/billing/portal/prices").then(function (res) {
+      if (res.status === 401) {
+        showNeed("expired");
+        return;
+      }
+      if (!res.ok || !res.body) {
+        els.pricesError.hidden = false;
+        els.pricesError.textContent = "无法加载模型价格，请稍后重试。";
+        return;
+      }
+      pricesState.items = Array.isArray(res.body.items) ? res.body.items : [];
+      pricesState.loaded = true;
+      renderPricesList();
+    }).catch(function () {
+      els.pricesError.hidden = false;
+      els.pricesError.textContent = "网络异常，请稍后重试。";
+    }).finally(function () {
+      pricesState.loading = false;
+    });
+  }
+
   function renderUsageList() {
     els.usageList.innerHTML = "";
     usageState.items.forEach(function (item) {
@@ -1004,6 +1077,9 @@
     }
     if (name === "topups" && !topupsState.loaded && !topupsState.loading) {
       setTopupsDays(topupsState.days, true);
+    }
+    if (name === "prices" && !pricesState.loaded && !pricesState.loading) {
+      loadPrices();
     }
   }
 

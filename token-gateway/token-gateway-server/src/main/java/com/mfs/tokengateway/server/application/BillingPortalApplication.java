@@ -17,19 +17,24 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mfs.tokengateway.db.dbservice.TokenRequestLogDbService;
+import com.mfs.tokengateway.db.dbservice.TokenPriceRuleDbService;
 import com.mfs.tokengateway.db.dbservice.TokenUserDbService;
 import com.mfs.tokengateway.db.dbservice.TokenWechatPayOrderDbService;
+import com.mfs.tokengateway.db.po.TokenPriceRule;
 import com.mfs.tokengateway.db.po.TokenRequestLog;
 import com.mfs.tokengateway.db.po.TokenUser;
 import com.mfs.tokengateway.db.po.TokenWechatPayOrder;
 import com.mfs.tokengateway.server.api.dto.BillingPortalMeResponse;
+import com.mfs.tokengateway.server.api.dto.BillingPortalPricesResponse;
+import com.mfs.tokengateway.server.api.dto.BillingPortalPricesResponse.BillingPortalPriceItem;
 import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse.BillingPortalTopupItem;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse.BillingPortalUsageItem;
 import com.mfs.tokengateway.server.security.RechargeCaller;
+import com.mfs.tokengateway.server.upstream.ModelWhitelist;
 
-/** 用户面板只读查询（US-G4-02 / G4-03 / G4-04）。 */
+/** 用户面板只读查询（US-G4-02 / G4-03 / G4-04 / G4-05）。 */
 @Service
 public class BillingPortalApplication {
 
@@ -41,14 +46,20 @@ public class BillingPortalApplication {
     private final TokenUserDbService tokenUserDbService;
     private final TokenRequestLogDbService tokenRequestLogDbService;
     private final TokenWechatPayOrderDbService tokenWechatPayOrderDbService;
+    private final TokenPriceRuleDbService tokenPriceRuleDbService;
+    private final ModelWhitelist modelWhitelist;
 
     public BillingPortalApplication(
             TokenUserDbService tokenUserDbService,
             TokenRequestLogDbService tokenRequestLogDbService,
-            TokenWechatPayOrderDbService tokenWechatPayOrderDbService) {
+            TokenWechatPayOrderDbService tokenWechatPayOrderDbService,
+            TokenPriceRuleDbService tokenPriceRuleDbService,
+            ModelWhitelist modelWhitelist) {
         this.tokenUserDbService = tokenUserDbService;
         this.tokenRequestLogDbService = tokenRequestLogDbService;
         this.tokenWechatPayOrderDbService = tokenWechatPayOrderDbService;
+        this.tokenPriceRuleDbService = tokenPriceRuleDbService;
+        this.modelWhitelist = modelWhitelist;
     }
 
     public BillingPortalMeResponse me(RechargeCaller caller) {
@@ -134,6 +145,26 @@ public class BillingPortalApplication {
                     : window.from();
             body.setNextCursor(encodeCursor(lastAt, String.valueOf(last.getId())));
         }
+        return body;
+    }
+
+    public BillingPortalPricesResponse listPrices(RechargeCaller caller) {
+        if (caller == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid_recharge_ticket");
+        }
+        Instant asOf = Instant.now();
+        LocalDateTime asOfLdt = LocalDateTime.ofInstant(asOf, ZoneOffset.UTC);
+        List<BillingPortalPriceItem> items = new ArrayList<>();
+        for (String model : modelWhitelist.listSorted()) {
+            TokenPriceRule rule = tokenPriceRuleDbService.findEffective(model, asOfLdt);
+            if (rule == null) {
+                continue;
+            }
+            items.add(toPriceItem(rule));
+        }
+        BillingPortalPricesResponse body = new BillingPortalPricesResponse();
+        body.setAsOf(asOf);
+        body.setItems(items);
         return body;
     }
 
@@ -223,6 +254,17 @@ public class BillingPortalApplication {
             item.setFailReason(row.getFailReason());
         } else {
             item.setFailReason(null);
+        }
+        return item;
+    }
+
+    static BillingPortalPriceItem toPriceItem(TokenPriceRule row) {
+        BillingPortalPriceItem item = new BillingPortalPriceItem();
+        item.setModel(row.getModel());
+        item.setInputPriceYuanPerMtok(liToYuan(row.getInputPriceLiPerMTok()));
+        item.setOutputPriceYuanPerMtok(liToYuan(row.getOutputPriceLiPerMTok()));
+        if (row.getEffectiveFrom() != null) {
+            item.setEffectiveFrom(row.getEffectiveFrom().toInstant(ZoneOffset.UTC));
         }
         return item;
     }
