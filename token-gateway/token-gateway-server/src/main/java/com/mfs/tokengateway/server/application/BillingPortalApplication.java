@@ -18,14 +18,18 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.mfs.tokengateway.db.dbservice.TokenRequestLogDbService;
 import com.mfs.tokengateway.db.dbservice.TokenUserDbService;
+import com.mfs.tokengateway.db.dbservice.TokenWechatPayOrderDbService;
 import com.mfs.tokengateway.db.po.TokenRequestLog;
 import com.mfs.tokengateway.db.po.TokenUser;
+import com.mfs.tokengateway.db.po.TokenWechatPayOrder;
 import com.mfs.tokengateway.server.api.dto.BillingPortalMeResponse;
+import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse;
+import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse.BillingPortalTopupItem;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse.BillingPortalUsageItem;
 import com.mfs.tokengateway.server.security.RechargeCaller;
 
-/** 用户面板只读查询（US-G4-02 / G4-03）。 */
+/** 用户面板只读查询（US-G4-02 / G4-03 / G4-04）。 */
 @Service
 public class BillingPortalApplication {
 
@@ -36,11 +40,15 @@ public class BillingPortalApplication {
 
     private final TokenUserDbService tokenUserDbService;
     private final TokenRequestLogDbService tokenRequestLogDbService;
+    private final TokenWechatPayOrderDbService tokenWechatPayOrderDbService;
 
     public BillingPortalApplication(
-            TokenUserDbService tokenUserDbService, TokenRequestLogDbService tokenRequestLogDbService) {
+            TokenUserDbService tokenUserDbService,
+            TokenRequestLogDbService tokenRequestLogDbService,
+            TokenWechatPayOrderDbService tokenWechatPayOrderDbService) {
         this.tokenUserDbService = tokenUserDbService;
         this.tokenRequestLogDbService = tokenRequestLogDbService;
+        this.tokenWechatPayOrderDbService = tokenWechatPayOrderDbService;
     }
 
     public BillingPortalMeResponse me(RechargeCaller caller) {
@@ -58,27 +66,17 @@ public class BillingPortalApplication {
     public BillingPortalUsageResponse listUsage(
             RechargeCaller caller, Integer limitRaw, String fromRaw, String toRaw, String cursorRaw) {
         int limit = normalizeLimit(limitRaw);
-        Instant now = Instant.now();
-        Instant to = parseInstantOr(toRaw, now, "invalid_time_range");
-        Instant from = parseInstantOr(fromRaw, to.minus(Duration.ofDays(DEFAULT_WINDOW_DAYS)), "invalid_time_range");
-        if (from.isAfter(to)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_time_range");
-        }
-        if (Duration.between(from, to).compareTo(Duration.ofDays(MAX_WINDOW_DAYS)) > 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_time_range");
-        }
-
+        TimeWindow window = resolveTimeWindow(fromRaw, toRaw);
         Cursor cursor = decodeCursor(cursorRaw);
 
-        BillingPortalUsageResponse empty = emptyUsage(from, to);
-        TokenUser user = resolveUser(caller);
-        Long userId = user != null ? user.getId() : caller.getUserId();
+        BillingPortalUsageResponse empty = emptyUsage(window.from(), window.to());
+        Long userId = resolveUserId(caller);
         if (userId == null) {
             return empty;
         }
 
-        LocalDateTime fromLdt = LocalDateTime.ofInstant(from, ZoneOffset.UTC);
-        LocalDateTime toLdt = LocalDateTime.ofInstant(to, ZoneOffset.UTC);
+        LocalDateTime fromLdt = LocalDateTime.ofInstant(window.from(), ZoneOffset.UTC);
+        LocalDateTime toLdt = LocalDateTime.ofInstant(window.to(), ZoneOffset.UTC);
         LocalDateTime cursorT = cursor != null ? LocalDateTime.ofInstant(cursor.t(), ZoneOffset.UTC) : null;
         String cursorId = cursor != null ? cursor.id() : null;
 
@@ -86,7 +84,7 @@ public class BillingPortalApplication {
                 userId, fromLdt, toLdt, cursorT, cursorId, limit);
 
         BillingPortalUsageResponse body = new BillingPortalUsageResponse();
-        body.setWindow(new BillingPortalUsageResponse.Window(from, to));
+        body.setWindow(new BillingPortalUsageResponse.Window(window.from(), window.to()));
         List<BillingPortalUsageItem> items = new ArrayList<>(rows.size());
         for (TokenRequestLog row : rows) {
             items.add(toUsageItem(row));
@@ -96,15 +94,92 @@ public class BillingPortalApplication {
             TokenRequestLog last = rows.get(rows.size() - 1);
             Instant lastAt = last.getCreatedAt() != null
                     ? last.getCreatedAt().toInstant(ZoneOffset.UTC)
-                    : from;
+                    : window.from();
             body.setNextCursor(encodeCursor(lastAt, last.getRequestId()));
         }
         return body;
     }
 
+    public BillingPortalTopupsResponse listTopups(
+            RechargeCaller caller, Integer limitRaw, String fromRaw, String toRaw, String cursorRaw) {
+        int limit = normalizeLimit(limitRaw);
+        TimeWindow window = resolveTimeWindow(fromRaw, toRaw);
+        Cursor cursor = decodeCursor(cursorRaw);
+        Long cursorOrderId = parseCursorLongId(cursor);
+
+        BillingPortalTopupsResponse empty = emptyTopups(window.from(), window.to());
+        Long userId = resolveUserId(caller);
+        if (userId == null) {
+            return empty;
+        }
+
+        LocalDateTime fromLdt = LocalDateTime.ofInstant(window.from(), ZoneOffset.UTC);
+        LocalDateTime toLdt = LocalDateTime.ofInstant(window.to(), ZoneOffset.UTC);
+        LocalDateTime cursorT = cursor != null ? LocalDateTime.ofInstant(cursor.t(), ZoneOffset.UTC) : null;
+
+        List<TokenWechatPayOrder> rows = tokenWechatPayOrderDbService.listForPortal(
+                userId, fromLdt, toLdt, cursorT, cursorOrderId, limit);
+
+        BillingPortalTopupsResponse body = new BillingPortalTopupsResponse();
+        body.setWindow(new BillingPortalTopupsResponse.Window(window.from(), window.to()));
+        List<BillingPortalTopupItem> items = new ArrayList<>(rows.size());
+        for (TokenWechatPayOrder row : rows) {
+            items.add(toTopupItem(row));
+        }
+        body.setItems(items);
+        if (rows.size() >= limit) {
+            TokenWechatPayOrder last = rows.get(rows.size() - 1);
+            Instant lastAt = last.getCreatedAt() != null
+                    ? last.getCreatedAt().toInstant(ZoneOffset.UTC)
+                    : window.from();
+            body.setNextCursor(encodeCursor(lastAt, String.valueOf(last.getId())));
+        }
+        return body;
+    }
+
+    private Long resolveUserId(RechargeCaller caller) {
+        TokenUser user = resolveUser(caller);
+        if (user != null) {
+            return user.getId();
+        }
+        return caller.getUserId();
+    }
+
+    private static TimeWindow resolveTimeWindow(String fromRaw, String toRaw) {
+        Instant now = Instant.now();
+        Instant to = parseInstantOr(toRaw, now, "invalid_time_range");
+        Instant from = parseInstantOr(fromRaw, to.minus(Duration.ofDays(DEFAULT_WINDOW_DAYS)), "invalid_time_range");
+        if (from.isAfter(to)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_time_range");
+        }
+        if (Duration.between(from, to).compareTo(Duration.ofDays(MAX_WINDOW_DAYS)) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_time_range");
+        }
+        return new TimeWindow(from, to);
+    }
+
+    private static Long parseCursorLongId(Cursor cursor) {
+        if (cursor == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(cursor.id());
+        } catch (NumberFormatException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid_cursor");
+        }
+    }
+
     private static BillingPortalUsageResponse emptyUsage(Instant from, Instant to) {
         BillingPortalUsageResponse body = new BillingPortalUsageResponse();
         body.setWindow(new BillingPortalUsageResponse.Window(from, to));
+        body.setItems(List.of());
+        body.setNextCursor(null);
+        return body;
+    }
+
+    private static BillingPortalTopupsResponse emptyTopups(Instant from, Instant to) {
+        BillingPortalTopupsResponse body = new BillingPortalTopupsResponse();
+        body.setWindow(new BillingPortalTopupsResponse.Window(from, to));
         body.setItems(List.of());
         body.setNextCursor(null);
         return body;
@@ -124,6 +199,31 @@ public class BillingPortalApplication {
         item.setCompletionTokens(row.getCompletionTokens());
         item.setChargeYuan(liToYuan(row.getRevenueLi()));
         item.setErrorSummary(row.getErrorSummary());
+        return item;
+    }
+
+    static BillingPortalTopupItem toTopupItem(TokenWechatPayOrder row) {
+        BillingPortalTopupItem item = new BillingPortalTopupItem();
+        item.setOutTradeNo(row.getOutTradeNo());
+        if (row.getCreatedAt() != null) {
+            item.setCreatedAt(row.getCreatedAt().toInstant(ZoneOffset.UTC));
+        }
+        if (row.getPaidAt() != null) {
+            item.setPaidAt(row.getPaidAt().toInstant(ZoneOffset.UTC));
+        }
+        if (row.getCreditedAt() != null) {
+            item.setCreditedAt(row.getCreditedAt().toInstant(ZoneOffset.UTC));
+        }
+        item.setAmountYuan(liToYuan(row.getAmountLi()));
+        item.setStatus(row.getStatus());
+        item.setDescription(row.getDescription());
+        item.setWxTransactionId(row.getWxTransactionId());
+        String status = row.getStatus() == null ? "" : row.getStatus().toLowerCase();
+        if ("failed".equals(status) || "closed".equals(status)) {
+            item.setFailReason(row.getFailReason());
+        } else {
+            item.setFailReason(null);
+        }
         return item;
     }
 
@@ -155,6 +255,8 @@ public class BillingPortalApplication {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, reason);
         }
     }
+
+    record TimeWindow(Instant from, Instant to) {}
 
     record Cursor(Instant t, String id) {}
 

@@ -487,7 +487,7 @@
       <section class="section" id="tab-usage">
         <h2>Token 消费</h2>
         <div class="usage-toolbar">
-          <div class="usage-window-seg" role="group" aria-label="查询时间窗">
+          <div class="usage-window-seg" id="usage-window-seg" role="group" aria-label="查询时间窗">
             <button type="button" data-days="7">近 7 天</button>
             <button type="button" data-days="30" class="active">近 30 天</button>
             <button type="button" data-days="90">近 90 天</button>
@@ -503,7 +503,21 @@
       </section>
       <section class="section" id="tab-topups">
         <h2>充值入账</h2>
-        <p class="placeholder">微信支付入账历史即将支持。</p>
+        <div class="usage-toolbar">
+          <div class="usage-window-seg" id="topups-window-seg" role="group" aria-label="充值查询时间窗">
+            <button type="button" data-days="7">近 7 天</button>
+            <button type="button" data-days="30" class="active">近 30 天</button>
+            <button type="button" data-days="90">近 90 天</button>
+          </div>
+          <p class="usage-hint" id="topups-window-hint">时间按本地显示</p>
+        </div>
+        <div class="usage-list" id="topups-list"></div>
+        <p class="placeholder" id="topups-empty" hidden>该时间范围内暂无充值记录</p>
+        <p class="usage-hint" id="topups-footnote">本列表为微信支付自助充值；人工调账请联系客服。</p>
+        <p class="inline-error" id="topups-error" hidden></p>
+        <div class="usage-actions">
+          <button type="button" class="btn btn-ghost" id="btn-topups-more" hidden>加载更多</button>
+        </div>
       </section>
       <section class="section" id="tab-prices">
         <h2>模型价格</h2>
@@ -577,10 +591,26 @@
     usageError: document.getElementById("usage-error"),
     usageMore: document.getElementById("btn-usage-more"),
     usageWindowHint: document.getElementById("usage-window-hint"),
-    usageWindowSeg: document.querySelectorAll(".usage-window-seg button")
+    usageWindowSeg: document.querySelectorAll("#usage-window-seg button"),
+    topupsList: document.getElementById("topups-list"),
+    topupsEmpty: document.getElementById("topups-empty"),
+    topupsError: document.getElementById("topups-error"),
+    topupsMore: document.getElementById("btn-topups-more"),
+    topupsWindowHint: document.getElementById("topups-window-hint"),
+    topupsWindowSeg: document.querySelectorAll("#topups-window-seg button")
   };
 
   var usageState = {
+    loaded: false,
+    loading: false,
+    nextCursor: null,
+    items: [],
+    from: null,
+    to: null,
+    days: 30
+  };
+
+  var topupsState = {
     loaded: false,
     loading: false,
     nextCursor: null,
@@ -677,6 +707,148 @@
     if (String(status).toLowerCase() === "active") return "正常";
     if (String(status).toLowerCase() === "disabled") return "已停用";
     return String(status);
+  }
+
+  function orderStatusLabel(status) {
+    var s = String(status || "").toLowerCase();
+    if (s === "created") return "待支付";
+    if (s === "paid") return "已支付（入账中）";
+    if (s === "credited") return "已入账";
+    if (s === "failed") return "下单失败";
+    if (s === "closed") return "已关闭";
+    return status || "—";
+  }
+
+  function syncTopupsWindowButtons() {
+    els.topupsWindowSeg.forEach(function (btn) {
+      var d = Number(btn.getAttribute("data-days"));
+      btn.classList.toggle("active", d === topupsState.days);
+      btn.disabled = topupsState.loading;
+    });
+  }
+
+  function setTopupsDays(days, forceReload) {
+    var next = Number(days) || 30;
+    if (next !== 7 && next !== 30 && next !== 90) next = 30;
+    var changed = next !== topupsState.days;
+    topupsState.days = next;
+    syncTopupsWindowButtons();
+    if (forceReload || changed || !topupsState.loaded) {
+      topupsState.from = null;
+      topupsState.to = null;
+      topupsState.nextCursor = null;
+      topupsState.items = [];
+      topupsState.loaded = false;
+      loadTopups(false);
+    }
+  }
+
+  function renderTopupsList() {
+    els.topupsList.innerHTML = "";
+    topupsState.items.forEach(function (item) {
+      var row = document.createElement("div");
+      row.className = "usage-row";
+
+      var top = document.createElement("div");
+      top.className = "usage-row-top";
+      var amount = document.createElement("span");
+      amount.className = "model";
+      amount.textContent = formatChargeYuan(item.amount_yuan);
+      var status = document.createElement("span");
+      status.className = "charge";
+      status.textContent = orderStatusLabel(item.status);
+      top.appendChild(amount);
+      top.appendChild(status);
+
+      var meta = document.createElement("div");
+      meta.className = "usage-row-meta";
+      var bits = [formatLocalTime(item.created_at)];
+      if (item.out_trade_no) bits.push(item.out_trade_no);
+      if (item.credited_at) bits.push("入账 " + formatLocalTime(item.credited_at));
+      if (item.description) bits.push(item.description);
+      bits.forEach(function (text) {
+        var span = document.createElement("span");
+        span.textContent = text;
+        meta.appendChild(span);
+      });
+      if (item.fail_reason) {
+        var err = document.createElement("span");
+        err.className = "err";
+        err.textContent = item.fail_reason;
+        meta.appendChild(err);
+      }
+
+      row.appendChild(top);
+      row.appendChild(meta);
+      els.topupsList.appendChild(row);
+    });
+
+    var empty = topupsState.items.length === 0 && topupsState.loaded && !topupsState.loading;
+    els.topupsEmpty.hidden = !empty;
+    els.topupsMore.hidden = !topupsState.nextCursor;
+  }
+
+  function loadTopups(append) {
+    if (topupsState.loading) return Promise.resolve();
+    topupsState.loading = true;
+    syncTopupsWindowButtons();
+    els.topupsError.hidden = true;
+    if (!append) {
+      els.topupsMore.hidden = true;
+      els.topupsEmpty.hidden = true;
+      if (!topupsState.from || !topupsState.to) {
+        var win = buildWindow(topupsState.days);
+        topupsState.from = win.from;
+        topupsState.to = win.to;
+      }
+    } else {
+      els.topupsMore.disabled = true;
+      els.topupsMore.textContent = "加载中…";
+    }
+    var path = "/v1/billing/portal/topups?limit=20"
+      + "&from=" + encodeURIComponent(topupsState.from)
+      + "&to=" + encodeURIComponent(topupsState.to);
+    if (append && topupsState.nextCursor) {
+      path += "&cursor=" + encodeURIComponent(topupsState.nextCursor);
+    }
+    return api(path).then(function (res) {
+      if (res.status === 401) {
+        showNeed("expired");
+        return;
+      }
+      if (!res.ok || !res.body) {
+        els.topupsError.hidden = false;
+        els.topupsError.textContent = "无法加载充值记录，请稍后重试。";
+        return;
+      }
+      var body = res.body;
+      var items = Array.isArray(body.items) ? body.items : [];
+      if (append) {
+        topupsState.items = topupsState.items.concat(items);
+      } else {
+        topupsState.items = items;
+      }
+      topupsState.nextCursor = body.next_cursor || null;
+      topupsState.loaded = true;
+      if (body.window && body.window.from && body.window.to) {
+        topupsState.from = body.window.from;
+        topupsState.to = body.window.to;
+        els.topupsWindowHint.textContent =
+          daysLabel(topupsState.days) + " · " + formatLocalTime(body.window.from) + " ~ " + formatLocalTime(body.window.to);
+      } else {
+        els.topupsWindowHint.textContent = daysLabel(topupsState.days) + " · 时间按本地显示";
+      }
+      els.topupsEmpty.textContent = daysLabel(topupsState.days) + "暂无充值记录";
+      renderTopupsList();
+    }).catch(function () {
+      els.topupsError.hidden = false;
+      els.topupsError.textContent = "网络异常，请稍后重试。";
+    }).finally(function () {
+      topupsState.loading = false;
+      syncTopupsWindowButtons();
+      els.topupsMore.disabled = false;
+      els.topupsMore.textContent = "加载更多";
+    });
   }
 
   function renderUsageList() {
@@ -830,6 +1002,9 @@
     if (name === "usage" && !usageState.loaded && !usageState.loading) {
       setUsageDays(usageState.days, true);
     }
+    if (name === "topups" && !topupsState.loaded && !topupsState.loading) {
+      setTopupsDays(topupsState.days, true);
+    }
   }
 
   function api(path) {
@@ -903,6 +1078,15 @@
     });
   });
   syncUsageWindowButtons();
+  els.topupsMore.addEventListener("click", function () {
+    loadTopups(true);
+  });
+  els.topupsWindowSeg.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      setTopupsDays(btn.getAttribute("data-days"), true);
+    });
+  });
+  syncTopupsWindowButtons();
 
   if (bootstrap.ok) {
     showReady();

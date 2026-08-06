@@ -123,4 +123,35 @@ public class TokenWechatPayOrderDbService extends ServiceImpl<TokenWechatPayOrde
         int n = Math.max(1, limit);
         return getBaseMapper().selectOpenForSync(createdBefore, createdAfter, n);
     }
+
+    /**
+     * 用户面板充值列表（US-G4-04）：按用户 + 下单时间窗 + 键集游标降序。
+     *
+     * @param cursorCreatedAt 上一页最后一行 created_at；首页传 null
+     * @param cursorId 上一页最后一行 id；首页传 null
+     */
+    public List<TokenWechatPayOrder> listForPortal(
+            long userId,
+            LocalDateTime fromInclusive,
+            LocalDateTime toInclusive,
+            LocalDateTime cursorCreatedAt,
+            Long cursorId,
+            int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+        LambdaQueryWrapper<TokenWechatPayOrder> q = new LambdaQueryWrapper<TokenWechatPayOrder>()
+                .eq(TokenWechatPayOrder::getUserId, userId)
+                .ge(TokenWechatPayOrder::getCreatedAt, fromInclusive)
+                .le(TokenWechatPayOrder::getCreatedAt, toInclusive);
+        if (cursorCreatedAt != null && cursorId != null) {
+            q.and(w -> w.lt(TokenWechatPayOrder::getCreatedAt, cursorCreatedAt)
+                    .or(w2 -> w2.eq(TokenWechatPayOrder::getCreatedAt, cursorCreatedAt)
+                            .lt(TokenWechatPayOrder::getId, cursorId)));
+        }
+        q.orderByDesc(TokenWechatPayOrder::getCreatedAt).orderByDesc(TokenWechatPayOrder::getId);
+        q.last("LIMIT " + limit);
+        List<TokenWechatPayOrder> rows = list(q);
+        return rows == null ? List.of() : rows;
+    }
 }

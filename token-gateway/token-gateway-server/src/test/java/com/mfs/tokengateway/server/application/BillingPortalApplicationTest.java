@@ -28,8 +28,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.mfs.tokengateway.db.dbservice.TokenRequestLogDbService;
 import com.mfs.tokengateway.db.dbservice.TokenUserDbService;
+import com.mfs.tokengateway.db.dbservice.TokenWechatPayOrderDbService;
 import com.mfs.tokengateway.db.po.TokenRequestLog;
 import com.mfs.tokengateway.db.po.TokenUser;
+import com.mfs.tokengateway.db.po.TokenWechatPayOrder;
+import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse;
 import com.mfs.tokengateway.server.security.RechargeCaller;
 
@@ -40,12 +43,15 @@ class BillingPortalApplicationTest {
     private TokenUserDbService tokenUserDbService;
     @Mock
     private TokenRequestLogDbService tokenRequestLogDbService;
+    @Mock
+    private TokenWechatPayOrderDbService tokenWechatPayOrderDbService;
 
     private BillingPortalApplication app;
 
     @BeforeEach
     void setUp() {
-        app = new BillingPortalApplication(tokenUserDbService, tokenRequestLogDbService);
+        app = new BillingPortalApplication(
+                tokenUserDbService, tokenRequestLogDbService, tokenWechatPayOrderDbService);
     }
 
     @Test
@@ -185,6 +191,103 @@ class BillingPortalApplicationTest {
                 .listForPortal(eq(9L), any(), any(), cursorT.capture(), cursorId.capture(), eq(20));
         assertEquals(LocalDateTime.ofInstant(t, ZoneOffset.UTC), cursorT.getValue());
         assertEquals("r9", cursorId.getValue());
+    }
+
+    @Test
+    void toTopupItemConvertsYuanAndGatesFailReason() {
+        TokenWechatPayOrder credited = baseOrder(1L, "o1", "2026-08-06T10:00:00Z", 1200L, "credited");
+        credited.setFailReason("should-hide");
+        var creditedItem = BillingPortalApplication.toTopupItem(credited);
+        assertEquals("o1", creditedItem.getOutTradeNo());
+        assertEquals(0, creditedItem.getAmountYuan().compareTo(new BigDecimal("1.200")));
+        assertNull(creditedItem.getFailReason());
+
+        TokenWechatPayOrder failed = baseOrder(2L, "o2", "2026-08-06T09:00:00Z", 500L, "failed");
+        failed.setFailReason("pay error");
+        var failedItem = BillingPortalApplication.toTopupItem(failed);
+        assertEquals("pay error", failedItem.getFailReason());
+    }
+
+    @Test
+    void listTopupsReturnsEmptyWhenNoUser() {
+        RechargeCaller caller = new RechargeCaller(1L, "t", "u", null, Instant.now().plusSeconds(60));
+        when(tokenUserDbService.findByTenantIdAndUserCode("t", "u")).thenReturn(null);
+
+        BillingPortalTopupsResponse body = app.listTopups(caller, 20, null, null, null);
+        assertTrue(body.getItems().isEmpty());
+        assertNull(body.getNextCursor());
+        assertTrue(body.getWindow() != null);
+    }
+
+    @Test
+    void listTopupsMapsRowsAndBuildsNextCursor() {
+        TokenUser user = new TokenUser();
+        user.setId(9L);
+        when(tokenUserDbService.getById(9L)).thenReturn(user);
+
+        TokenWechatPayOrder a = baseOrder(11L, "out-b", "2026-08-06T10:00:00Z", 1000L, "credited");
+        TokenWechatPayOrder b = baseOrder(10L, "out-a", "2026-08-06T09:00:00Z", 500L, "created");
+        when(tokenWechatPayOrderDbService.listForPortal(
+                        eq(9L), any(), any(), isNull(), isNull(), eq(2)))
+                .thenReturn(List.of(a, b));
+
+        RechargeCaller caller = new RechargeCaller(1L, "t", "u", 9L, Instant.now().plusSeconds(60));
+        BillingPortalTopupsResponse body = app.listTopups(caller, 2, null, null, null);
+        assertEquals(2, body.getItems().size());
+        assertEquals(0, body.getItems().get(0).getAmountYuan().compareTo(new BigDecimal("1.000")));
+        assertTrue(body.getNextCursor() != null);
+
+        var cursor = BillingPortalApplication.decodeCursor(body.getNextCursor());
+        assertEquals("10", cursor.id());
+    }
+
+    @Test
+    void listTopupsPassesDecodedCursorToDb() {
+        TokenUser user = new TokenUser();
+        user.setId(9L);
+        when(tokenUserDbService.getById(9L)).thenReturn(user);
+        when(tokenWechatPayOrderDbService.listForPortal(
+                        anyLong(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(List.of());
+
+        Instant t = Instant.parse("2026-08-06T06:00:00Z");
+        String cursor = BillingPortalApplication.encodeCursor(t, "42");
+        RechargeCaller caller = new RechargeCaller(1L, "t", "u", 9L, Instant.now().plusSeconds(60));
+        app.listTopups(caller, 20, null, null, cursor);
+
+        ArgumentCaptor<LocalDateTime> cursorT = ArgumentCaptor.forClass(LocalDateTime.class);
+        ArgumentCaptor<Long> cursorId = ArgumentCaptor.forClass(Long.class);
+        verify(tokenWechatPayOrderDbService)
+                .listForPortal(eq(9L), any(), any(), cursorT.capture(), cursorId.capture(), eq(20));
+        assertEquals(LocalDateTime.ofInstant(t, ZoneOffset.UTC), cursorT.getValue());
+        assertEquals(Long.valueOf(42L), cursorId.getValue());
+    }
+
+    @Test
+    void listTopupsRejectsNonNumericCursorId() {
+        TokenUser user = new TokenUser();
+        user.setId(9L);
+        when(tokenUserDbService.getById(9L)).thenReturn(user);
+
+        Instant t = Instant.parse("2026-08-06T06:00:00Z");
+        String cursor = BillingPortalApplication.encodeCursor(t, "not-a-number");
+        RechargeCaller caller = new RechargeCaller(1L, "t", "u", 9L, Instant.now().plusSeconds(60));
+        ResponseStatusException ex = assertThrows(
+                ResponseStatusException.class,
+                () -> app.listTopups(caller, 20, null, null, cursor));
+        assertEquals("invalid_cursor", ex.getReason());
+    }
+
+    private static TokenWechatPayOrder baseOrder(
+            long id, String outTradeNo, String createdAt, Long amountLi, String status) {
+        TokenWechatPayOrder row = new TokenWechatPayOrder();
+        row.setId(id);
+        row.setOutTradeNo(outTradeNo);
+        row.setCreatedAt(LocalDateTime.ofInstant(Instant.parse(createdAt), ZoneOffset.UTC));
+        row.setAmountLi(amountLi);
+        row.setStatus(status);
+        row.setDescription("微信充值");
+        return row;
     }
 
     private static TokenRequestLog baseLog(String id, String createdAt, Long revenueLi) {

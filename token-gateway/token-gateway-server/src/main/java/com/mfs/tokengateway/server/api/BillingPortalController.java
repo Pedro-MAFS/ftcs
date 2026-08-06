@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mfs.tokengateway.server.api.dto.BillingPortalMeResponse;
+import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse;
 import com.mfs.tokengateway.server.application.BillingPortalApplication;
 import com.mfs.tokengateway.server.security.RechargeCaller;
@@ -40,6 +41,16 @@ public class BillingPortalController {
             @RequestParam(value = "to", required = false) String to,
             @RequestParam(value = "cursor", required = false) String cursor) {
         return billingPortalApplication.listUsage(requireCaller(caller), limit, from, to, cursor);
+    }
+
+    @GetMapping("/topups")
+    public BillingPortalTopupsResponse topups(
+            @RequestAttribute(value = RechargeCaller.REQUEST_ATTR, required = false) RechargeCaller caller,
+            @RequestParam(value = "limit", required = false) Integer limit,
+            @RequestParam(value = "from", required = false) String from,
+            @RequestParam(value = "to", required = false) String to,
+            @RequestParam(value = "cursor", required = false) String cursor) {
+        return billingPortalApplication.listTopups(requireCaller(caller), limit, from, to, cursor);
     }
 
     private static RechargeCaller requireCaller(RechargeCaller caller) {
