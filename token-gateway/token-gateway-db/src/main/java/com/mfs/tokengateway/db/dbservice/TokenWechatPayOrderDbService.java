@@ -1,6 +1,7 @@
 package com.mfs.tokengateway.db.dbservice;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 
@@ -114,5 +115,12 @@ public class TokenWechatPayOrderDbService extends ServiceImpl<TokenWechatPayOrde
                                 .set(TokenWechatPayOrder::getLastSyncTradeState, tradeState)
                                 .set(TokenWechatPayOrder::getLastSyncResult, result)
                                 .setSql("sync_count = IFNULL(sync_count, 0) + 1"));
+    }
+
+    /** 定时补单扫描开放态订单。 */
+    public List<TokenWechatPayOrder> listOpenForSync(
+            LocalDateTime createdBefore, LocalDateTime createdAfter, int limit) {
+        int n = Math.max(1, limit);
+        return getBaseMapper().selectOpenForSync(createdBefore, createdAfter, n);
     }
 }

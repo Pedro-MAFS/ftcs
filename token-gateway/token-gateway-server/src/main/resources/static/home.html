@@ -269,7 +269,7 @@
       <p class="brand">token-gateway</p>
       <h1>对接说明</h1>
       <p class="lead">
-        Token Gateway 是 DeepSeek 等上游模型的中转计费网关：先用用户中心 JWT 签发/重置网关 API Key（<code>sk-</code>），再用该 Key 调用 Chat；余额以「厘」计量。官方通道充值由客户端用 UC JWT 换取短时 <code>rt_</code> ticket，打开托管充值页后可微信 Native 预下单；支付成功由微信回调幂等入账，回调丢失时用户可点「我已支付」主动查单补账（定时补单仍规划中）。本页描述当前已落地能力与接口契约，便于客户端自行对接。
+        Token Gateway 是 DeepSeek 等上游模型的中转计费网关：先用用户中心 JWT 签发/重置网关 API Key（<code>sk-</code>），再用该 Key 调用 Chat；余额以「厘」计量。官方通道充值由客户端用 UC JWT 换取短时 <code>rt_</code> ticket，打开托管充值页后可微信 Native 预下单；支付成功由微信回调幂等入账，回调丢失时可由「我已支付」/页内轮询或后台定时查单补账。本页描述当前已落地能力与接口契约，便于客户端自行对接。
       </p>
       <nav class="toc" aria-label="目录">
         <a href="#logic">基本逻辑</a>
@@ -596,7 +596,7 @@
             <tr><th>502</th><td><code>wechat_query_failed</code></td></tr>
           </table>
           <div class="callout">
-            未支付仍返回 200，<code>status</code> 保持开放态；页以 <code>status === "credited"</code> 判成功。定时补单调度另议，本期未落地。
+            未支付仍返回 200，<code>status</code> 保持开放态；页以 <code>status === "credited"</code> 判成功。后台定时补单见 <code>token-gateway.wechat-pay.sync-job.*</code>（ShedLock <code>wechatPaySyncJob</code>；须 <code>wechat-pay.enabled=true</code>）。
           </div>
         </div>
       </article>
@@ -701,7 +701,7 @@
 
     <section id="planned">
       <h2>规划中（尚未实现）</h2>
-      <p>下列能力仍待后续故事（微信定时补单调度、今日用量汇总等）。</p>
+      <p>下列能力仍待后续故事（今日用量汇总等）。</p>
 
       <article class="api">
         <div class="api-head">

@@ -42,6 +42,13 @@ token-gateway:
   #   public-key-path: ${WECHAT_PUBLIC_KEY_PATH:important/pub_key.pem}
   #   public-key-id: ${WECHAT_PUBLIC_KEY_ID:PUB_KEY_ID_请填商户平台显示的公钥ID}
   #   notify-url: ${WECHAT_NOTIFY_URL:https://your-gateway.example/v1/billing/wechat/notify}
+  #   # US-G3-03 定时查单补单（默认开；须上方 enabled=true 才实际跑）
+  #   # sync-job:
+  #   #   enabled: true
+  #   #   fixed-delay: 60s
+  #   #   min-age: 2m
+  #   #   max-age: 48h
+  #   #   expire-unpaid: true
 
 # 可选调试
 # logging:

@@ -21,6 +21,9 @@ public class SchedulingConfig {
 
     public static final String SETTLEMENT_LOCK_NAME = "tokenGatewaySettlement";
 
+    /** US-G3-03 微信查单补单调度 */
+    public static final String WECHAT_PAY_SYNC_LOCK_NAME = "wechatPaySyncJob";
+
     @Bean
     public LockProvider lockProvider(DataSource dataSource) {
         return new JdbcTemplateLockProvider(

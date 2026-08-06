@@ -292,6 +292,8 @@ public class TokenGatewayProperties {
         private String notifyUrl = "";
         private String description = "官方通道预付费充值";
         private Duration codeUrlExpiresIn = Duration.ofSeconds(7200);
+        /** US-G3-03 定时查单补单；实际执行还须 {@link #enabled}=true */
+        private final SyncJob syncJob = new SyncJob();
 
         public boolean isEnabled() {
             return enabled;
@@ -379,6 +381,80 @@ public class TokenGatewayProperties {
 
         public void setCodeUrlExpiresIn(Duration codeUrlExpiresIn) {
             this.codeUrlExpiresIn = codeUrlExpiresIn;
+        }
+
+        public SyncJob getSyncJob() {
+            return syncJob;
+        }
+
+        /** 定时向微信查开放单并补入账/关单 */
+        public static class SyncJob {
+            private boolean enabled = true;
+            private Duration fixedDelay = Duration.ofSeconds(60);
+            private Duration initialDelay = Duration.ofSeconds(30);
+            private int batchSize = 20;
+            /** 下单后至少等待该时长再扫，给 notify / 前台轮询优先权 */
+            private Duration minAge = Duration.ofMinutes(2);
+            /** 只扫该窗口内创建的开放单 */
+            private Duration maxAge = Duration.ofHours(48);
+            /** 码过期仍 NOTPAY 时本地关单 */
+            private boolean expireUnpaid = true;
+
+            public boolean isEnabled() {
+                return enabled;
+            }
+
+            public void setEnabled(boolean enabled) {
+                this.enabled = enabled;
+            }
+
+            public Duration getFixedDelay() {
+                return fixedDelay;
+            }
+
+            public void setFixedDelay(Duration fixedDelay) {
+                this.fixedDelay = fixedDelay;
+            }
+
+            public Duration getInitialDelay() {
+                return initialDelay;
+            }
+
+            public void setInitialDelay(Duration initialDelay) {
+                this.initialDelay = initialDelay;
+            }
+
+            public int getBatchSize() {
+                return batchSize;
+            }
+
+            public void setBatchSize(int batchSize) {
+                this.batchSize = batchSize;
+            }
+
+            public Duration getMinAge() {
+                return minAge;
+            }
+
+            public void setMinAge(Duration minAge) {
+                this.minAge = minAge;
+            }
+
+            public Duration getMaxAge() {
+                return maxAge;
+            }
+
+            public void setMaxAge(Duration maxAge) {
+                this.maxAge = maxAge;
+            }
+
+            public boolean isExpireUnpaid() {
+                return expireUnpaid;
+            }
+
+            public void setExpireUnpaid(boolean expireUnpaid) {
+                this.expireUnpaid = expireUnpaid;
+            }
         }
     }
 }

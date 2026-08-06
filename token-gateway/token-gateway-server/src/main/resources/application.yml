@@ -77,6 +77,15 @@ token-gateway:
     notify-url: ${WECHAT_NOTIFY_URL:}
     description: 官方通道预付费充值
     code-url-expires-in: 7200s
+    # US-G3-03：定时查单补单（须 wechat-pay.enabled=true 才实际跑）
+    sync-job:
+      enabled: ${GATEWAY_WECHAT_SYNC_JOB_ENABLED:true}
+      fixed-delay: 60s
+      initial-delay: 30s
+      batch-size: 20
+      min-age: 2m
+      max-age: 48h
+      expire-unpaid: true
   observability:
     access-log-enabled: true
     access-log-exclude:
