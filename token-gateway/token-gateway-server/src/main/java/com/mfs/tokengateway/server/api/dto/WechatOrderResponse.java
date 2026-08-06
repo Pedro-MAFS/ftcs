@@ -4,13 +4,17 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Instant;
 
-/** {@code GET /v1/billing/wechat/orders/{outTradeNo}} 响应（US-G3-01 薄读）。 */
+/** 微信充值订单响应（GET 本地读 / POST sync 查单共用）。 */
 public class WechatOrderResponse {
 
     @JsonProperty("out_trade_no")
     private String outTradeNo;
 
     private String status;
+
+    /** 本次微信查单 trade_state；本地短路未查时可 null */
+    @JsonProperty("trade_state")
+    private String tradeState;
 
     @JsonProperty("amount_yuan")
     private String amountYuan;
@@ -39,6 +43,18 @@ public class WechatOrderResponse {
     @JsonProperty("notify_count")
     private Integer notifyCount;
 
+    @JsonProperty("last_sync_at")
+    private Instant lastSyncAt;
+
+    @JsonProperty("last_sync_trade_state")
+    private String lastSyncTradeState;
+
+    @JsonProperty("last_sync_result")
+    private String lastSyncResult;
+
+    @JsonProperty("sync_count")
+    private Integer syncCount;
+
     public String getOutTradeNo() {
         return outTradeNo;
     }
@@ -53,6 +69,14 @@ public class WechatOrderResponse {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getTradeState() {
+        return tradeState;
+    }
+
+    public void setTradeState(String tradeState) {
+        this.tradeState = tradeState;
     }
 
     public String getAmountYuan() {
@@ -125,5 +149,37 @@ public class WechatOrderResponse {
 
     public void setNotifyCount(Integer notifyCount) {
         this.notifyCount = notifyCount;
+    }
+
+    public Instant getLastSyncAt() {
+        return lastSyncAt;
+    }
+
+    public void setLastSyncAt(Instant lastSyncAt) {
+        this.lastSyncAt = lastSyncAt;
+    }
+
+    public String getLastSyncTradeState() {
+        return lastSyncTradeState;
+    }
+
+    public void setLastSyncTradeState(String lastSyncTradeState) {
+        this.lastSyncTradeState = lastSyncTradeState;
+    }
+
+    public String getLastSyncResult() {
+        return lastSyncResult;
+    }
+
+    public void setLastSyncResult(String lastSyncResult) {
+        this.lastSyncResult = lastSyncResult;
+    }
+
+    public Integer getSyncCount() {
+        return syncCount;
+    }
+
+    public void setSyncCount(Integer syncCount) {
+        this.syncCount = syncCount;
     }
 }

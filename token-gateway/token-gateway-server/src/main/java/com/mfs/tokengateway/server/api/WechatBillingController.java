@@ -14,19 +14,24 @@ import com.mfs.tokengateway.server.api.dto.WechatOrderResponse;
 import com.mfs.tokengateway.server.api.dto.WechatPrepayRequest;
 import com.mfs.tokengateway.server.api.dto.WechatPrepayResponse;
 import com.mfs.tokengateway.server.application.WechatPrepayApplication;
+import com.mfs.tokengateway.server.application.WechatSyncApplication;
 import com.mfs.tokengateway.server.security.RechargeCaller;
 
 /**
- * 微信充值下单 / 订单查询（US-G3-01）；鉴权由 {@code RechargeTicketAuthFilter} 完成。
+ * 微信充值下单 / 订单查询 / 主动查单（US-G3-01 / G3-03）；鉴权由 {@code RechargeTicketAuthFilter} 完成。
  */
 @RestController
 @RequestMapping("/v1/billing/wechat")
 public class WechatBillingController {
 
     private final WechatPrepayApplication wechatPrepayApplication;
+    private final WechatSyncApplication wechatSyncApplication;
 
-    public WechatBillingController(WechatPrepayApplication wechatPrepayApplication) {
+    public WechatBillingController(
+            WechatPrepayApplication wechatPrepayApplication,
+            WechatSyncApplication wechatSyncApplication) {
         this.wechatPrepayApplication = wechatPrepayApplication;
+        this.wechatSyncApplication = wechatSyncApplication;
     }
 
     @PostMapping("/prepay")
@@ -45,6 +50,13 @@ public class WechatBillingController {
             @RequestAttribute(value = RechargeCaller.REQUEST_ATTR, required = false) RechargeCaller caller,
             @PathVariable("outTradeNo") String outTradeNo) {
         return wechatPrepayApplication.getOrder(requireCaller(caller), outTradeNo);
+    }
+
+    @PostMapping("/orders/{outTradeNo}/sync")
+    public WechatOrderResponse sync(
+            @RequestAttribute(value = RechargeCaller.REQUEST_ATTR, required = false) RechargeCaller caller,
+            @PathVariable("outTradeNo") String outTradeNo) {
+        return wechatSyncApplication.sync(requireCaller(caller), outTradeNo);
     }
 
     private static RechargeCaller requireCaller(RechargeCaller caller) {

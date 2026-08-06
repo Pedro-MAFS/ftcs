@@ -45,7 +45,7 @@ class WechatNotifyControllerTest {
         when(wechatPayClient.isAvailable()).thenReturn(true);
         Transaction tx = tx("tg1", "wx1", 500, TradeStateEnum.SUCCESS);
         when(wechatPayClient.parsePaymentNotification(any(RequestParam.class))).thenReturn(tx);
-        when(creditApplication.applyTradeState(eq("tg1"), eq(TradeStateEnum.SUCCESS), any()))
+        when(creditApplication.applyTradeState(eq("tg1"), eq(TradeStateEnum.SUCCESS), any(), eq("notify")))
                 .thenReturn(WechatCreditResult.CREDITED);
 
         ResponseEntity<Map<String, String>> res = notifyOk("{}");
@@ -58,12 +58,12 @@ class WechatNotifyControllerTest {
         when(wechatPayClient.isAvailable()).thenReturn(true);
         Transaction tx = tx("tg1", null, null, TradeStateEnum.CLOSED);
         when(wechatPayClient.parsePaymentNotification(any(RequestParam.class))).thenReturn(tx);
-        when(creditApplication.applyTradeState(eq("tg1"), eq(TradeStateEnum.CLOSED), isNull()))
+        when(creditApplication.applyTradeState(eq("tg1"), eq(TradeStateEnum.CLOSED), isNull(), eq("notify")))
                 .thenReturn(WechatCreditResult.CLOSED);
 
         ResponseEntity<Map<String, String>> res = notifyOk("{}");
         assertEquals(200, res.getStatusCode().value());
-        verify(creditApplication).applyTradeState(eq("tg1"), eq(TradeStateEnum.CLOSED), isNull());
+        verify(creditApplication).applyTradeState(eq("tg1"), eq(TradeStateEnum.CLOSED), isNull(), eq("notify"));
     }
 
     @Test
@@ -71,7 +71,7 @@ class WechatNotifyControllerTest {
         when(wechatPayClient.isAvailable()).thenReturn(true);
         Transaction tx = tx("tg1", null, null, TradeStateEnum.NOTPAY);
         when(wechatPayClient.parsePaymentNotification(any(RequestParam.class))).thenReturn(tx);
-        when(creditApplication.applyTradeState(eq("tg1"), eq(TradeStateEnum.NOTPAY), isNull()))
+        when(creditApplication.applyTradeState(eq("tg1"), eq(TradeStateEnum.NOTPAY), isNull(), eq("notify")))
                 .thenReturn(WechatCreditResult.IGNORED_NON_TERMINAL);
 
         ResponseEntity<Map<String, String>> res = notifyOk("{}");
@@ -96,7 +96,7 @@ class WechatNotifyControllerTest {
         when(wechatPayClient.isAvailable()).thenReturn(true);
         when(wechatPayClient.parsePaymentNotification(any(RequestParam.class)))
                 .thenReturn(tx("tg1", "wx1", 500, TradeStateEnum.SUCCESS));
-        when(creditApplication.applyTradeState(eq("tg1"), eq(TradeStateEnum.SUCCESS), any()))
+        when(creditApplication.applyTradeState(eq("tg1"), eq(TradeStateEnum.SUCCESS), any(), eq("notify")))
                 .thenReturn(WechatCreditResult.REJECTED_AMOUNT);
 
         ResponseEntity<Map<String, String>> res = notifyOk("{}");

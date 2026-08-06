@@ -148,6 +148,23 @@ class WechatCreditApplicationTest {
         verify(orderDbService).touchLastNotify(eq("tg1"), eq("PAYERROR"), eq("FAILED_MARKED"), any());
     }
 
+    @Test
+    void applyTradeStateSyncWritesSyncAudit() {
+        when(orderDbService.touchLastSync(eq("tg1"), eq("NOTPAY"), eq("IGNORED_NON_TERMINAL"), any()))
+                .thenReturn(1);
+
+        assertEquals(
+                WechatCreditResult.IGNORED_NON_TERMINAL,
+                application.applyTradeState(
+                        "tg1",
+                        TradeStateEnum.NOTPAY,
+                        null,
+                        WechatCreditApplication.SOURCE_SYNC));
+        verify(orderDbService)
+                .touchLastSync(eq("tg1"), eq("NOTPAY"), eq("IGNORED_NON_TERMINAL"), any());
+        verify(orderDbService, never()).touchLastNotify(any(), any(), any(), any());
+    }
+
     private static TokenWechatPayOrder baseOrder(String status) {
         TokenWechatPayOrder order = new TokenWechatPayOrder();
         order.setId(1L);

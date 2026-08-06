@@ -99,4 +99,20 @@ public class TokenWechatPayOrderDbService extends ServiceImpl<TokenWechatPayOrde
                                 .set(TokenWechatPayOrder::getLastNotifyResult, result)
                                 .setSql("notify_count = IFNULL(notify_count, 0) + 1"));
     }
+
+    /**
+     * 记录主动查单摘要（不依赖订单开放态；订单不存在则 0 行）。
+     */
+    public int touchLastSync(
+            String outTradeNo, String tradeState, String result, LocalDateTime syncedAt) {
+        return getBaseMapper()
+                .update(
+                        null,
+                        new LambdaUpdateWrapper<TokenWechatPayOrder>()
+                                .eq(TokenWechatPayOrder::getOutTradeNo, outTradeNo)
+                                .set(TokenWechatPayOrder::getLastSyncAt, syncedAt)
+                                .set(TokenWechatPayOrder::getLastSyncTradeState, tradeState)
+                                .set(TokenWechatPayOrder::getLastSyncResult, result)
+                                .setSql("sync_count = IFNULL(sync_count, 0) + 1"));
+    }
 }

@@ -21,7 +21,7 @@ import com.mfs.tokengateway.server.wechat.WechatPaidInfo;
 import com.wechat.pay.java.service.payments.model.Transaction.TradeStateEnum;
 
 /**
- * 微信支付结果驱动的订单处理（US-G3-02）：入账与非成功终态落库；供 notify 与日后 G3-03 共用。
+ * 微信支付结果驱动的订单处理（US-G3-02 / G3-03）：入账与非成功终态落库；供 notify 与 sync 共用。
  */
 @Service
 public class WechatCreditApplication {
@@ -32,6 +32,10 @@ public class WechatCreditApplication {
     public static final String STATUS_CLOSED = "closed";
     public static final String STATUS_FAILED = "failed";
     public static final String OPERATOR_WECHAT = "wechat_pay";
+
+    public static final String SOURCE_NOTIFY = "notify";
+    public static final String SOURCE_SYNC = "sync";
+    public static final String SOURCE_SCHEDULER = "scheduler";
 
     private static final int NOTE_MAX = 512;
     private static final int FAIL_REASON_MAX = 256;
@@ -54,61 +58,93 @@ public class WechatCreditApplication {
 
     /**
      * 按微信 {@code trade_state} 推进本地订单：SUCCESS 入账；CLOSED/REVOKED/PAYERROR 等到终态；
-     * NOTPAY/USERPAYING 等中间态不改库。
+     * NOTPAY/USERPAYING 等中间态不改库。审计字段按 {@code source} 写 notify 或 sync。
      */
     @Transactional
     public WechatCreditResult applyTradeState(
             String outTradeNo,
             TradeStateEnum tradeState,
-            WechatPaidInfo paidInfoOrNull) {
+            WechatPaidInfo paidInfoOrNull,
+            String source) {
         if (outTradeNo == null || outTradeNo.isBlank() || tradeState == null) {
             return WechatCreditResult.INVALID_PAYLOAD;
         }
+        String src = normalizeSource(source);
         return switch (tradeState) {
             case SUCCESS -> {
                 if (paidInfoOrNull == null) {
                     yield recordAndReturn(
-                            outTradeNo.trim(), tradeState, WechatCreditResult.INVALID_PAYLOAD);
+                            outTradeNo.trim(), tradeState, WechatCreditResult.INVALID_PAYLOAD, src);
                 }
                 yield recordAndReturn(
-                        outTradeNo.trim(), tradeState, creditIfPaid(paidInfoOrNull));
+                        outTradeNo.trim(), tradeState, creditIfPaid(paidInfoOrNull), src);
             }
             case CLOSED, REVOKED -> recordAndReturn(
-                    outTradeNo.trim(), tradeState, closeIfOpen(outTradeNo.trim(), tradeState.name()));
+                    outTradeNo.trim(),
+                    tradeState,
+                    closeIfOpen(outTradeNo.trim(), tradeState.name()),
+                    src);
             case PAYERROR -> recordAndReturn(
-                    outTradeNo.trim(), tradeState, failIfOpen(outTradeNo.trim(), tradeState.name()));
+                    outTradeNo.trim(),
+                    tradeState,
+                    failIfOpen(outTradeNo.trim(), tradeState.name()),
+                    src);
             case REFUND -> recordAndReturn(
-                    outTradeNo.trim(), tradeState, onRefundNotify(outTradeNo.trim()));
+                    outTradeNo.trim(), tradeState, onRefundNotify(outTradeNo.trim()), src);
             case NOTPAY, USERPAYING, ACCEPT -> {
                 log.info(
-                        "wechat notify non-terminal outTradeNo={} state={}",
+                        "wechat {} non-terminal outTradeNo={} state={}",
+                        src,
                         outTradeNo,
                         tradeState);
                 yield recordAndReturn(
-                        outTradeNo.trim(), tradeState, WechatCreditResult.IGNORED_NON_TERMINAL);
+                        outTradeNo.trim(), tradeState, WechatCreditResult.IGNORED_NON_TERMINAL, src);
             }
         };
     }
 
+    /** 兼容旧调用：默认按 notify 写审计字段。 */
+    @Transactional
+    public WechatCreditResult applyTradeState(
+            String outTradeNo, TradeStateEnum tradeState, WechatPaidInfo paidInfoOrNull) {
+        return applyTradeState(outTradeNo, tradeState, paidInfoOrNull, SOURCE_NOTIFY);
+    }
+
     private WechatCreditResult recordAndReturn(
-            String outTradeNo, TradeStateEnum tradeState, WechatCreditResult result) {
+            String outTradeNo, TradeStateEnum tradeState, WechatCreditResult result, String source) {
         LocalDateTime now = LocalDateTime.ofInstant(Instant.now(), ZoneOffset.UTC);
-        int n =
-                orderDbService.touchLastNotify(
-                        outTradeNo, tradeState.name(), result.name(), now);
+        int n;
+        if (SOURCE_NOTIFY.equals(source)) {
+            n = orderDbService.touchLastNotify(outTradeNo, tradeState.name(), result.name(), now);
+        } else {
+            n = orderDbService.touchLastSync(outTradeNo, tradeState.name(), result.name(), now);
+        }
         if (n == 0) {
             log.warn(
-                    "wechat notify audit miss outTradeNo={} tradeState={} result={}",
+                    "wechat {} audit miss outTradeNo={} tradeState={} result={}",
+                    source,
                     outTradeNo,
                     tradeState,
                     result);
         }
         log.info(
-                "wechat notify handled outTradeNo={} tradeState={} result={}",
+                "wechat {} handled outTradeNo={} tradeState={} result={}",
+                source,
                 outTradeNo,
                 tradeState,
                 result);
         return result;
+    }
+
+    private static String normalizeSource(String source) {
+        if (source == null || source.isBlank()) {
+            return SOURCE_NOTIFY;
+        }
+        String s = source.trim();
+        if (SOURCE_SYNC.equals(s) || SOURCE_SCHEDULER.equals(s) || SOURCE_NOTIFY.equals(s)) {
+            return s;
+        }
+        return SOURCE_NOTIFY;
     }
 
     @Transactional

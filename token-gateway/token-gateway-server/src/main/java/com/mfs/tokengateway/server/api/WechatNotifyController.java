@@ -109,7 +109,10 @@ public class WechatNotifyController {
         try {
             result =
                     creditApplication.applyTradeState(
-                            tx.getOutTradeNo().trim(), tx.getTradeState(), paidInfo);
+                            tx.getOutTradeNo().trim(),
+                            tx.getTradeState(),
+                            paidInfo,
+                            WechatCreditApplication.SOURCE_NOTIFY);
         } catch (RuntimeException e) {
             log.error("wechat notify apply error outTradeNo={}", tx.getOutTradeNo(), e);
             return fail(500, "credit_failed");

@@ -37,6 +37,14 @@ public class TokenWechatPayOrder {
     private String lastNotifyResult;
     /** 验签成功的回调次数 */
     private Integer notifyCount;
+    /** 最近一次主动查单时间 */
+    private LocalDateTime lastSyncAt;
+    /** 最近一次查单的 trade_state */
+    private String lastSyncTradeState;
+    /** 最近一次查单本地处理结果 */
+    private String lastSyncResult;
+    /** 主动查单次数 */
+    private Integer syncCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

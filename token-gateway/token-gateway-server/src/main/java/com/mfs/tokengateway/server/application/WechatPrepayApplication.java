@@ -232,6 +232,7 @@ public class WechatPrepayApplication {
         WechatOrderResponse body = new WechatOrderResponse();
         body.setOutTradeNo(order.getOutTradeNo());
         body.setStatus(order.getStatus());
+        body.setTradeState(null);
         body.setAmountYuan(BigDecimalYuan.fromFen(order.getAmountFen()));
         body.setAmountLi(order.getAmountLi());
         body.setCodeUrl(order.getCodeUrl());
@@ -244,6 +245,12 @@ public class WechatPrepayApplication {
         body.setLastNotifyTradeState(order.getLastNotifyTradeState());
         body.setLastNotifyResult(order.getLastNotifyResult());
         body.setNotifyCount(order.getNotifyCount() == null ? 0 : order.getNotifyCount());
+        if (order.getLastSyncAt() != null) {
+            body.setLastSyncAt(order.getLastSyncAt().toInstant(ZoneOffset.UTC));
+        }
+        body.setLastSyncTradeState(order.getLastSyncTradeState());
+        body.setLastSyncResult(order.getLastSyncResult());
+        body.setSyncCount(order.getSyncCount() == null ? 0 : order.getSyncCount());
         return body;
     }
 

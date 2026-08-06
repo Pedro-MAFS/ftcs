@@ -21,11 +21,12 @@ import com.wechat.pay.java.service.payments.nativepay.NativePayService;
 import com.wechat.pay.java.service.payments.nativepay.model.Amount;
 import com.wechat.pay.java.service.payments.nativepay.model.PrepayRequest;
 import com.wechat.pay.java.service.payments.nativepay.model.PrepayResponse;
+import com.wechat.pay.java.service.payments.nativepay.model.QueryOrderByOutTradeNoRequest;
 
 import jakarta.annotation.PostConstruct;
 
 /**
- * 官方 SDK 薄封装：Native 预下单（G3-01）+ 支付通知验签解密（G3-02）。
+ * 官方 SDK 薄封装：Native 预下单（G3-01）+ 支付通知验签解密（G3-02）+ 查单（G3-03）。
  */
 @Component
 public class WechatPayClient {
@@ -127,6 +128,48 @@ public class WechatPayClient {
         } catch (HttpException | MalformedMessageException | ValidationException e) {
             log.warn("wechat native prepay transport error outTradeNo={}", outTradeNo, e);
             throw new WechatPrepayException(e.getClass().getSimpleName(), e);
+        }
+    }
+
+    /**
+     * 按商户订单号向微信查单。
+     *
+     * @throws WechatQueryException 微信侧失败或传输异常
+     */
+    public Transaction queryByOutTradeNo(String outTradeNo) {
+        TokenGatewayProperties.WechatPay cfg = properties.getWechatPay();
+        NativePayService service = nativePayService;
+        if (!cfg.isEnabled() || service == null) {
+            throw new IllegalStateException("wechat pay not available");
+        }
+        if (outTradeNo == null || outTradeNo.isBlank()) {
+            throw new WechatQueryException("invalid_out_trade_no");
+        }
+
+        QueryOrderByOutTradeNoRequest request = new QueryOrderByOutTradeNoRequest();
+        request.setMchid(cfg.getMchId().trim());
+        request.setOutTradeNo(outTradeNo.trim());
+
+        try {
+            Transaction tx = service.queryOrderByOutTradeNo(request);
+            if (tx == null || tx.getTradeState() == null) {
+                log.warn("wechat query empty trade_state outTradeNo={}", outTradeNo);
+                throw new WechatQueryException("empty_trade_state");
+            }
+            return tx;
+        } catch (WechatQueryException e) {
+            throw e;
+        } catch (ServiceException e) {
+            log.warn(
+                    "wechat query service error outTradeNo={} http={} code={} msg={}",
+                    outTradeNo,
+                    e.getHttpStatusCode(),
+                    e.getErrorCode(),
+                    e.getErrorMessage());
+            throw new WechatQueryException(e.getErrorCode(), e);
+        } catch (HttpException | MalformedMessageException | ValidationException e) {
+            log.warn("wechat query transport error outTradeNo={}", outTradeNo, e);
+            throw new WechatQueryException(e.getClass().getSimpleName(), e);
         }
     }
 

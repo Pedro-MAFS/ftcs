@@ -337,7 +337,7 @@
   </div>
 
   <script type="application/json" id="tg-bootstrap">__TG_RECHARGE_BOOTSTRAP__</script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <script src="/vendor/qrcode.min.js"></script>
   <script>
 (function () {
   var bootstrap = { ok: false, expires_in: 0 };
@@ -582,7 +582,13 @@
       }
       if (!silent) {
         els.payingHint.hidden = false;
-        els.payingHint.textContent = "未检测到支付，请稍后再试";
+        if (status === "closed" || status === "failed") {
+          els.payingHint.textContent = status === "closed"
+            ? "该支付单已关闭，请重新下单"
+            : "支付未成功，请重新下单或联系支持";
+        } else {
+          els.payingHint.textContent = "未检测到支付，请稍后再试";
+        }
       }
     }).catch(function () {
       if (!silent) {

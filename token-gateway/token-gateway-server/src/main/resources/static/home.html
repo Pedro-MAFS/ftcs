@@ -269,7 +269,7 @@
       <p class="brand">token-gateway</p>
       <h1>对接说明</h1>
       <p class="lead">
-        Token Gateway 是 DeepSeek 等上游模型的中转计费网关：先用用户中心 JWT 签发/重置网关 API Key（<code>sk-</code>），再用该 Key 调用 Chat；余额以「厘」计量。官方通道充值由客户端用 UC JWT 换取短时 <code>rt_</code> ticket，打开托管充值页后可微信 Native 预下单；支付成功由微信回调幂等入账（查单补单仍规划中）。本页描述当前已落地能力与接口契约，便于客户端自行对接。
+        Token Gateway 是 DeepSeek 等上游模型的中转计费网关：先用用户中心 JWT 签发/重置网关 API Key（<code>sk-</code>），再用该 Key 调用 Chat；余额以「厘」计量。官方通道充值由客户端用 UC JWT 换取短时 <code>rt_</code> ticket，打开托管充值页后可微信 Native 预下单；支付成功由微信回调幂等入账，回调丢失时用户可点「我已支付」主动查单补账（定时补单仍规划中）。本页描述当前已落地能力与接口契约，便于客户端自行对接。
       </p>
       <nav class="toc" aria-label="目录">
         <a href="#logic">基本逻辑</a>
@@ -563,7 +563,41 @@
           <span class="badge live">已落地</span>
         </div>
         <div class="api-body">
-          <p>按商户订单号读本地订单（须 ticket 且身份匹配，否则 404）。入账后可见 <code>status=credited</code>；主动查微信补单见后续故事。</p>
+          <p>按商户订单号读本地订单（须 ticket 且身份匹配，否则 404）。入账后可见 <code>status=credited</code>。主动查微信见下方 sync。</p>
+        </div>
+      </article>
+
+      <article class="api" id="api-wechat-sync">
+        <div class="api-head">
+          <span class="method post">POST</span>
+          <span class="path">/v1/billing/wechat/orders/{outTradeNo}/sync</span>
+          <span class="badge live">已落地</span>
+        </div>
+        <div class="api-body">
+          <p>用户「我已支付」主动查单：向微信 <code>queryOrderByOutTradeNo</code>，再走与 notify 相同的 <code>applyTradeState</code>（写 <code>last_sync_*</code>）。本地已 <code>credited</code>/<code>closed</code> 可短路不查微信。鉴权同 prepay（ticket）。</p>
+          <p class="label">成功 · 200（示例）</p>
+          <pre>{
+  "out_trade_no": "tg…",
+  "status": "credited",
+  "trade_state": "SUCCESS",
+  "amount_yuan": "50.00",
+  "amount_li": 50000,
+  "credited_li": 50000,
+  "balance_li": 125000,
+  "last_sync_trade_state": "SUCCESS",
+  "last_sync_result": "CREDITED"
+}</pre>
+          <p class="label">错误</p>
+          <table>
+            <tr><th>401</th><td><code>invalid_recharge_ticket</code></td></tr>
+            <tr><th>404</th><td><code>order_not_found</code>（无单或不属于当前身份）</td></tr>
+            <tr><th>429</th><td><code>sync_rate_limited</code></td></tr>
+            <tr><th>503</th><td><code>wechat_pay_unavailable</code></td></tr>
+            <tr><th>502</th><td><code>wechat_query_failed</code></td></tr>
+          </table>
+          <div class="callout">
+            未支付仍返回 200，<code>status</code> 保持开放态；页以 <code>status === "credited"</code> 判成功。定时补单调度另议，本期未落地。
+          </div>
         </div>
       </article>
 
@@ -667,7 +701,7 @@
 
     <section id="planned">
       <h2>规划中（尚未实现）</h2>
-      <p>下列能力仍待后续故事（微信支付回调入账、查单补单、「我已支付」、今日用量汇总等）。</p>
+      <p>下列能力仍待后续故事（微信定时补单调度、今日用量汇总等）。</p>
 
       <article class="api">
         <div class="api-head">
