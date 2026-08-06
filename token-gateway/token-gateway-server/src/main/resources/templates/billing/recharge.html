@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>官方通道预付费充值 · Token 网关</title>
+  <title>官方服务预付费充值 · Token 网关</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Funnel+Sans:wght@600;700&display=swap" rel="stylesheet" />
@@ -73,6 +73,14 @@
       margin: 0;
       color: var(--text-secondary);
       font-size: 14px;
+      line-height: 1.5;
+    }
+    .tagline {
+      margin: 0;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
       line-height: 1.5;
     }
     .ttl-hint {
@@ -265,8 +273,9 @@
   <div class="wrap">
     <header>
       <p class="brand">Token 网关</p>
-      <h1>官方通道预付费充值</h1>
-      <p class="lead" id="header-lead">支付成功后余额用于调用官方通道模型，按实际用量扣费。</p>
+      <h1>官方服务预付费充值</h1>
+      <p class="tagline">预先充值，按量计费，余额包退</p>
+      <p class="lead" id="header-lead">支付成功后余额用于调用官方服务模型，按实际用量扣费。</p>
       <p class="ttl-hint" id="ttl-hint" hidden></p>
     </header>
 
@@ -424,7 +433,7 @@
     } else if (view === "paying") {
       els.lead.textContent = "";
     } else {
-      els.lead.textContent = "支付成功后余额用于调用官方通道模型，按实际用量扣费。";
+      els.lead.textContent = "支付成功后余额用于调用官方服务模型，按实际用量扣费。";
     }
     applyTtlHint(view);
   }

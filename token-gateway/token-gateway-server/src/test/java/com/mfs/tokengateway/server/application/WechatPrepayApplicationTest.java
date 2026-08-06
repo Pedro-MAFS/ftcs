@@ -52,7 +52,7 @@ class WechatPrepayApplicationTest {
         properties = new TokenGatewayProperties();
         properties.getWechatPay().setEnabled(true);
         properties.getWechatPay().setNotifyUrl("https://gw.example/v1/billing/wechat/notify");
-        properties.getWechatPay().setDescription("官方通道预付费充值");
+        properties.getWechatPay().setDescription("官方服务预付费充值");
         properties.getWechatPay().setCodeUrlExpiresIn(Duration.ofSeconds(7200));
 
         application =

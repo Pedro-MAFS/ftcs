@@ -74,7 +74,7 @@ public class WechatPrepayApplication {
         TokenGatewayProperties.WechatPay cfg = properties.getWechatPay();
         String description =
                 cfg.getDescription() == null || cfg.getDescription().isBlank()
-                        ? "官方通道预付费充值"
+                        ? "官方服务预付费充值"
                         : cfg.getDescription().trim();
         String notifyUrl = cfg.getNotifyUrl().trim();
 

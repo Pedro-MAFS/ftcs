@@ -1,4 +1,4 @@
-package com.mfs.tokengateway.server.billing;
+package com.mfs.tokengateway.server.api;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,8 +28,8 @@ import jakarta.servlet.http.HttpServletResponse;
 /**
  * 网关托管充值页入口（US-G3-06）：验票、Set-Cookie、去掉 query、注入页内 bootstrap。
  * <p>
- * 不做独立 {@code /session} JSON；无有效凭证时页内直接展示 NeedClient。
- * 有效凭证时 bootstrap 可带 {@code balance_li}（来自 token_users）。
+ * 属对外 API 面（HTML UI），与 JSON 接口同属 {@code api} 包；不做独立 {@code /session} JSON。
+ * 无有效凭证时页内直接展示 NeedClient；有效凭证时 bootstrap 可带 {@code balance_li}。
  */
 @Controller
 public class BillingRechargePageController {

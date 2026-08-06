@@ -290,7 +290,7 @@ public class TokenGatewayProperties {
         /** 微信支付公钥 ID，形如 {@code PUB_KEY_ID_...} */
         private String publicKeyId = "";
         private String notifyUrl = "";
-        private String description = "官方通道预付费充值";
+        private String description = "官方服务预付费充值";
         private Duration codeUrlExpiresIn = Duration.ofSeconds(7200);
         /** US-G3-03 定时查单补单；实际执行还须 {@link #enabled}=true */
         private final SyncJob syncJob = new SyncJob();

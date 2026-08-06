@@ -75,7 +75,7 @@ token-gateway:
     public-key-path: ${WECHAT_PUBLIC_KEY_PATH:}
     public-key-id: ${WECHAT_PUBLIC_KEY_ID:}
     notify-url: ${WECHAT_NOTIFY_URL:}
-    description: 官方通道预付费充值
+    description: 官方服务预付费充值
     code-url-expires-in: 7200s
     # US-G3-03：定时查单补单（须 wechat-pay.enabled=true 才实际跑）
     sync-job:
