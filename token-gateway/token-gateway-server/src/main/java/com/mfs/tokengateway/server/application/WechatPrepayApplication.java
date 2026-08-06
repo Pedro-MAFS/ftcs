@@ -235,8 +235,15 @@ public class WechatPrepayApplication {
         body.setAmountYuan(BigDecimalYuan.fromFen(order.getAmountFen()));
         body.setAmountLi(order.getAmountLi());
         body.setCodeUrl(order.getCodeUrl());
-        body.setCreditedLi(null);
+        body.setCreditedLi(
+                "credited".equalsIgnoreCase(order.getStatus()) ? order.getAmountLi() : null);
         body.setBalanceLi(null);
+        if (order.getLastNotifyAt() != null) {
+            body.setLastNotifyAt(order.getLastNotifyAt().toInstant(ZoneOffset.UTC));
+        }
+        body.setLastNotifyTradeState(order.getLastNotifyTradeState());
+        body.setLastNotifyResult(order.getLastNotifyResult());
+        body.setNotifyCount(order.getNotifyCount() == null ? 0 : order.getNotifyCount());
         return body;
     }
 

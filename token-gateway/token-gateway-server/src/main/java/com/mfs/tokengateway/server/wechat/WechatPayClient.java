@@ -9,12 +9,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.mfs.tokengateway.server.config.TokenGatewayProperties;
-import com.wechat.pay.java.core.Config;
 import com.wechat.pay.java.core.RSAPublicKeyConfig;
 import com.wechat.pay.java.core.exception.HttpException;
 import com.wechat.pay.java.core.exception.MalformedMessageException;
 import com.wechat.pay.java.core.exception.ServiceException;
 import com.wechat.pay.java.core.exception.ValidationException;
+import com.wechat.pay.java.core.notification.NotificationParser;
+import com.wechat.pay.java.core.notification.RequestParam;
+import com.wechat.pay.java.service.payments.model.Transaction;
 import com.wechat.pay.java.service.payments.nativepay.NativePayService;
 import com.wechat.pay.java.service.payments.nativepay.model.Amount;
 import com.wechat.pay.java.service.payments.nativepay.model.PrepayRequest;
@@ -23,10 +25,7 @@ import com.wechat.pay.java.service.payments.nativepay.model.PrepayResponse;
 import jakarta.annotation.PostConstruct;
 
 /**
- * 官方 SDK 薄封装：微信 Native 预下单（US-G3-01）。
- * <p>
- * 新商户无平台证书时使用 {@link RSAPublicKeyConfig}（微信支付公钥），
- * 不再自动拉取 {@code /v3/certificates}。
+ * 官方 SDK 薄封装：Native 预下单（G3-01）+ 支付通知验签解密（G3-02）。
  */
 @Component
 public class WechatPayClient {
@@ -36,6 +35,7 @@ public class WechatPayClient {
     private final TokenGatewayProperties properties;
 
     private volatile NativePayService nativePayService;
+    private volatile NotificationParser notificationParser;
 
     public WechatPayClient(TokenGatewayProperties properties) {
         this.properties = properties;
@@ -59,7 +59,7 @@ public class WechatPayClient {
             throw new IllegalStateException(
                     "wechat pay public key file not found: " + publicKeyPath.toAbsolutePath());
         }
-        Config config =
+        RSAPublicKeyConfig config =
                 new RSAPublicKeyConfig.Builder()
                         .merchantId(cfg.getMchId().trim())
                         .privateKeyFromPath(privateKeyPath.toAbsolutePath().toString())
@@ -69,6 +69,7 @@ public class WechatPayClient {
                         .apiV3Key(cfg.getApiV3Key().trim())
                         .build();
         this.nativePayService = new NativePayService.Builder().config(config).build();
+        this.notificationParser = new NotificationParser(config);
         log.info(
                 "wechat pay client ready mode=publicKey mchId={} appId={} publicKeyId={}",
                 cfg.getMchId().trim(),
@@ -78,7 +79,10 @@ public class WechatPayClient {
 
     public boolean isAvailable() {
         TokenGatewayProperties.WechatPay cfg = properties.getWechatPay();
-        return cfg.isEnabled() && nativePayService != null && isConfigured(cfg);
+        return cfg.isEnabled()
+                && nativePayService != null
+                && notificationParser != null
+                && isConfigured(cfg);
     }
 
     /**
@@ -123,6 +127,27 @@ public class WechatPayClient {
         } catch (HttpException | MalformedMessageException | ValidationException e) {
             log.warn("wechat native prepay transport error outTradeNo={}", outTradeNo, e);
             throw new WechatPrepayException(e.getClass().getSimpleName(), e);
+        }
+    }
+
+    /**
+     * 验签并解密支付结果通知。
+     *
+     * @throws WechatNotifyException 验签/解密失败
+     */
+    public Transaction parsePaymentNotification(RequestParam requestParam) {
+        NotificationParser parser = notificationParser;
+        if (parser == null) {
+            throw new WechatNotifyException("wechat_pay_unavailable");
+        }
+        try {
+            return parser.parse(requestParam, Transaction.class);
+        } catch (ValidationException e) {
+            throw new WechatNotifyException("signature_invalid", e);
+        } catch (MalformedMessageException e) {
+            throw new WechatNotifyException("malformed_notification", e);
+        } catch (RuntimeException e) {
+            throw new WechatNotifyException("notify_parse_failed", e);
         }
     }
 

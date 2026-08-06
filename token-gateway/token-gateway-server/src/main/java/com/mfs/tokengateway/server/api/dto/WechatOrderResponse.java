@@ -2,6 +2,8 @@ package com.mfs.tokengateway.server.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.time.Instant;
+
 /** {@code GET /v1/billing/wechat/orders/{outTradeNo}} 响应（US-G3-01 薄读）。 */
 public class WechatOrderResponse {
 
@@ -24,6 +26,18 @@ public class WechatOrderResponse {
 
     @JsonProperty("balance_li")
     private Long balanceLi;
+
+    @JsonProperty("last_notify_at")
+    private Instant lastNotifyAt;
+
+    @JsonProperty("last_notify_trade_state")
+    private String lastNotifyTradeState;
+
+    @JsonProperty("last_notify_result")
+    private String lastNotifyResult;
+
+    @JsonProperty("notify_count")
+    private Integer notifyCount;
 
     public String getOutTradeNo() {
         return outTradeNo;
@@ -79,5 +93,37 @@ public class WechatOrderResponse {
 
     public void setBalanceLi(Long balanceLi) {
         this.balanceLi = balanceLi;
+    }
+
+    public Instant getLastNotifyAt() {
+        return lastNotifyAt;
+    }
+
+    public void setLastNotifyAt(Instant lastNotifyAt) {
+        this.lastNotifyAt = lastNotifyAt;
+    }
+
+    public String getLastNotifyTradeState() {
+        return lastNotifyTradeState;
+    }
+
+    public void setLastNotifyTradeState(String lastNotifyTradeState) {
+        this.lastNotifyTradeState = lastNotifyTradeState;
+    }
+
+    public String getLastNotifyResult() {
+        return lastNotifyResult;
+    }
+
+    public void setLastNotifyResult(String lastNotifyResult) {
+        this.lastNotifyResult = lastNotifyResult;
+    }
+
+    public Integer getNotifyCount() {
+        return notifyCount;
+    }
+
+    public void setNotifyCount(Integer notifyCount) {
+        this.notifyCount = notifyCount;
     }
 }

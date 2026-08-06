@@ -29,6 +29,14 @@ public class TokenWechatPayOrder {
     private String failReason;
     private LocalDateTime paidAt;
     private LocalDateTime creditedAt;
+    /** 最近一次验签成功的微信回调时间 */
+    private LocalDateTime lastNotifyAt;
+    /** 最近一次回调的 trade_state */
+    private String lastNotifyTradeState;
+    /** 最近一次本地处理结果（如 CREDITED / IGNORED_NON_TERMINAL） */
+    private String lastNotifyResult;
+    /** 验签成功的回调次数 */
+    private Integer notifyCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
