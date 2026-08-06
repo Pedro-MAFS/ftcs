@@ -289,10 +289,6 @@ class BillingPortalApplicationTest {
 
     @Test
     void listTopupsRejectsNonNumericCursorId() {
-        TokenUser user = new TokenUser();
-        user.setId(9L);
-        when(tokenUserDbService.getById(9L)).thenReturn(user);
-
         Instant t = Instant.parse("2026-08-06T06:00:00Z");
         String cursor = BillingPortalApplication.encodeCursor(t, "not-a-number");
         RechargeCaller caller = new RechargeCaller(1L, "t", "u", 9L, Instant.now().plusSeconds(60));

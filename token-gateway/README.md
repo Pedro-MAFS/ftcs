@@ -47,6 +47,39 @@ mvn -q -DskipTests package
 java -jar token-gateway-server/target/token-gateway-server-1.0.0-SNAPSHOT.jar
 ```
 
+### 发布包（zip）
+
+`token-gateway-server` 在 `package` 阶段用 `maven-assembly-plugin` 生成可部署 zip：
+
+```bash
+cd token-gateway
+mvn -pl token-gateway-server -am -DskipTests package
+# 产物：token-gateway-server/target/token-gateway-server-<version>-dist.zip
+```
+
+解压后目录大致为：
+
+```
+token-gateway-server-<version>/
+├── token-gateway-server.jar   # 可执行 fat jar（内含 classpath application.yml）
+├── config/                    # 可选：放置外置 application.yml 覆盖默认配置
+├── logs/                      # 运行日志（RollingFile + startup.out）
+├── start.sh
+└── stop.sh
+```
+
+```bash
+unzip token-gateway-server-*-dist.zip
+cd token-gateway-server-*
+# 推荐：用环境变量覆盖密钥（MYSQL_* / OAUTH_JWK_KEY / GATEWAY_KEY_PEPPER 等）
+# 或在 config/ 下自建 application.yml 做外置覆盖（非必须）
+chmod +x start.sh stop.sh
+./start.sh
+./stop.sh
+```
+
+`start.sh` 会以工作目录为安装根，可选加载 `config/`（`optional:file:./config/`），并把 `LOGGING_FILE_PATH` 指到 `logs/`。可用 `JAVA_OPTS` 覆盖堆内存等 JVM 参数。
+
 本机若 **C: 磁盘已满**，把本地仓库指到 D:：
 
 ```bash
