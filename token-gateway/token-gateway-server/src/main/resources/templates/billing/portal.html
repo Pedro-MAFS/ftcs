@@ -163,6 +163,10 @@
       border: 1px solid var(--border);
       font-weight: 500;
     }
+    .usage-actions .btn {
+      width: auto;
+      min-width: 120px;
+    }
 
     .section-nav {
       display: flex;
@@ -224,6 +228,91 @@
       margin: 0;
       color: var(--text-secondary);
       font-size: 14px;
+    }
+    .usage-hint {
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    .usage-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px 16px;
+      width: 100%;
+    }
+    .usage-window-seg {
+      display: inline-flex;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .usage-window-seg button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      padding: 8px 14px;
+      font-family: var(--font-ui);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-right: 1px solid var(--border);
+    }
+    .usage-window-seg button:last-child { border-right: 0; }
+    .usage-window-seg button.active {
+      background: var(--accent-muted);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .usage-window-seg button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .usage-list {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+    }
+    .usage-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .usage-row-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+    }
+    .usage-row-top .model {
+      font-weight: 600;
+      color: var(--text);
+      word-break: break-all;
+    }
+    .usage-row-top .charge {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .usage-row-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      color: var(--text-secondary);
+    }
+    .usage-row-meta .err {
+      color: var(--danger);
+      width: 100%;
+    }
+    .usage-actions {
+      display: flex;
+      justify-content: center;
+      padding-top: 8px;
     }
     .inline-error {
       padding: 10px 12px;
@@ -397,7 +486,20 @@
       </section>
       <section class="section" id="tab-usage">
         <h2>Token 消费</h2>
-        <p class="placeholder">近期调用与扣费记录即将支持。</p>
+        <div class="usage-toolbar">
+          <div class="usage-window-seg" role="group" aria-label="查询时间窗">
+            <button type="button" data-days="7">近 7 天</button>
+            <button type="button" data-days="30" class="active">近 30 天</button>
+            <button type="button" data-days="90">近 90 天</button>
+          </div>
+          <p class="usage-hint" id="usage-window-hint">时间按本地显示</p>
+        </div>
+        <div class="usage-list" id="usage-list"></div>
+        <p class="placeholder" id="usage-empty" hidden>该时间范围内暂无消费记录</p>
+        <p class="inline-error" id="usage-error" hidden></p>
+        <div class="usage-actions">
+          <button type="button" class="btn btn-ghost" id="btn-usage-more" hidden>加载更多</button>
+        </div>
       </section>
       <section class="section" id="tab-topups">
         <h2>充值入账</h2>
@@ -469,8 +571,58 @@
     refundModal: document.getElementById("refund-modal"),
     btnCloseRefund: document.getElementById("btn-close-refund"),
     tabs: document.querySelectorAll(".section-nav button"),
-    sections: document.querySelectorAll(".section")
+    sections: document.querySelectorAll(".section"),
+    usageList: document.getElementById("usage-list"),
+    usageEmpty: document.getElementById("usage-empty"),
+    usageError: document.getElementById("usage-error"),
+    usageMore: document.getElementById("btn-usage-more"),
+    usageWindowHint: document.getElementById("usage-window-hint"),
+    usageWindowSeg: document.querySelectorAll(".usage-window-seg button")
   };
+
+  var usageState = {
+    loaded: false,
+    loading: false,
+    nextCursor: null,
+    items: [],
+    from: null,
+    to: null,
+    days: 30
+  };
+
+  function daysLabel(days) {
+    return "近 " + days + " 天";
+  }
+
+  function buildWindow(days) {
+    var to = new Date();
+    var from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }
+
+  function syncUsageWindowButtons() {
+    els.usageWindowSeg.forEach(function (btn) {
+      var d = Number(btn.getAttribute("data-days"));
+      btn.classList.toggle("active", d === usageState.days);
+      btn.disabled = usageState.loading;
+    });
+  }
+
+  function setUsageDays(days, forceReload) {
+    var next = Number(days) || 30;
+    if (next !== 7 && next !== 30 && next !== 90) next = 30;
+    var changed = next !== usageState.days;
+    usageState.days = next;
+    syncUsageWindowButtons();
+    if (forceReload || changed || !usageState.loaded) {
+      usageState.from = null;
+      usageState.to = null;
+      usageState.nextCursor = null;
+      usageState.items = [];
+      usageState.loaded = false;
+      loadUsage(false);
+    }
+  }
 
   function formatYuan(li) {
     var n = Number(li);
@@ -478,11 +630,165 @@
     return (n / 1000).toFixed(2) + " 元";
   }
 
+  function formatChargeYuan(yuan) {
+    if (yuan == null || yuan === "") return "—";
+    var n = Number(yuan);
+    if (!isFinite(n)) return "—";
+    return n.toFixed(2) + " 元";
+  }
+
+  function formatLocalTime(iso) {
+    if (!iso) return "—";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso);
+    try {
+      return d.toLocaleString(undefined, {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    } catch (e) {
+      return d.toISOString();
+    }
+  }
+
+  function requestStatusLabel(status) {
+    var s = String(status || "").toLowerCase();
+    if (s === "success") return "成功";
+    if (s === "error") return "失败";
+    if (s === "interrupted") return "中断";
+    return status || "—";
+  }
+
+  function billingStatusLabel(status) {
+    var s = String(status || "").toLowerCase();
+    if (s === "pending") return "待结算";
+    if (s === "settling") return "结算中";
+    if (s === "charged") return "已扣费";
+    if (s === "skipped_no_usage") return "无用量";
+    if (s === "settle_failed") return "结算失败";
+    return status || "—";
+  }
+
   function statusLabel(status) {
     if (!status) return "—";
     if (String(status).toLowerCase() === "active") return "正常";
     if (String(status).toLowerCase() === "disabled") return "已停用";
     return String(status);
+  }
+
+  function renderUsageList() {
+    els.usageList.innerHTML = "";
+    usageState.items.forEach(function (item) {
+      var row = document.createElement("div");
+      row.className = "usage-row";
+
+      var top = document.createElement("div");
+      top.className = "usage-row-top";
+      var model = document.createElement("span");
+      model.className = "model";
+      model.textContent = item.model || "—";
+      var charge = document.createElement("span");
+      charge.className = "charge";
+      charge.textContent = formatChargeYuan(item.charge_yuan);
+      top.appendChild(model);
+      top.appendChild(charge);
+
+      var meta = document.createElement("div");
+      meta.className = "usage-row-meta";
+      var bits = [
+        formatLocalTime(item.created_at),
+        "输入 " + (item.prompt_tokens != null ? item.prompt_tokens : "—"),
+        "输出 " + (item.completion_tokens != null ? item.completion_tokens : "—"),
+        requestStatusLabel(item.status),
+        billingStatusLabel(item.billing_status)
+      ];
+      if (item.key_name) bits.push(item.key_name);
+      bits.forEach(function (text) {
+        var span = document.createElement("span");
+        span.textContent = text;
+        meta.appendChild(span);
+      });
+      if (item.error_summary) {
+        var err = document.createElement("span");
+        err.className = "err";
+        err.textContent = item.error_summary;
+        meta.appendChild(err);
+      }
+
+      row.appendChild(top);
+      row.appendChild(meta);
+      els.usageList.appendChild(row);
+    });
+
+    var empty = usageState.items.length === 0 && usageState.loaded && !usageState.loading;
+    els.usageEmpty.hidden = !empty;
+    els.usageMore.hidden = !usageState.nextCursor;
+  }
+
+  function loadUsage(append) {
+    if (usageState.loading) return Promise.resolve();
+    usageState.loading = true;
+    syncUsageWindowButtons();
+    els.usageError.hidden = true;
+    if (!append) {
+      els.usageMore.hidden = true;
+      els.usageEmpty.hidden = true;
+      if (!usageState.from || !usageState.to) {
+        var win = buildWindow(usageState.days);
+        usageState.from = win.from;
+        usageState.to = win.to;
+      }
+    } else {
+      els.usageMore.disabled = true;
+      els.usageMore.textContent = "加载中…";
+    }
+    var path = "/v1/billing/portal/usage?limit=20"
+      + "&from=" + encodeURIComponent(usageState.from)
+      + "&to=" + encodeURIComponent(usageState.to);
+    if (append && usageState.nextCursor) {
+      path += "&cursor=" + encodeURIComponent(usageState.nextCursor);
+    }
+    return api(path).then(function (res) {
+      if (res.status === 401) {
+        showNeed("expired");
+        return;
+      }
+      if (!res.ok || !res.body) {
+        els.usageError.hidden = false;
+        els.usageError.textContent = "无法加载消费记录，请稍后重试。";
+        return;
+      }
+      var body = res.body;
+      var items = Array.isArray(body.items) ? body.items : [];
+      if (append) {
+        usageState.items = usageState.items.concat(items);
+      } else {
+        usageState.items = items;
+      }
+      usageState.nextCursor = body.next_cursor || null;
+      usageState.loaded = true;
+      if (body.window && body.window.from && body.window.to) {
+        usageState.from = body.window.from;
+        usageState.to = body.window.to;
+        els.usageWindowHint.textContent =
+          daysLabel(usageState.days) + " · " + formatLocalTime(body.window.from) + " ~ " + formatLocalTime(body.window.to);
+      } else {
+        els.usageWindowHint.textContent = daysLabel(usageState.days) + " · 时间按本地显示";
+      }
+      els.usageEmpty.textContent = daysLabel(usageState.days) + "暂无消费记录";
+      renderUsageList();
+    }).catch(function () {
+      els.usageError.hidden = false;
+      els.usageError.textContent = "网络异常，请稍后重试。";
+    }).finally(function () {
+      usageState.loading = false;
+      syncUsageWindowButtons();
+      els.usageMore.disabled = false;
+      els.usageMore.textContent = "加载更多";
+    });
   }
 
   function showNeed(reason) {
@@ -521,6 +827,9 @@
     els.sections.forEach(function (sec) {
       sec.classList.toggle("active", sec.id === "tab-" + name);
     });
+    if (name === "usage" && !usageState.loaded && !usageState.loading) {
+      setUsageDays(usageState.days, true);
+    }
   }
 
   function api(path) {
@@ -585,6 +894,15 @@
   els.refundModal.addEventListener("click", function (e) {
     if (e.target === els.refundModal) closeRefund();
   });
+  els.usageMore.addEventListener("click", function () {
+    loadUsage(true);
+  });
+  els.usageWindowSeg.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      setUsageDays(btn.getAttribute("data-days"), true);
+    });
+  });
+  syncUsageWindowButtons();
 
   if (bootstrap.ok) {
     showReady();

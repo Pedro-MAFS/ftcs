@@ -109,4 +109,35 @@ public class TokenRequestLogDbService extends ServiceImpl<TokenRequestLogMapper,
         }
         return list(new LambdaQueryWrapper<TokenRequestLog>().in(TokenRequestLog::getRequestId, requestIds));
     }
+
+    /**
+     * 用户面板消费列表（US-G4-03）：按用户 + 时间窗 + 键集游标降序。
+     *
+     * @param cursorCreatedAt 上一页最后一行 created_at；首页传 null
+     * @param cursorRequestId 上一页最后一行 request_id；首页传 null
+     */
+    public List<TokenRequestLog> listForPortal(
+            long userId,
+            LocalDateTime fromInclusive,
+            LocalDateTime toInclusive,
+            LocalDateTime cursorCreatedAt,
+            String cursorRequestId,
+            int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+        LambdaQueryWrapper<TokenRequestLog> q = new LambdaQueryWrapper<TokenRequestLog>()
+                .eq(TokenRequestLog::getUserId, userId)
+                .ge(TokenRequestLog::getCreatedAt, fromInclusive)
+                .le(TokenRequestLog::getCreatedAt, toInclusive);
+        if (cursorCreatedAt != null && cursorRequestId != null && !cursorRequestId.isBlank()) {
+            q.and(w -> w.lt(TokenRequestLog::getCreatedAt, cursorCreatedAt)
+                    .or(w2 -> w2.eq(TokenRequestLog::getCreatedAt, cursorCreatedAt)
+                            .lt(TokenRequestLog::getRequestId, cursorRequestId)));
+        }
+        q.orderByDesc(TokenRequestLog::getCreatedAt).orderByDesc(TokenRequestLog::getRequestId);
+        q.last("LIMIT " + limit);
+        List<TokenRequestLog> rows = list(q);
+        return rows == null ? List.of() : rows;
+    }
 }
