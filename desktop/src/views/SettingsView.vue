@@ -47,6 +47,7 @@ const provisioning = ref(false)
 const refreshingModels = ref(false)
 const refreshingUsage = ref(false)
 const openingRecharge = ref(false)
+const openingPortal = ref(false)
 const message = ref('')
 const error = ref('')
 const showApiKey = ref(false)
@@ -266,6 +267,28 @@ async function openOfficialRecharge(): Promise<void> {
     error.value = res.message || '无法打开充值页'
   } finally {
     openingRecharge.value = false
+  }
+}
+
+async function openOfficialPortal(): Promise<void> {
+  if (!window.ftcs?.openOfficialPortal) return
+  openingPortal.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    const res = await window.ftcs.openOfficialPortal()
+    if (res.ok) {
+      message.value = res.message || '已在浏览器打开账户面板'
+      return
+    }
+    if (res.needLogin) {
+      authHint.value = '请先登录后再查看账户详情'
+      error.value = '请先登录后再查看账户详情'
+      return
+    }
+    error.value = res.message || '无法打开账户面板'
+  } finally {
+    openingPortal.value = false
   }
 }
 
@@ -634,7 +657,15 @@ async function onCheckUpdate(): Promise<void> {
                   <button
                     type="button"
                     class="btn-secondary btn-sm"
-                    :disabled="openingRecharge || refreshingUsage"
+                    :disabled="openingPortal || openingRecharge || refreshingUsage"
+                    @click="openOfficialPortal"
+                  >
+                    {{ openingPortal ? '打开中…' : '详情' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-secondary btn-sm"
+                    :disabled="openingRecharge || openingPortal || refreshingUsage"
                     @click="openOfficialRecharge"
                   >
                     {{ openingRecharge ? '打开中…' : '充值' }}
@@ -642,7 +673,7 @@ async function onCheckUpdate(): Promise<void> {
                   <button
                     type="button"
                     class="btn-secondary btn-sm"
-                    :disabled="refreshingUsage || openingRecharge"
+                    :disabled="refreshingUsage || openingRecharge || openingPortal"
                     @click="refreshOfficialUsageQuiet"
                   >
                     {{ refreshingUsage ? '刷新中…' : '刷新' }}

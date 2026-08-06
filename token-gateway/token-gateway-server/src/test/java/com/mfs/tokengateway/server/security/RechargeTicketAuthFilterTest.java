@@ -40,8 +40,11 @@ class RechargeTicketAuthFilterTest {
         assertTrue(RechargeTicketAuthFilter.matchesProtected("/v1/billing/wechat/prepay"));
         assertTrue(RechargeTicketAuthFilter.matchesProtected("/v1/billing/wechat/orders/tg1"));
         assertTrue(RechargeTicketAuthFilter.matchesProtected("/v1/billing/wechat/orders/tg1/sync"));
+        assertTrue(RechargeTicketAuthFilter.matchesProtected("/v1/billing/portal/me"));
+        assertTrue(RechargeTicketAuthFilter.matchesProtected("/v1/billing/portal/keys"));
         assertFalse(RechargeTicketAuthFilter.matchesProtected("/v1/billing/wechat/notify"));
         assertFalse(RechargeTicketAuthFilter.matchesProtected("/v1/billing/recharge/ticket"));
+        assertFalse(RechargeTicketAuthFilter.matchesProtected("/billing/portal"));
     }
 
     @Test

@@ -17,7 +17,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * 充值 ticket 鉴权：保护微信 prepay / 订单查询等页内业务 API（US-G3-01 / G3-06 §4.6）。
+ * 充值 / 面板 ticket 鉴权：保护微信 prepay、订单查询与用户面板 API（US-G3-01 / G3-06 / G4-01）。
  * <p>
  * Cookie {@code tg_recharge_ticket} 优先于 {@code Authorization: Bearer rt_…}。
  */
@@ -52,7 +52,10 @@ public class RechargeTicketAuthFilter extends OncePerRequestFilter {
         if ("/v1/billing/wechat/prepay".equals(path)) {
             return true;
         }
-        return path.startsWith("/v1/billing/wechat/orders/");
+        if (path.startsWith("/v1/billing/wechat/orders/")) {
+            return true;
+        }
+        return path.startsWith("/v1/billing/portal/");
     }
 
     @Override

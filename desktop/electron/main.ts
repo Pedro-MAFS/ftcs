@@ -24,6 +24,7 @@ import {
   refreshOfficialModels,
   refreshOfficialUsage,
   openOfficialRecharge,
+  openOfficialPortal,
   maybeRefreshUsageAfterRechargeFocus,
 } from './gateway/official-channel-service'
 import { writeUserPrefs } from './config/user-prefs'
@@ -554,6 +555,9 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.GATEWAY_OPEN_OFFICIAL_RECHARGE, async () => {
     return openOfficialRecharge()
+  })
+  ipcMain.handle(IPC.GATEWAY_OPEN_OFFICIAL_PORTAL, async () => {
+    return openOfficialPortal()
   })
   ipcMain.handle(IPC.SETTINGS_PICK_WORKSPACE, async () => {
     const dir = await pickWorkspaceDirectory()

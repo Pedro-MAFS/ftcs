@@ -94,6 +94,8 @@ export interface OpenOfficialRechargeResult {
   message: string
 }
 
+export type OpenOfficialPortalResult = OpenOfficialRechargeResult
+
 export type SettingsCategory =
   | 'account'
   | 'model'

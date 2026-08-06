@@ -45,6 +45,7 @@ import type {
   RefreshOfficialModelsResult,
   RefreshOfficialUsageResult,
   OpenOfficialRechargeResult,
+  OpenOfficialPortalResult,
   OnboardingState,
   EnvProbeResult,
   NodeInstallProgress,
@@ -105,6 +106,8 @@ const api = {
     ipcRenderer.invoke(IPC.GATEWAY_REFRESH_OFFICIAL_USAGE),
   openOfficialRecharge: (): Promise<OpenOfficialRechargeResult> =>
     ipcRenderer.invoke(IPC.GATEWAY_OPEN_OFFICIAL_RECHARGE),
+  openOfficialPortal: (): Promise<OpenOfficialPortalResult> =>
+    ipcRenderer.invoke(IPC.GATEWAY_OPEN_OFFICIAL_PORTAL),
   getOnboardingState: (): Promise<OnboardingState> =>
     ipcRenderer.invoke(IPC.ONBOARDING_GET_STATE),
   setOnboardingState: (patch: Partial<OnboardingState>): Promise<OnboardingState> =>

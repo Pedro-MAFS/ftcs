@@ -13,6 +13,7 @@ export const IPC = {
   GATEWAY_REFRESH_OFFICIAL_MODELS: 'gateway:refresh-official-models',
   GATEWAY_REFRESH_OFFICIAL_USAGE: 'gateway:refresh-official-usage',
   GATEWAY_OPEN_OFFICIAL_RECHARGE: 'gateway:open-official-recharge',
+  GATEWAY_OPEN_OFFICIAL_PORTAL: 'gateway:open-official-portal',
   LIBRARY_LIST: 'library:list',
   LIBRARY_ADD_WEBSITE: 'library:add-website',
   LIBRARY_DELETE_WEBSITE: 'library:delete-website',
@@ -801,6 +802,8 @@ export interface OpenOfficialRechargeResult {
   needLogin?: boolean
   message: string
 }
+
+export type OpenOfficialPortalResult = OpenOfficialRechargeResult
 
 export interface WebsiteItem {
   id: string

@@ -18,6 +18,7 @@ import {
 import {
   FTCS_GATEWAY_KEY_NAME,
   buildRechargePageUrl,
+  buildPortalPageUrl,
   getDefaultTokenGatewayBaseUrl,
   getTokenGatewayBaseUrl,
   getTokenGatewayEnvKey,
@@ -63,6 +64,8 @@ export interface OpenOfficialRechargeResult {
   needLogin?: boolean
   message: string
 }
+
+export type OpenOfficialPortalResult = OpenOfficialRechargeResult
 
 /** 打开充值页后，主窗口 focus 时自动刷余额的窗口 */
 const RECHARGE_FOCUS_REFRESH_WINDOW_MS = 15 * 60 * 1000
@@ -335,6 +338,50 @@ export async function refreshOfficialUsage(): Promise<RefreshOfficialUsageResult
  * UC JWT 换票 → 系统浏览器打开网关充值页（US-G3-04）。
  */
 export async function openOfficialRecharge(): Promise<OpenOfficialRechargeResult> {
+  return openOfficialBillingPage({
+    buildUrl: buildRechargePageUrl,
+    loginMessage: '请先登录后再充值',
+    invalidUrlMessage: '无法打开充值页：地址无效',
+    protocolMessage: '无法打开充值页：仅支持 http(s)',
+    originMismatchMessage: '无法打开充值页：网关地址异常',
+    browserMessage: '无法打开浏览器，请检查系统默认浏览器设置',
+    successMessage: '已在浏览器打开充值页',
+    logTag: 'recharge',
+    markRechargeFocus: true,
+  })
+}
+
+/**
+ * UC JWT 换票 → 系统浏览器打开网关用户面板（US-G4-07）。
+ */
+export async function openOfficialPortal(): Promise<OpenOfficialPortalResult> {
+  return openOfficialBillingPage({
+    buildUrl: buildPortalPageUrl,
+    loginMessage: '请先登录后再查看账户详情',
+    invalidUrlMessage: '无法打开账户面板：地址无效',
+    protocolMessage: '无法打开账户面板：仅支持 http(s)',
+    originMismatchMessage: '无法打开账户面板：网关地址异常',
+    browserMessage: '无法打开浏览器，请检查系统默认浏览器设置',
+    successMessage: '已在浏览器打开账户面板',
+    logTag: 'portal',
+    markRechargeFocus: false,
+  })
+}
+
+async function openOfficialBillingPage(opts: {
+  buildUrl: (
+    ticket: string,
+    env: NodeJS.ProcessEnv | Record<string, string | undefined>,
+  ) => string
+  loginMessage: string
+  invalidUrlMessage: string
+  protocolMessage: string
+  originMismatchMessage: string
+  browserMessage: string
+  successMessage: string
+  logTag: string
+  markRechargeFocus: boolean
+}): Promise<OpenOfficialRechargeResult> {
   const workspaceRoot = getWorkspaceRoot()
   const envPath = getEnvPath(workspaceRoot)
   const env = readEnvFile(envPath)
@@ -344,7 +391,7 @@ export async function openOfficialRecharge(): Promise<OpenOfficialRechargeResult
 
   let bundle = await ensureFreshTokens()
   if (!bundle?.accessToken) {
-    return { ok: false, needLogin: true, message: '请先登录后再充值' }
+    return { ok: false, needLogin: true, message: opts.loginMessage }
   }
 
   let ticketRes = await createRechargeTicket({
@@ -355,7 +402,7 @@ export async function openOfficialRecharge(): Promise<OpenOfficialRechargeResult
   if (!ticketRes.ok && ticketRes.code === 'need_login') {
     bundle = await ensureFreshTokens({ force: true })
     if (!bundle?.accessToken) {
-      return { ok: false, needLogin: true, message: '请先登录后再充值' }
+      return { ok: false, needLogin: true, message: opts.loginMessage }
     }
     ticketRes = await createRechargeTicket({
       accessToken: bundle.accessToken,
@@ -371,40 +418,42 @@ export async function openOfficialRecharge(): Promise<OpenOfficialRechargeResult
     }
   }
 
-  const pageUrl = buildRechargePageUrl(ticketRes.ticket, mergedEnv)
+  const pageUrl = opts.buildUrl(ticketRes.ticket, mergedEnv)
   let parsed: URL
   try {
     parsed = new URL(pageUrl)
   } catch {
-    return { ok: false, message: '无法打开充值页：地址无效' }
+    return { ok: false, message: opts.invalidUrlMessage }
   }
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    return { ok: false, message: '无法打开充值页：仅支持 http(s)' }
+    return { ok: false, message: opts.protocolMessage }
   }
   const originNow = `${parsed.protocol}//${parsed.host}`
   if (originNow !== expectedOrigin) {
-    console.warn('[ftcs:gateway] recharge origin mismatch', {
+    console.warn(`[ftcs:gateway] ${opts.logTag} origin mismatch`, {
       expected: expectedOrigin,
       actual: originNow,
     })
-    return { ok: false, message: '无法打开充值页：网关地址异常' }
+    return { ok: false, message: opts.originMismatchMessage }
   }
 
   try {
     await shell.openExternal(parsed.toString())
   } catch (err) {
     console.warn(
-      '[ftcs:gateway] openExternal failed',
+      `[ftcs:gateway] openExternal failed (${opts.logTag})`,
       err instanceof Error ? err.message : String(err),
     )
     return {
       ok: false,
-      message: '无法打开浏览器，请检查系统默认浏览器设置',
+      message: opts.browserMessage,
     }
   }
 
-  lastRechargeOpenedAt = Date.now()
-  return { ok: true, message: '已在浏览器打开充值页' }
+  if (opts.markRechargeFocus) {
+    lastRechargeOpenedAt = Date.now()
+  }
+  return { ok: true, message: opts.successMessage }
 }
 
 /**

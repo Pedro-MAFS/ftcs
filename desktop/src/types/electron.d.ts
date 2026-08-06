@@ -495,6 +495,9 @@ declare global {
       openOfficialRecharge: () => Promise<
         import('./settings').OpenOfficialRechargeResult
       >
+      openOfficialPortal: () => Promise<
+        import('./settings').OpenOfficialPortalResult
+      >
       getOnboardingState: () => Promise<OnboardingState>
       setOnboardingState: (patch: Partial<OnboardingState>) => Promise<OnboardingState>
       probeEnvironment: () => Promise<EnvProbeResult>

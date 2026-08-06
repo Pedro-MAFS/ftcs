@@ -46,6 +46,18 @@ export function buildRechargePageUrl(
   return `${origin}/billing/recharge?ticket=${encodeURIComponent(raw)}`
 }
 
+/**
+ * 系统浏览器打开的用户面板 URL（复用同一短时 ticket）。
+ */
+export function buildPortalPageUrl(
+  ticket: string,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
+): string {
+  const raw = (ticket || '').trim()
+  const origin = getTokenGatewayOrigin(env)
+  return `${origin}/billing/portal?ticket=${encodeURIComponent(raw)}`
+}
+
 export function getTokenGatewayEnvKey(): string {
   return ENV_KEY
 }

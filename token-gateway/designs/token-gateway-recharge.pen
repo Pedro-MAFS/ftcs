@@ -103,7 +103,6 @@
               "id": "e6inwK",
               "name": "RuleAmount",
               "fill": "$text-muted",
-              "content": "",
               "fontFamily": "$font-ui",
               "fontSize": 12,
               "fontWeight": "normal"
@@ -113,7 +112,6 @@
               "id": "LJv4l",
               "name": "RuleRefund",
               "fill": "$text-muted",
-              "content": "",
               "fontFamily": "$font-ui",
               "fontSize": 12,
               "fontWeight": "normal"
@@ -328,7 +326,6 @@
               "id": "J5Fpm",
               "name": "RuleRefund",
               "fill": "$text-muted",
-              "content": "",
               "fontFamily": "$font-ui",
               "fontSize": 12,
               "fontWeight": "normal"
@@ -952,7 +949,6 @@
           "id": "KXFm6",
           "name": "RuleRefund",
           "fill": "$text-muted",
-          "content": "",
           "fontFamily": "$font-ui",
           "fontSize": 12,
           "fontWeight": "normal"
@@ -1124,10 +1120,755 @@
           "id": "N7hMg",
           "name": "RuleRefund",
           "fill": "$text-muted",
-          "content": "",
           "fontFamily": "$font-ui",
           "fontSize": 12,
           "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "ScKnG",
+      "x": 1060,
+      "y": 860,
+      "name": "G4-01 NeedClient · 缺少凭证",
+      "clip": true,
+      "width": 960,
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 32,
+      "padding": [
+        48,
+        64
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "G4yWp",
+          "name": "Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "kiFFK",
+              "name": "Brand",
+              "fill": "$text",
+              "content": "Token 网关",
+              "fontFamily": "$font-display",
+              "fontSize": 15,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "oW1x9",
+              "name": "Title",
+              "fill": "$text",
+              "content": "官方服务账户面板",
+              "fontFamily": "$font-display",
+              "fontSize": 28,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "ANpMC",
+              "name": "Lead",
+              "fill": "$text-secondary",
+              "content": "查看余额与用量，管理 API Token",
+              "fontFamily": "$font-ui",
+              "fontSize": 14
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Yrix0",
+          "name": "NeedClientPanel",
+          "width": 480,
+          "fill": "$bg-muted",
+          "cornerRadius": 12,
+          "stroke": "$border",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 28,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "l6vrJP",
+              "name": "NeedTitle",
+              "fill": "$text",
+              "content": "缺少登录凭证",
+              "fontFamily": "$font-display",
+              "fontSize": 18,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "JftjH",
+              "name": "NeedBody",
+              "fill": "$text-secondary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "请从已接入 Token 服务的应用重新进入账户面板（须携带临时会话凭证）。请勿直接收藏或分享本页面链接。",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-ui",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "HbnR0",
+          "name": "Footer",
+          "width": 480,
+          "layout": "vertical",
+          "gap": 6,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "IHH56",
+              "name": "Icp",
+              "fill": "$text-muted",
+              "content": "粤ICP备2021160059号-2  ·  粤公网安备44030602008070号",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "sQT1b",
+              "name": "Contact",
+              "fill": "$text-muted",
+              "content": "客服电话 +86 178 5203 2649  ·  mfs1998@qq.com",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "O0PP49",
+      "x": 2100,
+      "y": 860,
+      "name": "G4-01 Portal · 已登录页壳",
+      "width": 960,
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 24,
+      "padding": [
+        48,
+        64
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "T03oi",
+          "name": "Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "DtEFV",
+              "name": "Brand",
+              "fill": "$text",
+              "content": "Token 网关",
+              "fontFamily": "$font-display",
+              "fontSize": 15,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "OGRtv",
+              "name": "Title",
+              "fill": "$text",
+              "content": "官方服务账户面板",
+              "fontFamily": "$font-display",
+              "fontSize": 28,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "nYfta",
+              "name": "Subtitle",
+              "fill": "$text-secondary",
+              "textGrowth": "fixed-width",
+              "width": 480,
+              "content": "预先充值，按量计费，余额包退",
+              "lineHeight": 1.45,
+              "fontFamily": "$font-ui",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "I7oNA",
+          "name": "BalanceRow",
+          "width": 640,
+          "fill": "$bg-muted",
+          "cornerRadius": 8,
+          "stroke": "$border",
+          "strokeWidth": 1,
+          "padding": [
+            16,
+            20
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "vg0Zo",
+              "name": "BalanceLabel",
+              "fill": "$text-secondary",
+              "content": "当前余额",
+              "fontFamily": "$font-ui",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "Bq1Yg",
+              "name": "BalanceValue",
+              "fill": "$text",
+              "content": "12.60 元",
+              "fontFamily": "$font-display",
+              "fontSize": 20,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "xMsyz",
+          "name": "ActionRow",
+          "width": 640,
+          "gap": 12,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "mF7Pz",
+              "name": "BtnRecharge",
+              "height": 40,
+              "fill": "$accent",
+              "cornerRadius": 8,
+              "padding": [
+                0,
+                20
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "sLo5x",
+                  "name": "BtnRechargeLabel",
+                  "fill": "#FFFFFF",
+                  "content": "去充值",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "p9Ycrb",
+              "name": "BtnRefund",
+              "height": 40,
+              "fill": "$bg",
+              "cornerRadius": 8,
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "padding": [
+                0,
+                20
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "bp7kj",
+                  "name": "BtnRefundLabel",
+                  "fill": "$text",
+                  "content": "申请退费",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "U9rLHd",
+          "name": "TtlHint",
+          "fill": "$text-muted",
+          "content": "会话约 5 分钟有效；超时请从客户端重新打开",
+          "fontFamily": "$font-ui",
+          "fontSize": 12
+        },
+        {
+          "type": "frame",
+          "id": "bCz0k",
+          "name": "SectionNav",
+          "width": 640,
+          "stroke": "$border",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "gap": 4,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "PRRAW",
+              "name": "TabAccount",
+              "height": 40,
+              "stroke": "$accent",
+              "strokeWidth": {
+                "bottom": 2
+              },
+              "padding": [
+                0,
+                14
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "xiEgp",
+                  "name": "TabAccountLabel",
+                  "fill": "$accent",
+                  "content": "账户",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "m1JA2",
+              "name": "TabKeys",
+              "height": 40,
+              "padding": [
+                0,
+                14
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "PnTlS",
+                  "name": "TabKeysLabel",
+                  "fill": "$text-secondary",
+                  "content": "API Token",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "TrV8k",
+              "name": "TabUsage",
+              "height": 40,
+              "padding": [
+                0,
+                14
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ZIA0M",
+                  "name": "TabUsageLabel",
+                  "fill": "$text-secondary",
+                  "content": "消费",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "OPoEP",
+              "name": "TabTopups",
+              "height": 40,
+              "padding": [
+                0,
+                14
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ESG6Z",
+                  "name": "TabTopupsLabel",
+                  "fill": "$text-secondary",
+                  "content": "充值",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "z2hQmU",
+              "name": "TabPrices",
+              "height": 40,
+              "padding": [
+                0,
+                14
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "F2Teg",
+                  "name": "TabPricesLabel",
+                  "fill": "$text-secondary",
+                  "content": "价格",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "VYbml",
+          "name": "ContentAccount",
+          "width": 640,
+          "layout": "vertical",
+          "gap": 20,
+          "padding": [
+            20,
+            0,
+            0,
+            0
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "MJL4M",
+              "name": "SectionTitle",
+              "fill": "$text",
+              "content": "账户摘要",
+              "fontFamily": "$font-display",
+              "fontSize": 18,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "mqANI",
+              "name": "Meta用户",
+              "width": "fill_container",
+              "stroke": "$border",
+              "strokeWidth": {
+                "bottom": 1
+              },
+              "gap": 16,
+              "padding": [
+                12,
+                0
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "slHzd",
+                  "name": "MetaLabel用户",
+                  "fill": "$text-secondary",
+                  "content": "用户",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14
+                },
+                {
+                  "type": "text",
+                  "id": "V0yXCP",
+                  "name": "MetaValue用户",
+                  "fill": "$text",
+                  "content": "u_****8a21",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "X2Yho1",
+              "name": "Meta状态",
+              "width": "fill_container",
+              "stroke": "$border",
+              "strokeWidth": {
+                "bottom": 1
+              },
+              "gap": 16,
+              "padding": [
+                12,
+                0
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "S2M150",
+                  "name": "MetaLabel状态",
+                  "fill": "$text-secondary",
+                  "content": "状态",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14
+                },
+                {
+                  "type": "text",
+                  "id": "qzgB5",
+                  "name": "MetaValue状态",
+                  "fill": "$success",
+                  "content": "正常",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Ysera",
+              "name": "Meta余额",
+              "width": "fill_container",
+              "stroke": "$border",
+              "strokeWidth": {
+                "bottom": 1
+              },
+              "gap": 16,
+              "padding": [
+                12,
+                0
+              ],
+              "justifyContent": "space_between",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "zxBBi",
+                  "name": "MetaLabel余额",
+                  "fill": "$text-secondary",
+                  "content": "余额",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14
+                },
+                {
+                  "type": "text",
+                  "id": "Ppk4g",
+                  "name": "MetaValue余额",
+                  "fill": "$text",
+                  "content": "12.60 元",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 14,
+                  "fontWeight": "500"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "DEYmQ",
+          "name": "Footer",
+          "width": 640,
+          "layout": "vertical",
+          "gap": 6,
+          "padding": [
+            16,
+            0,
+            0,
+            0
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "NQm7R",
+              "name": "Icp",
+              "fill": "$text-muted",
+              "content": "粤ICP备2021160059号-2  ·  粤公网安备44030602008070号",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "h5mZj",
+              "name": "Contact",
+              "fill": "$text-muted",
+              "content": "客服电话 +86 178 5203 2649  ·  mfs1998@qq.com",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "ej2N1",
+      "x": 3140,
+      "y": 860,
+      "name": "G4-01 Expired · 会话过期",
+      "clip": true,
+      "width": 960,
+      "fill": "$bg",
+      "layout": "vertical",
+      "gap": 32,
+      "padding": [
+        48,
+        64
+      ],
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "MVYfW",
+          "name": "Header",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "x2OSP",
+              "name": "Brand",
+              "fill": "$text",
+              "content": "Token 网关",
+              "fontFamily": "$font-display",
+              "fontSize": 15,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "PNDgT",
+              "name": "Title",
+              "fill": "$text",
+              "content": "官方服务账户面板",
+              "fontFamily": "$font-display",
+              "fontSize": 28,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "b9m3r",
+              "name": "Lead",
+              "fill": "$text-secondary",
+              "content": "查看余额与用量，管理 API Token",
+              "fontFamily": "$font-ui",
+              "fontSize": 14
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "X5hw2b",
+          "name": "NeedClientPanel",
+          "width": 480,
+          "fill": "$bg-muted",
+          "cornerRadius": 12,
+          "stroke": "$border",
+          "strokeWidth": 1,
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 28,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "JX04w",
+              "name": "NeedTitle",
+              "fill": "$text",
+              "content": "会话已过期",
+              "fontFamily": "$font-display",
+              "fontSize": 18,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "d2JHvY",
+              "name": "NeedBody",
+              "fill": "$text-secondary",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "临时凭证已失效。请返回桌面客户端或接入应用，重新打开账户面板以获取新的会话。",
+              "lineHeight": 1.5,
+              "fontFamily": "$font-ui",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Ifato",
+          "name": "Footer",
+          "width": 480,
+          "layout": "vertical",
+          "gap": 6,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "K3Dso",
+              "name": "Icp",
+              "fill": "$text-muted",
+              "content": "粤ICP备2021160059号-2  ·  粤公网安备44030602008070号",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "qCY0D",
+              "name": "Contact",
+              "fill": "$text-muted",
+              "content": "客服电话 +86 178 5203 2649  ·  mfs1998@qq.com",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
         }
       ]
     }
@@ -1187,7 +1928,7 @@
     },
     "font-ui": {
       "type": "string",
-      "value": "Geist"
+      "value": "DM Sans"
     }
   },
   "fileToken": "3b028921-8ed4-495a-8fb5-f772d402e2bb"
