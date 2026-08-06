@@ -26,18 +26,23 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.mfs.tokengateway.db.dbservice.TokenApiKeyDbService;
 import com.mfs.tokengateway.db.dbservice.TokenPriceRuleDbService;
 import com.mfs.tokengateway.db.dbservice.TokenRequestLogDbService;
 import com.mfs.tokengateway.db.dbservice.TokenUserDbService;
 import com.mfs.tokengateway.db.dbservice.TokenWechatPayOrderDbService;
+import com.mfs.tokengateway.db.po.TokenApiKey;
 import com.mfs.tokengateway.db.po.TokenPriceRule;
 import com.mfs.tokengateway.db.po.TokenRequestLog;
 import com.mfs.tokengateway.db.po.TokenUser;
 import com.mfs.tokengateway.db.po.TokenWechatPayOrder;
+import com.mfs.tokengateway.server.api.dto.BillingPortalKeysResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalPricesResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse;
+import com.mfs.tokengateway.server.api.dto.KeyRotateResponse;
 import com.mfs.tokengateway.server.security.RechargeCaller;
+import com.mfs.tokengateway.server.security.UcIdentity;
 import com.mfs.tokengateway.server.upstream.ModelWhitelist;
 
 @ExtendWith(MockitoExtension.class)
@@ -51,6 +56,10 @@ class BillingPortalApplicationTest {
     private TokenWechatPayOrderDbService tokenWechatPayOrderDbService;
     @Mock
     private TokenPriceRuleDbService tokenPriceRuleDbService;
+    @Mock
+    private TokenApiKeyDbService tokenApiKeyDbService;
+    @Mock
+    private KeyRotateApplication keyRotateApplication;
 
     private ModelWhitelist modelWhitelist;
     private BillingPortalApplication app;
@@ -64,7 +73,9 @@ class BillingPortalApplicationTest {
                 tokenRequestLogDbService,
                 tokenWechatPayOrderDbService,
                 tokenPriceRuleDbService,
-                modelWhitelist);
+                tokenApiKeyDbService,
+                modelWhitelist,
+                keyRotateApplication);
     }
 
     @Test
@@ -324,6 +335,103 @@ class BillingPortalApplicationTest {
         assertEquals("deepseek-v4-pro", body.getItems().get(1).getModel());
         assertTrue(body.getAsOf() != null);
         assertEquals(0, body.getItems().get(0).getInputPriceYuanPerMtok().compareTo(new BigDecimal("1.200")));
+    }
+
+    @Test
+    void toKeyItemOmitsHash() {
+        TokenApiKey row = new TokenApiKey();
+        row.setName("ftcs-desktop");
+        row.setKeyPrefix("sk-Ab12CdEf");
+        row.setKeyHash("deadbeef");
+        row.setStatus("active");
+        row.setCreatedAt(LocalDateTime.ofInstant(Instant.parse("2026-07-01T02:00:00Z"), ZoneOffset.UTC));
+        row.setUpdatedAt(LocalDateTime.ofInstant(Instant.parse("2026-08-01T10:00:00Z"), ZoneOffset.UTC));
+
+        var item = BillingPortalApplication.toKeyItem(row);
+        assertEquals("ftcs-desktop", item.getName());
+        assertEquals("sk-Ab12CdEf", item.getKeyPrefix());
+        assertEquals("active", item.getStatus());
+        assertEquals(Instant.parse("2026-07-01T02:00:00Z"), item.getCreatedAt());
+        assertEquals(Instant.parse("2026-08-01T10:00:00Z"), item.getUpdatedAt());
+    }
+
+    @Test
+    void toUcIdentityUsesPortalClientId() {
+        RechargeCaller caller = new RechargeCaller(1L, "tenant-a", "u_code", 9L, Instant.now().plusSeconds(60));
+        UcIdentity identity = BillingPortalApplication.toUcIdentity(caller);
+        assertEquals("tenant-a", identity.getTenantId());
+        assertEquals("u_code", identity.getUserCode());
+        assertEquals("u_code", identity.getSubject());
+        assertEquals("billing-portal", identity.getClientId());
+    }
+
+    @Test
+    void listKeysReturnsEmptyWhenNoUser() {
+        RechargeCaller caller = new RechargeCaller(1L, "t", "u", null, Instant.now().plusSeconds(60));
+        when(tokenUserDbService.findByTenantIdAndUserCode("t", "u")).thenReturn(null);
+
+        BillingPortalKeysResponse body = app.listKeys(caller);
+        assertTrue(body.getItems().isEmpty());
+    }
+
+    @Test
+    void listKeysMapsRows() {
+        TokenUser user = new TokenUser();
+        user.setId(9L);
+        when(tokenUserDbService.getById(9L)).thenReturn(user);
+
+        TokenApiKey row = new TokenApiKey();
+        row.setName("ftcs-desktop");
+        row.setKeyPrefix("sk-xxxx");
+        row.setKeyHash("should-not-appear");
+        row.setStatus("active");
+        when(tokenApiKeyDbService.listByUserId(9L)).thenReturn(List.of(row));
+
+        RechargeCaller caller = new RechargeCaller(1L, "t", "u", 9L, Instant.now().plusSeconds(60));
+        BillingPortalKeysResponse body = app.listKeys(caller);
+        assertEquals(1, body.getItems().size());
+        assertEquals("ftcs-desktop", body.getItems().get(0).getName());
+        assertEquals("sk-xxxx", body.getItems().get(0).getKeyPrefix());
+    }
+
+    @Test
+    void rotateKeyDelegatesToKeyRotateApplication() {
+        TokenUser user = new TokenUser();
+        user.setId(9L);
+        when(tokenUserDbService.getById(9L)).thenReturn(user);
+
+        TokenApiKey existing = new TokenApiKey();
+        existing.setName("ftcs-desktop");
+        when(tokenApiKeyDbService.findByUserIdAndName(9L, "ftcs-desktop")).thenReturn(existing);
+
+        RechargeCaller caller = new RechargeCaller(1L, "tenant-a", "u_code", 9L, Instant.now().plusSeconds(60));
+        KeyRotateResponse expected = new KeyRotateResponse();
+        expected.setAction("rotated");
+        expected.setApiKey("sk-secret");
+        when(keyRotateApplication.rotate(any(UcIdentity.class), eq("ftcs-desktop"))).thenReturn(expected);
+
+        KeyRotateResponse body = app.rotateKey(caller, "FTCS-Desktop");
+        assertEquals("rotated", body.getAction());
+        assertEquals("sk-secret", body.getApiKey());
+
+        ArgumentCaptor<UcIdentity> idCap = ArgumentCaptor.forClass(UcIdentity.class);
+        verify(keyRotateApplication).rotate(idCap.capture(), eq("ftcs-desktop"));
+        assertEquals("billing-portal", idCap.getValue().getClientId());
+        assertEquals("tenant-a", idCap.getValue().getTenantId());
+    }
+
+    @Test
+    void rotateKeyRejectsUnknownName() {
+        TokenUser user = new TokenUser();
+        user.setId(9L);
+        when(tokenUserDbService.getById(9L)).thenReturn(user);
+        when(tokenApiKeyDbService.findByUserIdAndName(9L, "missing")).thenReturn(null);
+
+        RechargeCaller caller = new RechargeCaller(1L, "t", "u", 9L, Instant.now().plusSeconds(60));
+        ResponseStatusException ex = assertThrows(
+                ResponseStatusException.class,
+                () -> app.rotateKey(caller, "missing"));
+        assertEquals("key_not_found", ex.getReason());
     }
 
     private static TokenPriceRule priceRule(String model, long inputLi, long outputLi) {

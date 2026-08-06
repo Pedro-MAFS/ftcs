@@ -16,14 +16,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.mfs.tokengateway.db.dbservice.TokenApiKeyDbService;
 import com.mfs.tokengateway.db.dbservice.TokenRequestLogDbService;
 import com.mfs.tokengateway.db.dbservice.TokenPriceRuleDbService;
 import com.mfs.tokengateway.db.dbservice.TokenUserDbService;
 import com.mfs.tokengateway.db.dbservice.TokenWechatPayOrderDbService;
+import com.mfs.tokengateway.db.po.TokenApiKey;
 import com.mfs.tokengateway.db.po.TokenPriceRule;
 import com.mfs.tokengateway.db.po.TokenRequestLog;
 import com.mfs.tokengateway.db.po.TokenUser;
 import com.mfs.tokengateway.db.po.TokenWechatPayOrder;
+import com.mfs.tokengateway.server.api.dto.BillingPortalKeysResponse;
+import com.mfs.tokengateway.server.api.dto.BillingPortalKeysResponse.BillingPortalKeyItem;
 import com.mfs.tokengateway.server.api.dto.BillingPortalMeResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalPricesResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalPricesResponse.BillingPortalPriceItem;
@@ -31,10 +35,12 @@ import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse.BillingPortalTopupItem;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse.BillingPortalUsageItem;
+import com.mfs.tokengateway.server.api.dto.KeyRotateResponse;
 import com.mfs.tokengateway.server.security.RechargeCaller;
+import com.mfs.tokengateway.server.security.UcIdentity;
 import com.mfs.tokengateway.server.upstream.ModelWhitelist;
 
-/** 用户面板只读查询（US-G4-02 / G4-03 / G4-04 / G4-05）。 */
+/** 用户面板查询与 Key 管理（US-G4-02～05 / G4-08）。 */
 @Service
 public class BillingPortalApplication {
 
@@ -42,24 +48,31 @@ public class BillingPortalApplication {
     static final int MAX_USAGE_LIMIT = 50;
     static final int DEFAULT_WINDOW_DAYS = 30;
     static final int MAX_WINDOW_DAYS = 90;
+    static final String PORTAL_CLIENT_ID = "billing-portal";
 
     private final TokenUserDbService tokenUserDbService;
     private final TokenRequestLogDbService tokenRequestLogDbService;
     private final TokenWechatPayOrderDbService tokenWechatPayOrderDbService;
     private final TokenPriceRuleDbService tokenPriceRuleDbService;
+    private final TokenApiKeyDbService tokenApiKeyDbService;
     private final ModelWhitelist modelWhitelist;
+    private final KeyRotateApplication keyRotateApplication;
 
     public BillingPortalApplication(
             TokenUserDbService tokenUserDbService,
             TokenRequestLogDbService tokenRequestLogDbService,
             TokenWechatPayOrderDbService tokenWechatPayOrderDbService,
             TokenPriceRuleDbService tokenPriceRuleDbService,
-            ModelWhitelist modelWhitelist) {
+            TokenApiKeyDbService tokenApiKeyDbService,
+            ModelWhitelist modelWhitelist,
+            KeyRotateApplication keyRotateApplication) {
         this.tokenUserDbService = tokenUserDbService;
         this.tokenRequestLogDbService = tokenRequestLogDbService;
         this.tokenWechatPayOrderDbService = tokenWechatPayOrderDbService;
         this.tokenPriceRuleDbService = tokenPriceRuleDbService;
+        this.tokenApiKeyDbService = tokenApiKeyDbService;
         this.modelWhitelist = modelWhitelist;
+        this.keyRotateApplication = keyRotateApplication;
     }
 
     public BillingPortalMeResponse me(RechargeCaller caller) {
@@ -168,6 +181,35 @@ public class BillingPortalApplication {
         return body;
     }
 
+    public BillingPortalKeysResponse listKeys(RechargeCaller caller) {
+        BillingPortalKeysResponse body = new BillingPortalKeysResponse();
+        Long userId = resolveUserId(caller);
+        if (userId == null) {
+            body.setItems(List.of());
+            return body;
+        }
+        List<TokenApiKey> rows = tokenApiKeyDbService.listByUserId(userId);
+        List<BillingPortalKeyItem> items = new ArrayList<>(rows.size());
+        for (TokenApiKey row : rows) {
+            items.add(toKeyItem(row));
+        }
+        body.setItems(items);
+        return body;
+    }
+
+    public KeyRotateResponse rotateKey(RechargeCaller caller, String rawName) {
+        if (caller == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid_recharge_ticket");
+        }
+        // 面板本期仅允许重置已有 name，不开放新增（桌面 JWT rotate 仍可创建）。
+        String name = KeyNameRules.normalizeAndValidate(rawName);
+        Long userId = resolveUserId(caller);
+        if (userId == null || tokenApiKeyDbService.findByUserIdAndName(userId, name) == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "key_not_found");
+        }
+        return keyRotateApplication.rotate(toUcIdentity(caller), name);
+    }
+
     private Long resolveUserId(RechargeCaller caller) {
         TokenUser user = resolveUser(caller);
         if (user != null) {
@@ -267,6 +309,31 @@ public class BillingPortalApplication {
             item.setEffectiveFrom(row.getEffectiveFrom().toInstant(ZoneOffset.UTC));
         }
         return item;
+    }
+
+    static BillingPortalKeyItem toKeyItem(TokenApiKey row) {
+        BillingPortalKeyItem item = new BillingPortalKeyItem();
+        item.setName(row.getName());
+        item.setKeyPrefix(row.getKeyPrefix());
+        item.setStatus(row.getStatus());
+        if (row.getCreatedAt() != null) {
+            item.setCreatedAt(row.getCreatedAt().toInstant(ZoneOffset.UTC));
+        }
+        if (row.getUpdatedAt() != null) {
+            item.setUpdatedAt(row.getUpdatedAt().toInstant(ZoneOffset.UTC));
+        }
+        if (row.getLastUsedAt() != null) {
+            item.setLastUsedAt(row.getLastUsedAt().toInstant(ZoneOffset.UTC));
+        }
+        return item;
+    }
+
+    static UcIdentity toUcIdentity(RechargeCaller caller) {
+        return new UcIdentity(
+                caller.getTenantId(),
+                caller.getUserCode(),
+                caller.getUserCode(),
+                PORTAL_CLIENT_ID);
     }
 
     /** 厘 → 元；null 保持 null（待结算）。 */

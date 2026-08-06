@@ -367,6 +367,35 @@
       border: 1px solid var(--border);
       object-fit: cover;
     }
+    .keys-row-actions {
+      display: flex;
+      justify-content: flex-end;
+      padding-top: 2px;
+    }
+    .keys-row-actions .btn {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    .modal.secret-modal {
+      text-align: left;
+      width: min(440px, 100%);
+    }
+    .modal .secret-box {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      word-break: break-all;
+      padding: 12px;
+      background: var(--bg-muted);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+    }
+    .modal .modal-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
 
     .site-foot {
       position: fixed;
@@ -482,7 +511,10 @@
 
       <section class="section" id="tab-keys">
         <h2>API Token</h2>
-        <p class="placeholder">签发与重置即将在本面板开放；当前仍可通过桌面客户端管理凭证。</p>
+        <p class="usage-hint">可重置已有 Token；明文仅在成功后展示一次。本期不支持在面板新增。</p>
+        <div class="usage-list" id="keys-list"></div>
+        <p class="placeholder" id="keys-empty" hidden>尚无 API Token；请先在客户端签发后再回此页重置。</p>
+        <p class="inline-error" id="keys-error" hidden></p>
       </section>
       <section class="section" id="tab-usage">
         <h2>Token 消费</h2>
@@ -541,6 +573,29 @@
         <span>微信公众号</span>
       </div>
       <button type="button" class="btn btn-primary" id="btn-close-refund">知道了</button>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="keys-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="keys-confirm-title" hidden>
+    <div class="modal">
+      <h3 id="keys-confirm-title">确认重置</h3>
+      <p id="keys-confirm-body">将使旧 Key 立即失效，是否继续？</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="btn-keys-confirm-cancel">取消</button>
+        <button type="button" class="btn btn-primary" id="btn-keys-confirm-ok">继续重置</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="keys-secret-modal" role="dialog" aria-modal="true" aria-labelledby="keys-secret-title" hidden>
+    <div class="modal secret-modal">
+      <h3 id="keys-secret-title">API Token 已重置</h3>
+      <p id="keys-secret-hint">请立即复制保存。关闭后无法再查看明文。</p>
+      <div class="secret-box" id="keys-secret-value"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="btn-keys-copy">复制</button>
+        <button type="button" class="btn btn-primary" id="btn-keys-secret-close">已保存，关闭</button>
+      </div>
     </div>
   </div>
 
@@ -604,7 +659,19 @@
     topupsWindowSeg: document.querySelectorAll("#topups-window-seg button"),
     pricesList: document.getElementById("prices-list"),
     pricesEmpty: document.getElementById("prices-empty"),
-    pricesError: document.getElementById("prices-error")
+    pricesError: document.getElementById("prices-error"),
+    keysList: document.getElementById("keys-list"),
+    keysEmpty: document.getElementById("keys-empty"),
+    keysError: document.getElementById("keys-error"),
+    keysConfirmModal: document.getElementById("keys-confirm-modal"),
+    keysConfirmBody: document.getElementById("keys-confirm-body"),
+    btnKeysConfirmCancel: document.getElementById("btn-keys-confirm-cancel"),
+    btnKeysConfirmOk: document.getElementById("btn-keys-confirm-ok"),
+    keysSecretModal: document.getElementById("keys-secret-modal"),
+    keysSecretTitle: document.getElementById("keys-secret-title"),
+    keysSecretValue: document.getElementById("keys-secret-value"),
+    btnKeysCopy: document.getElementById("btn-keys-copy"),
+    btnKeysSecretClose: document.getElementById("btn-keys-secret-close")
   };
 
   var usageState = {
@@ -631,6 +698,15 @@
     loaded: false,
     loading: false,
     items: []
+  };
+
+  var keysState = {
+    loaded: false,
+    loading: false,
+    rotating: false,
+    items: [],
+    pendingName: null,
+    lastSecret: null
   };
 
   function daysLabel(days) {
@@ -924,6 +1000,158 @@
     });
   }
 
+  function keyStatusLabel(status) {
+    var s = String(status || "").toLowerCase();
+    if (s === "active") return "可用";
+    if (s === "disabled") return "已停用";
+    return status || "—";
+  }
+
+  function renderKeysList() {
+    els.keysList.innerHTML = "";
+    keysState.items.forEach(function (item) {
+      var row = document.createElement("div");
+      row.className = "usage-row";
+
+      var top = document.createElement("div");
+      top.className = "usage-row-top";
+      var name = document.createElement("span");
+      name.className = "model";
+      name.textContent = item.name || "—";
+      var status = document.createElement("span");
+      status.className = "charge";
+      status.textContent = keyStatusLabel(item.status);
+      top.appendChild(name);
+      top.appendChild(status);
+
+      var meta = document.createElement("div");
+      meta.className = "usage-row-meta";
+      var bits = [];
+      if (item.key_prefix) bits.push(item.key_prefix);
+      if (item.updated_at) bits.push("更新 " + formatLocalTime(item.updated_at));
+      if (item.last_used_at) bits.push("最近使用 " + formatLocalTime(item.last_used_at));
+      else if (item.created_at) bits.push("创建 " + formatLocalTime(item.created_at));
+      bits.forEach(function (text) {
+        var span = document.createElement("span");
+        span.textContent = text;
+        meta.appendChild(span);
+      });
+
+      var actions = document.createElement("div");
+      actions.className = "keys-row-actions";
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-ghost";
+      btn.textContent = "重置";
+      btn.disabled = keysState.rotating;
+      btn.addEventListener("click", function () {
+        openKeysConfirm(item.name);
+      });
+      actions.appendChild(btn);
+
+      row.appendChild(top);
+      row.appendChild(meta);
+      row.appendChild(actions);
+      els.keysList.appendChild(row);
+    });
+
+    var empty = keysState.items.length === 0 && keysState.loaded && !keysState.loading;
+    els.keysEmpty.hidden = !empty;
+  }
+
+  function loadKeys() {
+    if (keysState.loading) return Promise.resolve();
+    keysState.loading = true;
+    els.keysError.hidden = true;
+    els.keysEmpty.hidden = true;
+    return api("/v1/billing/portal/keys").then(function (res) {
+      if (res.status === 401) {
+        showNeed("expired");
+        return;
+      }
+      if (!res.ok || !res.body) {
+        els.keysError.hidden = false;
+        els.keysError.textContent = "无法加载 API Token，请稍后重试。";
+        return;
+      }
+      keysState.items = Array.isArray(res.body.items) ? res.body.items : [];
+      keysState.loaded = true;
+      renderKeysList();
+    }).catch(function () {
+      els.keysError.hidden = false;
+      els.keysError.textContent = "网络异常，请稍后重试。";
+    }).finally(function () {
+      keysState.loading = false;
+    });
+  }
+
+  function openKeysConfirm(name) {
+    keysState.pendingName = name;
+    els.keysConfirmBody.textContent = "将重置「" + name + "」，旧 Key 立即失效。是否继续？";
+    els.keysConfirmModal.hidden = false;
+    els.keysConfirmModal.classList.add("open");
+  }
+
+  function closeKeysConfirm() {
+    keysState.pendingName = null;
+    els.keysConfirmModal.classList.remove("open");
+    els.keysConfirmModal.hidden = true;
+  }
+
+  function openKeysSecret(apiKey) {
+    keysState.lastSecret = apiKey || null;
+    els.keysSecretTitle.textContent = "API Token 已重置";
+    els.keysSecretValue.textContent = apiKey || "";
+    els.keysSecretModal.hidden = false;
+    els.keysSecretModal.classList.add("open");
+  }
+
+  function closeKeysSecret() {
+    keysState.lastSecret = null;
+    els.keysSecretValue.textContent = "";
+    els.keysSecretModal.classList.remove("open");
+    els.keysSecretModal.hidden = true;
+  }
+
+  function requestRotate(name) {
+    if (keysState.rotating) return Promise.resolve();
+    keysState.rotating = true;
+    els.keysError.hidden = true;
+    renderKeysList();
+    return apiPost("/v1/billing/portal/keys/rotate", { name: name }).then(function (res) {
+      if (res.status === 401) {
+        showNeed("expired");
+        return;
+      }
+      if (!res.ok || !res.body || !res.body.api_key) {
+        els.keysError.hidden = false;
+        var reason = res.body && res.body.reason ? String(res.body.reason) : "";
+        if (res.status === 400 || reason === "invalid_name") {
+          els.keysError.textContent = "名称不合法，请稍后重试。";
+        } else if (res.status === 404 || reason === "key_not_found") {
+          els.keysError.textContent = "未找到该 Token，请刷新列表后重试。";
+        } else if (res.status === 403 || reason === "account_disabled") {
+          els.keysError.textContent = "账户已停用，无法重置 Token。";
+        } else {
+          els.keysError.textContent = "重置失败，请稍后重试。";
+        }
+        return;
+      }
+      openKeysSecret(res.body.api_key);
+      if (res.body.user && res.body.user.balance_li != null) {
+        els.balanceValue.textContent = formatYuan(res.body.user.balance_li);
+        els.meBalance.textContent = formatYuan(res.body.user.balance_li);
+      }
+      return loadKeys();
+    }).catch(function () {
+      els.keysError.hidden = false;
+      els.keysError.textContent = "网络异常，请稍后重试。";
+    }).finally(function () {
+      keysState.rotating = false;
+      renderKeysList();
+    });
+  }
+
   function renderUsageList() {
     els.usageList.innerHTML = "";
     usageState.items.forEach(function (item) {
@@ -1081,12 +1309,35 @@
     if (name === "prices" && !pricesState.loaded && !pricesState.loading) {
       loadPrices();
     }
+    if (name === "keys" && !keysState.loaded && !keysState.loading) {
+      loadKeys();
+    }
   }
 
   function api(path) {
     return fetch(path, {
       credentials: "same-origin",
       headers: { "Accept": "application/json" }
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        var body = null;
+        if (text) {
+          try { body = JSON.parse(text); } catch (e) { body = { raw: text }; }
+        }
+        return { ok: res.ok, status: res.status, body: body };
+      });
+    });
+  }
+
+  function apiPost(path, payload) {
+    return fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload || {})
     }).then(function (res) {
       return res.text().then(function (text) {
         var body = null;
@@ -1163,6 +1414,30 @@
     });
   });
   syncTopupsWindowButtons();
+
+  els.btnKeysConfirmCancel.addEventListener("click", closeKeysConfirm);
+  els.btnKeysConfirmOk.addEventListener("click", function () {
+    var name = keysState.pendingName;
+    closeKeysConfirm();
+    if (name) requestRotate(name);
+  });
+  els.keysConfirmModal.addEventListener("click", function (e) {
+    if (e.target === els.keysConfirmModal) closeKeysConfirm();
+  });
+  els.btnKeysSecretClose.addEventListener("click", closeKeysSecret);
+  els.keysSecretModal.addEventListener("click", function (e) {
+    if (e.target === els.keysSecretModal) closeKeysSecret();
+  });
+  els.btnKeysCopy.addEventListener("click", function () {
+    var text = keysState.lastSecret || els.keysSecretValue.textContent || "";
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        els.btnKeysCopy.textContent = "已复制";
+        setTimeout(function () { els.btnKeysCopy.textContent = "复制"; }, 1500);
+      }).catch(function () { /* ignore */ });
+    }
+  });
 
   if (bootstrap.ok) {
     showReady();

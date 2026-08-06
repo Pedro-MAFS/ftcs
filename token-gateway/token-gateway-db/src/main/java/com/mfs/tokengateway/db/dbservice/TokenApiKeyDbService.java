@@ -1,5 +1,7 @@
 package com.mfs.tokengateway.db.dbservice;
 
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -21,5 +23,13 @@ public class TokenApiKeyDbService extends ServiceImpl<TokenApiKeyMapper, TokenAp
     /** 按 key_hash 查；不存在返回 {@code null}。 */
     public TokenApiKey findByKeyHash(String keyHash) {
         return getOne(new LambdaQueryWrapper<TokenApiKey>().eq(TokenApiKey::getKeyHash, keyHash));
+    }
+
+    /** 用户面板 Key 列表（US-G4-08）：按 name 升序。 */
+    public List<TokenApiKey> listByUserId(long userId) {
+        List<TokenApiKey> rows = list(new LambdaQueryWrapper<TokenApiKey>()
+                .eq(TokenApiKey::getUserId, userId)
+                .orderByAsc(TokenApiKey::getName));
+        return rows == null ? List.of() : rows;
     }
 }

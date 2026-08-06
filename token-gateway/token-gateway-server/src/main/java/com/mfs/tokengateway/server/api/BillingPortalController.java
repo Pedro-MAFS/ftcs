@@ -2,16 +2,21 @@ package com.mfs.tokengateway.server.api;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.mfs.tokengateway.server.api.dto.BillingPortalKeysResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalMeResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalPricesResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse;
+import com.mfs.tokengateway.server.api.dto.KeyRotateRequest;
+import com.mfs.tokengateway.server.api.dto.KeyRotateResponse;
 import com.mfs.tokengateway.server.application.BillingPortalApplication;
 import com.mfs.tokengateway.server.security.RechargeCaller;
 
@@ -58,6 +63,20 @@ public class BillingPortalController {
     public BillingPortalPricesResponse prices(
             @RequestAttribute(value = RechargeCaller.REQUEST_ATTR, required = false) RechargeCaller caller) {
         return billingPortalApplication.listPrices(requireCaller(caller));
+    }
+
+    @GetMapping("/keys")
+    public BillingPortalKeysResponse keys(
+            @RequestAttribute(value = RechargeCaller.REQUEST_ATTR, required = false) RechargeCaller caller) {
+        return billingPortalApplication.listKeys(requireCaller(caller));
+    }
+
+    @PostMapping("/keys/rotate")
+    public KeyRotateResponse rotateKey(
+            @RequestAttribute(value = RechargeCaller.REQUEST_ATTR, required = false) RechargeCaller caller,
+            @RequestBody(required = false) KeyRotateRequest body) {
+        String name = body != null ? body.getName() : null;
+        return billingPortalApplication.rotateKey(requireCaller(caller), name);
     }
 
     private static RechargeCaller requireCaller(RechargeCaller caller) {
