@@ -53,7 +53,7 @@ token-gateway:
   settlement:
     # US-G0-10：异步结算（多实例认领 + 同用户合并扣减）
     enabled: true
-    fixed-delay: 5s
+    fixed-delay: 60s
     initial-delay: 10s
     batch-size: 50
     claim-timeout: 5m
