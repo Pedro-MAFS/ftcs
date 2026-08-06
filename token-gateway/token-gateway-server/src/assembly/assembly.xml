@@ -14,21 +14,18 @@
             <outputDirectory>/</outputDirectory>
             <destName>token-gateway-server.jar</destName>
         </file>
+        <!-- logs/ 被 gitignore，复用 config/.gitkeep 占位，保证 zip 含空日志目录 -->
+        <file>
+            <source>${project.basedir}/src/assembly/config/.gitkeep</source>
+            <outputDirectory>logs</outputDirectory>
+            <destName>.gitkeep</destName>
+        </file>
     </files>
 
     <fileSets>
         <fileSet>
             <directory>${project.basedir}/src/assembly/config</directory>
             <outputDirectory>config</outputDirectory>
-            <includes>
-                <include>**/*</include>
-            </includes>
-            <fileMode>0644</fileMode>
-            <directoryMode>0755</directoryMode>
-        </fileSet>
-        <fileSet>
-            <directory>${project.basedir}/src/assembly/logs</directory>
-            <outputDirectory>logs</outputDirectory>
             <includes>
                 <include>**/*</include>
             </includes>
