@@ -27,6 +27,16 @@ public class UpstreamClientConfig {
         return RestClient.builder().requestFactory(factory).build();
     }
 
+    @Bean(name = "tavilyRestClient")
+    RestClient tavilyRestClient(TokenGatewayProperties properties) {
+        Duration connect = properties.getUpstream().getTavily().getConnectTimeout();
+        Duration read = properties.getUpstream().getTavily().getReadTimeout();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(connect);
+        factory.setReadTimeout(read);
+        return RestClient.builder().requestFactory(factory).build();
+    }
+
     @Bean(name = "deepSeekHttpClient")
     HttpClient deepSeekHttpClient(TokenGatewayProperties properties) {
         return HttpClient.newBuilder()

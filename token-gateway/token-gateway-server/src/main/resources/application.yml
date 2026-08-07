@@ -45,6 +45,12 @@ token-gateway:
       stream-read-timeout: 300s
       stream-emitter-timeout: 300s
       stream-pool-size: 64
+    # US-G5-01：Tavily Search
+    tavily:
+      api-key: ${TAVILY_API_KEY:}
+      base-url: ${TAVILY_BASE_URL:https://api.tavily.com}
+      connect-timeout: 5s
+      read-timeout: 60s
   user-center:
     issuer-uri: ${UC_ISSUER_URI:https://user.ai-utills.com}
   key:

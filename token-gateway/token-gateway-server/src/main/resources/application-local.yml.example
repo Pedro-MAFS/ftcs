@@ -27,6 +27,8 @@ token-gateway:
   upstream:
     deepseek:
       api-key: ${DEEPSEEK_API_KEY:}
+    tavily:
+      api-key: ${TAVILY_API_KEY:}
   billing:
     # 可选；默认 300s
     recharge-ticket-ttl: ${GATEWAY_RECHARGE_TICKET_TTL:300s}

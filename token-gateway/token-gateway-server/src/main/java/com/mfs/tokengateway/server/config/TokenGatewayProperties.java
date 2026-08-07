@@ -47,9 +47,54 @@ public class TokenGatewayProperties {
 
     public static class Upstream {
         private final DeepSeek deepseek = new DeepSeek();
+        private final Tavily tavily = new Tavily();
 
         public DeepSeek getDeepseek() {
             return deepseek;
+        }
+
+        public Tavily getTavily() {
+            return tavily;
+        }
+    }
+
+    /** US-G5-01 Tavily Search 上游 */
+    public static class Tavily {
+        private String apiKey = "";
+        private String baseUrl = "https://api.tavily.com";
+        private Duration connectTimeout = Duration.ofSeconds(5);
+        private Duration readTimeout = Duration.ofSeconds(60);
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public Duration getConnectTimeout() {
+            return connectTimeout;
+        }
+
+        public void setConnectTimeout(Duration connectTimeout) {
+            this.connectTimeout = connectTimeout;
+        }
+
+        public Duration getReadTimeout() {
+            return readTimeout;
+        }
+
+        public void setReadTimeout(Duration readTimeout) {
+            this.readTimeout = readTimeout;
         }
     }
 
