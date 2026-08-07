@@ -58,7 +58,7 @@
 | 故事 | 详设文档（待写） | 出门 |
 |------|------------------|------|
 | US-G5-01 | [`design/US-G5-01-Tavily搜索代理设计.md`](./design/US-G5-01-Tavily搜索代理设计.md) | 路径、请求/响应、参数白名单 |
-| US-G5-02 | `design/US-G5-02-搜索鉴权与余额预检设计.md` | sk + 402 与 Chat 对齐 |
+| US-G5-02 | [`design/US-G5-02-搜索鉴权与余额预检设计.md`](./design/US-G5-02-搜索鉴权与余额预检设计.md) | sk + 402 与 Chat 对齐 |
 | US-G5-03 | `design/US-G5-03-搜索按次计量与结算设计.md` | 伪 model、摘要字段、价目种子、挂 G0-10 |
 | US-G5-04 | `design/US-G5-04-面板搜索价格展示设计.md` | 扩展 `…/prices` + 价格 Tab「元/次」 |
 
@@ -69,7 +69,7 @@
 ## 阶段 C — 网关实现（建议顺序）
 
 1. ~~US-G5-01：上游客户端 + `POST /v1/search`（**Mock 单测**验收；无免鉴权开关；真 sk 联调随 G5-02）~~ **已落地**  
-2. US-G5-02：挂 `GatewaySkAuthFacade` + 余额预检  
+2. ~~US-G5-02：挂 `GatewaySkAuthFacade` + 余额预检~~ **已落地**  
 3. US-G5-03：写 `token_request_logs`（`model=tavily.search`，按次 usage 约定）+ `price_rules` 种子 + 进异步结算  
 4. US-G5-04：面板价格扩展（可与 03 并行文档，实现依赖种子价）  
 5. 配置：`TAVILY_API_KEY`；文档化错误码（不泄露上游 Key）
