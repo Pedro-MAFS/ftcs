@@ -18,7 +18,7 @@
 |----|------|
 | 阶段 | **Phase G5**（G4 面板之后；可与桌面分册并行文档，实现串行） |
 | 鉴权 | 与 Chat 相同：`Authorization: Bearer sk-…`（G0-08） |
-| 计价 | **按次**（每次成功触发上游搜索计 1 次）；价目挂伪 model `tavily.search` |
+| 计价 | **按次**（代理路径**成功或失败**均计 1 次）；价目挂伪 model `tavily.search`；编码 **方案 A**（li/次×1e6 写入 input 列） |
 | 落账 | 复用 `token_request_logs` / `token_price_rules` / 异步结算；`model=tavily.search` |
 | 费率维护 | 与 Chat 同轨：`token_price_rules` **只 INSERT** 新 `effective_from`；运维 SQL；**无**管理端调价 UI |
 | 面板展示 | **要做**：扩展「价格」Tab / `…/prices`，展示 `tavily.search` **元/次**（US-G5-04）；消费列表自然出现即可 |
@@ -59,7 +59,7 @@
 |------|------------------|------|
 | US-G5-01 | [`design/US-G5-01-Tavily搜索代理设计.md`](./design/US-G5-01-Tavily搜索代理设计.md) | 路径、请求/响应、参数白名单 |
 | US-G5-02 | [`design/US-G5-02-搜索鉴权与余额预检设计.md`](./design/US-G5-02-搜索鉴权与余额预检设计.md) | sk + 402 与 Chat 对齐 |
-| US-G5-03 | `design/US-G5-03-搜索按次计量与结算设计.md` | 伪 model、摘要字段、价目种子、挂 G0-10 |
+| US-G5-03 | [`design/US-G5-03-搜索按次计量与结算设计.md`](./design/US-G5-03-搜索按次计量与结算设计.md) | 伪 model、摘要字段、价目种子、挂 G0-10 |
 | US-G5-04 | `design/US-G5-04-面板搜索价格展示设计.md` | 扩展 `…/prices` + 价格 Tab「元/次」 |
 
 **出门条件**：Must 详设评审通过后再编码。
@@ -70,7 +70,7 @@
 
 1. ~~US-G5-01：上游客户端 + `POST /v1/search`（**Mock 单测**验收；无免鉴权开关；真 sk 联调随 G5-02）~~ **已落地**  
 2. ~~US-G5-02：挂 `GatewaySkAuthFacade` + 余额预检~~ **已落地**  
-3. US-G5-03：写 `token_request_logs`（`model=tavily.search`，按次 usage 约定）+ `price_rules` 种子 + 进异步结算  
+3. ~~US-G5-03：写 `token_request_logs`（`model=tavily.search`，按次 usage 约定）+ `price_rules` 种子 + 进异步结算~~ **已落地**  
 4. US-G5-04：面板价格扩展（可与 03 并行文档，实现依赖种子价）  
 5. 配置：`TAVILY_API_KEY`；文档化错误码（不泄露上游 Key）
 
@@ -106,8 +106,8 @@
 | 项 | 约定 |
 |----|------|
 | 请求内 | **不算价、不扣费**（OQ-07） |
-| 计量 | 有上游成功 usage 语义 → `billing_status=pending`；失败无计费点 → `skipped_no_usage`（详设定） |
-| 按次映射 | 详设冻结：例如 `prompt_tokens=1, completion_tokens=0` 且价目 `input_price_li_per_mTok` 表示「厘/次」的等价编码，**或**显式 `li_per_call`——**B 阶段二选一写死，禁止双轨** |
+| 计量 | 代理路径成功/失败均写按次 usage → `billing_status=pending`；参数校验/鉴权预检失败不写（见 US-G5-03） |
+| 按次映射 | **已冻结方案 A**（见 [US-G5-03](./design/US-G5-03-搜索按次计量与结算设计.md)）：`prompt_tokens=1` + `input_price_li_per_mTok = li_per_call × 1e6`；**不做** `li_per_call` 扩列 |
 | 预检 | 至少能覆盖 1 次搜索单价（`min-balance` 或按价目估算） |
 
 ---

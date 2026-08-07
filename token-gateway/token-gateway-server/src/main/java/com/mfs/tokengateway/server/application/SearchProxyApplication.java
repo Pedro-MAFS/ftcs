@@ -2,25 +2,34 @@ package com.mfs.tokengateway.server.application;
 
 import java.util.Iterator;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.mfs.tokengateway.server.metering.RequestMeterCommand;
+import com.mfs.tokengateway.server.metering.RequestMeterService;
+import com.mfs.tokengateway.server.metering.SearchBilling;
+import com.mfs.tokengateway.server.security.ChatCaller;
 import com.mfs.tokengateway.server.upstream.TavilySearchClient;
 import com.mfs.tokengateway.server.upstream.UpstreamException;
 import com.mfs.tokengateway.server.upstream.UpstreamSearchResponse;
+import com.mfs.tokengateway.server.web.RequestIds;
 
 /**
- * Tavily 搜索代理：参数白名单 + 出站 + 稳定 DTO（US-G5-01；不计费，鉴权由 Controller 门面处理）。
+ * Tavily 搜索代理 + 按次计量落库（US-G5-01/03；鉴权/预检在 Controller）。
  */
 @Service
 public class SearchProxyApplication {
@@ -34,14 +43,19 @@ public class SearchProxyApplication {
     private static final int MAX_RESULTS_DEFAULT = 5;
     private static final int MAX_RESULTS_MIN = 1;
     private static final int MAX_RESULTS_MAX = 10;
-    private static final String SEARCH_DEPTH_BASIC = "basic";
+    private static final String SEARCH_DEPTH_BASIC = SearchBilling.SEARCH_DEPTH_BASIC;
 
     private final TavilySearchClient tavilySearchClient;
     private final ObjectMapper objectMapper;
+    private final RequestMeterService requestMeterService;
 
-    public SearchProxyApplication(TavilySearchClient tavilySearchClient, ObjectMapper objectMapper) {
+    public SearchProxyApplication(
+            TavilySearchClient tavilySearchClient,
+            ObjectMapper objectMapper,
+            RequestMeterService requestMeterService) {
         this.tavilySearchClient = tavilySearchClient;
         this.objectMapper = objectMapper;
+        this.requestMeterService = requestMeterService;
     }
 
     public ResponseEntity<String> search(JsonNode body) {
@@ -54,25 +68,109 @@ public class SearchProxyApplication {
         outbound.put("include_answer", false);
         outbound.put("include_raw_content", false);
 
+        ChatCaller caller = currentCaller();
+        String requestId = currentRequestId();
+        long startedNs = System.nanoTime();
+
         try {
             UpstreamSearchResponse upstream = tavilySearchClient.search(outbound);
             ObjectNode dto = projectResponse(req, upstream.body());
+            int resultCount = dto.path("results").size();
+            meterSuccess(requestId, caller, req.searchDepth(), resultCount, startedNs, upstream.statusCode());
             log.info(
                     "search ok maxResults={} resultCount={}",
                     req.maxResults(),
-                    dto.path("results").size());
+                    resultCount);
             return ResponseEntity.status(upstream.statusCode())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(objectMapper.writeValueAsString(dto));
         } catch (UpstreamException e) {
+            // 先落库再包装为 ResponseStatusException；本 catch 抛出的 RSE 不会再进下面的 RSE 分支
+            meterError(requestId, caller, req.searchDepth(), e.getCode(), startedNs, statusOrNull(e));
             throw new ResponseStatusException(e.getStatus(), e.getCode(), e);
         } catch (ResponseStatusException e) {
+            // try 内若直接抛 RSE（非 UpstreamException 包装），同样按次落库后透传
+            meterError(
+                    requestId,
+                    caller,
+                    req.searchDepth(),
+                    e.getReason() != null ? e.getReason() : "error",
+                    startedNs,
+                    e.getStatusCode() != null ? e.getStatusCode().value() : null);
             throw e;
         } catch (Exception e) {
+            meterError(
+                    requestId,
+                    caller,
+                    req.searchDepth(),
+                    "upstream_invalid_response",
+                    startedNs,
+                    null);
             log.warn("search map failure: {}", e.toString());
             throw new ResponseStatusException(
                     HttpStatus.BAD_GATEWAY, "upstream_invalid_response", e);
         }
+    }
+
+    private void meterSuccess(
+            String requestId,
+            ChatCaller caller,
+            String searchDepth,
+            int resultCount,
+            long startedNs,
+            int upstreamStatus) {
+        requestMeterService.record(new RequestMeterCommand(
+                requestId,
+                caller,
+                SearchBilling.MODEL,
+                RequestMeterService.STATUS_SUCCESS,
+                SearchBilling.perCallUsage(objectMapper),
+                latencyMs(startedNs),
+                upstreamStatus,
+                SearchBilling.successSummary(searchDepth, resultCount)));
+    }
+
+    private void meterError(
+            String requestId,
+            ChatCaller caller,
+            String searchDepth,
+            String code,
+            long startedNs,
+            Integer upstreamStatus) {
+        requestMeterService.record(new RequestMeterCommand(
+                requestId,
+                caller,
+                SearchBilling.MODEL,
+                RequestMeterService.STATUS_ERROR,
+                SearchBilling.perCallUsage(objectMapper),
+                latencyMs(startedNs),
+                upstreamStatus,
+                SearchBilling.errorSummary(searchDepth, code)));
+    }
+
+    private static Integer statusOrNull(UpstreamException e) {
+        return e.getStatus() != null ? e.getStatus().value() : null;
+    }
+
+    private static int latencyMs(long startedNs) {
+        return (int) Math.min(Integer.MAX_VALUE, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNs));
+    }
+
+    private static ChatCaller currentCaller() {
+        RequestAttributes attrs = RequestContextHolder.getRequestAttributes();
+        if (attrs == null) {
+            return null;
+        }
+        Object value = attrs.getAttribute(ChatCaller.REQUEST_ATTR, RequestAttributes.SCOPE_REQUEST);
+        return value instanceof ChatCaller caller ? caller : null;
+    }
+
+    private static String currentRequestId() {
+        String fromMdc = MDC.get(RequestIds.MDC_KEY);
+        if (fromMdc != null && !fromMdc.isBlank()) {
+            return fromMdc;
+        }
+        return RequestIds.newId();
     }
 
     NormalizedSearchRequest validateAndNormalize(JsonNode body) {
