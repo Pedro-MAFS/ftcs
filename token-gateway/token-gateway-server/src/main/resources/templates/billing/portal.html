@@ -234,6 +234,11 @@
       color: var(--text-muted);
       font-size: 12px;
     }
+    .prices-section-label {
+      margin: 14px 0 6px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
     .usage-toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -298,6 +303,27 @@
     .usage-row-top .charge {
       font-weight: 600;
       white-space: nowrap;
+    }
+    .price-was {
+      color: var(--text-muted);
+      font-weight: 400;
+      text-decoration: line-through;
+      margin-right: 6px;
+    }
+    .price-now {
+      color: var(--success);
+      font-weight: 700;
+    }
+    .price-deal-tag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--success-muted);
+      color: var(--success);
+      font-size: 11px;
+      font-weight: 600;
+      vertical-align: 1px;
     }
     .usage-row-meta {
       display: flex;
@@ -552,10 +578,10 @@
         </div>
       </section>
       <section class="section" id="tab-prices">
-        <h2>模型价格</h2>
-        <p class="usage-hint" id="prices-unit-hint">单价单位：元 / 百万 Token</p>
+        <h2>价格</h2>
+        <p class="usage-hint" id="prices-unit-hint">模型单价：元 / 百万 Token；搜索单价：元 / 次</p>
         <div class="usage-list" id="prices-list"></div>
-        <p class="placeholder" id="prices-empty" hidden>暂无已定价模型</p>
+        <p class="placeholder" id="prices-empty" hidden>暂无已定价项目</p>
         <p class="usage-hint" id="prices-footnote">价格变更不影响已完成请求。</p>
         <p class="inline-error" id="prices-error" hidden></p>
       </section>
@@ -940,9 +966,38 @@
     });
   }
 
+  function appendPricePair(parent, label, nowYuan, listYuan) {
+    if (label) {
+      parent.appendChild(document.createTextNode(label + " "));
+    }
+    if (listYuan != null && listYuan !== "" && Number(listYuan) > Number(nowYuan)) {
+      var was = document.createElement("span");
+      was.className = "price-was";
+      was.textContent = formatChargeYuan(listYuan);
+      var now = document.createElement("span");
+      now.className = "price-now";
+      now.textContent = formatChargeYuan(nowYuan);
+      parent.appendChild(was);
+      parent.appendChild(now);
+      return true;
+    }
+    parent.appendChild(document.createTextNode(formatChargeYuan(nowYuan)));
+    return false;
+  }
+
   function renderPricesList() {
     els.pricesList.innerHTML = "";
+    var sawPerCall = false;
     pricesState.items.forEach(function (item) {
+      var unit = item.billing_unit || "per_mtok";
+      if (unit === "per_call" && !sawPerCall) {
+        sawPerCall = true;
+        var sep = document.createElement("p");
+        sep.className = "usage-hint prices-section-label";
+        sep.textContent = "搜索";
+        els.pricesList.appendChild(sep);
+      }
+
       var row = document.createElement("div");
       row.className = "usage-row";
 
@@ -950,12 +1005,31 @@
       top.className = "usage-row-top";
       var model = document.createElement("span");
       model.className = "model";
-      model.textContent = item.model || "—";
+      if (unit === "per_call") {
+        model.textContent = (item.model || "—") + " · 网页搜索（按次）";
+      } else {
+        model.textContent = item.model || "—";
+      }
       var prices = document.createElement("span");
       prices.className = "charge";
-      prices.textContent =
-        "输入 " + formatChargeYuan(item.input_price_yuan_per_mtok)
-        + " · 输出 " + formatChargeYuan(item.output_price_yuan_per_mtok);
+      var hasDeal = false;
+      if (unit === "per_call") {
+        prices.appendChild(document.createTextNode("每次 "));
+        hasDeal = appendPricePair(prices, "", item.price_yuan_per_call, item.list_price_yuan_per_call);
+      } else {
+        var inDeal = appendPricePair(
+          prices, "输入", item.input_price_yuan_per_mtok, item.list_input_price_yuan_per_mtok);
+        prices.appendChild(document.createTextNode(" · "));
+        var outDeal = appendPricePair(
+          prices, "输出", item.output_price_yuan_per_mtok, item.list_output_price_yuan_per_mtok);
+        hasDeal = inDeal || outDeal;
+      }
+      if (hasDeal) {
+        var tag = document.createElement("span");
+        tag.className = "price-deal-tag";
+        tag.textContent = "优惠";
+        prices.appendChild(tag);
+      }
       top.appendChild(model);
       top.appendChild(prices);
 
@@ -986,7 +1060,7 @@
       }
       if (!res.ok || !res.body) {
         els.pricesError.hidden = false;
-        els.pricesError.textContent = "无法加载模型价格，请稍后重试。";
+        els.pricesError.textContent = "无法加载价格，请稍后重试。";
         return;
       }
       pricesState.items = Array.isArray(res.body.items) ? res.body.items : [];

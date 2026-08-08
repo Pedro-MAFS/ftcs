@@ -311,9 +311,66 @@ class BillingPortalApplicationTest {
 
         var item = BillingPortalApplication.toPriceItem(row);
         assertEquals("deepseek-v4-flash", item.getModel());
+        assertEquals(BillingPortalPricesResponse.BILLING_UNIT_PER_MTOK, item.getBillingUnit());
         assertEquals(0, item.getInputPriceYuanPerMtok().compareTo(new BigDecimal("1.200")));
         assertEquals(0, item.getOutputPriceYuanPerMtok().compareTo(new BigDecimal("2.300")));
+        assertNull(item.getPriceYuanPerCall());
+        // 用户价高于上游 → 不展示划线原价
+        assertNull(item.getListInputPriceYuanPerMtok());
+        assertNull(item.getListOutputPriceYuanPerMtok());
         assertEquals(Instant.parse("2020-01-01T00:00:00Z"), item.getEffectiveFrom());
+    }
+
+    @Test
+    void toPriceItemExposesListPriceOnlyWhenUserBelowUpstream() {
+        TokenPriceRule row = new TokenPriceRule();
+        row.setModel("promo-model");
+        row.setInputPriceLiPerMTok(800L);
+        row.setOutputPriceLiPerMTok(1500L);
+        row.setUpstreamInputCostLiPerMTok(1000L);
+        row.setUpstreamOutputCostLiPerMTok(2016L);
+
+        var item = BillingPortalApplication.toPriceItem(row);
+        assertEquals(0, item.getListInputPriceYuanPerMtok().compareTo(new BigDecimal("1.000")));
+        assertEquals(0, item.getListOutputPriceYuanPerMtok().compareTo(new BigDecimal("2.016")));
+    }
+
+    @Test
+    void toPerCallPriceItemDecodesSchemeAAndOmitsMtokFields() {
+        TokenPriceRule row = new TokenPriceRule();
+        row.setModel("tavily.search");
+        row.setInputPriceLiPerMTok(100_000_000L); // 100 厘/次
+        row.setOutputPriceLiPerMTok(0L);
+        row.setUpstreamInputCostLiPerMTok(60_000_000L); // 用户价更高 → 无划线
+        row.setEffectiveFrom(LocalDateTime.ofInstant(Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC));
+
+        var item = BillingPortalApplication.toPerCallPriceItem(row);
+        assertEquals("tavily.search", item.getModel());
+        assertEquals(BillingPortalPricesResponse.BILLING_UNIT_PER_CALL, item.getBillingUnit());
+        assertEquals(0, item.getPriceYuanPerCall().compareTo(new BigDecimal("0.100")));
+        assertNull(item.getInputPriceYuanPerMtok());
+        assertNull(item.getOutputPriceYuanPerMtok());
+        assertNull(item.getListPriceYuanPerCall());
+        assertEquals(Instant.parse("2020-01-01T00:00:00Z"), item.getEffectiveFrom());
+    }
+
+    @Test
+    void toPerCallPriceItemShowsListWhenUserBelowUpstream() {
+        TokenPriceRule row = new TokenPriceRule();
+        row.setModel("tavily.search");
+        row.setInputPriceLiPerMTok(0L);
+        row.setUpstreamInputCostLiPerMTok(60_000_000L); // 60 厘/次 = 0.060 元
+
+        var item = BillingPortalApplication.toPerCallPriceItem(row);
+        assertEquals(0, item.getPriceYuanPerCall().compareTo(new BigDecimal("0.000")));
+        assertEquals(0, item.getListPriceYuanPerCall().compareTo(new BigDecimal("0.060")));
+    }
+
+    @Test
+    void toPerCallPriceItemZeroSeedStillProducesZeroYuan() {
+        TokenPriceRule row = priceRule("tavily.search", 0L, 0L);
+        var item = BillingPortalApplication.toPerCallPriceItem(row);
+        assertEquals(0, item.getPriceYuanPerCall().compareTo(new BigDecimal("0.000")));
     }
 
     @Test
@@ -323,14 +380,38 @@ class BillingPortalApplicationTest {
                 .thenReturn(priceRule("deepseek-v4-flash", 1200L, 2300L));
         when(tokenPriceRuleDbService.findEffective(eq("deepseek-v4-pro"), any()))
                 .thenReturn(priceRule("deepseek-v4-pro", 3600L, 7000L));
+        when(tokenPriceRuleDbService.findEffective(eq("tavily.search"), any())).thenReturn(null);
 
         RechargeCaller caller = new RechargeCaller(1L, "t", "u", null, Instant.now().plusSeconds(60));
         BillingPortalPricesResponse body = app.listPrices(caller);
         assertEquals(2, body.getItems().size());
         assertEquals("deepseek-v4-flash", body.getItems().get(0).getModel());
+        assertEquals(BillingPortalPricesResponse.BILLING_UNIT_PER_MTOK, body.getItems().get(0).getBillingUnit());
         assertEquals("deepseek-v4-pro", body.getItems().get(1).getModel());
         assertTrue(body.getAsOf() != null);
         assertEquals(0, body.getItems().get(0).getInputPriceYuanPerMtok().compareTo(new BigDecimal("1.200")));
+    }
+
+    @Test
+    void listPricesAppendsSearchPerCallAfterModels() {
+        when(tokenPriceRuleDbService.findEffective(eq("deepseek-unpriced"), any())).thenReturn(null);
+        when(tokenPriceRuleDbService.findEffective(eq("deepseek-v4-flash"), any()))
+                .thenReturn(priceRule("deepseek-v4-flash", 1200L, 2300L));
+        when(tokenPriceRuleDbService.findEffective(eq("deepseek-v4-pro"), any()))
+                .thenReturn(priceRule("deepseek-v4-pro", 3600L, 7000L));
+        TokenPriceRule search = priceRule("tavily.search", 0L, 0L);
+        search.setUpstreamInputCostLiPerMTok(60_000_000L);
+        when(tokenPriceRuleDbService.findEffective(eq("tavily.search"), any())).thenReturn(search);
+
+        RechargeCaller caller = new RechargeCaller(1L, "t", "u", null, Instant.now().plusSeconds(60));
+        BillingPortalPricesResponse body = app.listPrices(caller);
+        assertEquals(3, body.getItems().size());
+        assertEquals("tavily.search", body.getItems().get(2).getModel());
+        assertEquals(BillingPortalPricesResponse.BILLING_UNIT_PER_CALL, body.getItems().get(2).getBillingUnit());
+        assertEquals(0, body.getItems().get(2).getPriceYuanPerCall().compareTo(new BigDecimal("0.000")));
+        assertEquals(0, body.getItems().get(2).getListPriceYuanPerCall().compareTo(new BigDecimal("0.060")));
+        assertNull(body.getItems().get(2).getInputPriceYuanPerMtok());
+        assertNull(body.getItems().get(2).getOutputPriceYuanPerMtok());
     }
 
     @Test

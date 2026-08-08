@@ -36,11 +36,12 @@ import com.mfs.tokengateway.server.api.dto.BillingPortalTopupsResponse.BillingPo
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse;
 import com.mfs.tokengateway.server.api.dto.BillingPortalUsageResponse.BillingPortalUsageItem;
 import com.mfs.tokengateway.server.api.dto.KeyRotateResponse;
+import com.mfs.tokengateway.server.metering.SearchBilling;
 import com.mfs.tokengateway.server.security.RechargeCaller;
 import com.mfs.tokengateway.server.security.UcIdentity;
 import com.mfs.tokengateway.server.upstream.ModelWhitelist;
 
-/** 用户面板查询与 Key 管理（US-G4-02～05 / G4-08）。 */
+/** 用户面板查询与 Key 管理（US-G4-02～05 / G4-08 / G5-04）。 */
 @Service
 public class BillingPortalApplication {
 
@@ -175,6 +176,10 @@ public class BillingPortalApplication {
             }
             items.add(toPriceItem(rule));
         }
+        TokenPriceRule searchRule = tokenPriceRuleDbService.findEffective(SearchBilling.MODEL, asOfLdt);
+        if (searchRule != null) {
+            items.add(toPerCallPriceItem(searchRule));
+        }
         BillingPortalPricesResponse body = new BillingPortalPricesResponse();
         body.setAsOf(asOf);
         body.setItems(items);
@@ -303,12 +308,45 @@ public class BillingPortalApplication {
     static BillingPortalPriceItem toPriceItem(TokenPriceRule row) {
         BillingPortalPriceItem item = new BillingPortalPriceItem();
         item.setModel(row.getModel());
-        item.setInputPriceYuanPerMtok(liToYuan(row.getInputPriceLiPerMTok()));
-        item.setOutputPriceYuanPerMtok(liToYuan(row.getOutputPriceLiPerMTok()));
+        item.setBillingUnit(BillingPortalPricesResponse.BILLING_UNIT_PER_MTOK);
+        long inputUser = nz(row.getInputPriceLiPerMTok());
+        long outputUser = nz(row.getOutputPriceLiPerMTok());
+        long inputUp = nz(row.getUpstreamInputCostLiPerMTok());
+        long outputUp = nz(row.getUpstreamOutputCostLiPerMTok());
+        item.setInputPriceYuanPerMtok(liToYuan(inputUser));
+        item.setOutputPriceYuanPerMtok(liToYuan(outputUser));
+        // 仅用户价严格低于上游时展示划线原价（营销「赚到了」；不暴露 upstream_* 字段名）
+        if (inputUser < inputUp) {
+            item.setListInputPriceYuanPerMtok(liToYuan(inputUp));
+        }
+        if (outputUser < outputUp) {
+            item.setListOutputPriceYuanPerMtok(liToYuan(outputUp));
+        }
         if (row.getEffectiveFrom() != null) {
             item.setEffectiveFrom(row.getEffectiveFrom().toInstant(ZoneOffset.UTC));
         }
         return item;
+    }
+
+    /** 搜索按次价：方案 A 解码后元/次；优惠时附带 list 划线原价。 */
+    static BillingPortalPriceItem toPerCallPriceItem(TokenPriceRule row) {
+        BillingPortalPriceItem item = new BillingPortalPriceItem();
+        item.setModel(row.getModel());
+        item.setBillingUnit(BillingPortalPricesResponse.BILLING_UNIT_PER_CALL);
+        long userLiPerCall = SearchBilling.decodeLiPerCall(nz(row.getInputPriceLiPerMTok()));
+        long upstreamLiPerCall = SearchBilling.decodeLiPerCall(nz(row.getUpstreamInputCostLiPerMTok()));
+        item.setPriceYuanPerCall(liToYuan(userLiPerCall));
+        if (userLiPerCall < upstreamLiPerCall) {
+            item.setListPriceYuanPerCall(liToYuan(upstreamLiPerCall));
+        }
+        if (row.getEffectiveFrom() != null) {
+            item.setEffectiveFrom(row.getEffectiveFrom().toInstant(ZoneOffset.UTC));
+        }
+        return item;
+    }
+
+    private static long nz(Long v) {
+        return v == null ? 0L : v;
     }
 
     static BillingPortalKeyItem toKeyItem(TokenApiKey row) {

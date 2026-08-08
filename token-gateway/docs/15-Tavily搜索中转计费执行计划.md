@@ -60,7 +60,7 @@
 | US-G5-01 | [`design/US-G5-01-Tavily搜索代理设计.md`](./design/US-G5-01-Tavily搜索代理设计.md) | 路径、请求/响应、参数白名单 |
 | US-G5-02 | [`design/US-G5-02-搜索鉴权与余额预检设计.md`](./design/US-G5-02-搜索鉴权与余额预检设计.md) | sk + 402 与 Chat 对齐 |
 | US-G5-03 | [`design/US-G5-03-搜索按次计量与结算设计.md`](./design/US-G5-03-搜索按次计量与结算设计.md) | 伪 model、摘要字段、价目种子、挂 G0-10 |
-| US-G5-04 | `design/US-G5-04-面板搜索价格展示设计.md` | 扩展 `…/prices` + 价格 Tab「元/次」 |
+| US-G5-04 | [`design/US-G5-04-面板搜索价格展示设计.md`](./design/US-G5-04-面板搜索价格展示设计.md) | 扩展 `…/prices` + 价格 Tab「元/次」✅ 编码已落地 |
 
 **出门条件**：Must 详设评审通过后再编码。
 

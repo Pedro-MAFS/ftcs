@@ -47,6 +47,13 @@ class SearchBillingTest {
     }
 
     @Test
+    void decodeLiPerCallFromSchemeAEncoding() {
+        assertEquals(0L, SearchBilling.decodeLiPerCall(0L));
+        assertEquals(100L, SearchBilling.decodeLiPerCall(100_000_000L));
+        assertEquals(60L, SearchBilling.decodeLiPerCall(60_000_000L));
+    }
+
+    @Test
     void summariesNeverEmbedQueryText() {
         String success = SearchBilling.successSummary("basic", 3);
         assertEquals("depth=basic;results=3", success);
