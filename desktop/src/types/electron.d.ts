@@ -458,6 +458,18 @@ export interface RawLeadSaveResult {
   lead?: LeadRowDto
 }
 
+export interface ExportLeadsCsvInput {
+  content: string
+  defaultFileName: string
+}
+
+export interface ExportLeadsCsvResult {
+  ok: boolean
+  canceled?: boolean
+  path?: string
+  message: string
+}
+
 declare global {
   interface Window {
     ftcs?: {
@@ -547,6 +559,7 @@ declare global {
       startExploreR1: (input: DiscoverLeadsInput) => Promise<DiscoverLeadsResult>
       listLeads: (productId: string) => Promise<LeadsSnapshotDto>
       saveRawLead: (input: RawLeadSaveInput) => Promise<RawLeadSaveResult>
+      exportLeadsCsv: (input: ExportLeadsCsvInput) => Promise<ExportLeadsCsvResult>
       scoreAndDedupeLeads: (productId: string) => Promise<ScoreAndDedupeResult>
       listEmailDrafts: (productId: string) => Promise<EmailDraftsSnapshotDto>
       draftEmails: (input: DraftEmailsInput) => Promise<DraftEmailsResult>

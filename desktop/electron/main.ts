@@ -48,6 +48,7 @@ import type {
   KeywordsSaveInput,
   DiscoverLeadsInput,
   RawLeadSaveInput,
+  ExportLeadsCsvInput,
   DraftEmailsInput,
   RejectEmailDraftInput,
   ApproveEmailDraftInput,
@@ -60,6 +61,7 @@ import { loadExpansion, saveExpansion } from './keywords/keywords-reader'
 import { listExploreTasks } from './exploration/explore-tasks'
 import { listLeadsSnapshot } from './leads/leads-reader'
 import { saveRawLead } from './leads/lead-writer'
+import { saveCsvWithDialog } from './leads/export-csv'
 import { listEmailDraftsSnapshot } from './emails/emails-reader'
 import { approveEmailDraft, rejectEmailDraft } from './emails/emails-writer'
 import {
@@ -827,6 +829,17 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.LEADS_SAVE_RAW, (_event, input: RawLeadSaveInput) => {
     try {
       return saveRawLead(input)
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.LEADS_EXPORT_CSV, async (_event, input: ExportLeadsCsvInput) => {
+    try {
+      return await saveCsvWithDialog(input ?? { content: '', defaultFileName: '' }, mainWindow)
     } catch (err) {
       return {
         ok: false,

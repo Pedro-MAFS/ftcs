@@ -37,6 +37,7 @@ export const IPC = {
   EXPLORATION_START_R1: 'exploration:start-r1',
   LEADS_LIST: 'leads:list',
   LEADS_SAVE_RAW: 'leads:save-raw',
+  LEADS_EXPORT_CSV: 'leads:export-csv',
   LEADS_SCORE_AND_DEDUPE: 'leads:score-and-dedupe',
   EMAIL_DRAFT_LIST: 'email:draft-list',
   EMAIL_DRAFT_GENERATE: 'email:draft-generate',
@@ -500,6 +501,18 @@ export interface ScoreAndDedupeResult {
   ok: boolean
   message: string
   productId?: string
+}
+
+export interface ExportLeadsCsvInput {
+  content: string
+  defaultFileName: string
+}
+
+export interface ExportLeadsCsvResult {
+  ok: boolean
+  canceled?: boolean
+  path?: string
+  message: string
 }
 
 export interface EmailVariantDto {

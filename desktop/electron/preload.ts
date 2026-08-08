@@ -14,6 +14,8 @@ import type {
   LeadsSnapshotDto,
   RawLeadSaveInput,
   RawLeadSaveResult,
+  ExportLeadsCsvInput,
+  ExportLeadsCsvResult,
   ScoreAndDedupeResult,
   DraftEmailsInput,
   DraftEmailsResult,
@@ -210,6 +212,8 @@ const api = {
     ipcRenderer.invoke(IPC.LEADS_LIST, productId),
   saveRawLead: (input: RawLeadSaveInput): Promise<RawLeadSaveResult> =>
     ipcRenderer.invoke(IPC.LEADS_SAVE_RAW, input),
+  exportLeadsCsv: (input: ExportLeadsCsvInput): Promise<ExportLeadsCsvResult> =>
+    ipcRenderer.invoke(IPC.LEADS_EXPORT_CSV, input),
   scoreAndDedupeLeads: (productId: string): Promise<ScoreAndDedupeResult> =>
     ipcRenderer.invoke(IPC.LEADS_SCORE_AND_DEDUPE, productId),
   listEmailDrafts: (productId: string): Promise<EmailDraftsSnapshotDto> =>

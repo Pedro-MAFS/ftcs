@@ -7,6 +7,7 @@ import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
 import LeadDetailDrawer from '../components/shared/LeadDetailDrawer.vue'
 import type { LeadRowDto, LeadsSnapshotDto } from '../types/electron'
+import { buildLeadsCsv, defaultLeadsCsvFileName } from '../utils/leads-export'
 
 const meta = SECTION_META.leads
 const route = useRoute()
@@ -29,6 +30,7 @@ const activeFilter = ref<FilterId>('all')
 const runFilter = ref('')
 const searchQuery = ref('')
 const loading = ref(false)
+const exporting = ref(false)
 const scoring = ref(false)
 const drafting = ref(false)
 const pendingHighIds = ref<string[]>([])
@@ -239,6 +241,15 @@ const filteredRows = computed(() => {
   )
 })
 
+const canExport = computed(() => {
+  return (
+    !!activeProductId.value &&
+    !exporting.value &&
+    filteredRows.value.length > 0 &&
+    !!window.ftcs?.exportLeadsCsv
+  )
+})
+
 async function refreshLeads(): Promise<void> {
   if (!window.ftcs?.listLeads || !activeProductId.value) {
     snapshot.value = null
@@ -381,6 +392,33 @@ function goExplore(): void {
   router.push({ name: 'explore' }).catch(() => undefined)
 }
 
+async function onExportCsv(): Promise<void> {
+  if (!activeProductId.value || !window.ftcs?.exportLeadsCsv) return
+  const rows = filteredRows.value
+  if (rows.length === 0) {
+    actionMessage.value = '当前筛选无结果，无法导出'
+    return
+  }
+
+  exporting.value = true
+  actionMessage.value = ''
+  try {
+    const content = buildLeadsCsv(rows)
+    const res = await window.ftcs.exportLeadsCsv({
+      content,
+      defaultFileName: defaultLeadsCsvFileName(activeProductId.value, {
+        runId: runFilter.value || undefined,
+      }),
+    })
+    if (res.canceled) return
+    actionMessage.value = res.message
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    exporting.value = false
+  }
+}
+
 function openDrawer(row: LeadRowDto): void {
   selectedId.value = row.id
   detailLead.value = row
@@ -478,6 +516,19 @@ onUnmounted(() => {
         <p>{{ subtitle }}</p>
       </div>
       <div class="main-pane__actions">
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="!canExport"
+          :title="
+            filteredRows.length > 0
+              ? `导出当前筛选的 ${filteredRows.length} 条线索为 CSV`
+              : '当前筛选无结果'
+          "
+          @click="onExportCsv"
+        >
+          {{ exporting ? '导出中…' : `导出 CSV${filteredRows.length ? ` ${filteredRows.length}` : ''}` }}
+        </button>
         <button
           type="button"
           class="btn-secondary"
