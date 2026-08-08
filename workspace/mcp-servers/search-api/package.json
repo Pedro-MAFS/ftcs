@@ -1,9 +1,9 @@
 {
   "name": "@ftcs/search-api",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "MCP server for web search via Tavily",
+  "description": "MCP server for web search via Tavily or FTCS token gateway",
   "bin": {
     "search-api": "./dist/mcp.js"
   },
@@ -12,7 +12,7 @@
     "build:tsc": "tsc",
     "start": "node dist/mcp.js",
     "dev": "npm run build && node dist/mcp.js",
-    "test": "npm run build:tsc && node --test dist/tavily.test.js dist/cache.test.js"
+    "test": "npm run build:tsc && node --test dist/tavily.test.js dist/cache.test.js dist/gateway.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

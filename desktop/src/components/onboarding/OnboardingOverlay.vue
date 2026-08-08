@@ -383,12 +383,18 @@ watch(phase, async (p) => {
 watch(
   () => form.channelMode,
   (mode) => {
-    if (mode !== 'official') return
-    if (!OFFICIAL_MODEL_CATALOG.models.some((m) => m.id === form.model)) {
-      form.model = OFFICIAL_MODEL_CATALOG.models[0].id
+    if (mode === 'official') {
+      form.searchProvider = 'gateway'
+      if (!OFFICIAL_MODEL_CATALOG.models.some((m) => m.id === form.model)) {
+        form.model = OFFICIAL_MODEL_CATALOG.models[0].id
+      }
+      if (!OFFICIAL_MODEL_CATALOG.small.some((m) => m.id === form.smallModel)) {
+        form.smallModel = OFFICIAL_MODEL_CATALOG.small[0].id
+      }
+      return
     }
-    if (!OFFICIAL_MODEL_CATALOG.small.some((m) => m.id === form.smallModel)) {
-      form.smallModel = OFFICIAL_MODEL_CATALOG.small[0].id
+    if (form.searchProvider === 'gateway') {
+      form.searchProvider = 'tavily'
     }
   },
 )
@@ -710,8 +716,11 @@ onMounted(() => {
             </div>
 
             <div class="onboarding__section-head">
-              <p class="onboarding__section-label">搜索 API（Tavily）· R1 探索需要</p>
+              <p class="onboarding__section-label">
+                {{ isOfficial ? '搜索服务 · R1 探索需要' : '搜索 API（Tavily）· R1 探索需要' }}
+              </p>
               <button
+                v-if="!isOfficial"
                 type="button"
                 class="help-link-btn"
                 title="什么是 Tavily？"
@@ -721,7 +730,12 @@ onMounted(() => {
                 <Icon name="help-circle" :size="14" />
               </button>
             </div>
-            <div class="onboarding__card">
+            <div v-if="isOfficial" class="onboarding__card">
+              <p class="hint-line">
+                官方通道下免费提供搜索服务，无需单独配置。
+              </p>
+            </div>
+            <div v-else class="onboarding__card">
               <div class="onboarding__key-row">
                 <input
                   v-model="form.tavilyApiKey"
@@ -738,7 +752,7 @@ onMounted(() => {
                 </button>
               </div>
               <p class="hint-line">
-                免费用户每月约 1000 次调用。前往
+                自定义通道需自备 Tavily Key。免费用户每月约 1000 次调用。前往
                 <button
                   type="button"
                   class="onboarding__link"

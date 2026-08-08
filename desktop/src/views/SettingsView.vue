@@ -324,14 +324,23 @@ async function onProvisionOfficial(reset = false): Promise<void> {
 watch(
   () => form.channelMode,
   (mode) => {
-    if (mode !== 'official') return
-    const opts = modelOptions.value
-    if (opts.length && !opts.some((m) => m.id === form.model)) {
-      form.model = opts[0].id
+    if (mode === 'official') {
+      form.searchProvider = 'gateway'
+      const opts = modelOptions.value
+      if (opts.length && !opts.some((m) => m.id === form.model)) {
+        form.model = opts[0].id
+      }
+      const smalls = smallModelOptions.value
+      if (smalls.length && !smalls.some((m) => m.id === form.smallModel)) {
+        form.smallModel = smalls[0].id
+      }
+      return
     }
-    const smalls = smallModelOptions.value
-    if (smalls.length && !smalls.some((m) => m.id === form.smallModel)) {
-      form.smallModel = smalls[0].id
+    if (form.searchProvider === 'gateway') {
+      form.searchProvider = 'tavily'
+    }
+    if (!Number.isFinite(form.searchDailyLimit) || form.searchDailyLimit >= 999999) {
+      form.searchDailyLimit = 50
     }
   },
 )
@@ -810,6 +819,7 @@ async function onCheckUpdate(): Promise<void> {
             <div class="settings-block__title">
               <h3>搜索服务</h3>
               <button
+                v-if="isCustom"
                 type="button"
                 class="help-link-btn"
                 title="什么是 Tavily？为什么需要搜索 Key？"
@@ -822,59 +832,89 @@ async function onCheckUpdate(): Promise<void> {
             <span class="muted mono">workspace/.env · SEARCH_*</span>
           </div>
 
-          <div class="field-grid">
-            <div>
-              <label class="field-label">搜索提供商</label>
-              <select v-model="form.searchProvider" class="text-input">
-                <option value="tavily">Tavily</option>
-              </select>
+          <template v-if="isOfficial">
+            <p class="hint-line">
+              <Icon name="info" :size="12" />
+              官方通道下免费提供搜索服务，无需单独配置。
+            </p>
+            <div class="field-grid">
+              <div>
+                <label class="field-label">搜索提供商</label>
+                <input class="text-input" value="官方通道（Token 网关）" disabled />
+              </div>
+              <div>
+                <label class="field-label">计费方式</label>
+                <input class="text-input" value="官方免费提供" disabled />
+              </div>
             </div>
-            <div>
-              <label class="field-label">日限额 SEARCH_DAILY_LIMIT</label>
+            <label class="field-label">TAVILY_API_KEY</label>
+            <div class="input-row">
               <input
-                v-model.number="form.searchDailyLimit"
                 class="text-input"
-                type="number"
-                min="1"
-                max="10000"
+                type="password"
+                value=""
+                placeholder="官方通道下无需配置"
+                disabled
+                autocomplete="off"
               />
             </div>
-          </div>
+          </template>
 
-          <label class="field-label">TAVILY_API_KEY</label>
-          <div class="input-row">
-            <input
-              v-model="form.tavilyApiKey"
-              class="text-input"
-              :type="showTavilyKey ? 'text' : 'password'"
-              :placeholder="snapshot?.tavilyApiKeySet ? '已配置（修改则覆盖）' : 'tvly-…'"
-              autocomplete="off"
-            />
-            <button type="button" class="icon-btn" @click="showTavilyKey = !showTavilyKey">
-              <Icon :name="showTavilyKey ? 'eye' : 'eye-off'" :size="14" />
-            </button>
-          </div>
-          <p class="hint-line">
-            免费用户每月约 1000 次调用。前往
-            <button
-              type="button"
-              class="text-link-btn"
-              @click="openProductLink(PRODUCT_LINKS.tavily)"
-            >
-              Tavily 官网
-            </button>
-            注册并获取 API Key。
-          </p>
-
-          <div class="usage-row">
-            <span class="mono">
-              今日用量 {{ snapshot?.searchUsedToday ?? 0 }} / {{ form.searchDailyLimit }}
-            </span>
-            <div class="usage-bar">
-              <i :style="{ width: `${usagePct}%` }" />
+          <template v-else>
+            <div class="field-grid">
+              <div>
+                <label class="field-label">搜索提供商</label>
+                <select v-model="form.searchProvider" class="text-input">
+                  <option value="tavily">Tavily</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label">日限额 SEARCH_DAILY_LIMIT</label>
+                <input
+                  v-model.number="form.searchDailyLimit"
+                  class="text-input"
+                  type="number"
+                  min="1"
+                  max="10000"
+                />
+              </div>
             </div>
-            <span class="mono muted">{{ usagePct }}%</span>
-          </div>
+
+            <label class="field-label">TAVILY_API_KEY</label>
+            <div class="input-row">
+              <input
+                v-model="form.tavilyApiKey"
+                class="text-input"
+                :type="showTavilyKey ? 'text' : 'password'"
+                :placeholder="snapshot?.tavilyApiKeySet ? '已配置（修改则覆盖）' : 'tvly-…'"
+                autocomplete="off"
+              />
+              <button type="button" class="icon-btn" @click="showTavilyKey = !showTavilyKey">
+                <Icon :name="showTavilyKey ? 'eye' : 'eye-off'" :size="14" />
+              </button>
+            </div>
+            <p class="hint-line">
+              自定义通道需自备 Tavily Key（不经官方余额）。免费用户每月约 1000 次调用。前往
+              <button
+                type="button"
+                class="text-link-btn"
+                @click="openProductLink(PRODUCT_LINKS.tavily)"
+              >
+                Tavily 官网
+              </button>
+              注册并获取 API Key。
+            </p>
+
+            <div class="usage-row">
+              <span class="mono">
+                今日用量 {{ snapshot?.searchUsedToday ?? 0 }} / {{ form.searchDailyLimit }}
+              </span>
+              <div class="usage-bar">
+                <i :style="{ width: `${usagePct}%` }" />
+              </div>
+              <span class="mono muted">{{ usagePct }}%</span>
+            </div>
+          </template>
         </section>
 
         <hr class="settings-divider" />

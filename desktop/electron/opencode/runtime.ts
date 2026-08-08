@@ -426,22 +426,42 @@ export class OpenCodeRuntime {
   }
 }
 
-/** 确保 MCP 子进程带上绝对 FTCS_WORKSPACE，并注入搜索相关密钥 */
+/** 确保 MCP 子进程带上绝对 FTCS_WORKSPACE，并按通道注入搜索凭证（docs/15） */
 function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
   const mcp = (config as { mcp?: Record<string, { environment?: Record<string, string> }> }).mcp
   if (!mcp || typeof mcp !== 'object') return config
 
-  const searchEnv = {
-    FTCS_WORKSPACE: workspaceRoot,
-    SEARCH_PROVIDER: process.env.SEARCH_PROVIDER ?? 'tavily',
-    SEARCH_DAILY_LIMIT: process.env.SEARCH_DAILY_LIMIT ?? '50',
-    ...(process.env.TAVILY_API_KEY
-      ? { TAVILY_API_KEY: process.env.TAVILY_API_KEY }
-      : {}),
-    ...(process.env.SERPAPI_API_KEY
-      ? { SERPAPI_API_KEY: process.env.SERPAPI_API_KEY }
-      : {}),
-  }
+  const channelMode = (process.env.FTCS_CHANNEL_MODE || 'official').trim()
+  const officialSearch = channelMode === 'official'
+  const gatewayBase = (
+    process.env.FTCS_TOKEN_GATEWAY_BASE_URL ||
+    'https://token.ai-utills.com/v1'
+  ).replace(/\/+$/, '')
+
+  // 官方：强制 gateway + sk；不注入用户 Tavily Key 作为上游
+  // 自定义：直连 Tavily BYOK
+  const searchEnv = officialSearch
+    ? {
+        FTCS_WORKSPACE: workspaceRoot,
+        SEARCH_PROVIDER: 'gateway',
+        // 官方以网关余额为准，放宽本地日限额以免双重拒绝
+        SEARCH_DAILY_LIMIT: process.env.SEARCH_DAILY_LIMIT || '999999',
+        FTCS_TOKEN_GATEWAY_BASE_URL: gatewayBase,
+        ...(process.env.FTCS_GATEWAY_API_KEY
+          ? { FTCS_GATEWAY_API_KEY: process.env.FTCS_GATEWAY_API_KEY }
+          : {}),
+      }
+    : {
+        FTCS_WORKSPACE: workspaceRoot,
+        SEARCH_PROVIDER: process.env.SEARCH_PROVIDER || 'tavily',
+        SEARCH_DAILY_LIMIT: process.env.SEARCH_DAILY_LIMIT ?? '50',
+        ...(process.env.TAVILY_API_KEY
+          ? { TAVILY_API_KEY: process.env.TAVILY_API_KEY }
+          : {}),
+        ...(process.env.SERPAPI_API_KEY
+          ? { SERPAPI_API_KEY: process.env.SERPAPI_API_KEY }
+          : {}),
+      }
 
   const nextMcp: Record<string, unknown> = {}
   for (const [name, server] of Object.entries(mcp)) {

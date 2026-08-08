@@ -177,6 +177,9 @@ export async function provisionOfficialChannel(input?: {
     [CHANNEL_MODE_ENV]: 'official',
     [GATEWAY_KEY_ENV]: rotate.apiKey,
     [getTokenGatewayEnvKey()]: baseUrl || getDefaultTokenGatewayBaseUrl(),
+    // 官方搜索走网关（docs/15）；运行时也会按通道强制注入
+    SEARCH_PROVIDER: 'gateway',
+    SEARCH_DAILY_LIMIT: '999999',
   }
 
   const current = getSettingsSnapshot()

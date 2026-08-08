@@ -129,14 +129,24 @@ export async function runAgentPreflight(
   })
 
   if (needsSearch(kind)) {
-    const searchOk = settings.tavilyApiKeySet
+    let searchOk = false
+    let searchDetail = ''
+    if (settings.channelMode === 'official') {
+      searchOk = Boolean(settings.officialProvisioned)
+      searchDetail = searchOk
+        ? '官方通道 · 搜索复用网关凭证'
+        : '探索需要搜索。请先登录并开通官方通道（设置 → 模型通道）'
+    } else {
+      searchOk = settings.tavilyApiKeySet
+      searchDetail = searchOk
+        ? `${settings.searchProvider || 'tavily'} Key 已配置`
+        : '探索需要搜索 API。请到设置页填写 Tavily API Key'
+    }
     checks.push({
       id: 'search',
       label: '搜索服务配置',
       ok: searchOk,
-      detail: searchOk
-        ? `${settings.searchProvider || 'tavily'} Key 已配置`
-        : '探索需要搜索 API。请到设置页填写 Tavily API Key',
+      detail: searchDetail,
     })
   }
 

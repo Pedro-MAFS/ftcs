@@ -372,6 +372,40 @@ function mcpBundlePath(pkgDir: string): string {
   return path.join(pkgDir, MCP_BUNDLE_ENTRY)
 }
 
+function readPkgVersion(pkgJsonPath: string): string {
+  try {
+    const raw = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8')) as { version?: string }
+    return String(raw.version || '')
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 工作区产物缺失、版本落后于模板、或模板 bundle 更新时需要同步。
+ * 工作区与模板为同一路径时不做拷贝（开发态直接用模板 dist）。
+ */
+function mcpBundleNeedsSync(workspacePkgDir: string, templatePkgDir: string): boolean {
+  const sameDir =
+    path.resolve(workspacePkgDir).toLowerCase() === path.resolve(templatePkgDir).toLowerCase()
+  if (sameDir) return false
+
+  const entry = mcpBundlePath(workspacePkgDir)
+  const templateEntry = mcpBundlePath(templatePkgDir)
+  if (!fs.existsSync(entry)) return true
+  if (!fs.existsSync(templateEntry)) return false
+
+  const wv = readPkgVersion(path.join(workspacePkgDir, 'package.json'))
+  const tv = readPkgVersion(path.join(templatePkgDir, 'package.json'))
+  if (tv && wv !== tv) return true
+
+  try {
+    return fs.statSync(templateEntry).mtimeMs > fs.statSync(entry).mtimeMs
+  } catch {
+    return true
+  }
+}
+
 /** 将模板源中的预打包产物拷到用户工作区对应包 */
 function copyMcpBundleFromTemplate(
   templatePkgDir: string,
@@ -394,7 +428,8 @@ function copyMcpBundleFromTemplate(
 
 /**
  * 确保用户工作区具备预打包 MCP 入口（dist/mcp.js）。
- * - 已有产物：跳过
+ * - 已有且与模板同版本：跳过
+ * - 模板有更新产物：拷贝同步（含 version bump，如 search-api 0.4 gateway）
  * - 开发态缺失：在仓库模板源 install+build，再拷贝产物（不在用户区 npm install）
  * - 打包态缺失：报错（安装包应已含产物）
  */
@@ -417,15 +452,16 @@ export async function ensureMcpServersReady(
     if (!fs.existsSync(pkgJson)) continue
 
     const entry = mcpBundlePath(pkgDir)
-    if (fs.existsSync(entry)) {
+    const templatePkg = path.join(templateMcpRoot, name)
+    const templateEntry = mcpBundlePath(templatePkg)
+    const needsSync = mcpBundleNeedsSync(pkgDir, templatePkg)
+
+    if (fs.existsSync(entry) && !needsSync) {
       skipped.push(name)
       continue
     }
 
-    const templatePkg = path.join(templateMcpRoot, name)
-    const templateEntry = mcpBundlePath(templatePkg)
-
-    // 模板里已有产物 → 只拷贝
+    // 模板里已有产物 → 只拷贝（含版本/时间戳落后时的强制同步）
     if (fs.existsSync(templateEntry)) {
       try {
         copyMcpBundleFromTemplate(templatePkg, pkgDir)

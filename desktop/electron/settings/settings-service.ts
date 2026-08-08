@@ -279,10 +279,14 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     baseUrl,
     model,
     smallModel,
-    searchProvider: env.SEARCH_PROVIDER || 'tavily',
+    searchProvider:
+      channelMode === 'official' ? 'gateway' : env.SEARCH_PROVIDER || 'tavily',
     tavilyApiKeyMasked: maskSecret(tavilyKey),
     tavilyApiKeySet: Boolean(tavilyKey),
-    searchDailyLimit: Number.parseInt(env.SEARCH_DAILY_LIMIT || '50', 10) || 50,
+    searchDailyLimit:
+      channelMode === 'official'
+        ? 999999
+        : Number.parseInt(env.SEARCH_DAILY_LIMIT || '50', 10) || 50,
     searchUsedToday: readSearchUsage(workspaceRoot),
     modelOptions,
     smallModelOptions,
@@ -306,15 +310,20 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
     defaultSmall,
   )
 
+  // 官方搜索走网关；自定义仍 Tavily（docs/15 D2）
+  const searchProvider =
+    channelMode === 'official' ? 'gateway' : input.searchProvider || 'tavily'
   const envUpdates: Record<string, string> = {
     [CHANNEL_MODE_ENV]: channelMode,
     FTCS_MODEL: model,
     FTCS_SMALL_MODEL: smallModel,
-    SEARCH_PROVIDER: input.searchProvider || 'tavily',
+    SEARCH_PROVIDER: searchProvider,
     SEARCH_DAILY_LIMIT: String(
-      Number.isFinite(input.searchDailyLimit) && input.searchDailyLimit > 0
-        ? Math.floor(input.searchDailyLimit)
-        : 50,
+      channelMode === 'official'
+        ? 999999
+        : Number.isFinite(input.searchDailyLimit) && input.searchDailyLimit > 0
+          ? Math.floor(input.searchDailyLimit)
+          : 50,
     ),
   }
 
