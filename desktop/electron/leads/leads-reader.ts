@@ -60,6 +60,8 @@ export interface LeadRow {
   status: LeadLifecycleStatus
   discoveredAt: string
   queryId: string
+  /** 所属探索运行；历史数据可为空 */
+  runId: string
   rawScore: number | null
   dedupeKey: string
   /** 淘汰线索指向保留的 scored lead id */
@@ -290,6 +292,7 @@ function loadRawLeads(
           status: null,
           discoveredAt: asString(raw.discovered_at),
           queryId: asString(raw.query_id),
+          runId: asString(raw.run_id),
           rawScore: asNumber(raw.raw_score),
           dedupeKey: '',
           keptLeadId: '',
@@ -355,6 +358,7 @@ function loadDiscardedLeads(
         status: null,
         discoveredAt: asString(raw.discovered_at),
         queryId: asString(raw.query_id),
+        runId: asString(raw.run_id),
         rawScore: asNumber(raw.raw_score),
         dedupeKey,
         keptLeadId,
@@ -415,6 +419,7 @@ function loadScoredLeads(
         status: parseLifecycle(raw.status),
         discoveredAt: asString(raw.discovered_at),
         queryId: asString(raw.query_id),
+        runId: asString(raw.run_id),
         rawScore: asNumber(raw.raw_score),
         dedupeKey: asString(raw.dedupe_key),
         keptLeadId: '',

@@ -57,7 +57,12 @@ export function appendRawLead(
   return lead;
 }
 
-export function listRawLeads(root: string, productId: string, round?: RawLead["round"]): RawLead[] {
+export function listRawLeads(
+  root: string,
+  productId: string,
+  round?: RawLead["round"],
+  runId?: string
+): RawLead[] {
   const rounds = round ? [round] : ["R1", "R2", "R3", "R4"];
   const leads: RawLead[] = [];
 
@@ -68,7 +73,11 @@ export function listRawLeads(root: string, productId: string, round?: RawLead["r
     }
     const lines = readFileSync(rawPath, "utf8").split("\n").filter(Boolean);
     for (const line of lines) {
-      leads.push(RawLeadSchema.parse(JSON.parse(line)));
+      const lead = RawLeadSchema.parse(JSON.parse(line));
+      if (runId && lead.run_id !== runId) {
+        continue;
+      }
+      leads.push(lead);
     }
   }
 
@@ -235,6 +244,7 @@ function toDiscardedLead(entry: {
     contacts: entry.lead.contacts,
     round: entry.lead.round,
     query_id: entry.lead.query_id,
+    run_id: entry.lead.run_id,
     discovered_at: entry.lead.discovered_at,
     raw_score: entry.lead.raw_score,
   };

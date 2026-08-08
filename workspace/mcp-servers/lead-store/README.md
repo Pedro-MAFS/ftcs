@@ -16,8 +16,8 @@
 | `keywords_get` | 读取关键词扩展结果 |
 | `keywords_save` | 保存大模型生成的关键词扩展（校验 schema，要求画像 ready） |
 | `lead_generate_id` | 生成线索 ID |
-| `lead_append_raw` | 追加原始线索至 `raw/{round}.jsonl` |
-| `lead_list_raw` | 列出原始线索 |
+| `lead_append_raw` | 追加原始线索至 `raw/{round}.jsonl`（应带 `run_id`） |
+| `lead_list_raw` | 列出原始线索（可按 `round` / `run_id` 筛选） |
 | `exploration_start` | 创建探索运行记录 |
 | `exploration_update` | 更新探索进度与 API 用量 |
 | `exploration_finish` | 完成探索运行 |

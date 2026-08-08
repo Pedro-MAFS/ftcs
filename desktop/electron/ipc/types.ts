@@ -461,6 +461,8 @@ export interface LeadRowDto {
   status: string | null
   discoveredAt: string
   queryId: string
+  /** 所属探索运行；历史数据可为空 */
+  runId: string
   rawScore: number | null
   dedupeKey: string
   keptLeadId: string

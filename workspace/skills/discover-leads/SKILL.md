@@ -120,6 +120,7 @@ lead-store.lead_append_raw({
   round: search_query.round,
   lead: {
     query_id: search_query.id,
+    run_id,   // 必须写入 Step 0 的 run_id，供按探索任务筛选
     company: {
       name: "...",
       website: "https://...",
@@ -138,6 +139,7 @@ lead-store.lead_append_raw({
 })
 ```
 
+`run_id` **必须**与本次 `exploration_start` 返回值一致。  
 `match_reason` **必须具体**，说明为何判断为目标客户（引用网站上的产品/业务证据）。
 
 5. 记录 `crawl_pages` +1
@@ -208,6 +210,7 @@ lead-store.exploration_finish({
 | `source.type` | 如 `tavily_search` |
 | `match_reason` | 具体判断依据（禁止空泛） |
 | `query_id` / `round` | 来自搜索词 |
+| `run_id` | 本次探索运行 ID（新写入必填；历史可为空） |
 
 可选：`company.country`、`company.description`、`contacts[]`、`raw_score`（0–100 初判）。
 

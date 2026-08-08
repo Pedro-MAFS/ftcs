@@ -406,6 +406,7 @@ export function rawLeadToScoredLead(
     contacts: lead.contacts,
     round: lead.round,
     query_id: lead.query_id,
+    run_id: lead.run_id,
     discovered_at: lead.discovered_at,
   };
 }

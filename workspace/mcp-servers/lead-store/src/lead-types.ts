@@ -25,6 +25,8 @@ export const RawLeadSchema = z.object({
   discovered_at: z.string(),
   round: z.enum(["R1", "R2", "R3", "R4"]),
   query_id: z.string(),
+  /** 所属探索运行；历史数据可为空 */
+  run_id: z.string().optional(),
   company: LeadCompanySchema,
   source: LeadSourceSchema,
   match_reason: z.string(),
@@ -113,6 +115,7 @@ export const ScoredLeadSchema = z.object({
   contacts: z.array(LeadContactSchema).default([]),
   round: z.enum(["R1", "R2", "R3", "R4"]).optional(),
   query_id: z.string().optional(),
+  run_id: z.string().optional(),
   discovered_at: z.string().optional(),
 });
 
@@ -144,6 +147,7 @@ export const DiscardedLeadSchema = z.object({
   contacts: z.array(LeadContactSchema).default([]),
   round: z.enum(["R1", "R2", "R3", "R4"]),
   query_id: z.string(),
+  run_id: z.string().optional(),
   discovered_at: z.string(),
   raw_score: z.number().optional(),
 });

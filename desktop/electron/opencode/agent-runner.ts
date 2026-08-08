@@ -170,7 +170,7 @@ function buildDiscoverLeadsPrompt(
     '2. search-api.search_usage 确认当日配额未用尽。',
     '3. lead-store.exploration_start 创建运行记录，记住 run_id。',
     '4. 从 search_queries 筛选指定 rounds，按 priority（high→medium→low）排序，取前 max_queries 条。',
-    '5. 对每个搜索词：search-api.search_web → chrome-devtools 打开候选页 → 判断是否目标客户 → 是则 lead_append_raw。',
+    '5. 对每个搜索词：search-api.search_web → chrome-devtools 打开候选页 → 判断是否目标客户 → 是则 lead_append_raw（lead 内必须带本次 run_id）。',
     '6. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。',
     '7. 用简短中文汇报：run_id、执行词数、线索数、API 用量、3～5 条代表性线索、下一步 score-and-dedupe。',
     '',

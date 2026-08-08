@@ -517,6 +517,10 @@ onUnmounted(() => {
                   <dd>{{ displayOrDash(lead.queryId) }}</dd>
                 </div>
                 <div class="lead-drawer__field">
+                  <dt>run_id</dt>
+                  <dd>{{ displayOrDash(lead.runId) }}</dd>
+                </div>
+                <div class="lead-drawer__field">
                   <dt>discovered_at</dt>
                   <dd>{{ discoveredLabel }}</dd>
                 </div>

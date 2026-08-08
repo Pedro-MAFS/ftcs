@@ -47,6 +47,7 @@ test("appendRawLead writes jsonl and exploration run tracks progress", () => {
       product_id: productId,
       round: "R1",
       query_id: "q_001",
+      run_id: run.id,
       company: {
         name: "ABC Decking",
         website: "https://abc-decking.de",
@@ -62,10 +63,32 @@ test("appendRawLead writes jsonl and exploration run tracks progress", () => {
       raw_score: 70,
     });
 
+    appendRawLead(root, productId, "R1", {
+      product_id: productId,
+      round: "R1",
+      query_id: "q_002",
+      company: {
+        name: "Legacy Corp",
+        website: "https://legacy.example",
+        country: "US",
+      },
+      source: {
+        url: "https://legacy.example",
+        type: "manual",
+      },
+      match_reason: "历史线索无 run_id",
+      contacts: [],
+    });
+
     const leads = listRawLeads(root, productId, "R1");
-    assert.equal(leads.length, 1);
+    assert.equal(leads.length, 2);
     assert.equal(leads[0]?.source.url, "https://abc-decking.de/products");
+    assert.equal(leads[0]?.run_id, run.id);
     assert.ok(leads[0]?.match_reason);
+
+    const byRun = listRawLeads(root, productId, "R1", run.id);
+    assert.equal(byRun.length, 1);
+    assert.equal(byRun[0]?.company.name, "ABC Decking");
 
     updateExplorationRun(root, productId, run.id, {
       queries_executed: 1,

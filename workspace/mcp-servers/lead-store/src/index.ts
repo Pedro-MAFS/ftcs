@@ -355,7 +355,7 @@ server.tool(
 
 server.tool(
   "lead_append_raw",
-  "Append a raw lead to data/leads/{product_id}/raw/{round}.jsonl",
+  "Append a raw lead to data/leads/{product_id}/raw/{round}.jsonl. Include run_id from exploration_start so leads can be filtered by exploration task.",
   {
     product_id: z.string(),
     round: z.enum(["R1", "R2", "R3", "R4"]),
@@ -407,14 +407,15 @@ server.tool(
 
 server.tool(
   "lead_list_raw",
-  "List raw leads for a product, optionally filtered by round.",
+  "List raw leads for a product, optionally filtered by round and/or run_id.",
   {
     product_id: z.string(),
     round: z.enum(["R1", "R2", "R3", "R4"]).optional(),
+    run_id: z.string().optional(),
   },
-  async ({ product_id, round }) => {
+  async ({ product_id, round, run_id }) => {
     const root = getProjectRoot();
-    const leads = listRawLeads(root, product_id, round);
+    const leads = listRawLeads(root, product_id, round, run_id);
     return {
       content: [
         {
@@ -422,6 +423,8 @@ server.tool(
           text: JSON.stringify(
             {
               product_id,
+              round: round ?? null,
+              run_id: run_id ?? null,
               total: leads.length,
               unique_domains: countUniqueLeadDomains(leads),
               leads,
@@ -557,7 +560,7 @@ server.tool(
       };
     }
 
-    const leads = listRawLeads(root, product_id);
+    const leads = listRawLeads(root, product_id, undefined, run_id);
     const run = updateExplorationRun(root, product_id, run_id, {
       status,
       finished_at: new Date().toISOString(),

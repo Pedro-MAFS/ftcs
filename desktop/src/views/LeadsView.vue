@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
@@ -9,12 +9,15 @@ import LeadDetailDrawer from '../components/shared/LeadDetailDrawer.vue'
 import type { LeadRowDto, LeadsSnapshotDto } from '../types/electron'
 
 const meta = SECTION_META.leads
+const route = useRoute()
 const router = useRouter()
 const {
   activeProductId,
+  exploreTasks,
   generating,
   agentSkill,
   agentStatus,
+  refreshExploreTasks,
   resetAgentForScoreAndDedupe,
   resetAgentForDraftEmail,
 } = useWorkspace()
@@ -22,6 +25,8 @@ const {
 type FilterId = 'all' | 'raw' | 'scored' | 'discarded' | 'a' | 'b' | 'c' | 'mail'
 
 const activeFilter = ref<FilterId>('all')
+/** 空字符串 = 全部探索任务；历史无线索 runId 仅在「全部」时可见 */
+const runFilter = ref('')
 const searchQuery = ref('')
 const loading = ref(false)
 const scoring = ref(false)
@@ -77,13 +82,24 @@ const canBatchDraft = computed(() => {
   )
 })
 
+const runOptions = computed(() => {
+  const tasks = (exploreTasks.value?.tasks ?? []).filter(
+    (t) => t.status !== 'keywords_ready',
+  )
+  return tasks.map((t) => ({
+    id: t.id,
+    label: `${t.title} · ${t.id}`,
+  }))
+})
+
 const subtitle = computed(() => {
   if (!activeProductId.value) return '请先在侧栏选择产品'
   const s = stats.value
   if (s.total === 0) return '暂无线索 · 可在探索页完成 R1 后回来查看'
   const parts = [`${s.total} 条`, `未评分 ${s.raw}`, `已评分 ${s.scored}`]
   if (s.discarded > 0) parts.push(`淘汰 ${s.discarded}`)
-  return `${parts.join(' · ')} · 可按状态筛选`
+  if (runFilter.value) parts.push(`任务 ${runFilter.value}`)
+  return `${parts.join(' · ')} · 可按状态 / 探索任务筛选`
 })
 
 const filters = computed(() => {
@@ -180,11 +196,23 @@ function matchesSearch(row: LeadRowDto, q: string): boolean {
     row.domain.toLowerCase().includes(q) ||
     row.country.toLowerCase().includes(q) ||
     row.matchReason.toLowerCase().includes(q) ||
-    row.contactLabel.toLowerCase().includes(q)
+    row.contactLabel.toLowerCase().includes(q) ||
+    row.runId.toLowerCase().includes(q)
   ) {
     return true
   }
   return row.contacts.some((c) => c.value.toLowerCase().includes(q))
+}
+
+function matchesRun(row: LeadRowDto, runId: string): boolean {
+  if (!runId) return true
+  return row.runId === runId
+}
+
+function applyRunQueryFromRoute(): void {
+  const raw = route.query.runId
+  const value = typeof raw === 'string' ? raw.trim() : ''
+  runFilter.value = value
 }
 
 function contactTitle(row: LeadRowDto): string {
@@ -202,8 +230,12 @@ function websiteUrl(row: LeadRowDto): string {
 const filteredRows = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   const filter = activeFilter.value
+  const runId = runFilter.value
   return rows.value.filter(
-    (row) => matchesFilter(row, filter) && matchesSearch(row, q),
+    (row) =>
+      matchesFilter(row, filter) &&
+      matchesRun(row, runId) &&
+      matchesSearch(row, q),
   )
 })
 
@@ -215,6 +247,7 @@ async function refreshLeads(): Promise<void> {
   }
   loading.value = true
   try {
+    void refreshExploreTasks()
     snapshot.value = await window.ftcs.listLeads(activeProductId.value)
     if (window.ftcs.listEmailDrafts) {
       const emails = await window.ftcs.listEmailDrafts(activeProductId.value)
@@ -371,13 +404,35 @@ function selectRow(row: LeadRowDto): void {
   selectedId.value = row.id
 }
 
+function onRunFilterChange(): void {
+  const next = runFilter.value.trim()
+  const current =
+    typeof route.query.runId === 'string' ? route.query.runId.trim() : ''
+  if (next === current) return
+  const query = { ...route.query }
+  if (next) query.runId = next
+  else delete query.runId
+  router.replace({ name: 'leads', query }).catch(() => undefined)
+}
+
 watch(activeProductId, () => {
   activeFilter.value = 'all'
+  runFilter.value = ''
   searchQuery.value = ''
   actionMessage.value = ''
   closeDrawer()
+  if (route.query.runId) {
+    router.replace({ name: 'leads', query: {} }).catch(() => undefined)
+  }
   void refreshLeads()
 })
+
+watch(
+  () => route.query.runId,
+  () => {
+    applyRunQueryFromRoute()
+  },
+)
 
 watch(agentStatus, (status) => {
   if (
@@ -403,6 +458,7 @@ watch(agentStatus, (status) => {
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
+  applyRunQueryFromRoute()
   void refreshLeads()
   pollTimer = setInterval(() => {
     if (document.visibilityState === 'visible') void refreshLeads()
@@ -477,6 +533,17 @@ onUnmounted(() => {
         {{ f.label }}
       </button>
       <div class="filter-spacer" />
+      <select
+        v-model="runFilter"
+        class="text-input filter-run-select"
+        aria-label="按探索任务筛选"
+        @change="onRunFilterChange"
+      >
+        <option value="">全部探索任务</option>
+        <option v-for="opt in runOptions" :key="opt.id" :value="opt.id">
+          {{ opt.label }}
+        </option>
+      </select>
       <div class="search-box search-box--input">
         <Icon name="search" :size="12" />
         <input
@@ -514,7 +581,9 @@ onUnmounted(() => {
           {{
             rows.length === 0
               ? '前往探索页启动 R1，原始线索将出现在此'
-              : '试试切换「全部 / 未评分 / 已评分 / 重复淘汰」或清空搜索'
+              : runFilter
+                ? '当前探索任务下无匹配线索（历史无线索无 run_id，不会出现在此筛选）'
+                : '试试切换「全部 / 未评分 / 已评分 / 重复淘汰」、探索任务或清空搜索'
           }}
         </p>
       </div>

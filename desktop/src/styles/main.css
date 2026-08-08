@@ -1370,6 +1370,14 @@ button:focus-visible {
   flex: 1;
 }
 
+.filter-run-select {
+  width: auto;
+  max-width: 220px;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
 .search-box {
   display: flex;
   align-items: center;

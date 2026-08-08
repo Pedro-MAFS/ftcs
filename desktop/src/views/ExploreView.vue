@@ -277,7 +277,13 @@ async function startR1(): Promise<void> {
   }
 }
 
-function goLeads(): void {
+function goLeads(task?: ExploreTaskDto): void {
+  if (task && task.status !== 'keywords_ready') {
+    router
+      .push({ name: 'leads', query: { runId: task.id } })
+      .catch(() => undefined)
+    return
+  }
   router.push({ name: 'leads' }).catch(() => undefined)
 }
 
@@ -598,17 +604,18 @@ onUnmounted(() => {
           </div>
 
           <div
-            v-if="task.status === 'completed' && task.leadsFound > 0"
+            v-if="task.status === 'completed' || task.status === 'failed'"
             class="explore-task__actions"
           >
             <button
               type="button"
               class="btn-secondary btn-secondary--sm"
-              @click="goLeads"
+              @click="goLeads(task)"
             >
               查看线索
             </button>
             <button
+              v-if="task.status === 'completed' && task.leadsFound > 0"
               type="button"
               class="btn-primary btn-secondary--sm"
               :disabled="generating || isScoring"
