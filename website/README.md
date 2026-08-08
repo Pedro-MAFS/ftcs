@@ -58,7 +58,7 @@ location /ftcs/ {
 {
   id: 'setup',
   label: 'Windows 安装包',
-  filename: '外贸获客-Setup-0.3.0.exe',
+  filename: '外贸获客-Setup-0.4.0.exe',
   note: 'NSIS 安装程序',
   mirrors: [
     {
@@ -66,12 +66,12 @@ location /ftcs/ {
       label: 'Gitee 下载',
       badge: '国内更快',
       primary: true,
-      url: 'https://gitee.com/.../releases/download/0.3.0/foreign-trade-Setup-0.3.0.exe',
+      url: 'https://gitee.com/.../releases/download/0.4.0/foreign-trade-Setup-0.4.0.exe',
     },
     {
       id: 'github',
       label: 'GitHub 下载',
-      url: 'https://github.com/.../releases/download/0.3.0/foreign-trade-Setup-0.3.0.exe',
+      url: 'https://github.com/.../releases/download/0.4.0/foreign-trade-Setup-0.4.0.exe',
     },
   ],
 }
@@ -85,10 +85,10 @@ location /ftcs/ {
 
 ```json
 {
-  "version": "0.3.0",
-  "releasedAt": "2026-07-20",
+  "version": "0.4.0",
+  "releasedAt": "2026-08-08",
   "minVersion": "0.1.0",
-  "title": "FTCS Desktop 0.3.0",
+  "title": "FTCS Desktop 0.4.0",
   "notes": ["更新说明条目"],
   "downloadPage": "https://ai-utills.com/ftcs/download/"
 }
