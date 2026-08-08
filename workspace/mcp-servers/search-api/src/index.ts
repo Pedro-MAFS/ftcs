@@ -16,7 +16,7 @@ import { getDailyUsage, incrementSearchUsage } from "./usage.js";
 
 const server = new McpServer({
   name: "search-api",
-  version: "0.4.0",
+  version: "0.4.1",
 });
 
 function isGatewayProvider(provider: string): boolean {

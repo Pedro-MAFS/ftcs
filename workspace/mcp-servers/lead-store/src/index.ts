@@ -44,7 +44,7 @@ import {
 
 const server = new McpServer({
   name: "lead-store",
-  version: "0.4.0",
+  version: "0.4.1",
 });
 
 server.tool(
