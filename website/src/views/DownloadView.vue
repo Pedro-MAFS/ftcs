@@ -17,8 +17,9 @@ function hasAnyMirror(mirrors: DownloadMirror[]): boolean {
         <h1>下载</h1>
         <p>
           {{ siteConfig.productName }} 桌面版（Windows）。使用前请先在本机准备
-          <strong>Node.js 22+</strong>、<strong>Google Chrome</strong>、
-          <strong>OpenCode CLI</strong> 与 API Key，详见帮助文档。
+          <strong>Node.js 22+</strong>、<strong>Google Chrome</strong> 与
+          <strong>OpenCode CLI</strong>；推荐登录开通官方通道（无需自备模型/搜索
+          Key）。详见帮助文档。
         </p>
       </div>
     </header>

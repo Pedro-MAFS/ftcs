@@ -42,7 +42,7 @@ const steps = [
 
 const settingsShot = {
   src: withBase('screenshots/ftcs-设置.png'),
-  alt: '设置界面：模型与 API Key',
+  alt: '设置界面：官方通道与本机配置',
 }
 </script>
 
@@ -102,7 +102,8 @@ const settingsShot = {
         <div class="showcase__copy">
           <h2 class="section__title">本机配置，密钥不出境</h2>
           <p class="section__desc">
-            在设置页配置大模型与搜索 API；工作区与 `.env` 保存在客户电脑本地。
+            推荐开通官方通道：模型按余额计费，搜索无需单独配置。工作区与
+            `.env` 保存在客户电脑本地。
           </p>
           <RouterLink class="btn btn-secondary" to="/docs/install">查看安装前置</RouterLink>
         </div>

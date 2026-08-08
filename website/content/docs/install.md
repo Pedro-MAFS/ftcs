@@ -9,8 +9,8 @@
 | Windows | 10 / 11，x64 | 运行桌面安装包或便携版 |
 | **Node.js** | **22 及以上** | 安装 OpenCode、用 `node` 启动 MCP、`npx` 拉取工具 |
 | **Google Chrome** | 已安装并可正常启动 | `chrome-devtools` 浏览网站、探索打开页面（Electron 内置浏览器不能替代） |
-| **OpenCode CLI** | 本机 PATH 可执行 `opencode` | 应用通过 SDK 拉起 `opencode serve`（轻量包不内嵌） |
-| API Key / 通道 | 官方通道（登录开通）或自定义上游 Key + 搜索（Tavily） | 画像 / 探索 / 邮件起草 |
+| **OpenCode CLI** | 本机 PATH 可执行 `opencode`，或应用内一键安装 | 应用通过 SDK 拉起 `opencode serve`（轻量包不内嵌） |
+| 模型 / 搜索 | **官方通道**（登录开通即可）或 **自定义**（自备模型 Key + Tavily） | 画像 / 探索 / 邮件起草 |
 
 请先确认：
 
@@ -19,6 +19,7 @@ node -v          # 应显示 v22.x 或更高
 ```
 
 并从开始菜单能正常打开 **Google Chrome**（Windows 上一般没有 `google-chrome` 命令）。
+
 ## 安装方式
 
 | 产物 | 说明 |
@@ -84,7 +85,9 @@ opencode --version
 ## 首次启动
 
 1. 启动应用，等待 Sidecar / 运行时就绪  
-2. 在 **设置 → 模型通道** 选择官方或自定义，并配置搜索 Key  
+2. 在 **设置 → 模型通道** 选择：  
+   - **官方通道（推荐）**：登录并开通后即可使用模型与搜索，无需再填搜索 Key  
+   - **自定义**：填写自备模型 Key，并配置 Tavily 搜索 Key  
 3. 工作区默认在用户数据目录下的 `workspace`；可在设置中更改  
 
 模板会同步 skills、MCP 预打包产物与配置；你的 `data/` 与 `.env` 不会被模板覆盖。
