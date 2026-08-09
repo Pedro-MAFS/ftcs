@@ -31,6 +31,12 @@ important/
 .mvn/wrapper/maven-wrapper.jar
 !token-gateway-server/.mvn/wrapper/maven-wrapper.jar
 
-# Node（admin-ui 后续）
+# Node（admin-ui）
 **/node_modules/
 **/dist/
+tokengateway-admin-ui/node_modules/
+
+# admin 内嵌前端构建产物（由 npm run build / Maven frontend-maven-plugin 生成）
+token-gateway-admin/src/main/resources/static/**
+!token-gateway-admin/src/main/resources/static/.gitkeep
+token-gateway-admin/target/frontend/

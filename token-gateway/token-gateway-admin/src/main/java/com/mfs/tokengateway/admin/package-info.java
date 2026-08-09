@@ -1,9 +1,10 @@
 /**
- * 管理端后端占位模块（本期不实现业务）。
+ * Token Gateway 运维管理端（US-G6-01 起可独立启动）。
  *
- * <p>规划：独立进程，依赖 {@code token-gateway-db}，提供充值/禁用 Key/调价/流水查询等运维 API；
- * 改余额或状态必须写流水。鉴权与消费方 {@code sk-} / UC JWT 分离。
+ * <p>独立进程（默认 8089），依赖 {@code token-gateway-db}，与 server 共库。
+ * 内网部署；本期无管理登录。生产可将 {@code tokengateway-admin-ui} 的 dist
+ * 打进 {@code classpath:/static/}，由内嵌 Tomcat 同域暴露。
  *
- * <p>上线前运维直接改库，且必须写流水。前端见 {@code tokengateway-admin-ui}。
+ * <p>禁止依赖 {@code token-gateway-server}；勿引入消费方 sk / UC RS 鉴权链。
  */
 package com.mfs.tokengateway.admin;

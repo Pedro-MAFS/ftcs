@@ -1,2 +1,4 @@
-/** 管理 HTTP API 占位（充值、Key 运维、价目、流水查询等，运营阶段实现）。 */
+/**
+ * 管理 HTTP 入站（{@code /admin/v1/**}）。
+ */
 package com.mfs.tokengateway.admin.api;

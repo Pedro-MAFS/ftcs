@@ -1,0 +1,34 @@
+server:
+  port: ${SERVER_PORT:8089}
+  # address: ${SERVER_ADDRESS:}   # 生产建议绑内网 IP
+
+spring:
+  application:
+    name: token-gateway-admin
+  datasource:
+    # 与 server 共库（token_*）。账号用 application-local.yml 或 MYSQL_*，勿把密钥写进本文件。
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:token_gateway}?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  flyway:
+    # 迁移仅由 token-gateway-server 执行（US-G6-01）
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+  health:
+    db:
+      enabled: true
+
+token-gateway:
+  admin:
+    cors-allowed-origins:
+      - http://127.0.0.1:5173
+      - http://localhost:5173

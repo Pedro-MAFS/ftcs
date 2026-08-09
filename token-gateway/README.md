@@ -8,7 +8,8 @@
 |------|------|
 | **服务内对接页** | 启动后打开 `http://127.0.0.1:8088/` 或 `/home.html`（基本逻辑 + 已实现接口出入参；**无需登录**） |
 | [docs/01-需求.md](./docs/01-需求.md) | 网关需求规格（权威） |
-| [docs/02-用户故事.md](./docs/02-用户故事.md) | G0 / G2 用户故事与依赖 |
+| [docs/02-用户故事.md](./docs/02-用户故事.md) | G0 / G2～G6 用户故事与依赖 |
+| [docs/16-管理端执行计划.md](./docs/16-管理端执行计划.md) | Phase G6 运维管理端（大屏 + 运营面板） |
 | [docs/design/](./docs/design/) | 详细设计（按用户故事） |
 
 消费方（桌面端）对接文档在宿主仓库：
@@ -18,8 +19,8 @@
 
 ## 本期边界
 
-- **管理端仅占位**：`token-gateway-admin` + `tokengateway-admin-ui` 预留模块，**本期不实现业务**；充值/禁用/调价 **直接改库**（须写流水）
-- 上游仅 DeepSeek
+- **管理端**：`token-gateway-admin` 可启动（默认 8089，见 [US-G6-01](./docs/design/US-G6-01-Admin工程骨架与部署设计.md)）；业务 API / UI 按 Phase G6 推进。上线前充值/禁用/调价仍可 **直接改库**（须写流水，US-G0-15）
+- 上游：DeepSeek Chat + Tavily Search（G5）
 - 身份来自用户中心（网关是 UC 的 Resource Server，不是 OAuth Client）
 - Web 栈：Spring **WebMVC**（SSE 用 `SseEmitter`）
 - 根包：`com.mfs.tokengateway`
@@ -33,21 +34,38 @@ token-gateway/                      # 外层：文档 + Maven 父工程
 ├── docs/
 ├── ops/                            # 改库 SQL 示例等（运维）
 ├── token-gateway-server/           # ★ 可运行 RS 服务（默认端口 8088）
-├── token-gateway-db/               # 共享表结构 / Mapper / PO（供 server 与未来 admin）
-├── token-gateway-admin/            # 管理端后端占位（本期不打包可执行应用）
-└── tokengateway-admin-ui/          # 管理端前端占位（Vue3，本期不实现）
+├── token-gateway-db/               # 共享表结构 / Mapper / PO（供 server 与 admin）
+├── token-gateway-admin/            # ★ 运维管理端（默认 8089；US-G6）
+└── tokengateway-admin-ui/          # 管理端 Vue3（脚手架已初始化；业务页见 G6-08/09）
 ```
 
 ## 启动
 
+### Server（消费方 RS）
+
 ```bash
 cd token-gateway
-# 先准备 MySQL（utf8mb4 / utf8mb4_bin），并配置 MYSQL_*（见 .env.example）
+# 先准备 MySQL（utf8mb4 / utf8mb4_bin），并配置 MYSQL_*（见 token-gateway-server/.env.example）
 mvn -q -DskipTests package
 java -jar token-gateway-server/target/token-gateway-server-1.0.0-SNAPSHOT.jar
 ```
 
-### 发布包（zip）
+### Admin（运维管理端，US-G6-01）
+
+须与 server **同一 MySQL**；表由 **server Flyway** 维护（admin 不跑迁移）。
+
+```bash
+cd token-gateway
+mvn -pl token-gateway-admin -am -DskipTests package
+java -jar token-gateway-admin/target/token-gateway-admin-1.0.0-SNAPSHOT.jar
+
+curl.exe -s http://127.0.0.1:8089/admin/v1/health
+# {"status":"UP","service":"token-gateway-admin"}
+```
+
+详见 [token-gateway-admin/README.md](./token-gateway-admin/README.md)、[docs/design/US-G6-01](./docs/design/US-G6-01-Admin工程骨架与部署设计.md)。
+
+### Server 发布包（zip）
 
 `token-gateway-server` 在 `package` 阶段用 `maven-assembly-plugin` 生成可部署 zip：
 

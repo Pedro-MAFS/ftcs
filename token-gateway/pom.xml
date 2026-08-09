@@ -10,7 +10,7 @@
     <packaging>pom</packaging>
     <description>
         Token 网关多模块工程：server（RS / 中转计费）、db（共享表结构）、
-        admin + tokengateway-admin-ui（管理端占位，本期不实现业务）。
+        admin（运维管理端，US-G6）+ tokengateway-admin-ui（Vue，打进 admin 静态资源）。
     </description>
 
     <modules>

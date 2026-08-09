@@ -1,2 +1,4 @@
-/** 管理用例编排占位；改库类操作须写 ledger。 */
+/**
+ * 管理端用例编排（G6-04+：调账等须写流水）。
+ */
 package com.mfs.tokengateway.admin.application;

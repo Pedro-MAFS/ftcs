@@ -1,30 +1,48 @@
-# Token Gateway 管理端前端（占位）
+# Token Gateway 管理端前端
 
-**本期不实现。** 仅预留目录与规划；运营阶段再脚手架。
+> **状态**：Vue3 + Vite 脚手架已初始化；业务页为占位，完整实现见 **US-G6-08 / US-G6-09**。  
+> **后端衔接**：[docs/design/US-G6-01-Admin工程骨架与部署设计.md](../docs/design/US-G6-01-Admin工程骨架与部署设计.md) §3.3  
+> **构建输出**：直接写入 [`../token-gateway-admin/src/main/resources/static/`](../token-gateway-admin/src/main/resources/static/)（随 admin jar / 内嵌 Tomcat 托管）
 
-## 规划
+## 开发
 
-| 项 | 决定 |
-|----|------|
-| 技术 | Vue3 + Vite |
-| 对接 | 仅 `token-gateway-admin`（不直连 server 消费 API） |
-| 能力 | 充值/余额、Key 禁用启用、价目、流水只读 |
-| 鉴权 | 管理身份（与桌面端 UC / `sk-` 分离） |
+```bash
+cd token-gateway/tokengateway-admin-ui
+npm install
+npm run dev
+# http://127.0.0.1:5173  （proxy /admin → :8089）
+```
 
-本期运维：**直接改库**，且 **必须写流水**。
+请先启动 admin。看板页会请求 `GET /admin/v1/health`。
 
-## 落地时建议目录
+## 构建（集成到 admin）
+
+```bash
+npm run build
+# → ../token-gateway-admin/src/main/resources/static/{index.html,assets/...}
+```
+
+或在父工程打包 admin（自动构建 UI）：
+
+```bash
+cd ../token-gateway-admin
+mvn package
+# 等价于 frontend-maven-plugin：npm ci + npm run build，再打 fat jar
+```
+
+跳过 UI：`mvn package -DskipAdminUi=true`
+
+## 目录
 
 ```
 tokengateway-admin-ui/
 ├── package.json
-├── vite.config.ts
+├── vite.config.ts      # outDir → admin/.../static
+├── .env.example
 ├── index.html
-├── src/
-│   ├── main.ts
-│   ├── App.vue
-│   ├── api/          # 调 admin 后端
-│   ├── views/        # 账户 / Key / 价目 / 流水
-│   └── router/
-└── README.md
+└── src/
+    ├── api/
+    ├── components/
+    ├── router/
+    └── views/
 ```
