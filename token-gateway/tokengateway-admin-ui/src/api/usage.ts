@@ -19,6 +19,10 @@ export interface AdminRequestListItem {
   completion_tokens?: number | null
   revenue_li?: number | null
   revenue_yuan?: number | string | null
+  cogs_li?: number | null
+  cogs_yuan?: number | string | null
+  margin_li?: number | null
+  margin_yuan?: number | string | null
   latency_ms?: number | null
   error_summary?: string | null
 }
@@ -35,10 +39,6 @@ export interface AdminRequestDetail extends AdminRequestListItem {
   key_id?: number
   cached_tokens?: number | null
   uncached_tokens?: number | null
-  cogs_li?: number | null
-  cogs_yuan?: number | string | null
-  margin_li?: number | null
-  margin_yuan?: number | string | null
   upstream_status?: number | null
   settle_owner?: string | null
   settle_claimed_at?: string | null

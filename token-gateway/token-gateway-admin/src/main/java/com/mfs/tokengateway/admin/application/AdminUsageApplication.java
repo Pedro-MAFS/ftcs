@@ -370,6 +370,10 @@ public class AdminUsageApplication {
         item.setCompletionTokens(row.getCompletionTokens());
         item.setRevenueLi(row.getRevenueLi());
         item.setRevenueYuan(AdminMoney.liToYuan(row.getRevenueLi()));
+        item.setCogsLi(row.getCogsLi());
+        item.setCogsYuan(AdminMoney.liToYuan(row.getCogsLi()));
+        item.setMarginLi(row.getMarginLi());
+        item.setMarginYuan(AdminMoney.liToYuan(row.getMarginLi()));
         item.setLatencyMs(row.getLatencyMs());
         item.setErrorSummary(row.getErrorSummary());
         return item;

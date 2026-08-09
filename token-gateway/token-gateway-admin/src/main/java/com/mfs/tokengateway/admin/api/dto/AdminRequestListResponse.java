@@ -97,6 +97,18 @@ public class AdminRequestListResponse {
         @JsonProperty("revenue_yuan")
         private BigDecimal revenueYuan;
 
+        @JsonProperty("cogs_li")
+        private Long cogsLi;
+
+        @JsonProperty("cogs_yuan")
+        private BigDecimal cogsYuan;
+
+        @JsonProperty("margin_li")
+        private Long marginLi;
+
+        @JsonProperty("margin_yuan")
+        private BigDecimal marginYuan;
+
         @JsonProperty("latency_ms")
         private Integer latencyMs;
 
@@ -205,6 +217,38 @@ public class AdminRequestListResponse {
 
         public void setRevenueYuan(BigDecimal revenueYuan) {
             this.revenueYuan = revenueYuan;
+        }
+
+        public Long getCogsLi() {
+            return cogsLi;
+        }
+
+        public void setCogsLi(Long cogsLi) {
+            this.cogsLi = cogsLi;
+        }
+
+        public BigDecimal getCogsYuan() {
+            return cogsYuan;
+        }
+
+        public void setCogsYuan(BigDecimal cogsYuan) {
+            this.cogsYuan = cogsYuan;
+        }
+
+        public Long getMarginLi() {
+            return marginLi;
+        }
+
+        public void setMarginLi(Long marginLi) {
+            this.marginLi = marginLi;
+        }
+
+        public BigDecimal getMarginYuan() {
+            return marginYuan;
+        }
+
+        public void setMarginYuan(BigDecimal marginYuan) {
+            this.marginYuan = marginYuan;
         }
 
         public Integer getLatencyMs() {

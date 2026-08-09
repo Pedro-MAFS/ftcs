@@ -69,8 +69,7 @@ class AdminUsageControllerTest {
 
         mockMvc.perform(get("/admin/v1/requests").param("billing_status", "settle_failed"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.items[0].billing_status").value("settle_failed"))
-                .andExpect(jsonPath("$.items[0].cogs_li").doesNotExist());
+                .andExpect(jsonPath("$.items[0].billing_status").value("settle_failed"));
     }
 
     @Test

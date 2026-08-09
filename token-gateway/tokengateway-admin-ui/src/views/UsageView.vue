@@ -43,33 +43,59 @@ const detailError = ref<string | null>(null)
 
 const maxPage = computed(() => Math.max(1, Math.ceil(total.value / size.value)))
 
+function sumLiField(
+  row: AdminRequestListItem,
+  liKey: 'revenue_li' | 'cogs_li' | 'margin_li',
+  yuanKey: 'revenue_yuan' | 'cogs_yuan' | 'margin_yuan',
+): number | null {
+  const li = row[liKey]
+  if (li != null) return typeof li === 'number' ? li : Number(li)
+  const yuan = row[yuanKey]
+  if (yuan == null || yuan === '') return null
+  const n = typeof yuan === 'number' ? yuan : Number(yuan)
+  if (Number.isNaN(n)) return null
+  return Math.round(n * 1000)
+}
+
 /** 当前页用量 / 金额汇总（仅前端，对本页 items） */
 const pageSummary = computed(() => {
   let prompt = 0
   let completion = 0
   let revenueLi = 0
+  let cogsLi = 0
+  let marginLi = 0
   let revenueKnown = 0
+  let cogsKnown = 0
+  let marginKnown = 0
   for (const row of items.value) {
     if (row.prompt_tokens != null) prompt += row.prompt_tokens
     if (row.completion_tokens != null) completion += row.completion_tokens
-    if (row.revenue_li != null) {
-      revenueLi += row.revenue_li
+    const r = sumLiField(row, 'revenue_li', 'revenue_yuan')
+    if (r != null) {
+      revenueLi += r
       revenueKnown++
-    } else if (row.revenue_yuan != null && row.revenue_yuan !== '') {
-      const n = typeof row.revenue_yuan === 'number' ? row.revenue_yuan : Number(row.revenue_yuan)
-      if (!Number.isNaN(n)) {
-        revenueLi += Math.round(n * 1000)
-        revenueKnown++
-      }
+    }
+    const c = sumLiField(row, 'cogs_li', 'cogs_yuan')
+    if (c != null) {
+      cogsLi += c
+      cogsKnown++
+    }
+    const m = sumLiField(row, 'margin_li', 'margin_yuan')
+    if (m != null) {
+      marginLi += m
+      marginKnown++
     }
   }
   return {
     count: items.value.length,
     prompt,
     completion,
-    revenueLi,
     revenueKnown,
+    cogsKnown,
+    marginKnown,
     revenueYuan: revenueLi / 1000,
+    cogsYuan: cogsLi / 1000,
+    marginYuan: marginLi / 1000,
   }
 })
 
@@ -374,13 +400,15 @@ onMounted(() => {
               <th>模型</th>
               <th>用量</th>
               <th>金额(元)</th>
+              <th>成本(元)</th>
+              <th>毛利(元)</th>
               <th>结算</th>
               <th>请求 ID</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="!items.length">
-              <td colspan="7" class="muted">暂无记录</td>
+              <td colspan="9" class="muted">暂无记录</td>
             </tr>
             <tr
               v-for="row in items"
@@ -406,6 +434,8 @@ onMounted(() => {
                 <span v-if="row.model === 'tavily.search'" class="hint">按次</span>
               </td>
               <td class="mono">{{ formatYuan(row.revenue_yuan) }}</td>
+              <td class="mono">{{ formatYuan(row.cogs_yuan) }}</td>
+              <td class="mono">{{ formatYuan(row.margin_yuan) }}</td>
               <td>
                 <span class="badge" :data-status="row.billing_status">{{
                   billingLabel(row.billing_status)
@@ -421,10 +451,22 @@ onMounted(() => {
               <td class="mono">
                 {{ formatYuan(pageSummary.revenueYuan) }}
                 <span v-if="pageSummary.revenueKnown < pageSummary.count" class="hint">
-                  （{{ pageSummary.revenueKnown }} 笔有金额）
+                  （{{ pageSummary.revenueKnown }} 笔）
                 </span>
               </td>
-              <td colspan="2" class="muted tiny">仅当前页；未结算金额不计入</td>
+              <td class="mono">
+                {{ formatYuan(pageSummary.cogsYuan) }}
+                <span v-if="pageSummary.cogsKnown < pageSummary.count" class="hint">
+                  （{{ pageSummary.cogsKnown }} 笔）
+                </span>
+              </td>
+              <td class="mono">
+                {{ formatYuan(pageSummary.marginYuan) }}
+                <span v-if="pageSummary.marginKnown < pageSummary.count" class="hint">
+                  （{{ pageSummary.marginKnown }} 笔）
+                </span>
+              </td>
+              <td colspan="2" class="muted tiny">仅当前页；无金额字段不计入</td>
             </tr>
           </tfoot>
         </table>

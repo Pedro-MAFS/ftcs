@@ -56,6 +56,8 @@ class AdminUsageApplicationTest {
     @Test
     void listRequestsMapsYuanAndUser() {
         TokenRequestLog row = request("01JABC", 42L, "charged", 5L);
+        row.setCogsLi(2L);
+        row.setMarginLi(3L);
         Page<TokenRequestLog> page = new Page<>(1, 20);
         page.setRecords(List.of(row));
         page.setTotal(1);
@@ -67,6 +69,8 @@ class AdminUsageApplicationTest {
         assertEquals(1, resp.getTotal());
         assertEquals("u_91bb04", resp.getItems().get(0).getUserCode());
         assertEquals("0.005", resp.getItems().get(0).getRevenueYuan().toPlainString());
+        assertEquals("0.002", resp.getItems().get(0).getCogsYuan().toPlainString());
+        assertEquals("0.003", resp.getItems().get(0).getMarginYuan().toPlainString());
         assertEquals("charged", resp.getItems().get(0).getBillingStatus());
         assertTrue(resp.getWindow() != null);
     }
