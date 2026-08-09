@@ -1,6 +1,7 @@
--- 人工充值示例（厘）：10 元 = 10000 厘
--- 将 @user_id 换成 token_users.id；operator/note 必填。
--- 禁止只改 balance_li 不写流水。详见 US-G0-02 §7 / 需求 §8.3。
+-- 【应急】人工充值示例（厘）：10 元 = 10000 厘
+-- 日常请走管理端 US-G6-07：POST /admin/v1/users/{id}/adjustments（/ops/topups）。
+-- 仅在 admin 不可用时手工执行；将 @user_id 换成 token_users.id；operator/note 必填。
+-- 禁止只改 balance_li 不写流水。详见 US-G0-02 §7 / 需求 §8.3 / US-G6-07。
 
 START TRANSACTION;
 

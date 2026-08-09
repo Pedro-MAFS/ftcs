@@ -64,6 +64,8 @@ export interface AdminLedgerListItem {
   request_id?: string | null
   note?: string | null
   operator?: string | null
+  /** wechat | manual；charge 通常为空 */
+  source?: string | null
   created_at?: string
 }
 

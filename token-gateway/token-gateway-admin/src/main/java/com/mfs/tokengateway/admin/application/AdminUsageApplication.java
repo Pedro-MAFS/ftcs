@@ -295,9 +295,13 @@ public class AdminUsageApplication {
         if ("all".equals(t)) {
             return null;
         }
+        if (TokenLedgerEntryDbService.TYPE_FILTER_CREDITS.equals(t)) {
+            return TokenLedgerEntryDbService.TYPE_FILTER_CREDITS;
+        }
         if (!LEDGER_TYPES.contains(t)) {
             throw AdminApiException.badRequest(
-                    "validation_error", "type must be charge, topup, adjust, or all");
+                    "validation_error",
+                    "type must be charge, topup, adjust, credits, or all");
         }
         return t;
     }
@@ -429,6 +433,7 @@ public class AdminUsageApplication {
         item.setRequestId(row.getRequestId());
         item.setNote(row.getNote());
         item.setOperator(row.getOperator());
+        item.setSource(AdminAdjustmentApplication.resolveSource(row.getType(), row.getOperator()));
         item.setCreatedAt(toInstant(row.getCreatedAt()));
         return item;
     }

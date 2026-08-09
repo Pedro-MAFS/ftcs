@@ -351,8 +351,15 @@ onMounted(refresh)
           <div><dt>tenant_id</dt><dd class="mono">{{ detail.tenant_id }}</dd></div>
           <div><dt>user_code</dt><dd class="mono">{{ detail.user_code }}</dd></div>
         </dl>
-        <p class="note">
-          调账见后续 G6-07。
+        <p class="note links">
+          <RouterLink
+            :to="{ path: '/ops/topups', query: { user_id: String(detail.id) } }"
+            >充值记录 →</RouterLink
+          >
+          <RouterLink
+            :to="{ path: '/ops/topups', query: { user_id: String(detail.id), adjust: '1' } }"
+            >人工调账 →</RouterLink
+          >
           <RouterLink :to="{ path: '/ops/usage', query: { user_id: String(detail.id) } }"
             >查看该用户消费 →</RouterLink
           >
@@ -557,6 +564,12 @@ h3 {
   margin: 1rem 0 0;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.note.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
 }
 
 .table-wrap {

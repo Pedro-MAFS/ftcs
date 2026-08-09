@@ -20,4 +20,15 @@ public final class AdminMoney {
         }
         return liToYuan(li.longValue());
     }
+
+    /**
+     * 元 → 厘；须整厘（无超出三位小数的余数），否则抛 {@link ArithmeticException}。
+     */
+    public static long yuanToLiExact(BigDecimal yuan) {
+        if (yuan == null) {
+            throw new ArithmeticException("yuan is null");
+        }
+        BigDecimal li = yuan.multiply(LI_PER_YUAN);
+        return li.setScale(0, RoundingMode.UNNECESSARY).longValueExact();
+    }
 }

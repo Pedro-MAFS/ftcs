@@ -1,6 +1,7 @@
 package com.mfs.tokengateway.admin.application;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -172,6 +173,40 @@ class AdminUsageApplicationTest {
         assertEquals(1, resp.getTotal());
         assertEquals("charge", resp.getItems().get(0).getType());
         assertEquals("-0.010", resp.getItems().get(0).getAmountYuan().toPlainString());
+        assertNull(resp.getItems().get(0).getSource());
+    }
+
+    @Test
+    void listLedgerCreditsFilterAndSource() {
+        Page<TokenLedgerEntry> page = new Page<>(1, 20);
+        TokenLedgerEntry wx = new TokenLedgerEntry();
+        wx.setId(1L);
+        wx.setUserId(42L);
+        wx.setType("topup");
+        wx.setAmountLi(10000L);
+        wx.setBalanceAfterLi(10000L);
+        wx.setOperator("wechat_pay");
+        wx.setCreatedAt(LocalDateTime.parse("2026-08-09T10:00:00"));
+        TokenLedgerEntry manual = new TokenLedgerEntry();
+        manual.setId(2L);
+        manual.setUserId(42L);
+        manual.setType("adjust");
+        manual.setAmountLi(-1000L);
+        manual.setBalanceAfterLi(9000L);
+        manual.setOperator("ops:alice");
+        manual.setCreatedAt(LocalDateTime.parse("2026-08-09T11:00:00"));
+        page.setRecords(List.of(wx, manual));
+        page.setTotal(2);
+        org.mockito.Mockito.doReturn(page)
+                .when(ledgerEntryDbService)
+                .pageForAdmin(any(), any(), eq("credits"), any(), any(), any(), any(), eq(1), eq(20));
+        when(tokenUserDbService.listByIds(any())).thenReturn(List.of(user(42L)));
+
+        AdminLedgerListResponse resp =
+                app.listLedger(null, "credits", null, null, null, null, 1, 20);
+        assertEquals(2, resp.getTotal());
+        assertEquals("wechat", resp.getItems().get(0).getSource());
+        assertEquals("manual", resp.getItems().get(1).getSource());
     }
 
     @Test

@@ -14,13 +14,15 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mfs.tokengateway.db.mapper.TokenLedgerEntryMapper;
 import com.mfs.tokengateway.db.po.TokenLedgerEntry;
 
-/** {@code token_ledger_entries}（G0-10 charge；G3-02 topup；G6-06 只读分页）。 */
+/** {@code token_ledger_entries}（G0-10 charge；G3-02 topup；G6-06/07 分页与调账）。 */
 @Service
 public class TokenLedgerEntryDbService extends ServiceImpl<TokenLedgerEntryMapper, TokenLedgerEntry> {
 
     public static final String TYPE_CHARGE = "charge";
     public static final String TYPE_TOPUP = "topup";
     public static final String TYPE_ADJUST = "adjust";
+    /** 管理端筛选：topup ∪ adjust（US-G6-07）。 */
+    public static final String TYPE_FILTER_CREDITS = "credits";
 
     public void insertCharge(TokenLedgerEntry entry) {
         save(entry);
@@ -28,6 +30,11 @@ public class TokenLedgerEntryDbService extends ServiceImpl<TokenLedgerEntryMappe
 
     public void insertTopup(TokenLedgerEntry entry) {
         entry.setType(TYPE_TOPUP);
+        save(entry);
+    }
+
+    public void insertAdjust(TokenLedgerEntry entry) {
+        entry.setType(TYPE_ADJUST);
         save(entry);
     }
 
@@ -41,9 +48,10 @@ public class TokenLedgerEntryDbService extends ServiceImpl<TokenLedgerEntryMappe
     }
 
     /**
-     * 管理端账本分页（US-G6-06）。
+     * 管理端账本分页（US-G6-06 / G6-07）。
      *
-     * @param typeExact {@code null}/blank 表示不限（{@code all}）；否则精确 type
+     * @param typeExact {@code null}/blank 表示不限（{@code all}）；
+     *     {@code credits} → IN (topup, adjust)；否则精确 type
      */
     public IPage<TokenLedgerEntry> pageForAdmin(
             Long userId,
@@ -62,7 +70,12 @@ public class TokenLedgerEntryDbService extends ServiceImpl<TokenLedgerEntryMappe
             w.in(TokenLedgerEntry::getUserId, userIdsIn);
         }
         if (StringUtils.hasText(typeExact)) {
-            w.eq(TokenLedgerEntry::getType, typeExact.trim());
+            String t = typeExact.trim();
+            if (TYPE_FILTER_CREDITS.equalsIgnoreCase(t)) {
+                w.in(TokenLedgerEntry::getType, List.of(TYPE_TOPUP, TYPE_ADJUST));
+            } else {
+                w.eq(TokenLedgerEntry::getType, t);
+            }
         }
         if (StringUtils.hasText(requestId)) {
             w.eq(TokenLedgerEntry::getRequestId, requestId.trim());

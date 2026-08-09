@@ -92,6 +92,9 @@ public class AdminLedgerListResponse {
         private String note;
         private String operator;
 
+        /** wechat | manual；charge 为 null（US-G6-07）。 */
+        private String source;
+
         @JsonProperty("created_at")
         private Instant createdAt;
 
@@ -189,6 +192,14 @@ public class AdminLedgerListResponse {
 
         public void setOperator(String operator) {
             this.operator = operator;
+        }
+
+        public String getSource() {
+            return source;
+        }
+
+        public void setSource(String source) {
+            this.source = source;
         }
 
         public Instant getCreatedAt() {

@@ -4,9 +4,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mfs.tokengateway.db.mapper.TokenWechatPayOrderMapper;
 import com.mfs.tokengateway.db.po.TokenWechatPayOrder;
@@ -122,6 +125,46 @@ public class TokenWechatPayOrderDbService extends ServiceImpl<TokenWechatPayOrde
             LocalDateTime createdBefore, LocalDateTime createdAfter, int limit) {
         int n = Math.max(1, limit);
         return getBaseMapper().selectOpenForSync(createdBefore, createdAfter, n);
+    }
+
+    /**
+     * 管理端微信订单分页（US-G6-11）。
+     *
+     * @param statusExact 精确 status；null/blank 表示不限
+     * @param outTradeNoExact 精确商户单号；null/blank 表示不限
+     */
+    public IPage<TokenWechatPayOrder> pageForAdmin(
+            Long userId,
+            String statusExact,
+            String outTradeNoExact,
+            LocalDateTime fromInclusive,
+            LocalDateTime toInclusive,
+            int page,
+            int size) {
+        LambdaQueryWrapper<TokenWechatPayOrder> w = new LambdaQueryWrapper<>();
+        if (userId != null) {
+            w.eq(TokenWechatPayOrder::getUserId, userId);
+        }
+        if (StringUtils.hasText(statusExact)) {
+            w.eq(TokenWechatPayOrder::getStatus, statusExact.trim());
+        }
+        if (StringUtils.hasText(outTradeNoExact)) {
+            w.eq(TokenWechatPayOrder::getOutTradeNo, outTradeNoExact.trim());
+        }
+        if (fromInclusive != null) {
+            w.ge(TokenWechatPayOrder::getCreatedAt, fromInclusive);
+        }
+        if (toInclusive != null) {
+            w.le(TokenWechatPayOrder::getCreatedAt, toInclusive);
+        }
+        w.orderByDesc(TokenWechatPayOrder::getCreatedAt).orderByDesc(TokenWechatPayOrder::getId);
+        long total = count(w);
+        long offset = (long) (page - 1) * size;
+        w.last("LIMIT " + offset + "," + size);
+        List<TokenWechatPayOrder> records = list(w);
+        Page<TokenWechatPayOrder> result = new Page<>(page, size, total, false);
+        result.setRecords(records != null ? records : List.of());
+        return result;
     }
 
     /**
