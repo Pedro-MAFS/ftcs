@@ -351,7 +351,12 @@ onMounted(refresh)
           <div><dt>tenant_id</dt><dd class="mono">{{ detail.tenant_id }}</dd></div>
           <div><dt>user_code</dt><dd class="mono">{{ detail.user_code }}</dd></div>
         </dl>
-        <p class="note">调账 / 消费明细见后续 G6-06～07。</p>
+        <p class="note">
+          调账见后续 G6-07。
+          <RouterLink :to="{ path: '/ops/usage', query: { user_id: String(detail.id) } }"
+            >查看该用户消费 →</RouterLink
+          >
+        </p>
       </section>
     </template>
 

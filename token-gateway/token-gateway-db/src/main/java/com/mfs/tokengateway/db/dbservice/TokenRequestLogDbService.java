@@ -1,6 +1,7 @@
 package com.mfs.tokengateway.db.dbservice;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -9,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mfs.tokengateway.db.mapper.TokenRequestLogMapper;
 import com.mfs.tokengateway.db.po.TokenRequestLog;
@@ -139,5 +142,68 @@ public class TokenRequestLogDbService extends ServiceImpl<TokenRequestLogMapper,
         q.last("LIMIT " + limit);
         List<TokenRequestLog> rows = list(q);
         return rows == null ? List.of() : rows;
+    }
+
+    /** 管理端按 request_id 查单条（US-G6-06）。 */
+    public TokenRequestLog findByRequestId(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            return null;
+        }
+        return getById(requestId);
+    }
+
+    /**
+     * 管理端请求计量分页（US-G6-06）。
+     *
+     * @param ignoreTimeWindow 精确 request_id 查询时为 true
+     * @param userIdsIn        {@code q} 解析出的用户 id 集合；与 {@code userId} 互斥使用
+     */
+    public IPage<TokenRequestLog> pageForAdmin(
+            Long userId,
+            Collection<Long> userIdsIn,
+            String requestIdExact,
+            String model,
+            String billingStatus,
+            String keyName,
+            String status,
+            LocalDateTime fromInclusive,
+            LocalDateTime toInclusive,
+            boolean ignoreTimeWindow,
+            int page,
+            int size) {
+        LambdaQueryWrapper<TokenRequestLog> w = new LambdaQueryWrapper<>();
+        if (requestIdExact != null && !requestIdExact.isBlank()) {
+            w.eq(TokenRequestLog::getRequestId, requestIdExact.trim());
+        } else {
+            if (userId != null) {
+                w.eq(TokenRequestLog::getUserId, userId);
+            } else if (userIdsIn != null && !userIdsIn.isEmpty()) {
+                w.in(TokenRequestLog::getUserId, userIdsIn);
+            }
+            if (model != null && !model.isBlank()) {
+                w.eq(TokenRequestLog::getModel, model.trim());
+            }
+            if (billingStatus != null && !billingStatus.isBlank()) {
+                w.eq(TokenRequestLog::getBillingStatus, billingStatus.trim());
+            }
+            if (keyName != null && !keyName.isBlank()) {
+                w.eq(TokenRequestLog::getKeyName, keyName.trim());
+            }
+            if (status != null && !status.isBlank()) {
+                w.eq(TokenRequestLog::getStatus, status.trim());
+            }
+            if (!ignoreTimeWindow) {
+                w.ge(TokenRequestLog::getCreatedAt, fromInclusive);
+                w.le(TokenRequestLog::getCreatedAt, toInclusive);
+            }
+        }
+        w.orderByDesc(TokenRequestLog::getCreatedAt).orderByDesc(TokenRequestLog::getRequestId);
+        long total = count(w);
+        long offset = (long) (page - 1) * size;
+        w.last("LIMIT " + offset + "," + size);
+        List<TokenRequestLog> records = list(w);
+        Page<TokenRequestLog> result = new Page<>(page, size, total, false);
+        result.setRecords(records != null ? records : List.of());
+        return result;
     }
 }

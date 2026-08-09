@@ -3,6 +3,8 @@ package com.mfs.tokengateway.db.dbservice;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.io.Serializable;
+import java.util.Collection;
 import java.util.List;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -86,5 +88,28 @@ public class TokenUserDbService extends ServiceImpl<TokenUserMapper, TokenUser> 
         return update(new LambdaUpdateWrapper<TokenUser>()
                 .eq(TokenUser::getId, userId)
                 .set(TokenUser::getStatus, newStatus));
+    }
+
+    /** 批量按 id 加载（US-G6-06 join user_code）。 */
+    public List<TokenUser> listByIds(Collection<? extends java.io.Serializable> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        List<TokenUser> rows = list(new LambdaQueryWrapper<TokenUser>().in(TokenUser::getId, ids));
+        return rows == null ? List.of() : rows;
+    }
+
+    /**
+     * 按 user_code 模糊查 id（US-G6-06 {@code q}）；最多 {@code limit} 条。
+     */
+    public List<TokenUser> findByUserCodeLike(String keyword, int limit) {
+        if (!StringUtils.hasText(keyword) || limit <= 0) {
+            return List.of();
+        }
+        List<TokenUser> rows = list(new LambdaQueryWrapper<TokenUser>()
+                .like(TokenUser::getUserCode, keyword.trim())
+                .orderByDesc(TokenUser::getId)
+                .last("LIMIT " + limit));
+        return rows == null ? List.of() : rows;
     }
 }
