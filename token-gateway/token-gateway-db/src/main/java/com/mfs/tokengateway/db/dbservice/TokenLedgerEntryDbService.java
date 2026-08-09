@@ -98,4 +98,34 @@ public class TokenLedgerEntryDbService extends ServiceImpl<TokenLedgerEntryMappe
         result.setRecords(records != null ? records : List.of());
         return result;
     }
+
+    /** 看板：窗内 type 金额合计（topup 用正额 SUM）（US-G6-02）。 */
+    public LedgerAmountCount sumAmountByTypeBetween(
+            String type, LocalDateTime fromInclusive, LocalDateTime toExclusive) {
+        LedgerAmountCount row =
+                getBaseMapper().sumAmountByTypeBetween(type, fromInclusive, toExclusive);
+        return row != null ? row : new LedgerAmountCount(0L, 0L);
+    }
+
+    /** 看板：窗内 type 金额合计（charge 用 ABS）（US-G6-02）。 */
+    public LedgerAmountCount sumAbsAmountByTypeBetween(
+            String type, LocalDateTime fromInclusive, LocalDateTime toExclusive) {
+        LedgerAmountCount row =
+                getBaseMapper().sumAbsAmountByTypeBetween(type, fromInclusive, toExclusive);
+        return row != null ? row : new LedgerAmountCount(0L, 0L);
+    }
+
+    public List<DashboardDayAgg> sumAmountGroupedByShanghaiDay(
+            String type, LocalDateTime fromInclusive, LocalDateTime toExclusive) {
+        List<DashboardDayAgg> rows =
+                getBaseMapper().sumAmountGroupedByShanghaiDay(type, fromInclusive, toExclusive);
+        return rows == null ? List.of() : rows;
+    }
+
+    public List<DashboardDayAgg> sumAbsAmountGroupedByShanghaiDay(
+            String type, LocalDateTime fromInclusive, LocalDateTime toExclusive) {
+        List<DashboardDayAgg> rows =
+                getBaseMapper().sumAbsAmountGroupedByShanghaiDay(type, fromInclusive, toExclusive);
+        return rows == null ? List.of() : rows;
+    }
 }

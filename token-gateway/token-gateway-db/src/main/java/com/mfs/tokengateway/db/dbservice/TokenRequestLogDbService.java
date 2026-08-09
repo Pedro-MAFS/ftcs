@@ -206,4 +206,25 @@ public class TokenRequestLogDbService extends ServiceImpl<TokenRequestLogMapper,
         result.setRecords(records != null ? records : List.of());
         return result;
     }
+
+    /** 看板：窗内去重活跃用户（US-G6-02）。 */
+    public long countDistinctUsersBetween(LocalDateTime fromInclusive, LocalDateTime toExclusive) {
+        return getBaseMapper().countDistinctUsersBetween(fromInclusive, toExclusive);
+    }
+
+    /** 看板：按上海日 DAU（US-G6-02）。 */
+    public List<DashboardDayAgg> countDistinctUsersGroupedByShanghaiDay(
+            LocalDateTime fromInclusive, LocalDateTime toExclusive) {
+        List<DashboardDayAgg> rows =
+                getBaseMapper().countDistinctUsersGroupedByShanghaiDay(fromInclusive, toExclusive);
+        return rows == null ? List.of() : rows;
+    }
+
+    /** 看板：今日已结算请求成本/毛利合计（US-G6-02 副指标）。 */
+    public RequestCogsMarginSum sumCogsMarginChargedBetween(
+            LocalDateTime fromInclusive, LocalDateTime toExclusive) {
+        RequestCogsMarginSum row =
+                getBaseMapper().sumCogsMarginChargedBetween(fromInclusive, toExclusive);
+        return row != null ? row : new RequestCogsMarginSum(0L, 0L);
+    }
 }

@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.io.Serializable;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -110,6 +111,19 @@ public class TokenUserDbService extends ServiceImpl<TokenUserMapper, TokenUser> 
                 .like(TokenUser::getUserCode, keyword.trim())
                 .orderByDesc(TokenUser::getId)
                 .last("LIMIT " + limit));
+        return rows == null ? List.of() : rows;
+    }
+
+    /** 看板：时间窗内新增用户数（US-G6-02）。 */
+    public long countCreatedBetween(LocalDateTime fromInclusive, LocalDateTime toExclusive) {
+        return getBaseMapper().countCreatedBetween(fromInclusive, toExclusive);
+    }
+
+    /** 看板：按上海日归桶的新增用户（US-G6-02）。 */
+    public List<DashboardDayAgg> countCreatedGroupedByShanghaiDay(
+            LocalDateTime fromInclusive, LocalDateTime toExclusive) {
+        List<DashboardDayAgg> rows =
+                getBaseMapper().countCreatedGroupedByShanghaiDay(fromInclusive, toExclusive);
         return rows == null ? List.of() : rows;
     }
 }
