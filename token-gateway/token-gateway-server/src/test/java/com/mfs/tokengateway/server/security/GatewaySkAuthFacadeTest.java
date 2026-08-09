@@ -25,6 +25,7 @@ import com.mfs.tokengateway.db.dbservice.TokenApiKeyDbService;
 import com.mfs.tokengateway.db.dbservice.TokenUserDbService;
 import com.mfs.tokengateway.db.po.TokenApiKey;
 import com.mfs.tokengateway.db.po.TokenUser;
+import com.mfs.tokengateway.db.security.GatewayApiKeyHasher;
 import com.mfs.tokengateway.server.config.TokenGatewayProperties;
 
 @ExtendWith(MockitoExtension.class)

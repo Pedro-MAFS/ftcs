@@ -13,6 +13,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.mfs.tokengateway.db.dbservice.TokenRechargeTicketDbService;
 import com.mfs.tokengateway.db.po.TokenRechargeTicket;
+import com.mfs.tokengateway.db.security.GatewayApiKeyHasher;
 import com.mfs.tokengateway.server.config.TokenGatewayProperties;
 
 /**

@@ -1,4 +1,4 @@
-package com.mfs.tokengateway.server.security;
+package com.mfs.tokengateway.db.security;
 
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -6,7 +6,7 @@ import java.util.Base64;
 import org.springframework.stereotype.Component;
 
 /**
- * 网关 API Key 明文生成（US-G0-06）。
+ * 网关 API Key 明文生成（US-G0-06 / G6-05 共享）。
  * <p>
  * 格式：{@code sk-} + 32 字节密码学随机 → Base64URL（无填充）。
  */

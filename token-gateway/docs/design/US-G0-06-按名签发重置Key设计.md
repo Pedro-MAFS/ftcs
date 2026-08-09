@@ -159,7 +159,9 @@ Content-Type: application/json
 | Pepper | `GATEWAY_KEY_PEPPER`；空则 **拒绝签发**（本地开发须在 `.env` / local 配置） |
 | 日志 | **禁止**打印 `api_key`、pepper、完整 hash 以外的敏感拼接材料；可打 `name`、`action`、`userId`、`requestId` |
 
-工具类建议：`GatewayApiKeyHasher`、`GatewayApiKeyGenerator`（`…server.security` 或 `…server.utils`）。
+工具类建议：`GatewayApiKeyHasher`、`GatewayApiKeyGenerator`（已下沉 `token-gateway-db` · `…db.security`，server/admin 共用）。
+
+> **G6 衔接**：运营端强制 rotate 见 [US-G6-05](./US-G6-05-用户APIKey管理设计.md)；Hasher/Generator **已下沉共享**（禁止在 admin 复制算法）。
 
 ---
 

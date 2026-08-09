@@ -18,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.mfs.tokengateway.db.dbservice.TokenRechargeTicketDbService;
 import com.mfs.tokengateway.db.po.TokenRechargeTicket;
+import com.mfs.tokengateway.db.security.GatewayApiKeyHasher;
 import com.mfs.tokengateway.server.config.TokenGatewayProperties;
 
 @ExtendWith(MockitoExtension.class)

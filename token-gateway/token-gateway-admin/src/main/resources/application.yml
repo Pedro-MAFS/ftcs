@@ -28,6 +28,9 @@ management:
       enabled: true
 
 token-gateway:
+  key:
+    # 与 server 共用；rotate 必填。未配置时启停仍可用，rotate 返回 500 pepper_not_configured
+    pepper: ${GATEWAY_KEY_PEPPER:}
   admin:
     cors-allowed-origins:
       - http://127.0.0.1:5173

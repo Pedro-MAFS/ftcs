@@ -33,4 +33,8 @@ public class AdminApiException extends RuntimeException {
     public static AdminApiException conflict(String code, String message) {
         return new AdminApiException(HttpStatus.CONFLICT, code, message);
     }
+
+    public static AdminApiException internalError(String code, String message) {
+        return new AdminApiException(HttpStatus.INTERNAL_SERVER_ERROR, code, message);
+    }
 }

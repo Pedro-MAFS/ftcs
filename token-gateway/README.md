@@ -114,7 +114,7 @@ mvn --% -Dmaven.repo.local=D:\maven-repo -DskipTests package
 2. 账号放 `MYSQL_*` 或 `application-local.yml`（勿把密钥写进已提交的 `application.yml`）
 3. 启动即：预建 `token_flyway_schema_history` → 执行 `V1_0_0__init_billing_schema.sql`
 
-改库示例：[`ops/topup_example.sql`](./ops/topup_example.sql)、[`ops/disable_key_by_name.sql`](./ops/disable_key_by_name.sql)、[`ops/insert_price_rule_example.sql`](./ops/insert_price_rule_example.sql)。
+改库示例（应急）：[`ops/topup_example.sql`](./ops/topup_example.sql)、[`ops/disable_key_by_name.sql`](./ops/disable_key_by_name.sql)（日常请走管理端 US-G6-05）、[`ops/insert_price_rule_example.sql`](./ops/insert_price_rule_example.sql)。
 
 `V1_0_0` 含白名单模型 **占位价目**（厘/MTok）；上线前复核后 INSERT 新 `effective_from` 行，勿当生产终价。
 

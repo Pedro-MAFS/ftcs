@@ -15,8 +15,8 @@ import com.mfs.tokengateway.db.po.TokenApiKey;
 import com.mfs.tokengateway.db.po.TokenUser;
 import com.mfs.tokengateway.server.api.dto.KeyRotateResponse;
 import com.mfs.tokengateway.server.config.TokenGatewayProperties;
-import com.mfs.tokengateway.server.security.GatewayApiKeyGenerator;
-import com.mfs.tokengateway.server.security.GatewayApiKeyHasher;
+import com.mfs.tokengateway.db.security.GatewayApiKeyGenerator;
+import com.mfs.tokengateway.db.security.GatewayApiKeyHasher;
 import com.mfs.tokengateway.server.security.UcIdentity;
 
 /**

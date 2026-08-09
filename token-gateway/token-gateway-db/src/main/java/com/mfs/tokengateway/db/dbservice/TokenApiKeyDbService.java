@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.mfs.tokengateway.db.mapper.TokenApiKeyMapper;
 import com.mfs.tokengateway.db.po.TokenApiKey;
@@ -34,6 +35,14 @@ public class TokenApiKeyDbService extends ServiceImpl<TokenApiKeyMapper, TokenAp
                 .eq(TokenApiKey::getUserId, userId)
                 .orderByAsc(TokenApiKey::getName));
         return rows == null ? List.of() : rows;
+    }
+
+    /** 管理端按用户 + name 更新 status（US-G6-05）。 */
+    public boolean updateStatus(long userId, String name, String status) {
+        return update(new LambdaUpdateWrapper<TokenApiKey>()
+                .eq(TokenApiKey::getUserId, userId)
+                .eq(TokenApiKey::getName, name)
+                .set(TokenApiKey::getStatus, status));
     }
 
     /** 管理端详情 Key 计数摘要（US-G6-04）；不含明文 / hash。 */

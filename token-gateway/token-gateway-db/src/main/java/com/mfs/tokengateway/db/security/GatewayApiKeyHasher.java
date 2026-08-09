@@ -1,4 +1,4 @@
-package com.mfs.tokengateway.server.security;
+package com.mfs.tokengateway.db.security;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -8,7 +8,7 @@ import java.util.HexFormat;
 import org.springframework.stereotype.Component;
 
 /**
- * 网关 API Key 哈希（US-G0-06 / G0-08）。
+ * 网关 API Key 哈希（US-G0-06 / G0-08 / G6-05 共享）。
  * <p>
  * {@code SHA-256( UTF8(pepper) || UTF8(raw) )} → 小写 hex 64 字符。
  */

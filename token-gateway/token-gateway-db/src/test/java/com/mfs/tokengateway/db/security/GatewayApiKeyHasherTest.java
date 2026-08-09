@@ -1,4 +1,4 @@
-package com.mfs.tokengateway.server.security;
+package com.mfs.tokengateway.db.security;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;

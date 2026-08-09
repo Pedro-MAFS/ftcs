@@ -27,7 +27,7 @@ import com.mfs.tokengateway.db.po.TokenRechargeTicket;
 import com.mfs.tokengateway.db.po.TokenUser;
 import com.mfs.tokengateway.server.api.dto.RechargeTicketResponse;
 import com.mfs.tokengateway.server.config.TokenGatewayProperties;
-import com.mfs.tokengateway.server.security.GatewayApiKeyHasher;
+import com.mfs.tokengateway.db.security.GatewayApiKeyHasher;
 import com.mfs.tokengateway.server.security.RechargeTicketGenerator;
 import com.mfs.tokengateway.server.security.UcIdentity;
 
