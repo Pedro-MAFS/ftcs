@@ -1,4 +1,5 @@
 -- 调价示例（US-G5-03）：tavily.search 按次价，只 INSERT 新版本，勿 UPDATE 覆盖历史价。
+-- 日常请走管理端 US-G6-10（POST /admin/v1/prices，billing_unit=per_call）；本脚本仅应急。
 -- 编码约定（方案 A）：
 --   input_price_li_per_mTok  = 厘/次 × 1000000
 --   output_price_li_per_mTok = 0

@@ -32,3 +32,9 @@ token-gateway:
     cors-allowed-origins:
       - http://127.0.0.1:5173
       - http://localhost:5173
+    prices:
+      # US-G6-10：可调价 / 列表展示的 model 白名单
+      allowed-models:
+        - deepseek-v4-flash
+        - deepseek-v4-pro
+        - tavily.search

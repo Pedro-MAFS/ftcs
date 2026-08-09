@@ -1,4 +1,5 @@
 -- 调价示例（US-G0-09）：只 INSERT 新版本，勿 UPDATE 覆盖历史价。
+-- 日常请走管理端 US-G6-10（POST /admin/v1/prices）；本脚本仅应急。
 -- 金额单位：厘 / 百万 Token。已 charged 的 token_request_logs 金额不回改。
 -- 将下方数值换成复核后的正式价；effective_from 用预约生效 UTC 时间。
 
