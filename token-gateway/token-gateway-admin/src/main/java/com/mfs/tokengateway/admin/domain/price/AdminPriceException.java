@@ -2,24 +2,13 @@ package com.mfs.tokengateway.admin.domain.price;
 
 import org.springframework.http.HttpStatus;
 
-/** 价目管理业务异常（US-G6-10）。 */
-public class AdminPriceException extends RuntimeException {
+import com.mfs.tokengateway.admin.domain.AdminApiException;
 
-    private final String code;
-    private final HttpStatus status;
+/** 价目管理业务异常（US-G6-10）；继承公共 {@link AdminApiException}。 */
+public class AdminPriceException extends AdminApiException {
 
     public AdminPriceException(HttpStatus status, String code, String message) {
-        super(message);
-        this.status = status;
-        this.code = code;
-    }
-
-    public String getCode() {
-        return code;
-    }
-
-    public HttpStatus getStatus() {
-        return status;
+        super(status, code, message);
     }
 
     public static AdminPriceException badRequest(String code, String message) {

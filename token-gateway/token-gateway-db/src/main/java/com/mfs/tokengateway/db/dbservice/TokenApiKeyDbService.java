@@ -13,6 +13,9 @@ import com.mfs.tokengateway.db.po.TokenApiKey;
 @Service
 public class TokenApiKeyDbService extends ServiceImpl<TokenApiKeyMapper, TokenApiKey> {
 
+    public static final String STATUS_ACTIVE = "active";
+    public static final String STATUS_DISABLED = "disabled";
+
     /** 按用户 + Key 名查；不存在返回 {@code null}。 */
     public TokenApiKey findByUserIdAndName(Long userId, String name) {
         return getOne(new LambdaQueryWrapper<TokenApiKey>()
@@ -32,4 +35,21 @@ public class TokenApiKeyDbService extends ServiceImpl<TokenApiKeyMapper, TokenAp
                 .orderByAsc(TokenApiKey::getName));
         return rows == null ? List.of() : rows;
     }
+
+    /** 管理端详情 Key 计数摘要（US-G6-04）；不含明文 / hash。 */
+    public KeyStatusCounts countByUserId(long userId) {
+        List<TokenApiKey> keys = listByUserId(userId);
+        long active = 0;
+        long disabled = 0;
+        for (TokenApiKey key : keys) {
+            if (STATUS_DISABLED.equalsIgnoreCase(key.getStatus())) {
+                disabled++;
+            } else if (STATUS_ACTIVE.equalsIgnoreCase(key.getStatus())) {
+                active++;
+            }
+        }
+        return new KeyStatusCounts(keys.size(), active, disabled);
+    }
+
+    public record KeyStatusCounts(long total, long active, long disabled) {}
 }

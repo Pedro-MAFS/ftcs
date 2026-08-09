@@ -17,6 +17,12 @@ export const router = createRouter({
       meta: { title: '用户管理' },
     },
     {
+      path: '/ops/users/:id',
+      name: 'user-detail',
+      component: () => import('@/views/UserDetailView.vue'),
+      meta: { title: '用户详情' },
+    },
+    {
       path: '/ops/usage',
       name: 'usage',
       component: () => import('@/views/UsageView.vue'),

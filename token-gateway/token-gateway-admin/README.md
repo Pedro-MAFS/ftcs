@@ -1,6 +1,6 @@
 # token-gateway-admin
 
-运维管理端后端（**US-G6-01** 骨架 + **US-G6-10** 价目）：独立 Spring Boot，默认端口 **8089**，与 `token-gateway-server` **共库**、**进程分离**。
+运维管理端后端（**US-G6-01** 骨架 + **US-G6-04** 用户 + **US-G6-10** 价目）：独立 Spring Boot，默认端口 **8089**，与 `token-gateway-server` **共库**、**进程分离**。
 
 ## 边界
 
@@ -9,9 +9,20 @@
 | 依赖 | 仅 `token-gateway-db` + Boot Web/Actuator；**无** server / UC RS / sk 鉴权 |
 | Flyway | **关闭**；表由 server 迁移 |
 | 探活 | `GET /admin/v1/health`（匿名） |
+| 用户 | `GET/PATCH /admin/v1/users*`（列表/详情/启停；无删户） |
 | 价目 | `GET/POST /admin/v1/prices`（只 INSERT；Chat + `tavily.search` 方案 A） |
 | 前端 | `tokengateway-admin-ui` 构建产物写入 `src/main/resources/static/`，内嵌 Tomcat 同域托管 |
-| 详设 | [US-G6-01](../docs/design/US-G6-01-Admin工程骨架与部署设计.md) · [US-G6-10](../docs/design/US-G6-10-价目管理设计.md) |
+| 详设 | [US-G6-01](../docs/design/US-G6-01-Admin工程骨架与部署设计.md) · [US-G6-04](../docs/design/US-G6-04-用户管理设计.md) · [US-G6-10](../docs/design/US-G6-10-价目管理设计.md) |
+
+## 用户 API（US-G6-04）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/admin/v1/users` | 分页；`q` / `status` / `tenant_id` / `user_code` |
+| GET | `/admin/v1/users/{id}` | 详情 + Key 计数摘要 |
+| PATCH | `/admin/v1/users/{id}/status` | `active`/`disabled`；必填 `operator`/`note` |
+
+禁用账户后 sk 调用返回 **403** `account_disabled`；无物理删除、无建户、无改余额。
 
 ## 价目 API（US-G6-10）
 
@@ -36,6 +47,7 @@ mvn -pl token-gateway-admin -am package
 java -jar token-gateway-admin/target/token-gateway-admin-*-SNAPSHOT.jar
 # 页面：http://127.0.0.1:8089/
 # API ：http://127.0.0.1:8089/admin/v1/health
+# 用户：http://127.0.0.1:8089/admin/v1/users
 # 价目：http://127.0.0.1:8089/admin/v1/prices
 ```
 

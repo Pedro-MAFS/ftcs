@@ -14,19 +14,19 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import com.mfs.tokengateway.admin.domain.price.AdminPriceException;
+import com.mfs.tokengateway.admin.domain.AdminApiException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-/** Admin API 错误体：{@code {code, message}}（US-G6-10）。 */
+/** Admin API 错误体：{@code {code, message}}（US-G6-04 / US-G6-10）。 */
 @RestControllerAdvice(basePackages = "com.mfs.tokengateway.admin.api")
 public class AdminRestExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(AdminRestExceptionHandler.class);
 
-    @ExceptionHandler(AdminPriceException.class)
-    public ResponseEntity<Map<String, Object>> handlePrice(
-            AdminPriceException ex, HttpServletRequest request) {
+    @ExceptionHandler(AdminApiException.class)
+    public ResponseEntity<Map<String, Object>> handleAdminApi(
+            AdminApiException ex, HttpServletRequest request) {
         log.warn(
                 "admin api error method={} path={} code={} message={}",
                 request.getMethod(),
