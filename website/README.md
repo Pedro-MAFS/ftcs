@@ -23,6 +23,17 @@ npm run preview
 
 产物在 `website/dist/`。预览地址同样为 `http://localhost:4173/ftcs/`。
 
+## SEO（robots / sitemap）
+
+构建后会随 `public/` 发布：
+
+| 文件 | 线上地址 |
+|------|----------|
+| `robots.txt` | https://ai-utills.com/ftcs/robots.txt |
+| `sitemap.xml` | https://ai-utills.com/ftcs/sitemap.xml |
+
+域名根 `https://ai-utills.com/robots.txt`（主站）需包含 `Sitemap: https://ai-utills.com/ftcs/sitemap.xml`，搜索引擎才会从根目录发现本站地图。文档增删后请同步更新 `public/sitemap.xml` 的 `<loc>` / `<lastmod>`。
+
 ## 部署到 Nginx（html/ftcs）
 
 1. 构建：`npm run build`

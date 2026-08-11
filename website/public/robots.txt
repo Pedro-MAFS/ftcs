@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /ftcs/
+
+# 禁止抓取应用更新元数据（非面向用户的页面）
+Disallow: /ftcs/updates/
+
+# 站点地图（本站挂载于 /ftcs/）
+Sitemap: https://ai-utills.com/ftcs/sitemap.xml

@@ -224,6 +224,36 @@ img {
   color: var(--text-secondary);
 }
 
+.site-footer__contact,
+.site-footer__beian {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  justify-content: center;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+.site-footer__contact a,
+.site-footer__beian a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.site-footer__contact a:hover,
+.site-footer__beian a:hover {
+  color: var(--text-secondary);
+}
+
+.site-footer__beian img {
+  display: block;
+  flex-shrink: 0;
+}
+
 /* Hero */
 .hero {
   padding: 3.5rem 0 2.5rem;
