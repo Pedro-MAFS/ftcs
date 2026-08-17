@@ -58,7 +58,7 @@ const settingsShot = {
       <div class="container">
         <div class="hero__intro">
           <p class="hero__eyebrow">{{ siteConfig.brand }}</p>
-          <h1 class="hero__brand">{{ siteConfig.productName }}</h1>
+          <h1 class="hero__brand">外贸获客系统</h1>
           <p class="hero__lead">{{ siteConfig.tagline }}</p>
           <div class="hero__actions">
             <RouterLink class="btn btn-primary" to="/download">下载桌面版</RouterLink>
