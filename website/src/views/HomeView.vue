@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { siteConfig } from '../config/site'
 import { withBase } from '../lib/base'
+import { usePageSeo } from '../composables/usePageSeo'
+
+usePageSeo({
+  description:
+    'FTCS 外贸获客桌面应用：从产品画像到线索发现与开发信草稿，数据留在本机，官网提供展示与下载。',
+})
 
 const heroShot = {
   src: withBase('screenshots/ftcs-线索.png'),
@@ -51,8 +57,8 @@ const settingsShot = {
     <section class="hero">
       <div class="container">
         <div class="hero__intro">
-          <h1 class="hero__brand">{{ siteConfig.brand }}</h1>
-          <p class="hero__product">{{ siteConfig.productName }}</p>
+          <p class="hero__eyebrow">{{ siteConfig.brand }}</p>
+          <h1 class="hero__brand">{{ siteConfig.productName }}</h1>
           <p class="hero__lead">{{ siteConfig.tagline }}</p>
           <div class="hero__actions">
             <RouterLink class="btn btn-primary" to="/download">下载桌面版</RouterLink>

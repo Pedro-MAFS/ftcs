@@ -2,7 +2,7 @@
 
 Vue 3 + Vite 纯静态站：功能展示、帮助文档、软件下载。
 
-**部署路径**：默认按 nginx `html/ftcs/` 子目录发布（Vite `base: '/ftcs/'`）。
+**部署路径**：默认按 nginx `html/ftcs/` 子目录发布（Vite `base: '/ftcs/'`）。构建使用 **vite-ssg** 预渲染各路由 HTML，便于搜索引擎抓取 H1 与正文。
 
 ## 开发
 
@@ -22,6 +22,14 @@ npm run preview
 ```
 
 产物在 `website/dist/`。预览地址同样为 `http://localhost:4173/ftcs/`。
+
+构建使用 **vite-ssg** 预渲染各路由为静态 HTML（`dirStyle: 'nested'`，如 `download/index.html`），源码中即含 `<h1>` 与各页 `title` / `description`，便于搜索引擎收录。新增文档时请同步：
+
+1. `src/content/docs-index.ts` 与 `content/docs/*.md`
+2. `vite.config.ts` → `ssgOptions.includedRoutes`
+3. `public/sitemap.xml`
+
+本地可跑 `node scripts/check-ssg-seo.mjs` 抽检 `dist` 内 title / description / h1。
 
 ## SEO（robots / sitemap）
 

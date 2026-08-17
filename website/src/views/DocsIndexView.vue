@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import { listDocs } from '../lib/docs'
+import { usePageSeo } from '../composables/usePageSeo'
+
+usePageSeo({
+  title: '帮助文档',
+  description: '外贸获客安装、推荐流程与常见问题：官方通道、探索、充值与下载说明。',
+})
 </script>
 
 <template>

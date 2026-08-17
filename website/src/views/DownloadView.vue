@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import { siteConfig, type DownloadMirror } from '../config/site'
+import { usePageSeo } from '../composables/usePageSeo'
+
+usePageSeo({
+  title: '下载',
+  description: `下载 ${siteConfig.productName} Windows 桌面版（安装包 / 便携版），支持官方通道与本机配置。`,
+})
 
 function isReady(url: string): boolean {
   return Boolean(url && url.trim())
@@ -14,7 +20,7 @@ function hasAnyMirror(mirrors: DownloadMirror[]): boolean {
   <div>
     <header class="page-head">
       <div class="container">
-        <h1>下载</h1>
+        <h1>下载 {{ siteConfig.productName }} 桌面版</h1>
         <p>
           {{ siteConfig.productName }} 桌面版（Windows）。使用前请先在本机准备
           <strong>Node.js 22+</strong>、<strong>Google Chrome</strong> 与

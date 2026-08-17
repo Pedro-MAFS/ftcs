@@ -6,7 +6,7 @@
   "description": "FTCS 外贸获客官网（Vue3 静态站）",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "build": "vue-tsc -b && vite-ssg build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -16,10 +16,12 @@
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
+    "@unhead/vue": "^2.1.17",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/tsconfig": "^0.9.1",
     "typescript": "~5.9.3",
     "vite": "^8.1.1",
+    "vite-ssg": "^28.3.0",
     "vue-tsc": "^3.3.5"
   }
 }

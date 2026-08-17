@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { marked } from 'marked'
 import { getDoc, listDocs } from '../lib/docs'
 import { rewriteHtmlHrefs } from '../lib/base'
+import { useDocPageSeo } from '../composables/usePageSeo'
 
 const props = defineProps<{ slug: string }>()
 const route = useRoute()
@@ -17,9 +18,15 @@ const html = computed(() => {
   return rewriteHtmlHrefs(raw)
 })
 
+useDocPageSeo(() => ({
+  title: doc.value?.meta.title ?? '文档未找到',
+  description: doc.value?.meta.description ?? '该文档不存在或已移动。',
+}))
+
 watch(
   () => [html.value, route.hash] as const,
   async ([content, hash]) => {
+    if (typeof document === 'undefined') return
     if (!content || !hash) return
     await nextTick()
     const el = document.querySelector(hash)

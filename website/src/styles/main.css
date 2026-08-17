@@ -266,14 +266,24 @@ img {
   margin-bottom: 2rem;
 }
 
+.hero__eyebrow {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 0.5rem;
+  animation: rise 0.7s ease both;
+}
+
 .hero__brand {
   font-family: var(--font-display);
   font-size: clamp(3.2rem, 8vw, 5.4rem);
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 0.95;
-  margin: 0 0 0.35rem;
-  animation: rise 0.7s ease both;
+  margin: 0 0 1rem;
+  animation: rise 0.7s ease 0.08s both;
 }
 
 .hero__product {
