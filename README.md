@@ -28,15 +28,18 @@
 | 10 | [OpenCode 一键安装方案](docs/10-OpenCode一键安装方案.md) | userData 本地前缀安装 opencode-ai；**硬依赖合格 Node** |
 | 11 | [官方模型通道对接](docs/11-官方模型通道对接.md) | Desktop ↔ Token 网关对接（消费方） |
 | 12 | [官方模型通道用户故事](docs/12-官方模型通道用户故事.md) | 桌面端 G1 用户故事 |
+| 15 | [官方搜索通道对接](docs/15-官方搜索通道对接.md) | 桌面端官方搜索（G5） |
+| 16 | [官方搜索通道用户故事](docs/16-官方搜索通道用户故事.md) | 桌面端 G5 用户故事 |
+| 17 | [下一阶段规划：业务效率工具](docs/17-下一阶段-业务效率工具.md) | MVP 之后：录入、探索轮次、人员联系画像 |
 
-Token 网关已迁至**独立 Git 仓库**维护；本仓仅保留桌面端对接说明（见下表 docs/11、docs/12）。
+Token 网关已迁至**独立 Git 仓库**维护；本仓仅保留桌面端对接说明（见 docs/11、docs/12）。
 
 
 ## 当前阶段
 
-**Phase 2 进行中** — **2.0 Electron + OpenCode（P0）、2.1 外贸 Web UI（P0）已完成**。
+**桌面 MVP 已可跑通**（约 v0.4.1）：录入 → 画像 → 关键词 → R1 探索 → 线索 → 开发信草稿；官方通道与充值可用。
 
-下一步：审核后发信（`email-sender` / 2.4）、定时探索（`scheduler`）。架构见 [docs/08-产品架构决策-Electron-OpenCode.md](docs/08-产品架构决策-Electron-OpenCode.md)，计划见 [docs/04-实施计划.md](docs/04-实施计划.md)。
+**下一阶段**见 [docs/17-下一阶段-业务效率工具.md](docs/17-下一阶段-业务效率工具.md)（尚未拆用户故事）。发信 / 定时探索暂非主线。旧任务清单见 [docs/04-实施计划.md](docs/04-实施计划.md)。
 
 **标准工作流目录**：[`workspace/`](workspace/) — Skills、MCP、配置、`data/`、`.env` 的**唯一维护位置**。应用壳在 `desktop/`。产品官网在 [`website/`](website/)（Vue3 静态站）。Token 网关已迁出本仓（独立仓库）；桌面端对接见 [`docs/11-官方模型通道对接.md`](docs/11-官方模型通道对接.md)。`.cursor/`、`.opencode/` 为本机 IDE/工具临时目录（**不进 Git**）。
 
