@@ -210,6 +210,7 @@ button:focus-visible {
   font-size: 12px;
   line-height: 1.55;
   color: var(--text-secondary);
+  white-space: pre-wrap;
 }
 
 .confirm-dialog__actions {
@@ -3099,7 +3100,8 @@ select.text-input {
   outline-offset: -1px;
 }
 
-.library-tree-row.is-checked:not(.is-focused) {
+.library-tree-row.is-checked:not(.is-focused),
+.library-tree-row.is-partial:not(.is-focused) {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
@@ -3238,9 +3240,18 @@ select.text-input {
   flex-shrink: 0;
 }
 
-.library-check.on {
+.library-check.on,
+.library-check.partial {
   background: var(--accent);
   border-color: var(--accent);
+}
+
+.library-check.partial::after {
+  content: '';
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: #fff;
 }
 
 .library-type-icon {

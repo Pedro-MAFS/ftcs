@@ -17,8 +17,11 @@ import { LIBRARY_DRAG_TYPE, remapPathPrefix, remapPathSet } from '../components/
 import {
   applyLibrarySelect,
   flattenVisibleIds,
+  normalizeFolderChecks,
   type LibrarySelectGesture,
 } from '../components/library/library-select'
+import { expandGenerateSelection } from '../components/library/library-generate'
+import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 
 const meta = SECTION_META.input
 const router = useRouter()
@@ -47,6 +50,10 @@ const ctxMenu = ref<{ kind: LibraryContextKind; x: number; y: number } | null>(n
 const ctxNode = ref<LibraryTreeNode | null>(null)
 const renamingPath = ref<string | null>(null)
 const selectAnchor = ref<string | null>(null)
+const confirmGenerate = ref(false)
+const confirmGenerateMessage = ref('')
+/** 不要放进 ref：Vue Proxy 无法经 Electron IPC 克隆 */
+let pendingGenerate: { websitePaths: string[]; filePaths: string[] } | null = null
 
 function collectFilePaths(nodes: LibraryTreeNode[]): string[] {
   const out: string[] = []
@@ -107,7 +114,11 @@ const selectedFolderCount = computed(
 const selectedCount = computed(() => selectedIds.value.size)
 const generatePickCount = computed(() => selectedFileCount.value + selectedWebsiteCount.value)
 const canGenerate = computed(
-  () => generatePickCount.value > 0 && !busy.value && !generating.value,
+  () =>
+    selectedCount.value > 0 &&
+    !busy.value &&
+    !generating.value &&
+    !confirmGenerate.value,
 )
 const selectedCountTitle = computed(() => {
   const parts = [
@@ -118,9 +129,8 @@ const selectedCountTitle = computed(() => {
   return parts.length ? parts.join(' · ') : '尚未勾选'
 })
 const generateButtonTitle = computed(() => {
-  if (generatePickCount.value) return '基于勾选的文件或网站生成画像'
-  if (selectedFolderCount.value) return '请勾选文件或网站（文件夹勾选暂不参与生成）'
-  return '请先勾选网站或文件'
+  if (generatePickCount.value || selectedFolderCount.value) return '基于勾选资料生成一份画像'
+  return '请先勾选文件、网站或文件夹'
 })
 const isEmpty = computed(() => tree.value.length === 0)
 const ctxItems = computed(() =>
@@ -150,7 +160,10 @@ function applySnapshot(snap: LibrarySnapshot, remap?: { from: string; to: string
   truncated.value = Boolean(snap.truncated)
   focusDir.value = snap.focusDir ?? snap.cwd ?? ''
   const valid = new Set(collectCheckablePaths(tree.value))
-  selectedIds.value = new Set([...selectedIds.value].filter((id) => valid.has(id)))
+  selectedIds.value = normalizeFolderChecks(
+    tree.value,
+    new Set([...selectedIds.value].filter((id) => valid.has(id))),
+  )
   if (selectAnchor.value && !valid.has(selectAnchor.value) && selectAnchor.value !== '') {
     selectAnchor.value = null
   }
@@ -184,7 +197,14 @@ async function refresh() {
 
 function onSelectGesture(id: string, gesture: LibrarySelectGesture) {
   const visible = flattenVisibleIds(tree.value, expanded.value)
-  const result = applyLibrarySelect(selectedIds.value, visible, id, gesture, selectAnchor.value)
+  const result = applyLibrarySelect(
+    tree.value,
+    selectedIds.value,
+    visible,
+    id,
+    gesture,
+    selectAnchor.value,
+  )
   selectedIds.value = result.selected
   selectAnchor.value = result.anchor
 }
@@ -398,9 +418,10 @@ async function confirmSaveWebsite() {
       websiteUrl.value = ''
       const created = res.createdPath
       if (created) {
-        const next = new Set(selectedIds.value)
-        next.add(created)
-        selectedIds.value = next
+        selectedIds.value = normalizeFolderChecks(
+          tree.value,
+          new Set([...selectedIds.value, created]),
+        )
         const parent = parentDir(created)
         const expandedNext = new Set(expanded.value)
         if (parent) expandedNext.add(parent)
@@ -719,17 +740,49 @@ async function removeEntry(node: LibraryTreeNode) {
   }
 }
 
-async function generateProfile() {
+function generateProfile() {
   if (!window.ftcs?.generateProfile || !canGenerate.value) return
 
-  const validFiles = new Set(filePaths.value)
-  const validSites = new Set(websitePathsInTree.value)
-  const websitePaths = [...selectedIds.value].filter((id) => validSites.has(id))
-  const fileList = [...selectedIds.value].filter((id) => validFiles.has(id))
-  if (!websitePaths.length && !fileList.length) {
-    error.value = '请先勾选至少一个公司网站或资料文件'
+  error.value = ''
+  message.value = ''
+  const expand = expandGenerateSelection(tree.value, selectedIds.value)
+  if (truncated.value && selectedFolderCount.value > 0) {
+    error.value = '资料超过显示上限，请把目录拆得更浅后再勾选文件夹生成。'
     return
   }
+  if (expand.empty) {
+    error.value = '没有可生成的资料'
+    return
+  }
+
+  if (expand.needsConfirm) {
+    pendingGenerate = {
+      websitePaths: [...expand.websitePaths],
+      filePaths: [...expand.filePaths],
+    }
+    confirmGenerateMessage.value = expand.confirmMessage
+    confirmGenerate.value = true
+    return
+  }
+
+  void runGenerate(expand.websitePaths, expand.filePaths)
+}
+
+function cancelGenerateConfirm() {
+  confirmGenerate.value = false
+  pendingGenerate = null
+}
+
+function confirmGenerateMerge() {
+  const pending = pendingGenerate
+  confirmGenerate.value = false
+  pendingGenerate = null
+  if (!pending) return
+  void runGenerate(pending.websitePaths, pending.filePaths)
+}
+
+async function runGenerate(websitePaths: string[], fileList: string[]) {
+  if (!window.ftcs?.generateProfile) return
 
   const preflightError = await ensureAgentReady('extract-profile')
   if (preflightError) {
@@ -740,10 +793,15 @@ async function generateProfile() {
   busy.value = true
   error.value = ''
   message.value = ''
-  resetAgentForGenerate(websitePaths.length + fileList.length)
+  const plainWebsites = Array.from(websitePaths, (p) => String(p))
+  const plainFiles = Array.from(fileList, (p) => String(p))
+  resetAgentForGenerate(plainWebsites.length + plainFiles.length)
 
   try {
-    const res = await window.ftcs.generateProfile({ websitePaths, filePaths: fileList })
+    const res = await window.ftcs.generateProfile({
+      websitePaths: plainWebsites,
+      filePaths: plainFiles,
+    })
     if (!res.ok) {
       error.value = res.message
       return
@@ -913,11 +971,20 @@ onUnmounted(() => {
 
       <p class="library-hint muted">
         <Icon name="info" :size="14" />
-        资料保存在 data/library/。Ctrl 点选、Shift 范围选；F2 或右键可重命名；拖到另一夹移动。文件夹勾选暂不参与生成。双击书签用浏览器打开。Ctrl+V 粘贴到焦点目录。生成画像时再分配产品 ID。
+        资料保存在 data/library/。Ctrl 点选、Shift 范围选；F2 或右键可重命名；拖到另一夹移动。勾选文件夹后生成时纳入该夹下全部文件与网站。双击书签用浏览器打开。Ctrl+V 粘贴到焦点目录。生成画像时再分配产品 ID。
       </p>
 
       <p v-if="message" class="library-feedback ok">{{ message }}</p>
       <p v-if="error" class="library-feedback err">{{ error }}</p>
     </div>
+
+    <ConfirmDialog
+      :open="confirmGenerate"
+      title="合并生成一份画像"
+      :message="confirmGenerateMessage"
+      confirm-label="生成"
+      @confirm="confirmGenerateMerge"
+      @cancel="cancelGenerateConfirm"
+    />
   </section>
 </template>

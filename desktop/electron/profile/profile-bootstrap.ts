@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { getWorkspaceRoot } from '../config/paths'
 import { generateProductId } from './product-id'
-import { migrateWebsitesIntoFiles, readWebsiteBookmark } from '../library/library-website'
+import { migrateWebsitesIntoFiles } from '../library/library-website'
+import { copyLibrarySourcesToInputs } from './profile-inputs'
 
 export interface BootstrapInput {
   websitePaths: string[]
@@ -18,38 +19,8 @@ export interface BootstrapResult {
   skipped: string[]
 }
 
-function sanitizeBaseName(name: string): string {
-  const cleaned = name
-    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^\.+/, '')
-    .slice(0, 120)
-  return cleaned || 'untitled'
-}
-
-function uniquePath(dir: string, fileName: string): string {
-  const ext = path.extname(fileName)
-  const base = path.basename(fileName, ext)
-  let candidate = path.join(dir, fileName)
-  let i = 2
-  while (fs.existsSync(candidate)) {
-    candidate = path.join(dir, `${base}-${i}${ext}`)
-    i += 1
-  }
-  return candidate
-}
-
-function assertSafeRel(rel: string): string {
-  const normalized = rel.replace(/\\/g, '/').replace(/^\/+/, '')
-  if (!normalized || normalized.includes('..') || path.isAbsolute(normalized)) {
-    throw new Error(`非法路径: ${rel}`)
-  }
-  return normalized
-}
-
 /**
- * 从资料库选中项分配产品 ID，并复制快照到 data/products/{id}/inputs/。
+ * 从资料库选中项分配产品 ID，并按相对路径复制快照到 data/products/{id}/inputs/。
  */
 export function bootstrapProductFromLibrary(
   input: BootstrapInput,
@@ -67,68 +38,27 @@ export function bootstrapProductFromLibrary(
   const inputsDir = path.join(productDir, 'inputs')
   fs.mkdirSync(inputsDir, { recursive: true })
 
-  const websiteUrls: string[] = []
-  const inputFiles: string[] = []
-  const skipped: string[] = []
   const filesRoot = path.join(workspaceRoot, 'data', 'library', 'files')
+  const copied = copyLibrarySourcesToInputs(
+    productId,
+    inputsDir,
+    filesRoot,
+    websitePaths,
+    filePaths,
+  )
 
-  for (const rel of websitePaths) {
-    try {
-      const safe = assertSafeRel(rel)
-      const src = path.join(filesRoot, ...safe.split('/'))
-      if (!fs.existsSync(src) || !fs.statSync(src).isFile()) {
-        skipped.push(`${rel}（网站条目不存在）`)
-        continue
-      }
-      const bookmark = readWebsiteBookmark(src)
-      if (!bookmark) {
-        skipped.push(`${rel}（不是网站书签）`)
-        continue
-      }
-      websiteUrls.push(bookmark.url)
-      const dest = uniquePath(inputsDir, sanitizeBaseName(path.basename(src)))
-      fs.copyFileSync(src, dest)
-      inputFiles.push(`data/products/${productId}/inputs/${path.basename(dest)}`)
-    } catch (err) {
-      skipped.push(`${rel}（${err instanceof Error ? err.message : String(err)}）`)
-    }
-  }
-
-  for (const rel of filePaths) {
-    try {
-      const safe = assertSafeRel(rel)
-      const src = path.join(filesRoot, ...safe.split('/'))
-      if (!fs.existsSync(src)) {
-        skipped.push(`${rel}（文件不存在）`)
-        continue
-      }
-      const st = fs.statSync(src)
-      if (!st.isFile()) {
-        skipped.push(`${path.basename(safe)}（请选择文件，不支持直接选目录）`)
-        continue
-      }
-      if (readWebsiteBookmark(src)) {
-        skipped.push(`${rel}（请按网站书签勾选，不要当普通文件）`)
-        continue
-      }
-      const dest = uniquePath(inputsDir, sanitizeBaseName(path.basename(src)))
-      fs.copyFileSync(src, dest)
-      inputFiles.push(`data/products/${productId}/inputs/${path.basename(dest)}`)
-    } catch (err) {
-      skipped.push(`${rel}（${err instanceof Error ? err.message : String(err)}）`)
-    }
-  }
-
-  if (!websiteUrls.length && !inputFiles.length) {
-    throw new Error(`没有可导入的资料：${skipped.join('；') || '未知原因'}`)
+  if (!copied.websiteUrls.length && !copied.inputFiles.length) {
+    fs.rmSync(productDir, { recursive: true, force: true })
+    throw new Error(`没有可导入的资料：${copied.skipped.join('；') || '未知原因'}`)
   }
 
   const manifest = {
     product_id: productId,
     created_at: new Date().toISOString(),
-    websites: websiteUrls,
-    files: inputFiles,
-    skipped,
+    websites: copied.websiteUrls,
+    files: copied.inputFiles,
+    skipped: copied.skipped,
+    source_inputs: copied.sourceInputs,
   }
   fs.writeFileSync(
     path.join(inputsDir, '_sources.json'),
@@ -140,8 +70,8 @@ export function bootstrapProductFromLibrary(
     productId,
     productDir,
     inputsDir,
-    websiteUrls,
-    inputFiles,
-    skipped,
+    websiteUrls: copied.websiteUrls,
+    inputFiles: copied.inputFiles,
+    skipped: copied.skipped,
   }
 }

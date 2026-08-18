@@ -3,7 +3,11 @@ import { computed, nextTick, ref, watch } from 'vue'
 import type { LibraryTreeNode } from '../../types/library'
 import Icon from '../shared/Icon.vue'
 import { LIBRARY_DRAG_TYPE } from './library-paths'
-import { selectGestureFromEvent, type LibrarySelectGesture } from './library-select'
+import {
+  libraryCheckState,
+  selectGestureFromEvent,
+  type LibrarySelectGesture,
+} from './library-select'
 
 const props = defineProps<{
   nodes: LibraryTreeNode[]
@@ -208,8 +212,27 @@ function onRowDblClick(node: LibraryTreeNode) {
 }
 
 function checkTitle(node: LibraryTreeNode): string {
-  if (node.kind === 'dir') return '勾选该文件夹（生成画像时暂不递归）'
+  if (node.kind === 'dir') return '勾选后纳入该夹下全部文件与网站'
   return '勾选后参与生成画像'
+}
+
+function checkState(node: LibraryTreeNode) {
+  return libraryCheckState(node, props.selectedIds)
+}
+
+function isChecked(node: LibraryTreeNode): boolean {
+  return checkState(node) === 'checked'
+}
+
+function isPartial(node: LibraryTreeNode): boolean {
+  return checkState(node) === 'indeterminate'
+}
+
+function ariaChecked(node: LibraryTreeNode): 'true' | 'false' | 'mixed' {
+  const state = checkState(node)
+  if (state === 'checked') return 'true'
+  if (state === 'indeterminate') return 'mixed'
+  return 'false'
 }
 
 function nodeIcon(node: LibraryTreeNode): 'folder' | 'globe' | 'file-text' {
@@ -315,7 +338,8 @@ function onTreeBlankContext(event: MouseEvent) {
       class="library-tree-row"
       :class="{
         'is-focused': isFocused(node),
-        'is-checked': selectedIds.has(node.relativePath),
+        'is-checked': isChecked(node),
+        'is-partial': isPartial(node),
         'is-drop-target': isDropTarget(node),
         'is-renaming': renamingPath === node.relativePath,
       }"
@@ -347,13 +371,14 @@ function onTreeBlankContext(event: MouseEvent) {
       <button
         type="button"
         class="library-check"
-        :class="{ on: selectedIds.has(node.relativePath) }"
-        :aria-pressed="selectedIds.has(node.relativePath)"
+        :class="{ on: isChecked(node), partial: isPartial(node) }"
+        role="checkbox"
+        :aria-checked="ariaChecked(node)"
         :disabled="busy"
         :title="checkTitle(node)"
         @click.stop="onCheckClick(node, $event)"
       >
-        <Icon v-if="selectedIds.has(node.relativePath)" name="check" :size="10" />
+        <Icon v-if="isChecked(node)" name="check" :size="10" />
       </button>
 
       <div class="library-open">
