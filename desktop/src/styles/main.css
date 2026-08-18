@@ -3107,6 +3107,24 @@ select.text-input {
   font-weight: 600;
 }
 
+.library-rename-input {
+  width: 100%;
+  min-width: 72px;
+  height: 22px;
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+
+.library-tree-row.is-renaming {
+  cursor: default;
+}
+
 .library-tree-chevron {
   width: 16px;
   height: 16px;

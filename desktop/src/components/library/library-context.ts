@@ -22,7 +22,7 @@ export interface LibraryContextItem {
 export function libraryContextItems(kind: LibraryContextKind): LibraryContextItem[] {
   if (kind === 'file') {
     return [
-      { id: 'rename', label: '重命名', disabled: true, hint: '后续版本' },
+      { id: 'rename', label: '重命名' },
       { id: 'delete', label: '删除', danger: true, separatorBefore: true },
     ]
   }
@@ -30,7 +30,7 @@ export function libraryContextItems(kind: LibraryContextKind): LibraryContextIte
   if (kind === 'website') {
     return [
       { id: 'open-website', label: '打开网站' },
-      { id: 'rename', label: '重命名', disabled: true, hint: '后续版本' },
+      { id: 'rename', label: '重命名' },
       { id: 'delete', label: '删除', danger: true, separatorBefore: true },
     ]
   }
@@ -55,7 +55,7 @@ export function libraryContextItems(kind: LibraryContextKind): LibraryContextIte
   ]
 
   if (kind === 'dir') {
-    items.push({ id: 'rename', label: '重命名', disabled: true, hint: '后续版本' })
+    items.push({ id: 'rename', label: '重命名' })
     items.push({ id: 'delete', label: '删除', danger: true, separatorBefore: true })
   }
 

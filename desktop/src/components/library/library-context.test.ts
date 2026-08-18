@@ -24,16 +24,16 @@ describe('libraryContextItems', () => {
     assert.equal(items.find((i) => i.id === 'import-folder')?.disabled, undefined)
     assert.equal(items.find((i) => i.id === 'save-website')?.disabled, undefined)
     assert.equal(items.find((i) => i.id === 'delete')?.danger, true)
-    assert.equal(items.find((i) => i.id === 'rename')?.disabled, true)
+    assert.equal(items.find((i) => i.id === 'rename')?.disabled, undefined)
   })
 
-  it('file menu is rename placeholder plus delete', () => {
+  it('file menu is rename plus delete', () => {
     const items = libraryContextItems('file')
     assert.deepEqual(
       items.map((i) => i.id),
       ['rename', 'delete'],
     )
-    assert.equal(items[0]?.disabled, true)
+    assert.equal(items[0]?.disabled, undefined)
   })
 
   it('website menu can open and delete', () => {
@@ -43,7 +43,7 @@ describe('libraryContextItems', () => {
       ['open-website', 'rename', 'delete'],
     )
     assert.equal(items.find((i) => i.id === 'open-website')?.disabled, undefined)
-    assert.equal(items.find((i) => i.id === 'rename')?.disabled, true)
+    assert.equal(items.find((i) => i.id === 'rename')?.disabled, undefined)
     assert.equal(items.find((i) => i.id === 'delete')?.danger, true)
   })
 })

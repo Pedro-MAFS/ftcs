@@ -546,6 +546,8 @@ declare global {
       importLibraryFolders: (cwd?: string) => Promise<LibraryMutationResult>
       pasteClipboardFiles: (cwd?: string) => Promise<LibraryMutationResult>
       deleteLibraryEntry: (relativePath: string, cwd?: string) => Promise<LibraryMutationResult>
+      renameLibraryEntry: (relativePath: string, newName: string, cwd?: string) => Promise<LibraryMutationResult>
+      moveLibraryEntry: (relativePath: string, destDir: string, cwd?: string) => Promise<LibraryMutationResult>
       generateProfile: (input: ProfileGenerateInput) => Promise<ProfileGenerateResult>
       abortProfile: () => Promise<{ ok: boolean }>
       getProfile: (productId: string) => Promise<ProfileDetail | null>

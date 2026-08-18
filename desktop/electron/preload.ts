@@ -188,6 +188,10 @@ const api = {
     ipcRenderer.invoke(IPC.LIBRARY_PASTE_CLIPBOARD, cwd),
   deleteLibraryEntry: (relativePath: string, cwd = ''): Promise<LibraryMutationResult> =>
     ipcRenderer.invoke(IPC.LIBRARY_DELETE_ENTRY, { relativePath, cwd }),
+  renameLibraryEntry: (relativePath: string, newName: string, cwd = ''): Promise<LibraryMutationResult> =>
+    ipcRenderer.invoke(IPC.LIBRARY_RENAME, { relativePath, newName, cwd }),
+  moveLibraryEntry: (relativePath: string, destDir: string, cwd = ''): Promise<LibraryMutationResult> =>
+    ipcRenderer.invoke(IPC.LIBRARY_MOVE, { relativePath, destDir, cwd }),
   generateProfile: (input: ProfileGenerateInput): Promise<ProfileGenerateResult> =>
     ipcRenderer.invoke(IPC.PROFILE_GENERATE, input),
   abortProfile: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.PROFILE_ABORT),

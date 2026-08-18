@@ -24,6 +24,8 @@ export const IPC = {
   LIBRARY_IMPORT_FOLDERS: 'library:import-folders',
   LIBRARY_PASTE_CLIPBOARD: 'library:paste-clipboard',
   LIBRARY_DELETE_ENTRY: 'library:delete-entry',
+  LIBRARY_RENAME: 'library:rename',
+  LIBRARY_MOVE: 'library:move',
   PROFILE_GENERATE: 'profile:generate',
   PROFILE_ABORT: 'profile:abort',
   PROFILE_GET: 'profile:get',

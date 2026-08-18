@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { LibraryTreeNode } from '../../types/library'
 import Icon from '../shared/Icon.vue'
+import { LIBRARY_DRAG_TYPE } from './library-paths'
 
 const props = defineProps<{
   nodes: LibraryTreeNode[]
@@ -11,6 +12,7 @@ const props = defineProps<{
   selectedIds: Set<string>
   busy?: boolean
   dropImportDir?: string | null
+  renamingPath?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -24,12 +26,37 @@ const emit = defineEmits<{
   'context-node': [event: MouseEvent, node: LibraryTreeNode]
   'drag-over-import': [dir: string]
   'drop-import': [dir: string, event: DragEvent]
+  'drop-move': [src: string, destDir: string]
+  'rename-commit': [relativePath: string, newName: string]
+  'rename-cancel': []
 }>()
+
+const renameDraft = ref('')
+const renameInputRef = ref<HTMLInputElement | null>(null)
+let skipClick = false
+let renameCancelled = false
+let renameSubmitted = false
 
 const visibleNodes = computed(() => flattenVisible(props.nodes, props.expanded))
 
 const rootFocused = computed(
   () => props.activePath === '' && props.focusDir === '',
+)
+
+watch(
+  () => props.renamingPath,
+  async (rel) => {
+    renameCancelled = false
+    renameSubmitted = false
+    if (!rel) return
+    const node = visibleNodes.value.find((item) => item.relativePath === rel)
+    renameDraft.value = node?.name ?? ''
+    await nextTick()
+    const input = renameInputRef.value
+    if (!input) return
+    input.focus()
+    selectRenameRange(input, node)
+  },
 )
 
 function flattenVisible(
@@ -65,56 +92,88 @@ function dropDirFor(node: LibraryTreeNode): string {
   return parts.join('/')
 }
 
+function isLibraryDrag(event: DragEvent): boolean {
+  return Boolean(event.dataTransfer?.types?.includes(LIBRARY_DRAG_TYPE))
+}
+
 function isFileDrag(event: DragEvent): boolean {
   return Boolean(event.dataTransfer?.types?.includes('Files'))
 }
 
-function onRowDragOver(event: DragEvent, node: LibraryTreeNode) {
-  if (!isFileDrag(event)) return
+function acceptDrop(event: DragEvent, dir: string, copy: boolean) {
   event.preventDefault()
   event.stopPropagation()
   if (props.busy) return
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-  emit('drag-over-import', dropDirFor(node))
+  if (event.dataTransfer) event.dataTransfer.dropEffect = copy ? 'copy' : 'move'
+  emit('drag-over-import', dir)
+}
+
+function onRowDragStart(event: DragEvent, node: LibraryTreeNode) {
+  if (props.busy || props.renamingPath) {
+    event.preventDefault()
+    return
+  }
+  skipClick = true
+  event.dataTransfer?.setData(LIBRARY_DRAG_TYPE, node.relativePath)
+  event.dataTransfer?.setData('text/plain', node.relativePath)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+
+function onRowDragEnd() {
+  window.setTimeout(() => {
+    skipClick = false
+  }, 0)
+}
+
+function onRowDragOver(event: DragEvent, node: LibraryTreeNode) {
+  if (isLibraryDrag(event)) {
+    acceptDrop(event, dropDirFor(node), false)
+    return
+  }
+  if (!isFileDrag(event)) return
+  acceptDrop(event, dropDirFor(node), true)
+}
+
+function finishDrop(event: DragEvent, dir: string) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (props.busy) return
+  const src = event.dataTransfer?.getData(LIBRARY_DRAG_TYPE)
+  if (src) {
+    emit('drop-move', src, dir)
+    return
+  }
+  emit('drop-import', dir, event)
 }
 
 function onRowDrop(event: DragEvent, node: LibraryTreeNode) {
-  event.preventDefault()
-  event.stopPropagation()
-  if (props.busy) return
-  emit('drop-import', dropDirFor(node), event)
+  finishDrop(event, dropDirFor(node))
 }
 
 function onRootDragOver(event: DragEvent) {
+  if (isLibraryDrag(event)) {
+    acceptDrop(event, '', false)
+    return
+  }
   if (!isFileDrag(event)) return
-  event.preventDefault()
-  event.stopPropagation()
-  if (props.busy) return
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-  emit('drag-over-import', '')
+  acceptDrop(event, '', true)
 }
 
 function onRootDrop(event: DragEvent) {
-  event.preventDefault()
-  event.stopPropagation()
-  if (props.busy) return
-  emit('drop-import', '', event)
+  finishDrop(event, '')
 }
 
 function onTreeBlankDragOver(event: DragEvent) {
+  if (isLibraryDrag(event)) {
+    acceptDrop(event, '', false)
+    return
+  }
   if (!isFileDrag(event)) return
-  event.preventDefault()
-  event.stopPropagation()
-  if (props.busy) return
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
-  emit('drag-over-import', '')
+  acceptDrop(event, '', true)
 }
 
 function onTreeBlankDrop(event: DragEvent) {
-  event.preventDefault()
-  event.stopPropagation()
-  if (props.busy) return
-  emit('drop-import', '', event)
+  finishDrop(event, '')
 }
 
 function isDropTarget(node: LibraryTreeNode): boolean {
@@ -123,11 +182,13 @@ function isDropTarget(node: LibraryTreeNode): boolean {
 }
 
 function onActivate(node: LibraryTreeNode) {
+  if (skipClick || props.renamingPath) return
   if (node.kind === 'dir') emit('activate-dir', node.relativePath)
   else emit('activate-file', node.relativePath)
 }
 
 function onRowDblClick(node: LibraryTreeNode) {
+  if (props.renamingPath) return
   if (node.kind === 'website') emit('open-website', node)
 }
 
@@ -145,6 +206,39 @@ function nodeSubtitle(node: LibraryTreeNode): string {
   if (node.kind === 'dir') return '文件夹'
   if (node.kind === 'website') return node.url || '网站'
   return formatSize(node.sizeBytes)
+}
+
+function selectRenameRange(input: HTMLInputElement, node?: LibraryTreeNode) {
+  if (node?.kind === 'file') {
+    const lastDot = node.name.lastIndexOf('.')
+    if (lastDot > 0) {
+      input.setSelectionRange(0, lastDot)
+      return
+    }
+  }
+  input.select()
+}
+
+function commitRename(rel: string) {
+  if (renameCancelled || renameSubmitted) return
+  renameSubmitted = true
+  emit('rename-commit', rel, renameDraft.value)
+}
+
+function cancelRename() {
+  renameCancelled = true
+  emit('rename-cancel')
+}
+
+function onRenameKeydown(event: KeyboardEvent, rel: string) {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    commitRename(rel)
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    cancelRename()
+  }
 }
 
 function onRowContext(event: MouseEvent, node: LibraryTreeNode) {
@@ -207,11 +301,15 @@ function onTreeBlankContext(event: MouseEvent) {
         'is-focused': isFocused(node),
         'is-checked': isSelectable(node) && selectedIds.has(node.relativePath),
         'is-drop-target': isDropTarget(node),
+        'is-renaming': renamingPath === node.relativePath,
       }"
       :style="{ paddingLeft: `${8 + node.depth * 16}px` }"
+      :draggable="!busy && renamingPath !== node.relativePath"
       @click="!busy && onActivate(node)"
       @dblclick.stop="onRowDblClick(node)"
       @contextmenu="onRowContext($event, node)"
+      @dragstart="onRowDragStart($event, node)"
+      @dragend="onRowDragEnd"
       @dragover="onRowDragOver($event, node)"
       @drop="onRowDrop($event, node)"
     >
@@ -249,7 +347,18 @@ function onTreeBlankContext(event: MouseEvent) {
           class="library-type-icon"
         />
         <div class="library-meta">
-          <div class="library-title">{{ node.name }}</div>
+          <input
+            v-if="renamingPath === node.relativePath"
+            ref="renameInputRef"
+            v-model="renameDraft"
+            class="library-rename-input"
+            :disabled="busy"
+            @click.stop
+            @dblclick.stop
+            @keydown="onRenameKeydown($event, node.relativePath)"
+            @blur="commitRename(node.relativePath)"
+          />
+          <div v-else class="library-title">{{ node.name }}</div>
           <div class="muted">{{ nodeSubtitle(node) }}</div>
         </div>
       </div>

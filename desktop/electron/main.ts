@@ -37,9 +37,11 @@ import {
   ensureLibraryDirs,
   importFilesFromPaths,
   listWebsites,
+  moveFilesEntry,
   pasteClipboardFiles,
   pickAndImportFiles,
   pickAndImportFolders,
+  renameFilesEntry,
 } from './library/library-service'
 import {
   flattenEntries,
@@ -723,6 +725,34 @@ function registerIpcHandlers(): void {
         const nextFocus = nextFocusAfterDelete(payload.relativePath, cwd)
         deleteFilesEntry(payload.relativePath)
         return libraryOk('已删除', nextFocus)
+      } catch (err) {
+        return libraryFail(err, cwd)
+      }
+    },
+  )
+
+  ipcMain.handle(
+    IPC.LIBRARY_RENAME,
+    (_event, payload: { relativePath: string; newName: string; cwd?: string }) => {
+      const cwd = payload.cwd ?? ''
+      try {
+        const result = renameFilesEntry(payload.relativePath, payload.newName)
+        const message = result.changed ? '已重命名' : '名称未变化'
+        return libraryOk(message, result.focusDir, { createdPath: result.relativePath })
+      } catch (err) {
+        return libraryFail(err, cwd)
+      }
+    },
+  )
+
+  ipcMain.handle(
+    IPC.LIBRARY_MOVE,
+    (_event, payload: { relativePath: string; destDir: string; cwd?: string }) => {
+      const cwd = payload.cwd ?? ''
+      try {
+        const result = moveFilesEntry(payload.relativePath, payload.destDir)
+        const message = result.changed ? '已移动' : '已在该文件夹中'
+        return libraryOk(message, result.focusDir, { createdPath: result.relativePath })
       } catch (err) {
         return libraryFail(err, cwd)
       }

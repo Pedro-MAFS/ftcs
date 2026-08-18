@@ -5,6 +5,8 @@ import { clipboard, dialog, BrowserWindow } from 'electron'
 import { getWorkspaceRoot } from '../config/paths'
 import { importFilesFromPaths as importTreeFromPaths, type ImportPathsResult } from './library-import'
 import { addWebsiteToFolder, migrateWebsitesIntoFiles } from './library-website'
+import { moveLibraryEntry, renameLibraryEntry } from './library-mutate'
+import { sanitizeEntryName } from './library-name'
 
 export interface WebsiteItem {
   id: string
@@ -53,28 +55,6 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function sanitizeBaseName(name: string): string {
-  const cleaned = name
-    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^\.+/, '')
-    .slice(0, 120)
-  return cleaned || 'untitled'
-}
-
-function uniquePath(dir: string, fileName: string): string {
-  const ext = path.extname(fileName)
-  const base = path.basename(fileName, ext)
-  let candidate = path.join(dir, fileName)
-  let i = 2
-  while (fs.existsSync(candidate)) {
-    candidate = path.join(dir, `${base}-${i}${ext}`)
-    i += 1
-  }
-  return candidate
 }
 
 /** 规范化 files/ 下的相对路径，禁止跳出沙箱 */
@@ -202,7 +182,7 @@ export function createFolder(
   folderName: string,
   workspaceRoot = getWorkspaceRoot(),
 ): FileEntry {
-  const name = sanitizeBaseName(folderName.trim())
+  const name = sanitizeEntryName(folderName)
   if (!name) throw new Error('请输入目录名')
   const { root, abs } = resolveUnderFiles(relativeDir, workspaceRoot)
   fs.mkdirSync(abs, { recursive: true })
@@ -224,6 +204,24 @@ export function deleteFilesEntry(
   const { abs } = resolveUnderFiles(relativePath, workspaceRoot)
   if (!fs.existsSync(abs)) throw new Error('不存在')
   fs.rmSync(abs, { recursive: true, force: true })
+}
+
+export function renameFilesEntry(
+  relativePath: string,
+  newName: string,
+  workspaceRoot = getWorkspaceRoot(),
+) {
+  ensureLibraryDirs(workspaceRoot)
+  return renameLibraryEntry(relativePath, newName, workspaceRoot)
+}
+
+export function moveFilesEntry(
+  relativePath: string,
+  destDir: string,
+  workspaceRoot = getWorkspaceRoot(),
+) {
+  ensureLibraryDirs(workspaceRoot)
+  return moveLibraryEntry(relativePath, destDir, workspaceRoot)
 }
 
 function importAbsolutePaths(

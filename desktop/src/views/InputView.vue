@@ -13,6 +13,7 @@ import {
   type LibraryContextAction,
   type LibraryContextKind,
 } from '../components/library/library-context'
+import { LIBRARY_DRAG_TYPE, remapPathPrefix, remapPathSet } from '../components/library/library-paths'
 
 const meta = SECTION_META.input
 const router = useRouter()
@@ -39,6 +40,7 @@ const folderInputRef = ref<HTMLInputElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 const ctxMenu = ref<{ kind: LibraryContextKind; x: number; y: number } | null>(null)
 const ctxNode = ref<LibraryTreeNode | null>(null)
+const renamingPath = ref<string | null>(null)
 
 function collectFilePaths(nodes: LibraryTreeNode[]): string[] {
   const out: string[] = []
@@ -97,11 +99,19 @@ const ctxItems = computed(() =>
 watch(
   () => busy.value || generating.value,
   (blocked) => {
-    if (blocked) closeCtxMenu()
+    if (blocked) {
+      closeCtxMenu()
+      renamingPath.value = null
+    }
   },
 )
 
-function applySnapshot(snap: LibrarySnapshot) {
+function applySnapshot(snap: LibrarySnapshot, remap?: { from: string; to: string }) {
+  if (remap?.from && remap.to && remap.from !== remap.to) {
+    selectedIds.value = remapPathSet(selectedIds.value, remap.from, remap.to)
+    expanded.value = remapPathSet(expanded.value, remap.from, remap.to)
+    activePath.value = remapPathPrefix(activePath.value, remap.from, remap.to)
+  }
   tree.value = snap.tree ?? []
   truncated.value = Boolean(snap.truncated)
   focusDir.value = snap.focusDir ?? snap.cwd ?? ''
@@ -113,8 +123,11 @@ function applySnapshot(snap: LibrarySnapshot) {
   }
 }
 
-function applyResult(res: { ok: boolean; message: string; snapshot: LibrarySnapshot }) {
-  applySnapshot(res.snapshot)
+function applyResult(
+  res: { ok: boolean; message: string; snapshot: LibrarySnapshot },
+  remap?: { from: string; to: string },
+) {
+  applySnapshot(res.snapshot, remap)
   if (res.ok) {
     if (res.message) message.value = res.message
   } else {
@@ -176,6 +189,70 @@ function closeCtxMenu() {
   ctxNode.value = null
 }
 
+function startRename(node: LibraryTreeNode) {
+  if (busy.value || generating.value) return
+  cancelCreateFolder()
+  cancelSaveWebsite()
+  closeCtxMenu()
+  if (node.kind === 'dir') {
+    focusDir.value = node.relativePath
+    activePath.value = node.relativePath
+  } else {
+    focusDir.value = parentDir(node.relativePath)
+    activePath.value = node.relativePath
+  }
+  renamingPath.value = node.relativePath
+}
+
+function cancelRename() {
+  renamingPath.value = null
+}
+
+async function commitRename(rel: string, newName: string) {
+  if (renamingPath.value !== rel) return
+  renamingPath.value = null
+  if (!window.ftcs?.renameLibraryEntry || busy.value) return
+  const name = newName.trim()
+  if (!name) {
+    error.value = '请输入名称'
+    return
+  }
+  busy.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    const res = await window.ftcs.renameLibraryEntry(rel, name, focusDir.value)
+    applyResult(
+      res,
+      res.ok && res.createdPath ? { from: rel, to: res.createdPath } : undefined,
+    )
+    if (res.ok && res.createdPath) activePath.value = res.createdPath
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function moveEntry(src: string, destDir: string) {
+  if (!window.ftcs?.moveLibraryEntry || !src || busy.value || generating.value) return
+  busy.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    const res = await window.ftcs.moveLibraryEntry(src, destDir, focusDir.value)
+    applyResult(
+      res,
+      res.ok && res.createdPath ? { from: src, to: res.createdPath } : undefined,
+    )
+    if (res.ok && res.createdPath) activePath.value = res.createdPath
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
+}
+
 function openCtxMenu(kind: LibraryContextKind, event: MouseEvent, node: LibraryTreeNode | null) {
   if (busy.value || generating.value) return
   ctxNode.value = node
@@ -229,6 +306,10 @@ async function onCtxPick(id: LibraryContextAction) {
     await startSaveWebsite()
     return
   }
+  if (id === 'rename' && node) {
+    startRename(node)
+    return
+  }
   if (id === 'open-website' && node) {
     await openWebsite(node)
     return
@@ -238,6 +319,7 @@ async function onCtxPick(id: LibraryContextAction) {
 
 async function startSaveWebsite() {
   cancelCreateFolder()
+  cancelRename()
   savingWebsite.value = true
   websiteUrl.value = ''
   error.value = ''
@@ -299,6 +381,7 @@ async function openWebsite(node: LibraryTreeNode) {
 
 async function startCreateFolder() {
   cancelSaveWebsite()
+  cancelRename()
   creatingFolder.value = true
   newFolderName.value = ''
   error.value = ''
@@ -463,6 +546,16 @@ function onGlobalKeydown(e: KeyboardEvent) {
   const target = e.target as HTMLElement | null
   const inField = Boolean(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'))
 
+  if (e.key === 'F2' && !inField && !busy.value && !generating.value) {
+    if (!activePath.value) return
+    const node = findNode(tree.value, activePath.value)
+    if (!node) return
+    e.preventDefault()
+    closeCtxMenu()
+    startRename(node)
+    return
+  }
+
   if (e.key === 'Delete' && !inField && !busy.value && !generating.value) {
     if (!activePath.value) return
     const node = findNode(tree.value, activePath.value)
@@ -482,6 +575,10 @@ function onGlobalKeydown(e: KeyboardEvent) {
   void pasteFromClipboard()
 }
 
+function isLibraryDrag(e: DragEvent): boolean {
+  return Boolean(e.dataTransfer?.types?.includes(LIBRARY_DRAG_TYPE))
+}
+
 function isFileDrag(e: DragEvent): boolean {
   return Boolean(e.dataTransfer?.types?.includes('Files'))
 }
@@ -498,7 +595,8 @@ function onDragOverImport(dir: string) {
 }
 
 function onWrapDragEnter(e: DragEvent) {
-  if (!isFileDrag(e) || busy.value || generating.value) return
+  if (busy.value || generating.value) return
+  if (!isFileDrag(e) && !isLibraryDrag(e)) return
   e.preventDefault()
   dragDepth.value += 1
   dragOver.value = true
@@ -506,7 +604,14 @@ function onWrapDragEnter(e: DragEvent) {
 }
 
 function onWrapDragOver(e: DragEvent) {
-  if (!isFileDrag(e) || busy.value || generating.value) return
+  if (busy.value || generating.value) return
+  if (isLibraryDrag(e)) {
+    e.preventDefault()
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+    onDragOverImport('')
+    return
+  }
+  if (!isFileDrag(e)) return
   e.preventDefault()
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
   onDragOverImport('')
@@ -520,6 +625,11 @@ function onWrapDragLeave() {
 async function onDropImport(dir: string, e: DragEvent) {
   e.preventDefault()
   clearDrag()
+  const src = e.dataTransfer?.getData(LIBRARY_DRAG_TYPE)
+  if (src) {
+    await moveEntry(src, dir)
+    return
+  }
   const paths = collectDroppedPaths(e.dataTransfer?.files)
   if (!paths.length) {
     error.value = '拖入的内容无法识别为本地文件'
@@ -724,6 +834,7 @@ onUnmounted(() => {
           :selected-ids="selectedIds"
           :busy="busy || generating"
           :drop-import-dir="dropImportDir"
+          :renaming-path="renamingPath"
           @select-root="onSelectRoot"
           @activate-dir="onActivateDir"
           @activate-file="onActivateFile"
@@ -734,6 +845,9 @@ onUnmounted(() => {
           @context-node="onNodeContext"
           @drag-over-import="onDragOverImport"
           @drop-import="onDropImport"
+          @drop-move="moveEntry"
+          @rename-commit="commitRename"
+          @rename-cancel="cancelRename"
         />
         <div v-else class="library-empty muted">
           当前还没有资料。在空白处右键可新建文件夹、粘贴、上传、保存网站或导入文件夹。
@@ -751,7 +865,7 @@ onUnmounted(() => {
 
       <p class="library-hint muted">
         <Icon name="info" :size="14" />
-        资料保存在 data/library/。树上右键可整理、保存网站；双击书签用浏览器打开。Ctrl+V 粘贴到焦点目录。生成画像时再分配产品 ID。
+        资料保存在 data/library/。F2 或右键可重命名；拖到另一夹移动；从资源管理器拖入仍是导入。双击书签用浏览器打开。Ctrl+V 粘贴到焦点目录。生成画像时再分配产品 ID。
       </p>
 
       <p v-if="message" class="library-feedback ok">{{ message }}</p>

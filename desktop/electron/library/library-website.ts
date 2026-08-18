@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { sanitizeEntryName } from './library-name'
 
 export interface WebsiteBookmark {
   title: string
@@ -14,16 +15,6 @@ function filesRoot(workspaceRoot: string): string {
 
 function websitesDir(workspaceRoot: string): string {
   return path.join(workspaceRoot, 'data', 'library', 'websites')
-}
-
-function sanitizeBaseName(name: string): string {
-  const cleaned = name
-    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^\.+/, '')
-    .slice(0, 120)
-  return cleaned || 'untitled'
 }
 
 function uniquePath(dir: string, fileName: string): string {
@@ -122,8 +113,21 @@ export function readWebsiteBookmark(fullPath: string): { url: string; title: str
   }
 }
 
-function writeWebsiteMarkdown(filePath: string, url: string, title: string): void {
-  const createdAt = new Date().toISOString()
+export function rewriteWebsiteTitle(fullPath: string, title: string): void {
+  const content = fs.readFileSync(fullPath, 'utf8')
+  const parsed = parseWebsiteMarkdown(content)
+  if (parsed.type !== 'website' || !parsed.url) {
+    throw new Error('不是网站书签')
+  }
+  writeWebsiteMarkdown(fullPath, parsed.url, title, parsed.createdAt)
+}
+
+function writeWebsiteMarkdown(
+  filePath: string,
+  url: string,
+  title: string,
+  createdAt = new Date().toISOString(),
+): void {
   const body = [
     '---',
     'type: website',
@@ -166,7 +170,7 @@ export function addWebsiteToFolder(
     throw new Error('该文件夹已保存此网站')
   }
   const title = hostFromUrl(url)
-  const dest = uniquePath(abs, `${sanitizeBaseName(title)}.md`)
+  const dest = uniquePath(abs, `${sanitizeEntryName(title) || 'untitled'}.md`)
   writeWebsiteMarkdown(dest, url, title)
   const relativePath = path.relative(root, dest).replace(/\\/g, '/')
   return {

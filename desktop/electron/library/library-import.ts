@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { TREE_MAX_DEPTH, TREE_MAX_NODES } from './library-tree'
+import { sanitizeEntryName } from './library-name'
 
 export interface ImportPathsResult {
   imported: number
@@ -20,14 +21,8 @@ function filesRoot(workspaceRoot: string): string {
   return path.join(workspaceRoot, 'data', 'library', 'files')
 }
 
-function sanitizeBaseName(name: string): string {
-  const cleaned = name
-    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^\.+/, '')
-    .slice(0, 120)
-  return cleaned || 'untitled'
+function importName(src: string): string {
+  return sanitizeEntryName(path.basename(src)) || 'untitled'
 }
 
 function uniquePath(dir: string, fileName: string): string {
@@ -167,7 +162,7 @@ function copyImportedFile(src: string, destDir: string, ctx: ImportWalkCtx): voi
     ctx.truncated = true
     return
   }
-  const name = sanitizeBaseName(path.basename(src))
+  const name = importName(src)
   if (!name || name.includes('..')) {
     ctx.skipped.push(skipReason(src, '非法名称'))
     return
@@ -200,7 +195,7 @@ function importDirTree(src: string, destParent: string, depth: number, ctx: Impo
     return
   }
 
-  const name = sanitizeBaseName(path.basename(src))
+  const name = importName(src)
   if (!name || name.includes('..')) {
     ctx.skipped.push(skipReason(src, '非法名称'))
     return
