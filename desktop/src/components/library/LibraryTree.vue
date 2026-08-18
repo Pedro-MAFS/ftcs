@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import type { LibraryTreeNode } from '../../types/library'
 import Icon from '../shared/Icon.vue'
 import { LIBRARY_DRAG_TYPE } from './library-paths'
+import { selectGestureFromEvent, type LibrarySelectGesture } from './library-select'
 
 const props = defineProps<{
   nodes: LibraryTreeNode[]
@@ -19,7 +20,6 @@ const emit = defineEmits<{
   'select-root': []
   'activate-dir': [relativePath: string]
   'activate-file': [relativePath: string]
-  'toggle-select': [relativePath: string]
   'open-website': [node: LibraryTreeNode]
   'context-blank': [event: MouseEvent]
   'context-root': [event: MouseEvent]
@@ -29,6 +29,8 @@ const emit = defineEmits<{
   'drop-move': [src: string, destDir: string]
   'rename-commit': [relativePath: string, newName: string]
   'rename-cancel': []
+  'select-gesture': [relativePath: string, gesture: LibrarySelectGesture]
+  'focus-node': [relativePath: string, kind: LibraryTreeNode['kind']]
 }>()
 
 const renameDraft = ref('')
@@ -181,10 +183,23 @@ function isDropTarget(node: LibraryTreeNode): boolean {
   return node.kind === 'dir' && node.relativePath === props.dropImportDir
 }
 
-function onActivate(node: LibraryTreeNode) {
+function onRowClick(node: LibraryTreeNode, event: MouseEvent) {
   if (skipClick || props.renamingPath) return
+  const gesture = selectGestureFromEvent(event)
+  if (gesture) {
+    event.preventDefault()
+    emit('select-gesture', node.relativePath, gesture)
+    emit('focus-node', node.relativePath, node.kind)
+    return
+  }
   if (node.kind === 'dir') emit('activate-dir', node.relativePath)
   else emit('activate-file', node.relativePath)
+}
+
+function onCheckClick(node: LibraryTreeNode, event: MouseEvent) {
+  event.preventDefault()
+  const gesture = selectGestureFromEvent(event) ?? 'toggle'
+  emit('select-gesture', node.relativePath, gesture)
 }
 
 function onRowDblClick(node: LibraryTreeNode) {
@@ -192,8 +207,9 @@ function onRowDblClick(node: LibraryTreeNode) {
   if (node.kind === 'website') emit('open-website', node)
 }
 
-function isSelectable(node: LibraryTreeNode): boolean {
-  return node.kind === 'file' || node.kind === 'website'
+function checkTitle(node: LibraryTreeNode): string {
+  if (node.kind === 'dir') return '勾选该文件夹（生成画像时暂不递归）'
+  return '勾选后参与生成画像'
 }
 
 function nodeIcon(node: LibraryTreeNode): 'folder' | 'globe' | 'file-text' {
@@ -299,13 +315,13 @@ function onTreeBlankContext(event: MouseEvent) {
       class="library-tree-row"
       :class="{
         'is-focused': isFocused(node),
-        'is-checked': isSelectable(node) && selectedIds.has(node.relativePath),
+        'is-checked': selectedIds.has(node.relativePath),
         'is-drop-target': isDropTarget(node),
         'is-renaming': renamingPath === node.relativePath,
       }"
       :style="{ paddingLeft: `${8 + node.depth * 16}px` }"
       :draggable="!busy && renamingPath !== node.relativePath"
-      @click="!busy && onActivate(node)"
+      @click="!busy && onRowClick(node, $event)"
       @dblclick.stop="onRowDblClick(node)"
       @contextmenu="onRowContext($event, node)"
       @dragstart="onRowDragStart($event, node)"
@@ -333,9 +349,9 @@ function onTreeBlankContext(event: MouseEvent) {
         class="library-check"
         :class="{ on: selectedIds.has(node.relativePath) }"
         :aria-pressed="selectedIds.has(node.relativePath)"
-        :disabled="busy || !isSelectable(node)"
-        :title="isSelectable(node) ? '勾选后参与生成画像' : '文件夹勾选将在后续版本开放'"
-        @click.stop="isSelectable(node) && emit('toggle-select', node.relativePath)"
+        :disabled="busy"
+        :title="checkTitle(node)"
+        @click.stop="onCheckClick(node, $event)"
       >
         <Icon v-if="selectedIds.has(node.relativePath)" name="check" :size="10" />
       </button>

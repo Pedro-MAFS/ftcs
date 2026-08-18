@@ -14,6 +14,11 @@ import {
   type LibraryContextKind,
 } from '../components/library/library-context'
 import { LIBRARY_DRAG_TYPE, remapPathPrefix, remapPathSet } from '../components/library/library-paths'
+import {
+  applyLibrarySelect,
+  flattenVisibleIds,
+  type LibrarySelectGesture,
+} from '../components/library/library-select'
 
 const meta = SECTION_META.input
 const router = useRouter()
@@ -41,6 +46,7 @@ const panelRef = ref<HTMLElement | null>(null)
 const ctxMenu = ref<{ kind: LibraryContextKind; x: number; y: number } | null>(null)
 const ctxNode = ref<LibraryTreeNode | null>(null)
 const renamingPath = ref<string | null>(null)
+const selectAnchor = ref<string | null>(null)
 
 function collectFilePaths(nodes: LibraryTreeNode[]): string[] {
   const out: string[] = []
@@ -60,8 +66,13 @@ function collectWebsitePaths(nodes: LibraryTreeNode[]): string[] {
   return out
 }
 
-function collectSelectablePaths(nodes: LibraryTreeNode[]): string[] {
-  return [...collectFilePaths(nodes), ...collectWebsitePaths(nodes)]
+function collectCheckablePaths(nodes: LibraryTreeNode[]): string[] {
+  const out: string[] = []
+  for (const node of nodes) {
+    out.push(node.relativePath)
+    if (node.children.length) out.push(...collectCheckablePaths(node.children))
+  }
+  return out
 }
 
 function collectAllPaths(nodes: LibraryTreeNode[]): Set<string> {
@@ -87,10 +98,30 @@ const selectedFileCount = computed(
 const selectedWebsiteCount = computed(
   () => [...selectedIds.value].filter((id) => websitePathsInTree.value.includes(id)).length,
 )
-const selectedCount = computed(() => selectedFileCount.value + selectedWebsiteCount.value)
-const canGenerate = computed(
-  () => selectedCount.value > 0 && !busy.value && !generating.value,
+const selectedFolderCount = computed(
+  () =>
+    [...selectedIds.value].filter(
+      (id) => !filePaths.value.includes(id) && !websitePathsInTree.value.includes(id),
+    ).length,
 )
+const selectedCount = computed(() => selectedIds.value.size)
+const generatePickCount = computed(() => selectedFileCount.value + selectedWebsiteCount.value)
+const canGenerate = computed(
+  () => generatePickCount.value > 0 && !busy.value && !generating.value,
+)
+const selectedCountTitle = computed(() => {
+  const parts = [
+    selectedFileCount.value ? `文件 ${selectedFileCount.value}` : '',
+    selectedWebsiteCount.value ? `网站 ${selectedWebsiteCount.value}` : '',
+    selectedFolderCount.value ? `文件夹 ${selectedFolderCount.value}` : '',
+  ].filter(Boolean)
+  return parts.length ? parts.join(' · ') : '尚未勾选'
+})
+const generateButtonTitle = computed(() => {
+  if (generatePickCount.value) return '基于勾选的文件或网站生成画像'
+  if (selectedFolderCount.value) return '请勾选文件或网站（文件夹勾选暂不参与生成）'
+  return '请先勾选网站或文件'
+})
 const isEmpty = computed(() => tree.value.length === 0)
 const ctxItems = computed(() =>
   ctxMenu.value ? libraryContextItems(ctxMenu.value.kind) : [],
@@ -111,12 +142,18 @@ function applySnapshot(snap: LibrarySnapshot, remap?: { from: string; to: string
     selectedIds.value = remapPathSet(selectedIds.value, remap.from, remap.to)
     expanded.value = remapPathSet(expanded.value, remap.from, remap.to)
     activePath.value = remapPathPrefix(activePath.value, remap.from, remap.to)
+    if (selectAnchor.value) {
+      selectAnchor.value = remapPathPrefix(selectAnchor.value, remap.from, remap.to)
+    }
   }
   tree.value = snap.tree ?? []
   truncated.value = Boolean(snap.truncated)
   focusDir.value = snap.focusDir ?? snap.cwd ?? ''
-  const valid = new Set(collectSelectablePaths(tree.value))
+  const valid = new Set(collectCheckablePaths(tree.value))
   selectedIds.value = new Set([...selectedIds.value].filter((id) => valid.has(id)))
+  if (selectAnchor.value && !valid.has(selectAnchor.value) && selectAnchor.value !== '') {
+    selectAnchor.value = null
+  }
   const all = collectAllPaths(tree.value)
   if (activePath.value && !all.has(activePath.value)) {
     activePath.value = focusDir.value
@@ -145,11 +182,21 @@ async function refresh() {
   applySnapshot(snap)
 }
 
-function toggleSelect(id: string) {
-  const next = new Set(selectedIds.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  selectedIds.value = next
+function onSelectGesture(id: string, gesture: LibrarySelectGesture) {
+  const visible = flattenVisibleIds(tree.value, expanded.value)
+  const result = applyLibrarySelect(selectedIds.value, visible, id, gesture, selectAnchor.value)
+  selectedIds.value = result.selected
+  selectAnchor.value = result.anchor
+}
+
+function onFocusNode(rel: string, kind: LibraryTreeNode['kind']) {
+  if (kind === 'dir') {
+    focusDir.value = rel
+    activePath.value = rel
+    return
+  }
+  focusDir.value = parentDir(rel)
+  activePath.value = rel
 }
 
 function toggleExpanded(rel: string) {
@@ -732,14 +779,14 @@ onUnmounted(() => {
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
-        <span class="library-count">
-          已选网站 {{ selectedWebsiteCount }} / 文件 {{ selectedFileCount }}
+        <span class="library-count" :title="selectedCountTitle">
+          已选 {{ selectedCount }} 项
         </span>
         <button
           type="button"
           class="btn-primary"
           :disabled="!canGenerate"
-          :title="selectedCount ? '基于勾选资料生成画像' : '请先勾选网站或文件'"
+          :title="generateButtonTitle"
           @click="generateProfile"
         >
           <Icon name="sparkles" :size="12" />
@@ -838,8 +885,9 @@ onUnmounted(() => {
           @select-root="onSelectRoot"
           @activate-dir="onActivateDir"
           @activate-file="onActivateFile"
-          @toggle-select="toggleSelect"
           @open-website="openWebsite"
+          @select-gesture="onSelectGesture"
+          @focus-node="onFocusNode"
           @context-blank="onBlankContext"
           @context-root="onRootContext"
           @context-node="onNodeContext"
@@ -865,7 +913,7 @@ onUnmounted(() => {
 
       <p class="library-hint muted">
         <Icon name="info" :size="14" />
-        资料保存在 data/library/。F2 或右键可重命名；拖到另一夹移动；从资源管理器拖入仍是导入。双击书签用浏览器打开。Ctrl+V 粘贴到焦点目录。生成画像时再分配产品 ID。
+        资料保存在 data/library/。Ctrl 点选、Shift 范围选；F2 或右键可重命名；拖到另一夹移动。文件夹勾选暂不参与生成。双击书签用浏览器打开。Ctrl+V 粘贴到焦点目录。生成画像时再分配产品 ID。
       </p>
 
       <p v-if="message" class="library-feedback ok">{{ message }}</p>
