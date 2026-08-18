@@ -40,8 +40,6 @@ export function libraryContextItems(kind: LibraryContextKind): LibraryContextIte
     items.push({
       id: 'import-folder',
       label: '导入文件夹',
-      disabled: true,
-      hint: '后续版本：从资源管理器导入整棵目录',
       separatorBefore: true,
     })
     return items
@@ -58,8 +56,6 @@ export function libraryContextItems(kind: LibraryContextKind): LibraryContextIte
     {
       id: 'import-folder',
       label: '导入文件夹',
-      disabled: true,
-      hint: '后续版本：从资源管理器导入整棵目录',
     },
   )
 

@@ -39,6 +39,7 @@ import {
   listWebsites,
   pasteClipboardFiles,
   pickAndImportFiles,
+  pickAndImportFolders,
 } from './library/library-service'
 import {
   flattenEntries,
@@ -325,12 +326,37 @@ function buildLibrarySnapshot(focusDir = ''): LibrarySnapshot {
   }
 }
 
-function libraryOk(message: string, cwd = '', extra?: Partial<{ imported: number; skipped: string[] }>) {
+function libraryOk(message: string, cwd = '', extra?: Partial<{ imported: number; skipped: string[]; dirsCreated: number }>) {
   return {
     ok: true,
     message,
     snapshot: buildLibrarySnapshot(cwd),
     ...extra,
+  }
+}
+
+function libraryImportReply(
+  dir: string,
+  result: { imported: number; dirsCreated: number; skipped: string[] },
+  emptyMessage: string,
+  fileVerb: string,
+) {
+  const { imported, dirsCreated, skipped } = result
+  if (imported === 0 && dirsCreated === 0 && skipped.length === 0) {
+    return libraryOk('', dir, { imported: 0, dirsCreated: 0, skipped: [] })
+  }
+  const parts: string[] = []
+  if (imported) parts.push(`${fileVerb} ${imported} 个文件`)
+  if (dirsCreated) parts.push(`已创建 ${dirsCreated} 个文件夹`)
+  if (skipped.length) parts.push(`跳过：${skipped.join('；')}`)
+  const ok = imported > 0 || dirsCreated > 0
+  return {
+    ok,
+    message: parts.join('。') || emptyMessage,
+    snapshot: buildLibrarySnapshot(dir),
+    imported,
+    dirsCreated,
+    skipped,
   }
 }
 
@@ -638,20 +664,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.LIBRARY_UPLOAD_FILES, async (_event, cwd?: string) => {
     const dir = cwd ?? ''
     try {
-      const { imported, skipped } = await pickAndImportFiles(dir, mainWindow)
-      if (imported === 0 && skipped.length === 0) {
-        return libraryOk('', dir, { imported: 0, skipped: [] })
-      }
-      const parts: string[] = []
-      if (imported) parts.push(`已导入 ${imported} 个文件`)
-      if (skipped.length) parts.push(`跳过：${skipped.join('；')}`)
-      return {
-        ok: imported > 0,
-        message: parts.join('。'),
-        snapshot: buildLibrarySnapshot(dir),
-        imported,
-        skipped,
-      }
+      const result = await pickAndImportFiles(dir, mainWindow)
+      return libraryImportReply(dir, result, '', '已导入')
     } catch (err) {
       return libraryFail(err, dir)
     }
@@ -662,45 +676,39 @@ function registerIpcHandlers(): void {
     (_event, payload: { cwd?: string; paths: string[] }) => {
       const dir = payload.cwd ?? ''
       try {
-        const { imported, skipped } = importFilesFromPaths(dir, payload.paths ?? [])
-        const parts: string[] = []
-        if (imported) parts.push(`已粘贴/导入 ${imported} 个文件`)
-        if (skipped.length) parts.push(`跳过：${skipped.join('；')}`)
-        return {
-          ok: imported > 0,
-          message: parts.join('。') || '没有可导入的文件',
-          snapshot: buildLibrarySnapshot(dir),
-          imported,
-          skipped,
-        }
+        const result = importFilesFromPaths(dir, payload.paths ?? [])
+        return libraryImportReply(dir, result, '没有可导入的文件', '已粘贴/导入')
       } catch (err) {
         return libraryFail(err, dir)
       }
     },
   )
 
+  ipcMain.handle(IPC.LIBRARY_IMPORT_FOLDERS, async (_event, cwd?: string) => {
+    const dir = cwd ?? ''
+    try {
+      const result = await pickAndImportFolders(dir, mainWindow)
+      return libraryImportReply(dir, result, '', '已导入')
+    } catch (err) {
+      return libraryFail(err, dir)
+    }
+  })
+
   ipcMain.handle(IPC.LIBRARY_PASTE_CLIPBOARD, (_event, cwd?: string) => {
     const dir = cwd ?? ''
     try {
-      const { imported, skipped } = pasteClipboardFiles(dir)
-      if (imported === 0) {
+      const result = pasteClipboardFiles(dir)
+      if (result.imported === 0 && result.dirsCreated === 0) {
         return {
           ok: false,
-          message: skipped[0] || '剪贴板中没有可粘贴的文件',
+          message: result.skipped[0] || '剪贴板中没有可粘贴的文件',
           snapshot: buildLibrarySnapshot(dir),
           imported: 0,
-          skipped,
+          dirsCreated: 0,
+          skipped: result.skipped,
         }
       }
-      const parts = [`已粘贴 ${imported} 个文件`]
-      if (skipped.length) parts.push(`跳过：${skipped.join('；')}`)
-      return {
-        ok: true,
-        message: parts.join('。'),
-        snapshot: buildLibrarySnapshot(dir),
-        imported,
-        skipped,
-      }
+      return libraryImportReply(dir, result, '', '已粘贴')
     } catch (err) {
       return libraryFail(err, dir)
     }

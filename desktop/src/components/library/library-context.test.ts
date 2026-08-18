@@ -6,7 +6,7 @@ describe('libraryContextItems', () => {
   it('blank menu has create/paste/upload and no delete', () => {
     const ids = libraryContextItems('blank').map((i) => i.id)
     assert.deepEqual(ids, ['mkdir', 'paste', 'upload', 'import-folder'])
-    assert.equal(libraryContextItems('blank').find((i) => i.id === 'import-folder')?.disabled, true)
+    assert.equal(libraryContextItems('blank').find((i) => i.id === 'import-folder')?.disabled, undefined)
   })
 
   it('root menu cannot delete', () => {
@@ -19,6 +19,7 @@ describe('libraryContextItems', () => {
     const items = libraryContextItems('dir')
     assert.equal(items.find((i) => i.id === 'mkdir')?.label, '新建子文件夹')
     assert.equal(items.find((i) => i.id === 'paste')?.label, '粘贴到此')
+    assert.equal(items.find((i) => i.id === 'import-folder')?.disabled, undefined)
     assert.equal(items.find((i) => i.id === 'delete')?.danger, true)
     assert.equal(items.find((i) => i.id === 'rename')?.disabled, true)
   })

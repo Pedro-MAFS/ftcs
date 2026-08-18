@@ -543,6 +543,7 @@ declare global {
       createLibraryFolder: (name: string, cwd?: string) => Promise<LibraryMutationResult>
       uploadLibraryFiles: (cwd?: string) => Promise<LibraryMutationResult>
       importLibraryPaths: (paths: string[], cwd?: string) => Promise<LibraryMutationResult>
+      importLibraryFolders: (cwd?: string) => Promise<LibraryMutationResult>
       pasteClipboardFiles: (cwd?: string) => Promise<LibraryMutationResult>
       deleteLibraryEntry: (relativePath: string, cwd?: string) => Promise<LibraryMutationResult>
       generateProfile: (input: ProfileGenerateInput) => Promise<ProfileGenerateResult>

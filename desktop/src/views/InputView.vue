@@ -217,6 +217,10 @@ async function onCtxPick(id: LibraryContextAction) {
     await uploadFiles()
     return
   }
+  if (id === 'import-folder') {
+    await importFolders()
+    return
+  }
   if (id === 'delete' && node) await removeEntry(node)
 }
 
@@ -316,6 +320,30 @@ async function uploadFiles() {
     if (res.message) {
       if (res.ok) message.value = res.message
       else error.value = res.message
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function importFolders() {
+  if (!window.ftcs?.importLibraryFolders || busy.value) return
+  busy.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    const res = await window.ftcs.importLibraryFolders(focusDir.value)
+    applySnapshot(res.snapshot)
+    if (res.message) {
+      if (res.ok) message.value = res.message
+      else error.value = res.message
+    }
+    if (res.ok && focusDir.value) {
+      const next = new Set(expanded.value)
+      next.add(focusDir.value)
+      expanded.value = next
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)

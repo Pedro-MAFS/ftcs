@@ -21,6 +21,7 @@ export const IPC = {
   LIBRARY_MKDIR: 'library:mkdir',
   LIBRARY_UPLOAD_FILES: 'library:upload-files',
   LIBRARY_IMPORT_PATHS: 'library:import-paths',
+  LIBRARY_IMPORT_FOLDERS: 'library:import-folders',
   LIBRARY_PASTE_CLIPBOARD: 'library:paste-clipboard',
   LIBRARY_DELETE_ENTRY: 'library:delete-entry',
   PROFILE_GENERATE: 'profile:generate',
@@ -863,5 +864,6 @@ export interface LibraryMutationResult {
   message: string
   snapshot: LibrarySnapshot
   imported?: number
+  dirsCreated?: number
   skipped?: string[]
 }

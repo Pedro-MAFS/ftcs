@@ -182,6 +182,8 @@ const api = {
     ipcRenderer.invoke(IPC.LIBRARY_UPLOAD_FILES, cwd),
   importLibraryPaths: (paths: string[], cwd = ''): Promise<LibraryMutationResult> =>
     ipcRenderer.invoke(IPC.LIBRARY_IMPORT_PATHS, { cwd, paths }),
+  importLibraryFolders: (cwd = ''): Promise<LibraryMutationResult> =>
+    ipcRenderer.invoke(IPC.LIBRARY_IMPORT_FOLDERS, cwd),
   pasteClipboardFiles: (cwd = ''): Promise<LibraryMutationResult> =>
     ipcRenderer.invoke(IPC.LIBRARY_PASTE_CLIPBOARD, cwd),
   deleteLibraryEntry: (relativePath: string, cwd = ''): Promise<LibraryMutationResult> =>

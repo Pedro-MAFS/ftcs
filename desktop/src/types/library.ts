@@ -42,5 +42,6 @@ export interface LibraryMutationResult {
   message: string
   snapshot: LibrarySnapshot
   imported?: number
+  dirsCreated?: number
   skipped?: string[]
 }

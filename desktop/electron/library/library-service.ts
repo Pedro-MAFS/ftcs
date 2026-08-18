@@ -3,6 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { clipboard, dialog, BrowserWindow } from 'electron'
 import { getWorkspaceRoot } from '../config/paths'
+import { importFilesFromPaths as importTreeFromPaths, type ImportPathsResult } from './library-import'
 
 export interface WebsiteItem {
   id: string
@@ -175,6 +176,8 @@ function toFilesRel(root: string, abs: string): string {
   return path.relative(root, abs).replace(/\\/g, '/')
 }
 
+export type { ImportPathsResult }
+
 export function listWebsites(workspaceRoot = getWorkspaceRoot()): WebsiteItem[] {
   ensureLibraryDirs(workspaceRoot)
   const dir = websitesDir(workspaceRoot)
@@ -321,35 +324,16 @@ function importAbsolutePaths(
   relativeDir: string,
   absolutePaths: string[],
   workspaceRoot = getWorkspaceRoot(),
-): { imported: number; skipped: string[] } {
-  const { abs } = resolveUnderFiles(relativeDir, workspaceRoot)
-  fs.mkdirSync(abs, { recursive: true })
-  let imported = 0
-  const skipped: string[] = []
-
-  for (const src of absolutePaths) {
-    if (!src || !fs.existsSync(src)) {
-      skipped.push(`${path.basename(src || 'unknown')}（找不到源文件）`)
-      continue
-    }
-    const st = fs.statSync(src)
-    if (!st.isFile()) {
-      skipped.push(`${path.basename(src)}（不是文件）`)
-      continue
-    }
-    const dest = uniquePath(abs, sanitizeBaseName(path.basename(src)))
-    fs.copyFileSync(src, dest)
-    imported += 1
-  }
-
-  return { imported, skipped }
+  options?: { maxNodes?: number; maxDepth?: number },
+): ImportPathsResult {
+  return importTreeFromPaths(relativeDir, absolutePaths, workspaceRoot, options)
 }
 
 export async function pickAndImportFiles(
   relativeDir = '',
   parent?: BrowserWindow | null,
   workspaceRoot = getWorkspaceRoot(),
-): Promise<{ imported: number; skipped: string[] }> {
+): Promise<ImportPathsResult> {
   const options = {
     title: '选择文件导入资料库',
     properties: ['openFile', 'multiSelections'] as Array<
@@ -360,7 +344,27 @@ export async function pickAndImportFiles(
     ? await dialog.showOpenDialog(parent, options)
     : await dialog.showOpenDialog(options)
   if (result.canceled || result.filePaths.length === 0) {
-    return { imported: 0, skipped: [] }
+    return { imported: 0, dirsCreated: 0, skipped: [] }
+  }
+  return importAbsolutePaths(relativeDir, result.filePaths, workspaceRoot)
+}
+
+export async function pickAndImportFolders(
+  relativeDir = '',
+  parent?: BrowserWindow | null,
+  workspaceRoot = getWorkspaceRoot(),
+): Promise<ImportPathsResult> {
+  const options = {
+    title: '选择要导入的文件夹',
+    properties: ['openDirectory', 'multiSelections'] as Array<
+      'openDirectory' | 'multiSelections'
+    >,
+  }
+  const result = parent
+    ? await dialog.showOpenDialog(parent, options)
+    : await dialog.showOpenDialog(options)
+  if (result.canceled || result.filePaths.length === 0) {
+    return { imported: 0, dirsCreated: 0, skipped: [] }
   }
   return importAbsolutePaths(relativeDir, result.filePaths, workspaceRoot)
 }
@@ -369,9 +373,10 @@ export function importFilesFromPaths(
   relativeDir: string,
   absolutePaths: string[],
   workspaceRoot = getWorkspaceRoot(),
-): { imported: number; skipped: string[] } {
-  if (!absolutePaths.length) return { imported: 0, skipped: [] }
-  return importAbsolutePaths(relativeDir, absolutePaths, workspaceRoot)
+  options?: { maxNodes?: number; maxDepth?: number },
+): ImportPathsResult {
+  if (!absolutePaths.length) return { imported: 0, dirsCreated: 0, skipped: [] }
+  return importAbsolutePaths(relativeDir, absolutePaths, workspaceRoot, options)
 }
 
 /** 读取系统剪贴板中的文件路径（资源管理器复制文件后） */
@@ -438,10 +443,14 @@ export function readClipboardFilePaths(): string[] {
 export function pasteClipboardFiles(
   relativeDir: string,
   workspaceRoot = getWorkspaceRoot(),
-): { imported: number; skipped: string[] } {
+): ImportPathsResult {
   const paths = readClipboardFilePaths()
   if (!paths.length) {
-    return { imported: 0, skipped: ['剪贴板中没有可粘贴的文件（请先在资源管理器中复制文件）'] }
+    return {
+      imported: 0,
+      dirsCreated: 0,
+      skipped: ['剪贴板中没有可粘贴的文件（请先在资源管理器中复制文件）'],
+    }
   }
   return importAbsolutePaths(relativeDir, paths, workspaceRoot)
 }
