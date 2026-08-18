@@ -17,11 +17,12 @@ export interface FileEntry {
 
 export interface LibraryTreeNode {
   name: string
-  kind: 'dir' | 'file'
+  kind: 'dir' | 'file' | 'website'
   relativePath: string
   depth: number
   sizeBytes?: number
   modifiedAt?: string
+  url?: string
   children: LibraryTreeNode[]
 }
 
@@ -44,4 +45,5 @@ export interface LibraryMutationResult {
   imported?: number
   dirsCreated?: number
   skipped?: string[]
+  createdPath?: string
 }

@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
-import type { LibrarySnapshot, LibraryTreeNode, WebsiteItem } from '../types/library'
+import type { LibrarySnapshot, LibraryTreeNode } from '../types/library'
 import { useWorkspace } from '../composables/useWorkspace'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
@@ -19,14 +19,14 @@ const router = useRouter()
 const { resetAgentForGenerate, generating } = useWorkspace()
 
 const websiteUrl = ref('')
-const websites = ref<WebsiteItem[]>([])
+const savingWebsite = ref(false)
+const websiteInputRef = ref<HTMLInputElement | null>(null)
 const focusDir = ref('')
 const activePath = ref('')
 const tree = ref<LibraryTreeNode[]>([])
 const truncated = ref(false)
 const expanded = ref<Set<string>>(new Set())
 const selectedIds = ref<Set<string>>(new Set())
-const selectedWebsiteIds = ref<Set<string>>(new Set())
 const busy = ref(false)
 const message = ref('')
 const error = ref('')
@@ -49,6 +49,19 @@ function collectFilePaths(nodes: LibraryTreeNode[]): string[] {
   return out
 }
 
+function collectWebsitePaths(nodes: LibraryTreeNode[]): string[] {
+  const out: string[] = []
+  for (const node of nodes) {
+    if (node.kind === 'website') out.push(node.relativePath)
+    if (node.children.length) out.push(...collectWebsitePaths(node.children))
+  }
+  return out
+}
+
+function collectSelectablePaths(nodes: LibraryTreeNode[]): string[] {
+  return [...collectFilePaths(nodes), ...collectWebsitePaths(nodes)]
+}
+
 function collectAllPaths(nodes: LibraryTreeNode[]): Set<string> {
   const out = new Set<string>([''])
   for (const node of nodes) {
@@ -65,10 +78,13 @@ function parentDir(relativePath: string): string {
 }
 
 const filePaths = computed(() => collectFilePaths(tree.value))
+const websitePathsInTree = computed(() => collectWebsitePaths(tree.value))
 const selectedFileCount = computed(
   () => [...selectedIds.value].filter((id) => filePaths.value.includes(id)).length,
 )
-const selectedWebsiteCount = computed(() => selectedWebsiteIds.value.size)
+const selectedWebsiteCount = computed(
+  () => [...selectedIds.value].filter((id) => websitePathsInTree.value.includes(id)).length,
+)
 const selectedCount = computed(() => selectedFileCount.value + selectedWebsiteCount.value)
 const canGenerate = computed(
   () => selectedCount.value > 0 && !busy.value && !generating.value,
@@ -86,16 +102,11 @@ watch(
 )
 
 function applySnapshot(snap: LibrarySnapshot) {
-  websites.value = snap.websites
   tree.value = snap.tree ?? []
   truncated.value = Boolean(snap.truncated)
   focusDir.value = snap.focusDir ?? snap.cwd ?? ''
-  const validFiles = new Set(collectFilePaths(tree.value))
-  selectedIds.value = new Set([...selectedIds.value].filter((id) => validFiles.has(id)))
-  const validSites = new Set(snap.websites.map((w) => w.relativePath))
-  selectedWebsiteIds.value = new Set(
-    [...selectedWebsiteIds.value].filter((id) => validSites.has(id)),
-  )
+  const valid = new Set(collectSelectablePaths(tree.value))
+  selectedIds.value = new Set([...selectedIds.value].filter((id) => valid.has(id)))
   const all = collectAllPaths(tree.value)
   if (activePath.value && !all.has(activePath.value)) {
     activePath.value = focusDir.value
@@ -126,13 +137,6 @@ function toggleSelect(id: string) {
   if (next.has(id)) next.delete(id)
   else next.add(id)
   selectedIds.value = next
-}
-
-function toggleWebsite(id: string) {
-  const next = new Set(selectedWebsiteIds.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  selectedWebsiteIds.value = next
 }
 
 function toggleExpanded(rel: string) {
@@ -199,7 +203,7 @@ function onNodeContext(event: MouseEvent, node: LibraryTreeNode) {
     focusDir.value = parentDir(node.relativePath)
     activePath.value = node.relativePath
   }
-  openCtxMenu(node.kind === 'dir' ? 'dir' : 'file', event, node)
+  openCtxMenu(node.kind, event, node)
 }
 
 async function onCtxPick(id: LibraryContextAction) {
@@ -221,24 +225,58 @@ async function onCtxPick(id: LibraryContextAction) {
     await importFolders()
     return
   }
+  if (id === 'save-website') {
+    await startSaveWebsite()
+    return
+  }
+  if (id === 'open-website' && node) {
+    await openWebsite(node)
+    return
+  }
   if (id === 'delete' && node) await removeEntry(node)
 }
 
-async function addWebsite() {
+async function startSaveWebsite() {
+  cancelCreateFolder()
+  savingWebsite.value = true
+  websiteUrl.value = ''
+  error.value = ''
+  message.value = ''
+  await nextTick()
+  websiteInputRef.value?.focus()
+}
+
+function cancelSaveWebsite() {
+  savingWebsite.value = false
+  websiteUrl.value = ''
+}
+
+async function confirmSaveWebsite() {
   if (!window.ftcs?.addWebsite || busy.value) return
+  const url = websiteUrl.value.trim()
+  if (!url) {
+    error.value = '请输入公司网站 URL'
+    return
+  }
   busy.value = true
   error.value = ''
   message.value = ''
   try {
-    const res = await window.ftcs.addWebsite(websiteUrl.value, focusDir.value)
+    const res = await window.ftcs.addWebsite(url, focusDir.value)
     applyResult(res)
     if (res.ok) {
+      savingWebsite.value = false
       websiteUrl.value = ''
-      const added = res.snapshot.websites[0]
-      if (added) {
-        const next = new Set(selectedWebsiteIds.value)
-        next.add(added.relativePath)
-        selectedWebsiteIds.value = next
+      const created = res.createdPath
+      if (created) {
+        const next = new Set(selectedIds.value)
+        next.add(created)
+        selectedIds.value = next
+        const parent = parentDir(created)
+        const expandedNext = new Set(expanded.value)
+        if (parent) expandedNext.add(parent)
+        expanded.value = expandedNext
+        activePath.value = created
       }
     }
   } catch (err) {
@@ -248,22 +286,19 @@ async function addWebsite() {
   }
 }
 
-async function removeWebsite(item: WebsiteItem) {
-  if (!window.ftcs?.deleteWebsite || busy.value) return
-  if (!window.confirm(`删除网站「${item.title}」？`)) return
-  busy.value = true
-  error.value = ''
-  message.value = ''
+async function openWebsite(node: LibraryTreeNode) {
+  const url = node.url
+  if (!url || !window.ftcs?.openExternal) return
   try {
-    applyResult(await window.ftcs.deleteWebsite(item.relativePath, focusDir.value))
+    const res = await window.ftcs.openExternal(url)
+    if (!res.ok) error.value = res.message
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    busy.value = false
   }
 }
 
 async function startCreateFolder() {
+  cancelSaveWebsite()
   creatingFolder.value = true
   newFolderName.value = ''
   error.value = ''
@@ -502,7 +537,9 @@ async function removeEntry(node: LibraryTreeNode) {
   const tip =
     node.kind === 'dir'
       ? `删除目录「${node.name}」及其全部内容？`
-      : `删除文件「${node.name}」？`
+      : node.kind === 'website'
+        ? `删除网站「${node.name}」？`
+        : `删除文件「${node.name}」？`
   if (!window.confirm(tip)) return
   busy.value = true
   error.value = ''
@@ -528,8 +565,9 @@ async function removeEntry(node: LibraryTreeNode) {
 async function generateProfile() {
   if (!window.ftcs?.generateProfile || !canGenerate.value) return
 
-  const websitePaths = [...selectedWebsiteIds.value]
   const validFiles = new Set(filePaths.value)
+  const validSites = new Set(websitePathsInTree.value)
+  const websitePaths = [...selectedIds.value].filter((id) => validSites.has(id))
   const fileList = [...selectedIds.value].filter((id) => validFiles.has(id))
   if (!websitePaths.length && !fileList.length) {
     error.value = '请先勾选至少一个公司网站或资料文件'
@@ -601,63 +639,6 @@ onUnmounted(() => {
     </header>
 
     <div ref="panelRef" class="library-panel" tabindex="0" @paste="onPaste">
-      <label class="field-label">公司网站</label>
-      <div class="input-row">
-        <input
-          v-model="websiteUrl"
-          class="text-input"
-          type="url"
-          placeholder="https://www.example.com"
-          :disabled="busy || generating"
-          @keydown.enter.prevent="addWebsite"
-        />
-        <button
-          type="button"
-          class="btn-accent-ghost"
-          :disabled="busy || generating || !websiteUrl.trim()"
-          @click="addWebsite"
-        >
-          <Icon name="plus" :size="14" />
-          保存网站
-        </button>
-      </div>
-
-      <ul v-if="websites.length" class="website-chips">
-        <li
-          v-for="site in websites"
-          :key="site.id"
-          class="website-chip"
-          :class="{ selected: selectedWebsiteIds.has(site.relativePath) }"
-        >
-          <button
-            type="button"
-            class="library-check"
-            :class="{ on: selectedWebsiteIds.has(site.relativePath) }"
-            :aria-pressed="selectedWebsiteIds.has(site.relativePath)"
-            title="勾选后参与生成画像"
-            @click="toggleWebsite(site.relativePath)"
-          >
-            <Icon v-if="selectedWebsiteIds.has(site.relativePath)" name="check" :size="10" />
-          </button>
-          <Icon name="globe" :size="12" />
-          <div class="website-chip__meta">
-            <a class="website-chip__title" :href="site.url" target="_blank" rel="noreferrer">
-              {{ site.title }}
-            </a>
-            <span class="muted">{{ site.url }}</span>
-          </div>
-          <button
-            type="button"
-            class="icon-btn"
-            title="删除网站"
-            :disabled="busy || generating"
-            @click="removeWebsite(site)"
-          >
-            <Icon name="trash" :size="12" />
-          </button>
-        </li>
-      </ul>
-
       <div class="library-head">
         <div class="field-label" style="margin: 0">资料库</div>
       </div>
@@ -695,6 +676,35 @@ onUnmounted(() => {
         </button>
       </div>
 
+      <div v-if="savingWebsite" class="mkdir-row">
+        <input
+          ref="websiteInputRef"
+          v-model="websiteUrl"
+          class="text-input"
+          type="url"
+          placeholder="https://www.example.com（将保存到当前焦点目录）"
+          :disabled="busy"
+          @keydown.enter.prevent="confirmSaveWebsite"
+          @keydown.esc.prevent="cancelSaveWebsite"
+        />
+        <button
+          type="button"
+          class="btn-primary btn-sm"
+          :disabled="busy || !websiteUrl.trim()"
+          @click="confirmSaveWebsite"
+        >
+          保存
+        </button>
+        <button
+          type="button"
+          class="btn-secondary btn-sm"
+          :disabled="busy"
+          @click="cancelSaveWebsite"
+        >
+          取消
+        </button>
+      </div>
+
       <div
         class="library-tree-wrap"
         :class="{ 'is-drag': dragOver && dropImportDir === '' }"
@@ -718,6 +728,7 @@ onUnmounted(() => {
           @activate-dir="onActivateDir"
           @activate-file="onActivateFile"
           @toggle-select="toggleSelect"
+          @open-website="openWebsite"
           @context-blank="onBlankContext"
           @context-root="onRootContext"
           @context-node="onNodeContext"
@@ -725,7 +736,7 @@ onUnmounted(() => {
           @drop-import="onDropImport"
         />
         <div v-else class="library-empty muted">
-          当前还没有资料。在空白处右键可新建文件夹、粘贴或上传文件。
+          当前还没有资料。在空白处右键可新建文件夹、粘贴、上传、保存网站或导入文件夹。
         </div>
       </div>
 
@@ -740,7 +751,7 @@ onUnmounted(() => {
 
       <p class="library-hint muted">
         <Icon name="info" :size="14" />
-        资料保存在 data/library/。树上右键可整理；Ctrl+V 粘贴到焦点目录。生成画像时再分配产品 ID。
+        资料保存在 data/library/。树上右键可整理、保存网站；双击书签用浏览器打开。Ctrl+V 粘贴到焦点目录。生成画像时再分配产品 ID。
       </p>
 
       <p v-if="message" class="library-feedback ok">{{ message }}</p>

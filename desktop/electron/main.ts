@@ -326,7 +326,7 @@ function buildLibrarySnapshot(focusDir = ''): LibrarySnapshot {
   }
 }
 
-function libraryOk(message: string, cwd = '', extra?: Partial<{ imported: number; skipped: string[]; dirsCreated: number }>) {
+function libraryOk(message: string, cwd = '', extra?: Partial<{ imported: number; skipped: string[]; dirsCreated: number; createdPath: string }>) {
   return {
     ok: true,
     message,
@@ -623,11 +623,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.LIBRARY_LIST, (_event, cwd?: string) => buildLibrarySnapshot(cwd ?? ''))
 
   ipcMain.handle(IPC.LIBRARY_ADD_WEBSITE, (_event, url: string, cwd?: string) => {
+    const dir = cwd ?? ''
     try {
-      addWebsite(url)
-      return libraryOk('已保存公司网站', cwd ?? '')
+      const created = addWebsite(url, dir)
+      return libraryOk('已保存公司网站', dir, { createdPath: created.relativePath })
     } catch (err) {
-      return libraryFail(err, cwd ?? '')
+      return libraryFail(err, dir)
     }
   })
 

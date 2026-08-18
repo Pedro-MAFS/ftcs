@@ -1,16 +1,18 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { readWebsiteBookmark } from './library-website'
 
 export const TREE_MAX_NODES = 5000
 export const TREE_MAX_DEPTH = 16
 
 export interface LibraryTreeNode {
   name: string
-  kind: 'dir' | 'file'
+  kind: 'dir' | 'file' | 'website'
   relativePath: string
   depth: number
   sizeBytes?: number
   modifiedAt?: string
+  url?: string
   children: LibraryTreeNode[]
 }
 
@@ -133,15 +135,29 @@ function walkDir(
       })
     } else if (st.isFile()) {
       ctx.count += 1
-      nodes.push({
-        name: dirent.name,
-        kind: 'file',
-        relativePath: entryRel,
-        depth,
-        sizeBytes: st.size,
-        modifiedAt: st.mtime.toISOString(),
-        children: [],
-      })
+      const bookmark = readWebsiteBookmark(full)
+      if (bookmark) {
+        nodes.push({
+          name: bookmark.title,
+          kind: 'website',
+          relativePath: entryRel,
+          depth,
+          sizeBytes: st.size,
+          modifiedAt: st.mtime.toISOString(),
+          url: bookmark.url,
+          children: [],
+        })
+      } else {
+        nodes.push({
+          name: dirent.name,
+          kind: 'file',
+          relativePath: entryRel,
+          depth,
+          sizeBytes: st.size,
+          modifiedAt: st.mtime.toISOString(),
+          children: [],
+        })
+      }
     }
   }
 
@@ -167,6 +183,15 @@ export function collectFilePaths(nodes: LibraryTreeNode[]): string[] {
   for (const node of nodes) {
     if (node.kind === 'file') out.push(node.relativePath)
     if (node.children.length) out.push(...collectFilePaths(node.children))
+  }
+  return out
+}
+
+export function collectWebsitePaths(nodes: LibraryTreeNode[]): string[] {
+  const out: string[] = []
+  for (const node of nodes) {
+    if (node.kind === 'website') out.push(node.relativePath)
+    if (node.children.length) out.push(...collectWebsitePaths(node.children))
   }
   return out
 }
@@ -199,7 +224,7 @@ export function flattenEntries(nodes: LibraryTreeNode[]): Array<{
   for (const node of nodes) {
     out.push({
       name: node.name,
-      kind: node.kind,
+      kind: node.kind === 'dir' ? 'dir' : 'file',
       relativePath: node.relativePath,
       sizeBytes: node.sizeBytes,
       modifiedAt: node.modifiedAt,

@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { clipboard, dialog, BrowserWindow } from 'electron'
 import { getWorkspaceRoot } from '../config/paths'
 import { importFilesFromPaths as importTreeFromPaths, type ImportPathsResult } from './library-import'
+import { addWebsiteToFolder, migrateWebsitesIntoFiles } from './library-website'
 
 export interface WebsiteItem {
   id: string
@@ -44,6 +45,7 @@ export function ensureLibraryDirs(workspaceRoot = getWorkspaceRoot()): {
   const files = path.join(root, 'files')
   fs.mkdirSync(websites, { recursive: true })
   fs.mkdirSync(files, { recursive: true })
+  migrateWebsitesIntoFiles(workspaceRoot)
   return { libraryPath: root, filesRoot: files, websitesRoot: websites }
 }
 
@@ -51,17 +53,6 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function formatRelativeDay(iso?: string): string {
-  if (!iso) return '已加入'
-  const t = Date.parse(iso)
-  if (Number.isNaN(t)) return '已加入'
-  const dayMs = 24 * 60 * 60 * 1000
-  const diff = Date.now() - t
-  if (diff < dayMs) return '今天加入'
-  if (diff < 2 * dayMs) return '昨天加入'
-  return new Date(t).toLocaleDateString()
 }
 
 function sanitizeBaseName(name: string): string {
@@ -84,66 +75,6 @@ function uniquePath(dir: string, fileName: string): string {
     i += 1
   }
   return candidate
-}
-
-function hostFromUrl(raw: string): string {
-  try {
-    const u = new URL(raw)
-    return u.hostname || raw
-  } catch {
-    return raw.replace(/^https?:\/\//i, '').split('/')[0] || raw
-  }
-}
-
-function normalizeWebsiteUrl(raw: string): string {
-  const trimmed = raw.trim()
-  if (!trimmed) throw new Error('请输入公司网站 URL')
-  const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
-  let parsed: URL
-  try {
-    parsed = new URL(withProto)
-  } catch {
-    throw new Error('URL 格式无效')
-  }
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    throw new Error('仅支持 http/https 网址')
-  }
-  parsed.hash = ''
-  return parsed.toString().replace(/\/$/, '')
-}
-
-function parseWebsiteMarkdown(content: string): { url?: string; title?: string; createdAt?: string } {
-  if (!content.startsWith('---')) return {}
-  const end = content.indexOf('\n---', 3)
-  if (end < 0) return {}
-  const fm = content.slice(3, end).trim()
-  const out: { url?: string; title?: string; createdAt?: string } = {}
-  for (const line of fm.split(/\r?\n/)) {
-    const m = line.match(/^(\w+):\s*(.*)$/)
-    if (!m) continue
-    const key = m[1]
-    const value = m[2].trim().replace(/^["']|["']$/g, '')
-    if (key === 'url') out.url = value
-    if (key === 'title') out.title = value
-    if (key === 'created_at') out.createdAt = value
-  }
-  return out
-}
-
-function writeWebsiteMarkdown(filePath: string, url: string, title: string): void {
-  const createdAt = new Date().toISOString()
-  const body = [
-    '---',
-    'type: website',
-    `url: ${url}`,
-    `title: ${title}`,
-    `created_at: ${createdAt}`,
-    '---',
-    '',
-    `公司网站：${url}`,
-    '',
-  ].join('\n')
-  fs.writeFileSync(filePath, body, 'utf8')
 }
 
 /** 规范化 files/ 下的相对路径，禁止跳出沙箱 */
@@ -180,47 +111,22 @@ export type { ImportPathsResult }
 
 export function listWebsites(workspaceRoot = getWorkspaceRoot()): WebsiteItem[] {
   ensureLibraryDirs(workspaceRoot)
-  const dir = websitesDir(workspaceRoot)
-  const items: WebsiteItem[] = []
-  for (const name of fs.readdirSync(dir)) {
-    if (!name.toLowerCase().endsWith('.md')) continue
-    const full = path.join(dir, name)
-    const st = fs.statSync(full)
-    if (!st.isFile()) continue
-    const parsed = parseWebsiteMarkdown(fs.readFileSync(full, 'utf8'))
-    const url = parsed.url || ''
-    const title = parsed.title || hostFromUrl(url || name)
-    const rel = path.join('websites', name).replace(/\\/g, '/')
-    items.push({
-      id: rel,
-      title,
-      url,
-      relativePath: rel,
-      createdAt: parsed.createdAt ?? st.mtime.toISOString(),
-      subtitle: formatRelativeDay(parsed.createdAt ?? st.mtime.toISOString()),
-    })
-  }
-  items.sort((a, b) => {
-    const ta = a.createdAt ? Date.parse(a.createdAt) : 0
-    const tb = b.createdAt ? Date.parse(b.createdAt) : 0
-    return tb - ta
-  })
-  return items
+  return []
 }
 
-export function addWebsite(rawUrl: string, workspaceRoot = getWorkspaceRoot()): WebsiteItem {
-  const url = normalizeWebsiteUrl(rawUrl)
+export function addWebsite(
+  rawUrl: string,
+  relativeDir = '',
+  workspaceRoot = getWorkspaceRoot(),
+): WebsiteItem {
   ensureLibraryDirs(workspaceRoot)
-  const title = hostFromUrl(url)
-  const dest = uniquePath(websitesDir(workspaceRoot), `${sanitizeBaseName(title)}.md`)
-  writeWebsiteMarkdown(dest, url, title)
-  const rel = path.join('websites', path.basename(dest)).replace(/\\/g, '/')
+  const created = addWebsiteToFolder(rawUrl, relativeDir, workspaceRoot)
   return {
-    id: rel,
-    title,
-    url,
-    relativePath: rel,
-    createdAt: new Date().toISOString(),
+    id: created.relativePath,
+    title: created.title,
+    url: created.url,
+    relativePath: created.relativePath,
+    createdAt: created.createdAt,
     subtitle: '今天加入',
   }
 }

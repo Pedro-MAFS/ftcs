@@ -18,6 +18,7 @@ const emit = defineEmits<{
   'activate-dir': [relativePath: string]
   'activate-file': [relativePath: string]
   'toggle-select': [relativePath: string]
+  'open-website': [node: LibraryTreeNode]
   'context-blank': [event: MouseEvent]
   'context-root': [event: MouseEvent]
   'context-node': [event: MouseEvent, node: LibraryTreeNode]
@@ -126,6 +127,26 @@ function onActivate(node: LibraryTreeNode) {
   else emit('activate-file', node.relativePath)
 }
 
+function onRowDblClick(node: LibraryTreeNode) {
+  if (node.kind === 'website') emit('open-website', node)
+}
+
+function isSelectable(node: LibraryTreeNode): boolean {
+  return node.kind === 'file' || node.kind === 'website'
+}
+
+function nodeIcon(node: LibraryTreeNode): 'folder' | 'globe' | 'file-text' {
+  if (node.kind === 'dir') return 'folder'
+  if (node.kind === 'website') return 'globe'
+  return 'file-text'
+}
+
+function nodeSubtitle(node: LibraryTreeNode): string {
+  if (node.kind === 'dir') return '文件夹'
+  if (node.kind === 'website') return node.url || '网站'
+  return formatSize(node.sizeBytes)
+}
+
 function onRowContext(event: MouseEvent, node: LibraryTreeNode) {
   event.preventDefault()
   event.stopPropagation()
@@ -184,11 +205,12 @@ function onTreeBlankContext(event: MouseEvent) {
       class="library-tree-row"
       :class="{
         'is-focused': isFocused(node),
-        'is-checked': node.kind === 'file' && selectedIds.has(node.relativePath),
+        'is-checked': isSelectable(node) && selectedIds.has(node.relativePath),
         'is-drop-target': isDropTarget(node),
       }"
       :style="{ paddingLeft: `${8 + node.depth * 16}px` }"
       @click="!busy && onActivate(node)"
+      @dblclick.stop="onRowDblClick(node)"
       @contextmenu="onRowContext($event, node)"
       @dragover="onRowDragOver($event, node)"
       @drop="onRowDrop($event, node)"
@@ -213,24 +235,22 @@ function onTreeBlankContext(event: MouseEvent) {
         class="library-check"
         :class="{ on: selectedIds.has(node.relativePath) }"
         :aria-pressed="selectedIds.has(node.relativePath)"
-        :disabled="busy || node.kind === 'dir'"
-        :title="node.kind === 'file' ? '勾选后参与生成画像' : '文件夹勾选将在后续版本开放'"
-        @click.stop="node.kind === 'file' && emit('toggle-select', node.relativePath)"
+        :disabled="busy || !isSelectable(node)"
+        :title="isSelectable(node) ? '勾选后参与生成画像' : '文件夹勾选将在后续版本开放'"
+        @click.stop="isSelectable(node) && emit('toggle-select', node.relativePath)"
       >
         <Icon v-if="selectedIds.has(node.relativePath)" name="check" :size="10" />
       </button>
 
       <div class="library-open">
         <Icon
-          :name="node.kind === 'dir' ? 'folder' : 'file-text'"
+          :name="nodeIcon(node)"
           :size="14"
           class="library-type-icon"
         />
         <div class="library-meta">
           <div class="library-title">{{ node.name }}</div>
-          <div class="muted">
-            {{ node.kind === 'dir' ? '文件夹' : formatSize(node.sizeBytes) }}
-          </div>
+          <div class="muted">{{ nodeSubtitle(node) }}</div>
         </div>
       </div>
     </div>
