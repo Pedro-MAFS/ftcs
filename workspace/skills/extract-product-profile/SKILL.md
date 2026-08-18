@@ -40,10 +40,10 @@ outputs:
 | ---- | -------------------------- | ------------- |
 | 公司网站 | `chrome-devtools-mcp`      | 打开首页，按需自由探索站内页面 |
 | 普通文件 | 智能体原生 Read 工具              | 直接读取文本内容      |
-| 特殊文件 | `lead-store.file_classify` | 停止并提示用户转换格式   |
+| 特殊文件 | `lead-store.file_classify` | **跳过该文件**，有官网或其它文本则继续 |
 
 
-**特殊文件**（当前不支持）：pdf、xlsx、xls、doc、docx、ppt、图片等。
+**特殊文件**（当前不抽取）：pdf、xlsx、xls、doc、docx、ppt、图片等。抽取归后续 Office 故事。桌面端生成时已跳过拷贝；若仍碰到，不要停止整次生成。
 
 ## 执行步骤
 
@@ -55,12 +55,14 @@ outputs:
 ### Step 1：判断输入类型
 
 - 有 `website_url` → 走 **网站分支**（Step 2A）
-- 有 `file_paths` → 对每个文件调用 `lead-store.file_classify`
+- 有 `file_paths` → 对每个文件调用 `lead-store.file_classify`（可选；桌面端已过滤）
   - `supported` → 走 **文件分支**（Step 2B）
-  - `special` → **停止**，返回：
-    > 该文件格式需专用解析器，当前版本暂不支持。请提供 txt/md/json/csv，或提供公司网站 URL。
-  - `unknown` → 提示用户提供支持的格式或网站 URL
-- 两者都有 → 分别执行后合并结果
+  - `special` / `unknown` → **跳过该文件并继续**，不要停止整次。可在摘要里说明跳过了哪些格式。
+- 两者都有 → 分别执行后 **合并进同一份画像**
+- `source_inputs`：
+  - 每个官网 URL 一条 `{ "type": "website", "url": "...", "crawled_at": "..." }`
+  - 每个已读文本一条 `{ "type": "file", "path": "data/products/{id}/inputs/…", "uploaded_at": "..." }`
+  - **不要**把 `inputs/` 里的网站书签 markdown（frontmatter `type: website`）写成 `type: file`
 
 ### Step 2A：网站分支（chrome-devtools-mcp）
 
@@ -173,6 +175,15 @@ outputs:
 { "type": "website", "url": "...", "crawled_at": "ISO8601" }
 ```
 
+官网 + 文本同时存在时，两类都要有，例如：
+
+```json
+[
+  { "type": "website", "url": "https://example.com", "crawled_at": "ISO8601" },
+  { "type": "file", "path": "data/products/prod_…/inputs/绿森/说明.md", "uploaded_at": "ISO8601" }
+]
+```
+
 **就绪度（由 lead-store 计算，勿手改）**
 
 - `company.name` + `company.website`：+20
@@ -215,7 +226,7 @@ outputs:
 | ------------------- | ----------------------------------------- |
 | 网站无法访问              | 告知用户检查 URL，建议改提供文本资料                      |
 | chrome-devtools 不可用 | 提示启用 chrome-devtools MCP（桌面 App / Cursor 均可） |
-| 特殊文件                | 返回固定提示语，不尝试读取                             |
+| 特殊文件                | 跳过该文件，有官网或文本则继续生成；不要整次停止           |
 | 画像分数 < 60           | 保存为 `draft`，追问后继续                         |
 
 
@@ -228,6 +239,10 @@ outputs:
 **文件输入**：
 
 > 请根据这个产品说明文件建立画像：D:\docs\product-intro.md
+
+**官网 + 文本**：
+
+> 这个产品夹里有公司网站，也有说明书，请合并生成一份画像。
 
 ## 流水线
 

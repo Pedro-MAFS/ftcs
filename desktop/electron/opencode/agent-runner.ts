@@ -4,6 +4,7 @@ import {
   loadProfile,
   type ProductProfileDetail,
 } from '../profile/profile-reader'
+import { patchProfileSourceInputs } from '../profile/profile-writer'
 import { loadExpansion, type KeywordExpansion } from '../keywords/keywords-reader'
 import {
   findLatestRunAfter,
@@ -83,15 +84,17 @@ function buildPrompt(bootstrap: BootstrapResult): string {
     '公司网站 URL：',
     websiteLines,
     '',
-    '输入文件（已复制到 inputs/，请用 Read 读取）：',
+    '输入文件（已复制到 inputs/，请用 Read 读取；网站书签不要当说明书）：',
     fileLines,
     '',
     '执行要求：',
     '1. 调用 lead-store.inputs_ensure_dir（目录已存在亦可）。',
-    '2. 有网站则用 chrome-devtools 按需探索；有文件则读取并提取。',
+    '2. 有网站则用 chrome-devtools 按需探索；有文件则读取并提取。两类都有则合并进同一份画像。',
     '3. 组装 ProductProfile 后调用 lead-store.product_save（传入上述 product_id）。',
-    '4. readiness 由 lead-store 计算，不要手改。',
-    '5. 完成后用简短中文汇报：产品 ID、公司名、核心产品、就绪度分数与 status、缺失字段、下一步建议。',
+    '4. source_inputs 必须记录：每个官网 URL 一条 type:website；每个文本一条 type:file（path 用上面的 inputs 路径）。不要把网站书签 md 写成 type:file。',
+    '5. 特殊格式桌面端已跳过，不要因 file_classify 为 special 而停止整次生成。',
+    '6. readiness 由 lead-store 计算，不要手改。',
+    '7. 完成后用简短中文汇报：产品 ID、公司名、核心产品、就绪度分数与 status、缺失字段、下一步建议。',
     '',
     `来源清单：data/products/${bootstrap.productId}/inputs/_sources.json`,
   ].join('\n')
@@ -1517,7 +1520,7 @@ export class AgentRunController {
 
       await bridge.ingestNow().catch(() => undefined)
 
-      const profile = await loadWithGrace(
+      let profile = await loadWithGrace(
         () => loadProfile(bootstrap.productId),
         { signal, attempts: 12, intervalMs: 500 },
       )
@@ -1527,6 +1530,8 @@ export class AgentRunController {
           '会话已结束，但未找到 profile.json。请向上滚动查看工具调用与模型输出。',
         )
       }
+
+      profile = patchProfileSourceInputs(bootstrap.productId) ?? profile
 
       const score =
         profile.readinessScore != null ? String(profile.readinessScore) : '—'

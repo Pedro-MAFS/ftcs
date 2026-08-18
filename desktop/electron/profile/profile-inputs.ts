@@ -6,6 +6,48 @@ export type SourceInput =
   | { type: 'website'; library_path: string; url: string }
   | { type: 'file'; library_path: string }
 
+/** 与 lead-store file-types.ts 对齐 */
+const SUPPORTED_TEXT_EXTENSIONS = new Set([
+  '.txt',
+  '.md',
+  '.json',
+  '.csv',
+  '.yaml',
+  '.yml',
+  '.xml',
+  '.html',
+  '.htm',
+])
+
+const SPECIAL_FILE_EXTENSIONS = new Set([
+  '.pdf',
+  '.xlsx',
+  '.xls',
+  '.doc',
+  '.docx',
+  '.ppt',
+  '.pptx',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.bmp',
+])
+
+export type InputFileKind = 'supported' | 'special' | 'unknown'
+
+export function classifyInputFile(filePath: string): InputFileKind {
+  const base = filePath.replace(/\\/g, '/')
+  const slash = base.lastIndexOf('/')
+  const name = slash >= 0 ? base.slice(slash + 1) : base
+  const dot = name.lastIndexOf('.')
+  const ext = dot === -1 ? '' : name.slice(dot).toLowerCase()
+  if (SUPPORTED_TEXT_EXTENSIONS.has(ext)) return 'supported'
+  if (SPECIAL_FILE_EXTENSIONS.has(ext)) return 'special'
+  return 'unknown'
+}
+
 export interface CopiedLibrarySources {
   websiteUrls: string[]
   inputFiles: string[]
@@ -68,7 +110,6 @@ export function copyLibrarySourcesToInputs(
       fs.mkdirSync(path.dirname(dest), { recursive: true })
       fs.copyFileSync(src, dest)
       websiteUrls.push(bookmark.url)
-      inputFiles.push(storedInputPath(productId, stored))
       sourceInputs.push({ type: 'website', library_path: stored, url: bookmark.url })
     } catch (err) {
       skipped.push(`${rel}（${err instanceof Error ? err.message : String(err)}）`)
@@ -90,6 +131,10 @@ export function copyLibrarySourcesToInputs(
       }
       if (readWebsiteBookmark(src)) {
         skipped.push(`${rel}（请按网站书签勾选，不要当普通文件）`)
+        continue
+      }
+      if (classifyInputFile(safe) !== 'supported') {
+        skipped.push(`${rel}（当前不支持该格式）`)
         continue
       }
       const { dest, stored } = destUnderInputs(inputsDir, safe)

@@ -70,7 +70,6 @@ describe('copyLibrarySourcesToInputs', () => {
 
     assert.deepEqual(copied.websiteUrls, ['https://www.example.com'])
     assert.deepEqual(copied.inputFiles, [
-      'data/products/prod_20260818_001/inputs/绿森/地板/www.example.com.md',
       'data/products/prod_20260818_001/inputs/绿森/说明.txt',
       'data/products/prod_20260818_001/inputs/绿森/地板/报价 单.md',
       'data/products/prod_20260818_001/inputs/客户A/说明.md',
@@ -99,5 +98,39 @@ describe('copyLibrarySourcesToInputs', () => {
 
     assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '说明.txt')), true)
     assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '空夹')), false)
+  })
+
+  it('skips pdf and images, keeps text, and does not put bookmark md in inputFiles', () => {
+    const root = makeRoot()
+    const filesRoot = path.join(root, 'files')
+    const inputsDir = path.join(root, 'inputs')
+    writeFile(path.join(filesRoot, '绿森', '说明.md'), 'a')
+    writeFile(path.join(filesRoot, '绿森', '目录.pdf'), 'fake-pdf')
+    writeFile(path.join(filesRoot, '绿森', '图.jpg'), 'fake-jpg')
+    writeFile(path.join(filesRoot, '绿森', '无扩展名'), 'raw')
+    writeBookmark(path.join(filesRoot, '绿森', 'www.example.com.md'), 'https://www.example.com')
+
+    const copied = copyLibrarySourcesToInputs(
+      'prod_1',
+      inputsDir,
+      filesRoot,
+      ['绿森/www.example.com.md'],
+      ['绿森/说明.md', '绿森/目录.pdf', '绿森/图.jpg', '绿森/无扩展名'],
+    )
+
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '说明.md')), true)
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', 'www.example.com.md')), true)
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '目录.pdf')), false)
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '图.jpg')), false)
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '无扩展名')), false)
+    assert.deepEqual(copied.websiteUrls, ['https://www.example.com'])
+    assert.deepEqual(copied.inputFiles, ['data/products/prod_1/inputs/绿森/说明.md'])
+    assert.deepEqual(copied.sourceInputs, [
+      { type: 'website', library_path: '绿森/www.example.com.md', url: 'https://www.example.com' },
+      { type: 'file', library_path: '绿森/说明.md' },
+    ])
+    assert.equal(copied.skipped.includes('绿森/目录.pdf（当前不支持该格式）'), true)
+    assert.equal(copied.skipped.includes('绿森/图.jpg（当前不支持该格式）'), true)
+    assert.equal(copied.skipped.includes('绿森/无扩展名（当前不支持该格式）'), true)
   })
 })

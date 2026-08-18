@@ -4,6 +4,7 @@ import { getWorkspaceRoot } from '../config/paths'
 import { generateProductId } from './product-id'
 import { getProfilePath, loadProfile, type ProductProfileDetail } from './profile-reader'
 import { computeReadiness, resolveStatus } from './readiness'
+import { mergeSourceInputs, type SourcesManifest } from './profile-sources'
 
 export interface ProfileProductEdit {
   name?: string
@@ -290,5 +291,37 @@ export function softDeleteProductProfile(
     message: `已删除「${id}」`,
     profile: profile ?? undefined,
   }
+}
+
+/** Agent 抽完后用 inputs/_sources.json 补齐 source_inputs，不改业务字段。 */
+export function patchProfileSourceInputs(
+  productId: string,
+  workspaceRoot = getWorkspaceRoot(),
+): ProductProfileDetail | null {
+  const profile = loadProfile(productId, workspaceRoot)
+  if (!profile) return null
+
+  const sourcesPath = path.join(
+    workspaceRoot,
+    'data',
+    'products',
+    productId,
+    'inputs',
+    '_sources.json',
+  )
+  if (!fs.existsSync(sourcesPath)) return profile
+
+  let manifest: unknown
+  try {
+    manifest = JSON.parse(fs.readFileSync(sourcesPath, 'utf8')) as unknown
+  } catch {
+    return profile
+  }
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return profile
+
+  const merged = mergeSourceInputs(profile.raw.source_inputs, manifest as SourcesManifest)
+  const next = { ...profile.raw, source_inputs: merged }
+  fs.writeFileSync(getProfilePath(productId, workspaceRoot), `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+  return loadProfile(productId, workspaceRoot) ?? profile
 }
 

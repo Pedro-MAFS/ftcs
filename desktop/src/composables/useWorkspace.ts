@@ -357,6 +357,14 @@ export function useWorkspace() {
     ]
   }
 
+  /** 生成未真正启动（如无可导入资料）时解除右侧面板占用 */
+  function clearAgentStartFailed(): void {
+    agentStatus.value = 'idle'
+    agentTimeline.value = []
+    agentExpanded.value = {}
+    agentMeta.value = []
+  }
+
   function resetAgentForExpandKeywords(): void {
     agentSkill.value = 'expand-keywords'
     agentStatus.value = 'running'
@@ -440,6 +448,7 @@ export function useWorkspace() {
     createDraftProduct,
     setAgentContext,
     resetAgentForGenerate,
+    clearAgentStartFailed,
     resetAgentForExpandKeywords,
     resetAgentForDiscoverLeads,
     resetAgentForScoreAndDedupe,

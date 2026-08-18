@@ -14,11 +14,12 @@
 6. `product_save` → readiness 55，status: draft
 7. 追问目标市场（regions）与买家类型
 
-## 特殊文件示例
+## 特殊文件
 
-用户提交 `catalog.pdf`：
+用户提交 `catalog.pdf`（同时还有官网或 txt/md）：
 
 1. `file_classify` → special
-2. **停止**，返回：
+2. **跳过该文件**，继续用官网 / 文本生成
+3. 摘要里可说明 pdf 暂不抽取
 
-> 该文件格式需专用解析器，当前版本暂不支持。请提供 txt/md/json/csv，或提供公司网站 URL。
+若**只有** special 文件、没有官网也没有文本，再提示用户提供 txt/md/json/csv 或公司网站 URL。抽取 pdf/docx/xlsx 不在本 Skill。

@@ -25,7 +25,7 @@ import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 
 const meta = SECTION_META.input
 const router = useRouter()
-const { resetAgentForGenerate, generating } = useWorkspace()
+const { resetAgentForGenerate, clearAgentStartFailed, generating } = useWorkspace()
 
 const websiteUrl = ref('')
 const savingWebsite = ref(false)
@@ -804,6 +804,7 @@ async function runGenerate(websitePaths: string[], fileList: string[]) {
     })
     if (!res.ok) {
       error.value = res.message
+      clearAgentStartFailed()
       return
     }
     message.value = res.message
@@ -813,6 +814,7 @@ async function runGenerate(websitePaths: string[], fileList: string[]) {
     await router.push({ name: 'profile' })
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
+    clearAgentStartFailed()
   } finally {
     busy.value = false
   }
