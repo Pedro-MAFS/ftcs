@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import type { LibrarySnapshot, LibraryTreeNode, WebsiteItem } from '../types/library'
@@ -7,6 +7,12 @@ import { useWorkspace } from '../composables/useWorkspace'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
 import LibraryTree from '../components/library/LibraryTree.vue'
+import LibraryContextMenu from '../components/library/LibraryContextMenu.vue'
+import {
+  libraryContextItems,
+  type LibraryContextAction,
+  type LibraryContextKind,
+} from '../components/library/library-context'
 
 const meta = SECTION_META.input
 const router = useRouter()
@@ -25,10 +31,14 @@ const busy = ref(false)
 const message = ref('')
 const error = ref('')
 const dragOver = ref(false)
+const dropImportDir = ref<string | null>(null)
+const dragDepth = ref(0)
 const creatingFolder = ref(false)
 const newFolderName = ref('')
 const folderInputRef = ref<HTMLInputElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
+const ctxMenu = ref<{ kind: LibraryContextKind; x: number; y: number } | null>(null)
+const ctxNode = ref<LibraryTreeNode | null>(null)
 
 function collectFilePaths(nodes: LibraryTreeNode[]): string[] {
   const out: string[] = []
@@ -64,6 +74,16 @@ const canGenerate = computed(
   () => selectedCount.value > 0 && !busy.value && !generating.value,
 )
 const isEmpty = computed(() => tree.value.length === 0)
+const ctxItems = computed(() =>
+  ctxMenu.value ? libraryContextItems(ctxMenu.value.kind) : [],
+)
+
+watch(
+  () => busy.value || generating.value,
+  (blocked) => {
+    if (blocked) closeCtxMenu()
+  },
+)
 
 function applySnapshot(snap: LibrarySnapshot) {
   websites.value = snap.websites
@@ -136,6 +156,68 @@ function onActivateDir(rel: string) {
 function onActivateFile(rel: string) {
   focusDir.value = parentDir(rel)
   activePath.value = rel
+}
+
+function findNode(nodes: LibraryTreeNode[], rel: string): LibraryTreeNode | null {
+  for (const node of nodes) {
+    if (node.relativePath === rel) return node
+    const child = findNode(node.children, rel)
+    if (child) return child
+  }
+  return null
+}
+
+function closeCtxMenu() {
+  ctxMenu.value = null
+  ctxNode.value = null
+}
+
+function openCtxMenu(kind: LibraryContextKind, event: MouseEvent, node: LibraryTreeNode | null) {
+  if (busy.value || generating.value) return
+  ctxNode.value = node
+  ctxMenu.value = { kind, x: event.clientX, y: event.clientY }
+}
+
+function onBlankContext(event: MouseEvent) {
+  event.preventDefault()
+  onSelectRoot()
+  openCtxMenu('blank', event, null)
+}
+
+function onRootContext(event: MouseEvent) {
+  event.preventDefault()
+  onSelectRoot()
+  openCtxMenu('root', event, null)
+}
+
+function onNodeContext(event: MouseEvent, node: LibraryTreeNode) {
+  event.preventDefault()
+  if (node.kind === 'dir') {
+    focusDir.value = node.relativePath
+    activePath.value = node.relativePath
+  } else {
+    focusDir.value = parentDir(node.relativePath)
+    activePath.value = node.relativePath
+  }
+  openCtxMenu(node.kind === 'dir' ? 'dir' : 'file', event, node)
+}
+
+async function onCtxPick(id: LibraryContextAction) {
+  const node = ctxNode.value
+  closeCtxMenu()
+  if (id === 'mkdir') {
+    await startCreateFolder()
+    return
+  }
+  if (id === 'paste') {
+    await pasteFromClipboard()
+    return
+  }
+  if (id === 'upload') {
+    await uploadFiles()
+    return
+  }
+  if (id === 'delete' && node) await removeEntry(node)
 }
 
 async function addWebsite() {
@@ -242,17 +324,27 @@ async function uploadFiles() {
   }
 }
 
-async function importPaths(paths: string[]) {
+async function importPaths(paths: string[], destDir?: string) {
   if (!window.ftcs?.importLibraryPaths || !paths.length || busy.value) return
+  const dir = destDir ?? focusDir.value
   busy.value = true
   error.value = ''
   message.value = ''
   try {
-    const res = await window.ftcs.importLibraryPaths(paths, focusDir.value)
+    const res = await window.ftcs.importLibraryPaths(paths, dir)
     applySnapshot(res.snapshot)
     if (res.message) {
       if (res.ok) message.value = res.message
       else error.value = res.message
+    }
+    if (res.ok) {
+      focusDir.value = dir
+      activePath.value = dir
+      if (dir) {
+        const next = new Set(expanded.value)
+        next.add(dir)
+        expanded.value = next
+      }
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -305,26 +397,76 @@ async function onPaste(e: ClipboardEvent) {
 }
 
 function onGlobalKeydown(e: KeyboardEvent) {
+  const target = e.target as HTMLElement | null
+  const inField = Boolean(target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'))
+
+  if (e.key === 'Delete' && !inField && !busy.value && !generating.value) {
+    if (!activePath.value) return
+    const node = findNode(tree.value, activePath.value)
+    if (!node) return
+    e.preventDefault()
+    closeCtxMenu()
+    void removeEntry(node)
+    return
+  }
+
   const key = e.key.toLowerCase()
   const withMod = e.ctrlKey || e.metaKey
   if (!withMod || key !== 'v') return
-
-  const target = e.target as HTMLElement | null
-  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
+  if (inField) return
 
   e.preventDefault()
   void pasteFromClipboard()
 }
 
-async function onDrop(e: DragEvent) {
+function isFileDrag(e: DragEvent): boolean {
+  return Boolean(e.dataTransfer?.types?.includes('Files'))
+}
+
+function clearDrag() {
+  dragDepth.value = 0
   dragOver.value = false
+  dropImportDir.value = null
+}
+
+function onDragOverImport(dir: string) {
+  dragOver.value = true
+  dropImportDir.value = dir
+}
+
+function onWrapDragEnter(e: DragEvent) {
+  if (!isFileDrag(e) || busy.value || generating.value) return
+  e.preventDefault()
+  dragDepth.value += 1
+  dragOver.value = true
+  if (dropImportDir.value == null) dropImportDir.value = ''
+}
+
+function onWrapDragOver(e: DragEvent) {
+  if (!isFileDrag(e) || busy.value || generating.value) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+  onDragOverImport('')
+}
+
+function onWrapDragLeave() {
+  dragDepth.value -= 1
+  if (dragDepth.value <= 0) clearDrag()
+}
+
+async function onDropImport(dir: string, e: DragEvent) {
+  e.preventDefault()
+  clearDrag()
   const paths = collectDroppedPaths(e.dataTransfer?.files)
   if (!paths.length) {
     error.value = '拖入的内容无法识别为本地文件'
     return
   }
-  e.preventDefault()
-  await importPaths(paths)
+  await importPaths(paths, dir)
+}
+
+async function onDrop(e: DragEvent) {
+  await onDropImport('', e)
 }
 
 async function removeEntry(node: LibraryTreeNode) {
@@ -414,31 +556,9 @@ onUnmounted(() => {
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
-        <button
-          type="button"
-          class="btn-secondary"
-          :disabled="busy || generating"
-          @click="startCreateFolder"
-        >
-          <Icon name="folder-plus" :size="12" />
-          新建目录
-        </button>
-        <button
-          type="button"
-          class="btn-secondary"
-          :disabled="busy || generating"
-          @click="pasteFromClipboard"
-        >
-          粘贴文件
-        </button>
-        <button
-          type="button"
-          class="btn-secondary"
-          :disabled="busy || generating"
-          @click="uploadFiles"
-        >
-          上传文件
-        </button>
+        <span class="library-count">
+          已选网站 {{ selectedWebsiteCount }} / 文件 {{ selectedFileCount }}
+        </span>
         <button
           type="button"
           class="btn-primary"
@@ -512,9 +632,6 @@ onUnmounted(() => {
 
       <div class="library-head">
         <div class="field-label" style="margin: 0">资料库</div>
-        <span class="library-count">
-          已选网站 {{ selectedWebsiteCount }} / 文件 {{ selectedFileCount }}
-        </span>
       </div>
 
       <p v-if="truncated" class="library-trunc muted">
@@ -552,10 +669,13 @@ onUnmounted(() => {
 
       <div
         class="library-tree-wrap"
-        :class="{ 'is-drag': dragOver }"
-        @dragover.prevent="dragOver = true"
-        @dragleave="dragOver = false"
+        :class="{ 'is-drag': dragOver && dropImportDir === '' }"
+        @dragenter="onWrapDragEnter"
+        @dragover="onWrapDragOver"
+        @dragleave="onWrapDragLeave"
         @drop.prevent="onDrop"
+        @scroll="closeCtxMenu"
+        @contextmenu.prevent="onBlankContext"
       >
         <LibraryTree
           v-if="!isEmpty"
@@ -565,20 +685,34 @@ onUnmounted(() => {
           :active-path="activePath"
           :selected-ids="selectedIds"
           :busy="busy || generating"
+          :drop-import-dir="dropImportDir"
           @select-root="onSelectRoot"
           @activate-dir="onActivateDir"
           @activate-file="onActivateFile"
           @toggle-select="toggleSelect"
-          @delete="removeEntry"
+          @context-blank="onBlankContext"
+          @context-root="onRootContext"
+          @context-node="onNodeContext"
+          @drag-over-import="onDragOverImport"
+          @drop-import="onDropImport"
         />
         <div v-else class="library-empty muted">
-          当前还没有资料。可用「新建目录」或「上传文件」添加。
+          当前还没有资料。在空白处右键可新建文件夹、粘贴或上传文件。
         </div>
       </div>
 
+      <LibraryContextMenu
+        v-if="ctxMenu"
+        :x="ctxMenu.x"
+        :y="ctxMenu.y"
+        :items="ctxItems"
+        @pick="onCtxPick"
+        @close="closeCtxMenu"
+      />
+
       <p class="library-hint muted">
         <Icon name="info" :size="14" />
-        资料保存在 data/library/；生成画像时再分配产品 ID，并复制快照到 products/{id}/inputs/。
+        资料保存在 data/library/。树上右键可整理；Ctrl+V 粘贴到焦点目录。生成画像时再分配产品 ID。
       </p>
 
       <p v-if="message" class="library-feedback ok">{{ message }}</p>

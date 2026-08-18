@@ -10,6 +10,7 @@ const props = defineProps<{
   activePath: string
   selectedIds: Set<string>
   busy?: boolean
+  dropImportDir?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -17,7 +18,11 @@ const emit = defineEmits<{
   'activate-dir': [relativePath: string]
   'activate-file': [relativePath: string]
   'toggle-select': [relativePath: string]
-  delete: [node: LibraryTreeNode]
+  'context-blank': [event: MouseEvent]
+  'context-root': [event: MouseEvent]
+  'context-node': [event: MouseEvent, node: LibraryTreeNode]
+  'drag-over-import': [dir: string]
+  'drop-import': [dir: string, event: DragEvent]
 }>()
 
 const visibleNodes = computed(() => flattenVisible(props.nodes, props.expanded))
@@ -52,19 +57,115 @@ function isFocused(node: LibraryTreeNode): boolean {
   return node.kind === 'dir' && props.focusDir === node.relativePath
 }
 
+function dropDirFor(node: LibraryTreeNode): string {
+  if (node.kind === 'dir') return node.relativePath
+  const parts = node.relativePath.replace(/\\/g, '/').split('/').filter(Boolean)
+  parts.pop()
+  return parts.join('/')
+}
+
+function isFileDrag(event: DragEvent): boolean {
+  return Boolean(event.dataTransfer?.types?.includes('Files'))
+}
+
+function onRowDragOver(event: DragEvent, node: LibraryTreeNode) {
+  if (!isFileDrag(event)) return
+  event.preventDefault()
+  event.stopPropagation()
+  if (props.busy) return
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+  emit('drag-over-import', dropDirFor(node))
+}
+
+function onRowDrop(event: DragEvent, node: LibraryTreeNode) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (props.busy) return
+  emit('drop-import', dropDirFor(node), event)
+}
+
+function onRootDragOver(event: DragEvent) {
+  if (!isFileDrag(event)) return
+  event.preventDefault()
+  event.stopPropagation()
+  if (props.busy) return
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+  emit('drag-over-import', '')
+}
+
+function onRootDrop(event: DragEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (props.busy) return
+  emit('drop-import', '', event)
+}
+
+function onTreeBlankDragOver(event: DragEvent) {
+  if (!isFileDrag(event)) return
+  event.preventDefault()
+  event.stopPropagation()
+  if (props.busy) return
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+  emit('drag-over-import', '')
+}
+
+function onTreeBlankDrop(event: DragEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (props.busy) return
+  emit('drop-import', '', event)
+}
+
+function isDropTarget(node: LibraryTreeNode): boolean {
+  if (props.dropImportDir == null) return false
+  return node.kind === 'dir' && node.relativePath === props.dropImportDir
+}
+
 function onActivate(node: LibraryTreeNode) {
   if (node.kind === 'dir') emit('activate-dir', node.relativePath)
   else emit('activate-file', node.relativePath)
 }
+
+function onRowContext(event: MouseEvent, node: LibraryTreeNode) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (props.busy) return
+  emit('context-node', event, node)
+}
+
+function onRootContext(event: MouseEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (props.busy) return
+  emit('context-root', event)
+}
+
+function onTreeBlankContext(event: MouseEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  if (props.busy) return
+  emit('context-blank', event)
+}
 </script>
 
 <template>
-  <div class="library-tree">
+  <div
+    class="library-tree"
+    @contextmenu="onTreeBlankContext"
+    @dragover="onTreeBlankDragOver"
+    @drop="onTreeBlankDrop"
+  >
     <div
       class="library-tree-row"
-      :class="{ 'is-focused': rootFocused }"
+      :class="{
+        'is-focused': rootFocused,
+        'is-drop-target': dropImportDir === '',
+      }"
       :style="{ paddingLeft: '8px' }"
       @click="emit('select-root')"
+      @contextmenu="onRootContext"
+      @dragover="onRootDragOver"
+      @drop="onRootDrop"
     >
       <span class="library-tree-chevron" aria-hidden="true">
         <Icon name="chevron-down" :size="12" />
@@ -84,9 +185,13 @@ function onActivate(node: LibraryTreeNode) {
       :class="{
         'is-focused': isFocused(node),
         'is-checked': node.kind === 'file' && selectedIds.has(node.relativePath),
+        'is-drop-target': isDropTarget(node),
       }"
       :style="{ paddingLeft: `${8 + node.depth * 16}px` }"
       @click="!busy && onActivate(node)"
+      @contextmenu="onRowContext($event, node)"
+      @dragover="onRowDragOver($event, node)"
+      @drop="onRowDrop($event, node)"
     >
       <button
         v-if="node.kind === 'dir'"
@@ -128,16 +233,6 @@ function onActivate(node: LibraryTreeNode) {
           </div>
         </div>
       </div>
-
-      <button
-        type="button"
-        class="icon-btn library-delete"
-        title="删除"
-        :disabled="busy"
-        @click.stop="emit('delete', node)"
-      >
-        <Icon name="trash" :size="13" />
-      </button>
     </div>
   </div>
 </template>
