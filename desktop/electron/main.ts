@@ -36,11 +36,16 @@ import {
   deleteWebsite,
   ensureLibraryDirs,
   importFilesFromPaths,
-  listFilesDir,
   listWebsites,
   pasteClipboardFiles,
   pickAndImportFiles,
 } from './library/library-service'
+import {
+  flattenEntries,
+  listFilesTree,
+  nextFocusAfterDelete,
+  resolveExistingFocusDir,
+} from './library/library-tree'
 import type {
   LibrarySnapshot,
   ProfileGenerateInput,
@@ -304,15 +309,19 @@ async function buildAppStatus(): Promise<AppStatus> {
   }
 }
 
-function buildLibrarySnapshot(cwd = ''): LibrarySnapshot {
+function buildLibrarySnapshot(focusDir = ''): LibrarySnapshot {
   const workspaceRoot = getWorkspaceRoot()
   ensureLibraryDirs(workspaceRoot)
-  const listed = listFilesDir(cwd, workspaceRoot)
+  const { tree, truncated } = listFilesTree(workspaceRoot)
+  const resolvedFocus = resolveExistingFocusDir(tree, focusDir)
   return {
     websites: listWebsites(workspaceRoot),
-    cwd: listed.cwd,
-    entries: listed.entries,
-    filesRootLabel: listed.cwd ? `data/library/files/${listed.cwd}` : 'data/library/files',
+    focusDir: resolvedFocus,
+    tree,
+    truncated,
+    filesRootLabel: 'data/library/files',
+    cwd: resolvedFocus,
+    entries: flattenEntries(tree),
   }
 }
 
@@ -618,8 +627,8 @@ function registerIpcHandlers(): void {
     (_event, payload: { cwd?: string; name: string }) => {
       const cwd = payload.cwd ?? ''
       try {
-        createFolder(cwd, payload.name)
-        return libraryOk('已创建目录', cwd)
+        const created = createFolder(cwd, payload.name)
+        return libraryOk('已创建目录', created.relativePath)
       } catch (err) {
         return libraryFail(err, cwd)
       }
@@ -702,8 +711,9 @@ function registerIpcHandlers(): void {
     (_event, payload: { relativePath: string; cwd?: string }) => {
       const cwd = payload.cwd ?? ''
       try {
+        const nextFocus = nextFocusAfterDelete(payload.relativePath, cwd)
         deleteFilesEntry(payload.relativePath)
-        return libraryOk('已删除', cwd)
+        return libraryOk('已删除', nextFocus)
       } catch (err) {
         return libraryFail(err, cwd)
       }

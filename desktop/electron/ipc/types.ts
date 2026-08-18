@@ -837,11 +837,25 @@ export interface FileEntry {
   modifiedAt?: string
 }
 
+export interface LibraryTreeNode {
+  name: string
+  kind: 'dir' | 'file'
+  relativePath: string
+  depth: number
+  sizeBytes?: number
+  modifiedAt?: string
+  children: LibraryTreeNode[]
+}
+
 export interface LibrarySnapshot {
   websites: WebsiteItem[]
-  cwd: string
-  entries: FileEntry[]
+  focusDir: string
+  tree: LibraryTreeNode[]
+  truncated: boolean
   filesRootLabel: string
+  /** @deprecated I-01 起与 focusDir 相同 */
+  cwd?: string
+  entries?: FileEntry[]
 }
 
 export interface LibraryMutationResult {

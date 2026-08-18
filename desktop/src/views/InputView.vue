@@ -2,10 +2,11 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
-import type { FileEntry, LibrarySnapshot, WebsiteItem } from '../types/library'
+import type { LibrarySnapshot, LibraryTreeNode, WebsiteItem } from '../types/library'
 import { useWorkspace } from '../composables/useWorkspace'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
+import LibraryTree from '../components/library/LibraryTree.vue'
 
 const meta = SECTION_META.input
 const router = useRouter()
@@ -13,9 +14,11 @@ const { resetAgentForGenerate, generating } = useWorkspace()
 
 const websiteUrl = ref('')
 const websites = ref<WebsiteItem[]>([])
-const cwd = ref('')
-const entries = ref<FileEntry[]>([])
-const filesRootLabel = ref('data/library/files')
+const focusDir = ref('')
+const activePath = ref('')
+const tree = ref<LibraryTreeNode[]>([])
+const truncated = ref(false)
+const expanded = ref<Set<string>>(new Set())
 const selectedIds = ref<Set<string>>(new Set())
 const selectedWebsiteIds = ref<Set<string>>(new Set())
 const busy = ref(false)
@@ -27,40 +30,56 @@ const newFolderName = ref('')
 const folderInputRef = ref<HTMLInputElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 
+function collectFilePaths(nodes: LibraryTreeNode[]): string[] {
+  const out: string[] = []
+  for (const node of nodes) {
+    if (node.kind === 'file') out.push(node.relativePath)
+    if (node.children.length) out.push(...collectFilePaths(node.children))
+  }
+  return out
+}
+
+function collectAllPaths(nodes: LibraryTreeNode[]): Set<string> {
+  const out = new Set<string>([''])
+  for (const node of nodes) {
+    out.add(node.relativePath)
+    for (const child of collectAllPaths(node.children)) out.add(child)
+  }
+  return out
+}
+
+function parentDir(relativePath: string): string {
+  const parts = relativePath.replace(/\\/g, '/').split('/').filter(Boolean)
+  parts.pop()
+  return parts.join('/')
+}
+
+const filePaths = computed(() => collectFilePaths(tree.value))
 const selectedFileCount = computed(
-  () =>
-    [...selectedIds.value].filter(
-      (id) => entries.value.find((e) => e.relativePath === id)?.kind === 'file',
-    ).length,
+  () => [...selectedIds.value].filter((id) => filePaths.value.includes(id)).length,
 )
 const selectedWebsiteCount = computed(() => selectedWebsiteIds.value.size)
 const selectedCount = computed(() => selectedFileCount.value + selectedWebsiteCount.value)
 const canGenerate = computed(
   () => selectedCount.value > 0 && !busy.value && !generating.value,
 )
-const crumbs = computed(() => {
-  if (!cwd.value) return [] as Array<{ label: string; path: string }>
-  const parts = cwd.value.split('/').filter(Boolean)
-  const out: Array<{ label: string; path: string }> = []
-  let acc = ''
-  for (const part of parts) {
-    acc = acc ? `${acc}/${part}` : part
-    out.push({ label: part, path: acc })
-  }
-  return out
-})
+const isEmpty = computed(() => tree.value.length === 0)
 
 function applySnapshot(snap: LibrarySnapshot) {
   websites.value = snap.websites
-  cwd.value = snap.cwd
-  entries.value = snap.entries
-  filesRootLabel.value = snap.filesRootLabel
-  const validFiles = new Set(snap.entries.map((e) => e.relativePath))
+  tree.value = snap.tree ?? []
+  truncated.value = Boolean(snap.truncated)
+  focusDir.value = snap.focusDir ?? snap.cwd ?? ''
+  const validFiles = new Set(collectFilePaths(tree.value))
   selectedIds.value = new Set([...selectedIds.value].filter((id) => validFiles.has(id)))
   const validSites = new Set(snap.websites.map((w) => w.relativePath))
   selectedWebsiteIds.value = new Set(
     [...selectedWebsiteIds.value].filter((id) => validSites.has(id)),
   )
+  const all = collectAllPaths(tree.value)
+  if (activePath.value && !all.has(activePath.value)) {
+    activePath.value = focusDir.value
+  }
 }
 
 function applyResult(res: { ok: boolean; message: string; snapshot: LibrarySnapshot }) {
@@ -72,13 +91,13 @@ function applyResult(res: { ok: boolean; message: string; snapshot: LibrarySnaps
   }
 }
 
-async function refresh(nextCwd = cwd.value) {
+async function refresh() {
   if (!window.ftcs?.listLibrary) {
     error.value = '桌面 API 不可用'
     return
   }
   error.value = ''
-  const snap = await window.ftcs.listLibrary(nextCwd)
+  const snap = await window.ftcs.listLibrary(focusDir.value)
   applySnapshot(snap)
 }
 
@@ -96,11 +115,27 @@ function toggleWebsite(id: string) {
   selectedWebsiteIds.value = next
 }
 
-function formatSize(n?: number): string {
-  if (n == null) return ''
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+function toggleExpanded(rel: string) {
+  const next = new Set(expanded.value)
+  if (next.has(rel)) next.delete(rel)
+  else next.add(rel)
+  expanded.value = next
+}
+
+function onSelectRoot() {
+  focusDir.value = ''
+  activePath.value = ''
+}
+
+function onActivateDir(rel: string) {
+  focusDir.value = rel
+  activePath.value = rel
+  toggleExpanded(rel)
+}
+
+function onActivateFile(rel: string) {
+  focusDir.value = parentDir(rel)
+  activePath.value = rel
 }
 
 async function addWebsite() {
@@ -109,7 +144,7 @@ async function addWebsite() {
   error.value = ''
   message.value = ''
   try {
-    const res = await window.ftcs.addWebsite(websiteUrl.value, cwd.value)
+    const res = await window.ftcs.addWebsite(websiteUrl.value, focusDir.value)
     applyResult(res)
     if (res.ok) {
       websiteUrl.value = ''
@@ -134,31 +169,12 @@ async function removeWebsite(item: WebsiteItem) {
   error.value = ''
   message.value = ''
   try {
-    applyResult(await window.ftcs.deleteWebsite(item.relativePath, cwd.value))
+    applyResult(await window.ftcs.deleteWebsite(item.relativePath, focusDir.value))
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
     busy.value = false
   }
-}
-
-async function openDir(rel: string) {
-  busy.value = true
-  error.value = ''
-  try {
-    await refresh(rel)
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function goUp() {
-  if (!cwd.value) return
-  const parts = cwd.value.split('/').filter(Boolean)
-  parts.pop()
-  await openDir(parts.join('/'))
 }
 
 async function startCreateFolder() {
@@ -185,10 +201,21 @@ async function confirmCreateFolder() {
   busy.value = true
   error.value = ''
   message.value = ''
+  const parent = focusDir.value
   try {
-    applyResult(await window.ftcs.createLibraryFolder(name, cwd.value))
-    creatingFolder.value = false
-    newFolderName.value = ''
+    const res = await window.ftcs.createLibraryFolder(name, parent)
+    applyResult(res)
+    if (res.ok) {
+      creatingFolder.value = false
+      newFolderName.value = ''
+      const next = new Set(expanded.value)
+      if (parent) next.add(parent)
+      if (res.snapshot.focusDir) {
+        next.add(res.snapshot.focusDir)
+        activePath.value = res.snapshot.focusDir
+      }
+      expanded.value = next
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -202,7 +229,7 @@ async function uploadFiles() {
   error.value = ''
   message.value = ''
   try {
-    const res = await window.ftcs.uploadLibraryFiles(cwd.value)
+    const res = await window.ftcs.uploadLibraryFiles(focusDir.value)
     applySnapshot(res.snapshot)
     if (res.message) {
       if (res.ok) message.value = res.message
@@ -221,7 +248,7 @@ async function importPaths(paths: string[]) {
   error.value = ''
   message.value = ''
   try {
-    const res = await window.ftcs.importLibraryPaths(paths, cwd.value)
+    const res = await window.ftcs.importLibraryPaths(paths, focusDir.value)
     applySnapshot(res.snapshot)
     if (res.message) {
       if (res.ok) message.value = res.message
@@ -240,7 +267,7 @@ async function pasteFromClipboard() {
   error.value = ''
   message.value = ''
   try {
-    const res = await window.ftcs.pasteClipboardFiles(cwd.value)
+    const res = await window.ftcs.pasteClipboardFiles(focusDir.value)
     applySnapshot(res.snapshot)
     if (res.message) {
       if (res.ok) message.value = res.message
@@ -253,7 +280,7 @@ async function pasteFromClipboard() {
   }
 }
 
-function collectFilePaths(fileList: FileList | File[] | null | undefined): string[] {
+function collectDroppedPaths(fileList: FileList | File[] | null | undefined): string[] {
   if (!fileList || !window.ftcs?.getPathForFile) return []
   const files = Array.from(fileList)
   return files.map((f) => window.ftcs!.getPathForFile(f)).filter(Boolean)
@@ -266,7 +293,7 @@ async function onPaste(e: ClipboardEvent) {
     if (!hasOsFiles) return
   }
 
-  const fromEvent = collectFilePaths(e.clipboardData?.files)
+  const fromEvent = collectDroppedPaths(e.clipboardData?.files)
   if (fromEvent.length) {
     e.preventDefault()
     await importPaths(fromEvent)
@@ -291,7 +318,7 @@ function onGlobalKeydown(e: KeyboardEvent) {
 
 async function onDrop(e: DragEvent) {
   dragOver.value = false
-  const paths = collectFilePaths(e.dataTransfer?.files)
+  const paths = collectDroppedPaths(e.dataTransfer?.files)
   if (!paths.length) {
     error.value = '拖入的内容无法识别为本地文件'
     return
@@ -300,18 +327,27 @@ async function onDrop(e: DragEvent) {
   await importPaths(paths)
 }
 
-async function removeEntry(entry: FileEntry) {
+async function removeEntry(node: LibraryTreeNode) {
   if (!window.ftcs?.deleteLibraryEntry || busy.value) return
   const tip =
-    entry.kind === 'dir'
-      ? `删除目录「${entry.name}」及其全部内容？`
-      : `删除文件「${entry.name}」？`
+    node.kind === 'dir'
+      ? `删除目录「${node.name}」及其全部内容？`
+      : `删除文件「${node.name}」？`
   if (!window.confirm(tip)) return
   busy.value = true
   error.value = ''
   message.value = ''
   try {
-    applyResult(await window.ftcs.deleteLibraryEntry(entry.relativePath, cwd.value))
+    const res = await window.ftcs.deleteLibraryEntry(node.relativePath, focusDir.value)
+    applyResult(res)
+    if (res.ok) {
+      const next = new Set(expanded.value)
+      next.delete(node.relativePath)
+      expanded.value = next
+      if (activePath.value === node.relativePath || activePath.value.startsWith(`${node.relativePath}/`)) {
+        activePath.value = res.snapshot.focusDir || ''
+      }
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -319,19 +355,13 @@ async function removeEntry(entry: FileEntry) {
   }
 }
 
-function onEntryActivate(entry: FileEntry) {
-  if (entry.kind === 'dir') void openDir(entry.relativePath)
-  else toggleSelect(entry.relativePath)
-}
-
 async function generateProfile() {
   if (!window.ftcs?.generateProfile || !canGenerate.value) return
 
   const websitePaths = [...selectedWebsiteIds.value]
-  const filePaths = [...selectedIds.value].filter(
-    (id) => entries.value.find((e) => e.relativePath === id)?.kind === 'file',
-  )
-  if (!websitePaths.length && !filePaths.length) {
+  const validFiles = new Set(filePaths.value)
+  const fileList = [...selectedIds.value].filter((id) => validFiles.has(id))
+  if (!websitePaths.length && !fileList.length) {
     error.value = '请先勾选至少一个公司网站或资料文件'
     return
   }
@@ -345,10 +375,10 @@ async function generateProfile() {
   busy.value = true
   error.value = ''
   message.value = ''
-  resetAgentForGenerate(websitePaths.length + filePaths.length)
+  resetAgentForGenerate(websitePaths.length + fileList.length)
 
   try {
-    const res = await window.ftcs.generateProfile({ websitePaths, filePaths })
+    const res = await window.ftcs.generateProfile({ websitePaths, filePaths: fileList })
     if (!res.ok) {
       error.value = res.message
       return
@@ -366,7 +396,7 @@ async function generateProfile() {
 }
 
 onMounted(() => {
-  void refresh('')
+  void refresh()
   window.addEventListener('keydown', onGlobalKeydown)
   void nextTick(() => panelRef.value?.focus())
 })
@@ -481,34 +511,15 @@ onUnmounted(() => {
       </ul>
 
       <div class="library-head">
-        <div>
-          <div class="field-label" style="margin: 0">文件管理器</div>
-          <div class="library-crumbs mono muted">
-            <button type="button" class="crumb" :disabled="!cwd || busy" @click="openDir('')">
-              files
-            </button>
-            <template v-for="c in crumbs" :key="c.path">
-              <span>/</span>
-              <button type="button" class="crumb" :disabled="busy" @click="openDir(c.path)">
-                {{ c.label }}
-              </button>
-            </template>
-          </div>
-        </div>
+        <div class="field-label" style="margin: 0">资料库</div>
         <span class="library-count">
-          {{ entries.length }} 项 · 已选网站 {{ selectedWebsiteCount }} / 文件
-          {{ selectedFileCount }}
+          已选网站 {{ selectedWebsiteCount }} / 文件 {{ selectedFileCount }}
         </span>
       </div>
 
-      <div class="library-toolbar">
-        <button type="button" class="btn-secondary btn-sm" :disabled="!cwd || busy" @click="goUp">
-          <Icon name="chevron-left" :size="12" />
-          上级
-        </button>
-        <span class="mono muted library-path">{{ filesRootLabel }}</span>
-        <span class="muted library-tip">勾选资料后点「生成画像」</span>
-      </div>
+      <p v-if="truncated" class="library-trunc muted">
+        资料超过显示上限，仅展示部分节点。请把目录拆得更浅后再打开。
+      </p>
 
       <div v-if="creatingFolder" class="mkdir-row">
         <input
@@ -516,7 +527,7 @@ onUnmounted(() => {
           v-model="newFolderName"
           class="text-input"
           type="text"
-          placeholder="新目录名称"
+          placeholder="新目录名称（将建在当前焦点目录下）"
           :disabled="busy"
           @keydown.enter.prevent="confirmCreateFolder"
           @keydown.esc.prevent="cancelCreateFolder"
@@ -539,64 +550,30 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <ul
-        v-if="entries.length"
-        class="library-list"
-        :class="{ 'is-drag': dragOver }"
-        @dragover.prevent="dragOver = true"
-        @dragleave="dragOver = false"
-        @drop.prevent="onDrop"
-      >
-        <li
-          v-for="entry in entries"
-          :key="entry.relativePath"
-          class="library-row"
-          :class="{ selected: selectedIds.has(entry.relativePath) }"
-          @dblclick="onEntryActivate(entry)"
-        >
-          <button
-            type="button"
-            class="library-check"
-            :class="{ on: selectedIds.has(entry.relativePath) }"
-            :aria-pressed="selectedIds.has(entry.relativePath)"
-            :disabled="entry.kind === 'dir'"
-            @click="entry.kind === 'file' && toggleSelect(entry.relativePath)"
-          >
-            <Icon v-if="selectedIds.has(entry.relativePath)" name="check" :size="10" />
-          </button>
-          <button type="button" class="library-open" @click="onEntryActivate(entry)">
-            <Icon
-              :name="entry.kind === 'dir' ? 'folder' : 'file-text'"
-              :size="14"
-              class="library-type-icon"
-            />
-            <div class="library-meta">
-              <div class="library-title">{{ entry.name }}</div>
-              <div class="muted">
-                {{ entry.kind === 'dir' ? '文件夹' : formatSize(entry.sizeBytes) }}
-              </div>
-            </div>
-          </button>
-          <button
-            type="button"
-            class="icon-btn library-delete"
-            title="删除"
-            :disabled="busy || generating"
-            @click="removeEntry(entry)"
-          >
-            <Icon name="trash" :size="13" />
-          </button>
-        </li>
-      </ul>
       <div
-        v-else
-        class="library-empty muted"
+        class="library-tree-wrap"
         :class="{ 'is-drag': dragOver }"
         @dragover.prevent="dragOver = true"
         @dragleave="dragOver = false"
         @drop.prevent="onDrop"
       >
-        当前目录为空。可「上传文件」、Ctrl+V /「粘贴文件」，或「新建目录」。
+        <LibraryTree
+          v-if="!isEmpty"
+          :nodes="tree"
+          :expanded="expanded"
+          :focus-dir="focusDir"
+          :active-path="activePath"
+          :selected-ids="selectedIds"
+          :busy="busy || generating"
+          @select-root="onSelectRoot"
+          @activate-dir="onActivateDir"
+          @activate-file="onActivateFile"
+          @toggle-select="toggleSelect"
+          @delete="removeEntry"
+        />
+        <div v-else class="library-empty muted">
+          当前还没有资料。可用「新建目录」或「上传文件」添加。
+        </div>
       </div>
 
       <p class="library-hint muted">

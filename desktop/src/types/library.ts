@@ -15,11 +15,26 @@ export interface FileEntry {
   modifiedAt?: string
 }
 
+export interface LibraryTreeNode {
+  name: string
+  kind: 'dir' | 'file'
+  relativePath: string
+  depth: number
+  sizeBytes?: number
+  modifiedAt?: string
+  children: LibraryTreeNode[]
+}
+
 export interface LibrarySnapshot {
   websites: WebsiteItem[]
-  cwd: string
-  entries: FileEntry[]
+  /** 焦点目录，供新建/上传/粘贴；根为 '' */
+  focusDir: string
+  tree: LibraryTreeNode[]
+  truncated: boolean
   filesRootLabel: string
+  /** @deprecated I-01 起不再用于浏览；与 focusDir 相同 */
+  cwd?: string
+  entries?: FileEntry[]
 }
 
 export interface LibraryMutationResult {
