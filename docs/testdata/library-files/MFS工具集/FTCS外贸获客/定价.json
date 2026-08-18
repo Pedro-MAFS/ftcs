@@ -1,0 +1,9 @@
+{
+  "currency": "CNY",
+  "note": "虚拟套餐，仅供画像测试",
+  "plans": [
+    { "name": "试用", "price": 0, "quota": "体验额度" },
+    { "name": "专业版", "price": 199, "period": "月", "quota": "官方模型+搜索" },
+    { "name": "团队版", "price": 599, "period": "月", "seats": 5 }
+  ]
+}

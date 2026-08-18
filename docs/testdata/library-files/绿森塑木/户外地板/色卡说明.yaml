@@ -1,0 +1,11 @@
+palette:
+  - code: TEAK
+    name: 柚木
+  - code: OAK
+    name: 橡木
+  - code: CHARCOAL
+    name: 木炭
+  - code: GREY
+    name: 灰色
+custom_color_moq_sqm: 2000
+note: 虚拟色卡，供 csv/yaml 混合生成测试

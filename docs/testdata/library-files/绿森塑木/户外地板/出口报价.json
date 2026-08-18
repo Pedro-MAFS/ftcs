@@ -1,0 +1,11 @@
+{
+  "company": "Shandong Lvsen WPC Composite Co., Ltd.",
+  "incoterms": "FOB Qingdao",
+  "currency": "USD",
+  "validity": "2026-09-30",
+  "note": "虚拟报价，仅供画像测试",
+  "items": [
+    { "sku": "LSCO-1P", "desc": "SF-3.0 WPC decking teak", "unit": "sqm", "price": 21.5 },
+    { "sku": "LSCO-2P", "desc": "SF-3.0 WPC decking oak", "unit": "sqm", "price": 21.5 }
+  ]
+}

@@ -1,0 +1,5 @@
+model,name_en,size_mm,surface,moq_sqm,price_range_usd
+LSCO-1P,SF-3.0 teak,140x22,matte co-ex,500,18-24
+LSCO-2P,SF-3.0 oak,140x22,matte co-ex,500,18-24
+LSCO-3P,SF-3.0 charcoal,140x22,matte co-ex,500,18-24
+LSCO-4P,SF-3.0 grey,140x22,matte co-ex,800,19-26

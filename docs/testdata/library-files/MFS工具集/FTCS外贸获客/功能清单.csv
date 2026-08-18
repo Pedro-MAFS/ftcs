@@ -1,0 +1,8 @@
+module,name,status
+input,资料库工程树,ga
+profile,画像提取,ga
+keywords,关键词扩展,ga
+explore,R1 聚合探索,ga
+leads,线索评分去重,ga
+email,开发信草稿,ga
+office,Office 抽文本,planned
