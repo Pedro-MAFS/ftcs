@@ -11,6 +11,7 @@ import type {
   OpenCodeInstallResult,
   OfficeCliInstallProgress,
   OfficeCliInstallResult,
+  OfficeCliReadyResult,
 } from './onboarding'
 import type { UpdateCheckResult } from './update'
 
@@ -527,6 +528,7 @@ declare global {
       onOfficeCliInstallProgress: (
         handler: (progress: OfficeCliInstallProgress) => void,
       ) => () => void
+      getOfficeCliReady: () => Promise<OfficeCliReadyResult>
       quitApp: () => Promise<{ ok: boolean }>
       getAppVersion: () => Promise<string>
       checkForUpdate: (opts?: { forceNotify?: boolean }) => Promise<UpdateCheckResult>

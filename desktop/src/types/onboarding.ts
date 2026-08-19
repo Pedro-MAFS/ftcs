@@ -154,6 +154,11 @@ export type OfficeCliInstallResult =
       manualUrl: string
     }
 
+export interface OfficeCliReadyResult {
+  ready: boolean
+  installSupported: boolean
+}
+
 export const TOUR_STEPS = [
   {
     id: 'input',

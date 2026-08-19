@@ -66,6 +66,7 @@ export const IPC = {
   RUNTIME_INSTALL_OPENCODE_PROGRESS: 'runtime:install-opencode-progress',
   RUNTIME_INSTALL_OFFICECLI: 'runtime:install-officecli',
   RUNTIME_INSTALL_OFFICECLI_PROGRESS: 'runtime:install-officecli-progress',
+  RUNTIME_OFFICECLI_READY: 'runtime:officecli-ready',
   APP_QUIT: 'app:quit',
   UPDATE_CHECK: 'update:check',
   UPDATE_SNOOZE: 'update:snooze',
@@ -248,6 +249,11 @@ export type OfficeCliInstallResult =
       logPath?: string
       manualUrl: string
     }
+
+export interface OfficeCliReadyResult {
+  ready: boolean
+  installSupported: boolean
+}
 
 export interface AuthSessionSnapshot {
   loggedIn: boolean

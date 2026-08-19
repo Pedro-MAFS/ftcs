@@ -21,7 +21,13 @@ import {
   type LibrarySelectGesture,
 } from '../components/library/library-select'
 import { expandGenerateSelection } from '../components/library/library-generate'
+import {
+  hasOfficeGateFiles,
+  listOfficeGateFiles,
+  stripOfficeGateFiles,
+} from '../components/library/library-office'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
+import OfficeCliGenerateGateDialog from '../components/library/OfficeCliGenerateGateDialog.vue'
 
 const meta = SECTION_META.input
 const router = useRouter()
@@ -54,6 +60,23 @@ const confirmGenerate = ref(false)
 const confirmGenerateMessage = ref('')
 /** 不要放进 ref：Vue Proxy 无法经 Electron IPC 克隆 */
 let pendingGenerate: { websitePaths: string[]; filePaths: string[] } | null = null
+
+const officeGateOpen = ref(false)
+const officeGateBusy = ref(false)
+const officeGateProgress = ref('')
+const officeGateError = ref('')
+const officeGateManualUrl = ref('')
+const officeGateInstallSupported = ref(true)
+const officeGateCount = ref(0)
+let stopOfficeCliProgress: (() => void) | null = null
+/** 门禁 / 合并确认共用的展开结果（勿放 ref） */
+let pendingAfterExpand: {
+  websitePaths: string[]
+  filePaths: string[]
+  needsConfirm: boolean
+  confirmMessage: string
+  officeCount: number
+} | null = null
 
 function collectFilePaths(nodes: LibraryTreeNode[]): string[] {
   const out: string[] = []
@@ -118,7 +141,8 @@ const canGenerate = computed(
     selectedCount.value > 0 &&
     !busy.value &&
     !generating.value &&
-    !confirmGenerate.value,
+    !confirmGenerate.value &&
+    !officeGateOpen.value,
 )
 const selectedCountTitle = computed(() => {
   const parts = [
@@ -740,7 +764,7 @@ async function removeEntry(node: LibraryTreeNode) {
   }
 }
 
-function generateProfile() {
+async function generateProfile() {
   if (!window.ftcs?.generateProfile || !canGenerate.value) return
 
   error.value = ''
@@ -755,17 +779,50 @@ function generateProfile() {
     return
   }
 
-  if (expand.needsConfirm) {
-    pendingGenerate = {
-      websitePaths: [...expand.websitePaths],
-      filePaths: [...expand.filePaths],
+  const pending = {
+    websitePaths: [...expand.websitePaths],
+    filePaths: [...expand.filePaths],
+    needsConfirm: expand.needsConfirm,
+    confirmMessage: expand.confirmMessage,
+    officeCount: listOfficeGateFiles(expand.filePaths).length,
+  }
+
+  if (hasOfficeGateFiles(pending.filePaths)) {
+    const readyInfo = window.ftcs.getOfficeCliReady
+      ? await window.ftcs.getOfficeCliReady()
+      : { ready: false, installSupported: window.ftcs.platform === 'win32' }
+    if (!readyInfo.ready) {
+      pendingAfterExpand = pending
+      officeGateCount.value = pending.officeCount
+      officeGateInstallSupported.value = readyInfo.installSupported
+      officeGateError.value = ''
+      officeGateProgress.value = ''
+      officeGateManualUrl.value = ''
+      officeGateOpen.value = true
+      return
     }
-    confirmGenerateMessage.value = expand.confirmMessage
+  }
+
+  proceedAfterOfficeGate(pending)
+}
+
+function proceedAfterOfficeGate(pending: {
+  websitePaths: string[]
+  filePaths: string[]
+  needsConfirm: boolean
+  confirmMessage: string
+  officeCount: number
+}) {
+  if (pending.needsConfirm) {
+    pendingGenerate = {
+      websitePaths: [...pending.websitePaths],
+      filePaths: [...pending.filePaths],
+    }
+    confirmGenerateMessage.value = pending.confirmMessage
     confirmGenerate.value = true
     return
   }
-
-  void runGenerate(expand.websitePaths, expand.filePaths)
+  void runGenerate(pending.websitePaths, pending.filePaths)
 }
 
 function cancelGenerateConfirm() {
@@ -779,6 +836,96 @@ function confirmGenerateMerge() {
   pendingGenerate = null
   if (!pending) return
   void runGenerate(pending.websitePaths, pending.filePaths)
+}
+
+function closeOfficeGate() {
+  officeGateOpen.value = false
+  officeGateBusy.value = false
+  officeGateProgress.value = ''
+  officeGateError.value = ''
+  officeGateManualUrl.value = ''
+  stopOfficeCliProgress?.()
+  stopOfficeCliProgress = null
+}
+
+function cancelOfficeGate() {
+  if (officeGateBusy.value) return
+  closeOfficeGate()
+  pendingAfterExpand = null
+}
+
+function skipOfficeGate() {
+  if (officeGateBusy.value) return
+  const pending = pendingAfterExpand
+  closeOfficeGate()
+  pendingAfterExpand = null
+  if (!pending) return
+
+  const skippedCount = listOfficeGateFiles(pending.filePaths).length
+  const nextFiles = stripOfficeGateFiles(pending.filePaths)
+  if (pending.websitePaths.length === 0 && nextFiles.length === 0) {
+    error.value =
+      '跳过 Office 文件后没有可生成的资料，请安装 OfficeCLI 或勾选其它资料。'
+    return
+  }
+
+  const confirmMessage =
+    pending.needsConfirm && skippedCount > 0
+      ? `${pending.confirmMessage}\n\n已跳过 ${skippedCount} 个 Word/Excel/PPT 文件。`
+      : pending.confirmMessage
+
+  proceedAfterOfficeGate({
+    websitePaths: pending.websitePaths,
+    filePaths: nextFiles,
+    needsConfirm: pending.needsConfirm,
+    confirmMessage,
+    officeCount: 0,
+  })
+}
+
+async function installFromOfficeGate() {
+  if (
+    !window.ftcs?.installOfficeCli ||
+    officeGateBusy.value ||
+    !officeGateInstallSupported.value
+  ) {
+    return
+  }
+  officeGateBusy.value = true
+  officeGateProgress.value = '准备安装…'
+  officeGateError.value = ''
+  officeGateManualUrl.value = ''
+  stopOfficeCliProgress?.()
+  stopOfficeCliProgress =
+    window.ftcs.onOfficeCliInstallProgress?.((p) => {
+      officeGateProgress.value = p.message
+    }) ?? null
+  try {
+    const result = await window.ftcs.installOfficeCli()
+    if (!result.ok) {
+      officeGateError.value = result.message
+      officeGateManualUrl.value = result.manualUrl || ''
+      officeGateProgress.value = ''
+      return
+    }
+    const pending = pendingAfterExpand
+    closeOfficeGate()
+    pendingAfterExpand = null
+    if (pending) proceedAfterOfficeGate(pending)
+  } catch (err) {
+    officeGateError.value = err instanceof Error ? err.message : String(err)
+    officeGateProgress.value = ''
+  } finally {
+    officeGateBusy.value = false
+    stopOfficeCliProgress?.()
+    stopOfficeCliProgress = null
+  }
+}
+
+async function openOfficeGateManual() {
+  const url = officeGateManualUrl.value
+  if (!url || !window.ftcs?.openExternal) return
+  await window.ftcs.openExternal(url)
 }
 
 async function runGenerate(websitePaths: string[], fileList: string[]) {
@@ -828,6 +975,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalKeydown)
+  stopOfficeCliProgress?.()
+  stopOfficeCliProgress = null
 })
 </script>
 
@@ -987,6 +1136,19 @@ onUnmounted(() => {
       confirm-label="生成"
       @confirm="confirmGenerateMerge"
       @cancel="cancelGenerateConfirm"
+    />
+    <OfficeCliGenerateGateDialog
+      :open="officeGateOpen"
+      :office-count="officeGateCount"
+      :install-supported="officeGateInstallSupported"
+      :busy="officeGateBusy"
+      :progress="officeGateProgress"
+      :error="officeGateError"
+      :manual-url="officeGateManualUrl"
+      @install="installFromOfficeGate"
+      @skip="skipOfficeGate"
+      @cancel="cancelOfficeGate"
+      @open-manual="openOfficeGateManual"
     />
   </section>
 </template>

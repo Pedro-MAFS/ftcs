@@ -56,6 +56,7 @@ import type {
   OpenCodeInstallResult,
   OfficeCliInstallProgress,
   OfficeCliInstallResult,
+  OfficeCliReadyResult,
   UpdateCheckResult,
 } from './ipc/types'
 
@@ -166,6 +167,8 @@ const api = {
       ipcRenderer.removeListener(IPC.RUNTIME_INSTALL_OFFICECLI_PROGRESS, listener)
     }
   },
+  getOfficeCliReady: (): Promise<OfficeCliReadyResult> =>
+    ipcRenderer.invoke(IPC.RUNTIME_OFFICECLI_READY),
   quitApp: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.APP_QUIT),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke(IPC.APP_GET_VERSION),
   checkForUpdate: (opts?: { forceNotify?: boolean }): Promise<UpdateCheckResult> =>

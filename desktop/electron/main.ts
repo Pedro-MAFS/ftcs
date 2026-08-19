@@ -99,6 +99,10 @@ import { probeEnvironment } from './onboarding/env-probe'
 import { installNodeRuntime } from './runtime/install-node-service'
 import { installOpenCodeRuntime } from './runtime/install-opencode-service'
 import { installOfficeCliRuntime } from './runtime/install-officecli-service'
+import {
+  isOfficeCliInstallSupported,
+  resolveConfiguredOfficeCli,
+} from './runtime/officecli-paths'
 import type {
   NodeInstallProgress,
   OpenCodeInstallProgress,
@@ -553,6 +557,10 @@ function registerIpcHandlers(): void {
       },
     })
   })
+  ipcMain.handle(IPC.RUNTIME_OFFICECLI_READY, () => ({
+    ready: resolveConfiguredOfficeCli() !== null,
+    installSupported: isOfficeCliInstallSupported(),
+  }))
   ipcMain.handle(IPC.APP_QUIT, () => {
     app.quit()
     return { ok: true }
