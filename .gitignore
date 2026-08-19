@@ -32,6 +32,8 @@ workspace/logs/
 
 # IDE / 工具本地目录（不进仓库）
 .cursor/                 # Cursor 本机临时接线
+!.cursor/skills/
+!.cursor/skills/**/
 .opencode/               # OpenCode 本机缓存/插件（跑 serve 时自动生成）
 workspace/.opencode/     # 不再使用；Skills 只用 workspace/skills
 .idea/
