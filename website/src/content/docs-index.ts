@@ -13,12 +13,12 @@ export const docsIndex: DocMeta[] = [
   {
     slug: 'install',
     title: '安装与前置',
-    description: 'Node 22+、Google Chrome、OpenCode、官方/自定义通道与安装包说明',
+    description: 'Node 22+、Google Chrome、OpenCode、可选 OfficeCLI、官方/自定义通道与安装包说明',
   },
   {
     slug: 'workflow',
     title: '推荐使用流程',
-    description: '录入、画像、探索、评分、开发信审核的标准路径',
+    description: '按目录录入、画像、探索、评分、开发信审核的标准路径',
   },
   {
     slug: 'faq',

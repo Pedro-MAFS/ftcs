@@ -25,6 +25,7 @@ export default defineConfig({
       return [
         '/',
         '/download',
+        '/changelog',
         '/docs',
         '/docs/getting-started',
         '/docs/install',

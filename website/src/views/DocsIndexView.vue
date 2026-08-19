@@ -25,6 +25,10 @@ usePageSeo({
         <h2>{{ doc.title }}</h2>
         <p>{{ doc.description }}</p>
       </RouterLink>
+      <RouterLink to="/changelog">
+        <h2>发布日志</h2>
+        <p>从 0.5.0 起记录各版本更新，可对照当前版本与目标版本的差异。</p>
+      </RouterLink>
     </div>
   </div>
 </template>

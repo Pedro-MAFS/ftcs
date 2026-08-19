@@ -35,6 +35,7 @@ function hasAnyMirror(mirrors: DownloadMirror[]): boolean {
         <span>当前版本 {{ siteConfig.version }}</span>
         <span>平台：Windows x64</span>
         <span>前置：Node 22+ · Chrome · OpenCode</span>
+        <RouterLink to="/changelog">发布日志</RouterLink>
       </div>
 
       <p v-if="siteConfig.downloadTip" class="download-tip">
@@ -93,7 +94,9 @@ function hasAnyMirror(mirrors: DownloadMirror[]): boolean {
 
       <p class="muted" style="padding-bottom: 3rem">
         安装说明见
-        <RouterLink to="/docs/install">安装与前置</RouterLink>。
+        <RouterLink to="/docs/install">安装与前置</RouterLink>
+        。版本差异见
+        <RouterLink to="/changelog">发布日志</RouterLink>。
       </p>
     </div>
   </div>

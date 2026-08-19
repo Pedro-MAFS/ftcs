@@ -5,6 +5,7 @@ const {
   bannerVisible,
   result,
   openDownloadPage,
+  openChangelogPage,
   snooze,
   dismiss,
 } = useUpdateCheck()
@@ -33,6 +34,9 @@ const {
     <div class="update-banner__actions">
       <button type="button" class="btn-primary btn-sm" @click="openDownloadPage">
         前往下载页
+      </button>
+      <button type="button" class="btn-secondary btn-sm" @click="openChangelogPage">
+        查看发布日志
       </button>
       <button
         v-if="!result.mandatory"

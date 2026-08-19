@@ -12,6 +12,8 @@ import { siteConfig } from '../config/site'
       <p>
         <RouterLink to="/docs">帮助文档</RouterLink>
         ·
+        <RouterLink to="/changelog">发布日志</RouterLink>
+        ·
         <RouterLink to="/download">下载</RouterLink>
       </p>
     </div>

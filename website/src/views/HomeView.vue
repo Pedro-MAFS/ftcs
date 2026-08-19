@@ -16,7 +16,7 @@ const heroShot = {
 const steps = [
   {
     title: '产品录入',
-    body: '导入公司网站或产品资料，归档到本机资料库。',
+    body: '按文件夹整理官网与说明书，勾选文件或目录后生成画像。',
     src: withBase('screenshots/ftcs-录入.png'),
     alt: '产品录入界面',
   },

@@ -120,6 +120,14 @@ location /ftcs/ {
 Markdown 源文件：`content/docs/*.md`  
 目录元数据：`src/content/docs-index.ts`
 
+## 发布日志
+
+页面：`/changelog`（数据源 [`src/config/changelog.ts`](src/config/changelog.ts)）。
+
+- **从 0.5.0 起记录**，不补更早版本。  
+- 用户可选择「我的版本」与「目标版本」查看区间差异。桌面端更新横幅会带 `?from=&to=` 打开此页。  
+- 发版时：在 `changelogReleases` **数组头部**追加一条，并同步 [`public/updates/latest.json`](public/updates/latest.json) 的 `notes`。
+
 ## 产品截图
 
 放在 `public/screenshots/`，首页会按流程引用：

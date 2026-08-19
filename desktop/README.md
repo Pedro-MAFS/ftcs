@@ -97,7 +97,7 @@ npx electron-builder --win # 产出 release/
 
 ### 应用内检查更新
 
-启动后会请求官网 `{FTCS_SITE_ORIGIN}/ftcs/updates/latest.json`（默认 `https://ai-utills.com/...`）；若远程版本高于本地，标题栏下方提示并引导打开下载页。发版时请同步更新官网 `website/public/updates/latest.json`，并在设置 → 关于中可手动「检查更新」。
+启动后会请求官网 `{FTCS_SITE_ORIGIN}/ftcs/updates/latest.json`（默认 `https://ai-utills.com/...`）；若远程版本高于本地，标题栏下方提示并引导打开下载页，也可打开官网 [发布日志](https://ai-utills.com/ftcs/changelog/)（带当前/目标版本参数）查看区间差异。发版时请同步官网 `website/public/updates/latest.json` 与 `website/src/config/changelog.ts`，并在设置 → 关于中可手动「检查更新」。
 
 ## 工作区初始化
 

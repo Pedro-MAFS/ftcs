@@ -35,6 +35,7 @@ const {
   result: updateResult,
   checkForUpdate,
   openDownloadPage,
+  openChangelogPage,
   refreshAppVersion,
 } = useUpdateCheck()
 const updateHint = ref('')
@@ -1072,6 +1073,14 @@ async function onCheckUpdate(): Promise<void> {
             >
               <Icon name="package" :size="12" />
               下载页
+            </button>
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              @click="openChangelogPage"
+            >
+              <Icon name="file-text" :size="12" />
+              发布日志
             </button>
             <button type="button" class="btn-secondary btn-sm" @click="onShareApp">
               <Icon name="share-2" :size="12" />

@@ -49,6 +49,7 @@ watch(
       >
         {{ item.title }}
       </RouterLink>
+      <RouterLink to="/changelog">发布日志</RouterLink>
       <p style="margin-top: 1.25rem">
         <RouterLink to="/docs">← 全部文档</RouterLink>
       </p>

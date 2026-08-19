@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { PRODUCT_LINKS } from '../config/links'
+import { changelogPageUrl, PRODUCT_LINKS } from '../config/links'
 import type { UpdateCheckResult } from '../types/update'
 
 const emptyResult = (): UpdateCheckResult => ({
@@ -77,6 +77,15 @@ async function bootstrapUpdateCheck(): Promise<void> {
   }, 2500)
 }
 
+async function openChangelogPage(): Promise<void> {
+  const url = changelogPageUrl({
+    from: result.value.currentVersion || appVersion.value || undefined,
+    to: result.value.latestVersion || undefined,
+  })
+  if (!window.ftcs?.openExternal) return
+  await window.ftcs.openExternal(url)
+}
+
 async function openDownloadPage(): Promise<void> {
   const url = result.value.downloadPage || PRODUCT_LINKS.download
   if (!window.ftcs?.openExternal) return
@@ -110,6 +119,7 @@ export function useUpdateCheck() {
     bootstrapUpdateCheck,
     checkForUpdate,
     openDownloadPage,
+    openChangelogPage,
     snooze,
     dismiss,
     hideBanner,
