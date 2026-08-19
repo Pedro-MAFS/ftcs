@@ -1,6 +1,6 @@
 # US-I-04 导入文件夹树设计
 
-> **用户故事**：[../17-下一阶段-业务效率工具.md](../17-下一阶段-业务效率工具.md) · US-I-04  
+> **用户故事**：[../17-需求-业务效率工具.md](../17-需求-业务效率工具.md) · US-I-04  
 > **状态**：编码已落地  
 > **范围**：从资源管理器拖入或右键选择本地文件夹，按相对结构写入 `data/library/files` 的落点目录  
 > **依赖**：US-I-01（拖入落点）、US-I-02（右键「导入文件夹」）  
@@ -96,7 +96,7 @@
 | `desktop/electron/ipc/types.ts`、`preload.ts`、`electron.d.ts`、`main.ts` | `LIBRARY_IMPORT_FOLDERS`；`dirsCreated`；粘贴/拖入共用新导入 |
 | `desktop/src/components/library/library-context.ts` | 「导入文件夹」启用 |
 | `desktop/src/views/InputView.vue` | 右键调用选夹；拖入无需改落点（已走 `importLibraryPaths`） |
-| `docs/17-下一阶段-业务效率工具.md` | 链到本文 |
+| `docs/17-需求-业务效率工具.md` | 链到本文 |
 
 不改 `sanitizeBaseName`。浏览仍 5000/16，超限导入后树可能 `truncated`（I-01 已有提示）。
 

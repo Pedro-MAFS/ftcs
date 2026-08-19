@@ -1,6 +1,6 @@
 # US-I-01 工程树浏览设计
 
-> **用户故事**：[../17-下一阶段-业务效率工具.md](../17-下一阶段-业务效率工具.md) · US-I-01  
+> **用户故事**：[../17-需求-业务效率工具.md](../17-需求-业务效率工具.md) · US-I-01  
 > **状态**：编码已落地  
 > **范围**：录入页资料区由「进入单层列表」改为 IDE 式展开树；数据根仍为 `data/library/files`  
 > **依赖**：无  
@@ -220,7 +220,7 @@ export interface LibrarySnapshot {
 | `desktop/src/components/library/LibraryTree.vue` | 新建 |
 | `desktop/src/styles/main.css` | 树缩进、焦点、chevron；删除或闲置 crumbs 样式 |
 | `desktop/electron/library/*.test.ts` 或 lead-store 外测 | 给 `listFilesTree` 加单测：排序、沙箱、上限 |
-| `docs/17-下一阶段-业务效率工具.md` | US-I-01 详细设计改为本文 |
+| `docs/17-需求-业务效率工具.md` | US-I-01 详细设计改为本文 |
 
 交互稿 `desktop/designs/ftcs-console.pen`：有录入页则补一帧「工程树」；无则编码以本文为准。
 

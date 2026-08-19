@@ -1,6 +1,6 @@
 # US-I-11 Office 侧车抽取设计
 
-> **用户故事**：[../17-下一阶段-业务效率工具.md](../17-下一阶段-业务效率工具.md) · US-I-11  
+> **用户故事**：[../17-需求-业务效率工具.md](../17-需求-业务效率工具.md) · US-I-11  
 > **状态**：编码已落地  
 > **范围**：OfficeCLI 已就绪时，对 `.docx` / `.xlsx` / `.pptx` 在拷贝到 `inputs/` 时抽出侧车 `.txt`，原件保留；Prompt 只列侧车与普通文本；`source_inputs` 可测；单文件失败不毁掉整次生成  
 > **依赖**：US-I-08（拷贝 / skipped / `mergeSourceInputs`）；US-I-09（`resolveConfiguredOfficeCli`）；I-10 门禁保证「未装不带着 Office 路径乱进」——本故事仍做主进程防呆  
