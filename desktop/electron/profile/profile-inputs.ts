@@ -1,6 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readWebsiteBookmark } from '../library/library-website'
+import {
+  extractOfficeTextToString,
+  isOfficeExtractExtension,
+  officeSidecarRelPath,
+  type OfficeExtractResult,
+} from './profile-office-extract'
 
 export type SourceInput =
   | { type: 'website'; library_path: string; url: string }
@@ -19,14 +25,12 @@ const SUPPORTED_TEXT_EXTENSIONS = new Set([
   '.htm',
 ])
 
+/** pdf / 老格式 / 图片等；docx/xlsx/pptx 已拆到 office（见 US-I-11） */
 const SPECIAL_FILE_EXTENSIONS = new Set([
   '.pdf',
-  '.xlsx',
   '.xls',
   '.doc',
-  '.docx',
   '.ppt',
-  '.pptx',
   '.png',
   '.jpg',
   '.jpeg',
@@ -35,7 +39,12 @@ const SPECIAL_FILE_EXTENSIONS = new Set([
   '.bmp',
 ])
 
-export type InputFileKind = 'supported' | 'special' | 'unknown'
+export type InputFileKind = 'supported' | 'office' | 'special' | 'unknown'
+
+export type OfficeExtractFn = (
+  absSourcePath: string,
+  cliExe: string,
+) => Promise<OfficeExtractResult>
 
 export function classifyInputFile(filePath: string): InputFileKind {
   const base = filePath.replace(/\\/g, '/')
@@ -44,6 +53,7 @@ export function classifyInputFile(filePath: string): InputFileKind {
   const dot = name.lastIndexOf('.')
   const ext = dot === -1 ? '' : name.slice(dot).toLowerCase()
   if (SUPPORTED_TEXT_EXTENSIONS.has(ext)) return 'supported'
+  if (isOfficeExtractExtension(base)) return 'office'
   if (SPECIAL_FILE_EXTENSIONS.has(ext)) return 'special'
   return 'unknown'
 }
@@ -53,6 +63,16 @@ export interface CopiedLibrarySources {
   inputFiles: string[]
   sourceInputs: SourceInput[]
   skipped: string[]
+}
+
+export interface CopyLibrarySourcesOptions {
+  /** 单测注入；默认走真 OfficeCLI extract */
+  extractOffice?: OfficeExtractFn
+  /**
+   * 解析 OfficeCLI。生产由 bootstrap 传入 resolveConfiguredOfficeCli；
+   * 未传则视为未安装（避免本模块静态依赖 electron）。
+   */
+  resolveCli?: () => { exe: string; source: string } | null
 }
 
 function assertSafeRel(rel: string): string {
@@ -80,18 +100,22 @@ function storedInputPath(productId: string, relFromInputs: string): string {
 
 /**
  * 按相对 files/ 的路径拷到 inputs/ 下同样的子目录，不平铺、不改文件名。
+ * Office（docx/xlsx/pptx）：原件 + 侧车 .txt；Prompt 只列侧车。
  */
-export function copyLibrarySourcesToInputs(
+export async function copyLibrarySourcesToInputs(
   productId: string,
   inputsDir: string,
   filesRoot: string,
   websitePaths: string[],
   filePaths: string[],
-): CopiedLibrarySources {
+  options?: CopyLibrarySourcesOptions,
+): Promise<CopiedLibrarySources> {
   const websiteUrls: string[] = []
   const inputFiles: string[] = []
   const sourceInputs: SourceInput[] = []
   const skipped: string[] = []
+  const extractOffice = options?.extractOffice ?? extractOfficeTextToString
+  const resolveCli = options?.resolveCli ?? (() => null)
 
   for (const rel of websitePaths) {
     try {
@@ -116,6 +140,16 @@ export function copyLibrarySourcesToInputs(
     }
   }
 
+  let cliExe: string | null = null
+  let cliResolved = false
+  function ensureCli(): string | null {
+    if (!cliResolved) {
+      cliResolved = true
+      cliExe = resolveCli()?.exe ?? null
+    }
+    return cliExe
+  }
+
   for (const rel of filePaths) {
     try {
       const safe = assertSafeRel(rel)
@@ -133,14 +167,49 @@ export function copyLibrarySourcesToInputs(
         skipped.push(`${rel}（请按网站书签勾选，不要当普通文件）`)
         continue
       }
-      if (classifyInputFile(safe) !== 'supported') {
+
+      const kind = classifyInputFile(safe)
+      if (kind === 'special' || kind === 'unknown') {
         skipped.push(`${rel}（当前不支持该格式）`)
         continue
       }
+
+      if (kind === 'supported') {
+        const { dest, stored } = destUnderInputs(inputsDir, safe)
+        fs.mkdirSync(path.dirname(dest), { recursive: true })
+        fs.copyFileSync(src, dest)
+        inputFiles.push(storedInputPath(productId, stored))
+        sourceInputs.push({ type: 'file', library_path: stored })
+        continue
+      }
+
+      // office
+      const exe = ensureCli()
+      if (!exe) {
+        skipped.push(`${rel}（未安装 OfficeCLI）`)
+        continue
+      }
+
+      const extracted = await extractOffice(src, exe)
+      if (!extracted.ok) {
+        const label =
+          extracted.reason === '抽出文本为空'
+            ? '抽出文本为空'
+            : `Office 文本抽取失败：${extracted.reason}`
+        skipped.push(`${rel}（${label}）`)
+        continue
+      }
+
       const { dest, stored } = destUnderInputs(inputsDir, safe)
+      const sidecarRel = officeSidecarRelPath(stored)
+      const { dest: sidecarDest, stored: sidecarStored } = destUnderInputs(
+        inputsDir,
+        sidecarRel,
+      )
       fs.mkdirSync(path.dirname(dest), { recursive: true })
       fs.copyFileSync(src, dest)
-      inputFiles.push(storedInputPath(productId, stored))
+      fs.writeFileSync(sidecarDest, extracted.text, 'utf8')
+      inputFiles.push(storedInputPath(productId, sidecarStored))
       sourceInputs.push({ type: 'file', library_path: stored })
     } catch (err) {
       skipped.push(`${rel}（${err instanceof Error ? err.message : String(err)}）`)

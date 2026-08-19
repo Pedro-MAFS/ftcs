@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, it } from 'node:test'
-import { copyLibrarySourcesToInputs } from './profile-inputs.ts'
+import { classifyInputFile, copyLibrarySourcesToInputs } from './profile-inputs.ts'
 
 const temps: string[] = []
 
@@ -42,8 +42,18 @@ afterEach(() => {
   }
 })
 
+describe('classifyInputFile', () => {
+  it('marks docx/xlsx/pptx as office', () => {
+    assert.equal(classifyInputFile('a/说明.docx'), 'office')
+    assert.equal(classifyInputFile('a/报价.XLSX'), 'office')
+    assert.equal(classifyInputFile('a/deck.pptx'), 'office')
+    assert.equal(classifyInputFile('a/说明.pdf'), 'special')
+    assert.equal(classifyInputFile('a/说明.md'), 'supported')
+  })
+})
+
 describe('copyLibrarySourcesToInputs', () => {
-  it('keeps library-relative directories and does not flatten or hyphenate names', () => {
+  it('keeps library-relative directories and does not flatten or hyphenate names', async () => {
     const root = makeRoot()
     const filesRoot = path.join(root, 'files')
     const inputsDir = path.join(root, 'inputs')
@@ -52,7 +62,7 @@ describe('copyLibrarySourcesToInputs', () => {
     writeBookmark(path.join(filesRoot, '绿森', '地板', 'www.example.com.md'), 'https://www.example.com')
     writeFile(path.join(filesRoot, '客户A', '说明.md'), 'c')
 
-    const copied = copyLibrarySourcesToInputs(
+    const copied = await copyLibrarySourcesToInputs(
       'prod_20260818_001',
       inputsDir,
       filesRoot,
@@ -87,20 +97,20 @@ describe('copyLibrarySourcesToInputs', () => {
     assert.deepEqual(copied.skipped, [])
   })
 
-  it('does not create empty sibling folders', () => {
+  it('does not create empty sibling folders', async () => {
     const root = makeRoot()
     const filesRoot = path.join(root, 'files')
     const inputsDir = path.join(root, 'inputs')
     fs.mkdirSync(path.join(filesRoot, '绿森', '空夹'), { recursive: true })
     writeFile(path.join(filesRoot, '绿森', '说明.txt'), 'a')
 
-    copyLibrarySourcesToInputs('prod_1', inputsDir, filesRoot, [], ['绿森/说明.txt'])
+    await copyLibrarySourcesToInputs('prod_1', inputsDir, filesRoot, [], ['绿森/说明.txt'])
 
     assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '说明.txt')), true)
     assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '空夹')), false)
   })
 
-  it('skips pdf and images, keeps text, and does not put bookmark md in inputFiles', () => {
+  it('skips pdf and images, keeps text, and does not put bookmark md in inputFiles', async () => {
     const root = makeRoot()
     const filesRoot = path.join(root, 'files')
     const inputsDir = path.join(root, 'inputs')
@@ -110,7 +120,7 @@ describe('copyLibrarySourcesToInputs', () => {
     writeFile(path.join(filesRoot, '绿森', '无扩展名'), 'raw')
     writeBookmark(path.join(filesRoot, '绿森', 'www.example.com.md'), 'https://www.example.com')
 
-    const copied = copyLibrarySourcesToInputs(
+    const copied = await copyLibrarySourcesToInputs(
       'prod_1',
       inputsDir,
       filesRoot,
@@ -132,5 +142,93 @@ describe('copyLibrarySourcesToInputs', () => {
     assert.equal(copied.skipped.includes('绿森/目录.pdf（当前不支持该格式）'), true)
     assert.equal(copied.skipped.includes('绿森/图.jpg（当前不支持该格式）'), true)
     assert.equal(copied.skipped.includes('绿森/无扩展名（当前不支持该格式）'), true)
+  })
+
+  it('extracts office sidecar when CLI ready (injected)', async () => {
+    const root = makeRoot()
+    const filesRoot = path.join(root, 'files')
+    const inputsDir = path.join(root, 'inputs')
+    writeFile(path.join(filesRoot, '绿森', '地板', '说明.docx'), 'binary-fake')
+    writeFile(path.join(filesRoot, '绿森', 'readme.md'), 'md')
+
+    const copied = await copyLibrarySourcesToInputs(
+      'prod_1',
+      inputsDir,
+      filesRoot,
+      [],
+      ['绿森/地板/说明.docx', '绿森/readme.md'],
+      {
+        resolveCli: () => ({ exe: 'C:\\fake\\officecli.exe', source: 'test' }),
+        extractOffice: async () => ({ ok: true, text: '抽出的产品说明' }),
+      },
+    )
+
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '地板', '说明.docx')), true)
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '地板', '说明.docx.txt')), true)
+    assert.equal(
+      fs.readFileSync(path.join(inputsDir, '绿森', '地板', '说明.docx.txt'), 'utf8'),
+      '抽出的产品说明',
+    )
+    assert.deepEqual(copied.inputFiles, [
+      'data/products/prod_1/inputs/绿森/地板/说明.docx.txt',
+      'data/products/prod_1/inputs/绿森/readme.md',
+    ])
+    assert.deepEqual(copied.sourceInputs, [
+      { type: 'file', library_path: '绿森/地板/说明.docx' },
+      { type: 'file', library_path: '绿森/readme.md' },
+    ])
+    assert.deepEqual(copied.skipped, [])
+  })
+
+  it('skips office when CLI missing', async () => {
+    const root = makeRoot()
+    const filesRoot = path.join(root, 'files')
+    const inputsDir = path.join(root, 'inputs')
+    writeFile(path.join(filesRoot, '绿森', '说明.docx'), 'x')
+    writeFile(path.join(filesRoot, '绿森', '说明.md'), 'y')
+
+    const copied = await copyLibrarySourcesToInputs(
+      'prod_1',
+      inputsDir,
+      filesRoot,
+      [],
+      ['绿森/说明.docx', '绿森/说明.md'],
+      { resolveCli: () => null },
+    )
+
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '说明.docx')), false)
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '说明.md')), true)
+    assert.equal(copied.skipped.includes('绿森/说明.docx（未安装 OfficeCLI）'), true)
+    assert.deepEqual(copied.inputFiles, ['data/products/prod_1/inputs/绿森/说明.md'])
+  })
+
+  it('skips office when extract fails or empty', async () => {
+    const root = makeRoot()
+    const filesRoot = path.join(root, 'files')
+    const inputsDir = path.join(root, 'inputs')
+    writeFile(path.join(filesRoot, '绿森', '坏.docx'), 'x')
+    writeFile(path.join(filesRoot, '绿森', '空.pptx'), 'y')
+    writeFile(path.join(filesRoot, '绿森', 'ok.md'), 'z')
+
+    const copied = await copyLibrarySourcesToInputs(
+      'prod_1',
+      inputsDir,
+      filesRoot,
+      [],
+      ['绿森/坏.docx', '绿森/空.pptx', '绿森/ok.md'],
+      {
+        resolveCli: () => ({ exe: 'C:\\fake\\officecli.exe', source: 'test' }),
+        extractOffice: async (abs) => {
+          if (abs.includes('坏')) return { ok: false, reason: 'corrupt' }
+          return { ok: false, reason: '抽出文本为空' }
+        },
+      },
+    )
+
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '坏.docx')), false)
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '空.pptx')), false)
+    assert.equal(copied.skipped.some((s) => s.includes('坏.docx') && s.includes('抽取失败')), true)
+    assert.equal(copied.skipped.some((s) => s.includes('空.pptx') && s.includes('抽出文本为空')), true)
+    assert.deepEqual(copied.inputFiles, ['data/products/prod_1/inputs/绿森/ok.md'])
   })
 })

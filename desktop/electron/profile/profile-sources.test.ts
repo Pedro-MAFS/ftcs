@@ -60,4 +60,21 @@ describe('mergeSourceInputs', () => {
     const manual = [{ type: 'manual', note: '手工创建草稿' }]
     assert.deepEqual(mergeSourceInputs(manual, manifest), manual)
   })
+
+  it('maps office library_path to sidecar .txt path', () => {
+    const officeManifest: SourcesManifest = {
+      product_id: 'prod_1',
+      created_at: '2026-08-18T00:00:00.000Z',
+      files: ['data/products/prod_1/inputs/绿森/地板/说明.docx.txt'],
+      source_inputs: [{ type: 'file', library_path: '绿森/地板/说明.docx' }],
+    }
+    const merged = mergeSourceInputs([], officeManifest)
+    assert.deepEqual(merged, [
+      {
+        type: 'file',
+        path: 'data/products/prod_1/inputs/绿森/地板/说明.docx.txt',
+        uploaded_at: '2026-08-18T00:00:00.000Z',
+      },
+    ])
+  })
 })

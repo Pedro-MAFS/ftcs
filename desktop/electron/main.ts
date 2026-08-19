@@ -1136,7 +1136,7 @@ function registerIpcHandlers(): void {
         return { ok: false, message: preflight.message }
       }
 
-      const bootstrap = bootstrapProductFromLibrary({
+      const bootstrap = await bootstrapProductFromLibrary({
         websitePaths: input?.websitePaths ?? [],
         filePaths: input?.filePaths ?? [],
       })

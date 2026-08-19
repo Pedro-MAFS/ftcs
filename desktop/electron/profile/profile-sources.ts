@@ -1,3 +1,8 @@
+import {
+  isOfficeExtractExtension,
+  officeSidecarRelPath,
+} from './profile-office-extract'
+
 export interface SourcesManifest {
   product_id?: string
   created_at?: string
@@ -17,15 +22,31 @@ function slashPath(value: unknown): string {
   return String(value ?? '').replace(/\\/g, '/')
 }
 
-function inputsPathFor(manifest: SourcesManifest, libraryPath: string): string {
+/**
+ * 资料库相对路径 → inputs 下 Agent 可读路径。
+ * Office：library_path 为原件，映射到侧车 .txt。
+ */
+export function inputsPathFor(manifest: SourcesManifest, libraryPath: string): string {
   const lib = slashPath(libraryPath)
-  const listed = (manifest.files ?? []).find((item) => {
-    const n = slashPath(item)
-    return n === lib || n.endsWith(`/inputs/${lib}`) || n.endsWith(`/${lib}`)
-  })
-  if (listed) return slashPath(listed)
+  const candidateLibs = isOfficeExtractExtension(lib)
+    ? [officeSidecarRelPath(lib), lib]
+    : [lib]
+
+  for (const candidate of candidateLibs) {
+    const listed = (manifest.files ?? []).find((item) => {
+      const n = slashPath(item)
+      return (
+        n === candidate ||
+        n.endsWith(`/inputs/${candidate}`) ||
+        n.endsWith(`/${candidate}`)
+      )
+    })
+    if (listed) return slashPath(listed)
+  }
+
   const id = manifest.product_id || 'unknown'
-  return `data/products/${id}/inputs/${lib}`
+  const preferred = candidateLibs[0] ?? lib
+  return `data/products/${id}/inputs/${preferred}`
 }
 
 function isBookmarkFilePath(

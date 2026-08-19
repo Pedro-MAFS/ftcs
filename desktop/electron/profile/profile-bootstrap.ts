@@ -4,6 +4,7 @@ import { getWorkspaceRoot } from '../config/paths'
 import { generateProductId } from './product-id'
 import { migrateWebsitesIntoFiles } from '../library/library-website'
 import { copyLibrarySourcesToInputs } from './profile-inputs'
+import { resolveConfiguredOfficeCli } from '../runtime/officecli-paths'
 
 export interface BootstrapInput {
   websitePaths: string[]
@@ -21,11 +22,12 @@ export interface BootstrapResult {
 
 /**
  * 从资料库选中项分配产品 ID，并按相对路径复制快照到 data/products/{id}/inputs/。
+ * Office 文件在拷贝时抽出侧车文本（US-I-11）。
  */
-export function bootstrapProductFromLibrary(
+export async function bootstrapProductFromLibrary(
   input: BootstrapInput,
   workspaceRoot = getWorkspaceRoot(),
-): BootstrapResult {
+): Promise<BootstrapResult> {
   migrateWebsitesIntoFiles(workspaceRoot)
   const websitePaths = [...new Set(input.websitePaths ?? [])]
   const filePaths = [...new Set(input.filePaths ?? [])]
@@ -39,12 +41,13 @@ export function bootstrapProductFromLibrary(
   fs.mkdirSync(inputsDir, { recursive: true })
 
   const filesRoot = path.join(workspaceRoot, 'data', 'library', 'files')
-  const copied = copyLibrarySourcesToInputs(
+  const copied = await copyLibrarySourcesToInputs(
     productId,
     inputsDir,
     filesRoot,
     websitePaths,
     filePaths,
+    { resolveCli: resolveConfiguredOfficeCli },
   )
 
   if (!copied.websiteUrls.length && !copied.inputFiles.length) {

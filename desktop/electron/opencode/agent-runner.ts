@@ -92,7 +92,7 @@ function buildPrompt(bootstrap: BootstrapResult): string {
     '2. 有网站则用 chrome-devtools 按需探索；有文件则读取并提取。两类都有则合并进同一份画像。',
     '3. 组装 ProductProfile 后调用 lead-store.product_save（传入上述 product_id）。',
     '4. source_inputs 必须记录：每个官网 URL 一条 type:website；每个文本一条 type:file（path 用上面的 inputs 路径）。不要把网站书签 md 写成 type:file。',
-    '5. 特殊格式桌面端已跳过，不要因 file_classify 为 special 而停止整次生成。',
+    '5. Office（Word/Excel/PPT）已在桌面端抽成 .txt 侧车并列在「输入文件」中，请直接 Read；不要调用 officecli，不要因原件扩展名或 file_classify 为 special 而停止整次生成。',
     '6. readiness 由 lead-store 计算，不要手改。',
     '7. 完成后用简短中文汇报：产品 ID、公司名、核心产品、就绪度分数与 status、缺失字段、下一步建议。',
     '',
