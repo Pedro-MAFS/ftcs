@@ -7,6 +7,8 @@ interface UserPrefs {
   workspaceRoot?: string
   /** 一键安装的 OpenCode 可执行文件绝对路径 */
   opencodePath?: string
+  /** 一键安装的 OfficeCLI 可执行文件绝对路径 */
+  officecliPath?: string
   onboarding?: OnboardingState
   update?: {
     dismissedVersion?: string

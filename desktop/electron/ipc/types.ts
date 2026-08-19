@@ -64,6 +64,8 @@ export const IPC = {
   RUNTIME_INSTALL_NODE_PROGRESS: 'runtime:install-node-progress',
   RUNTIME_INSTALL_OPENCODE: 'runtime:install-opencode',
   RUNTIME_INSTALL_OPENCODE_PROGRESS: 'runtime:install-opencode-progress',
+  RUNTIME_INSTALL_OFFICECLI: 'runtime:install-officecli',
+  RUNTIME_INSTALL_OFFICECLI_PROGRESS: 'runtime:install-officecli-progress',
   APP_QUIT: 'app:quit',
   UPDATE_CHECK: 'update:check',
   UPDATE_SNOOZE: 'update:snooze',
@@ -105,11 +107,12 @@ export interface OnboardingState {
 export type EnvProbeStatus = 'ok' | 'missing' | 'outdated' | 'error'
 
 export interface EnvProbeItem {
-  id: 'node' | 'opencode' | 'chrome'
+  id: 'node' | 'opencode' | 'chrome' | 'officecli'
   label: string
   status: EnvProbeStatus
   detail: string
   installUrl?: string
+  optional?: boolean
 }
 
 export interface EnvProbeResult {
@@ -199,6 +202,48 @@ export type OpenCodeInstallResult =
   | {
       ok: false
       code: OpenCodeInstallErrorCode
+      message: string
+      logPath?: string
+      manualUrl: string
+    }
+
+export type OfficeCliInstallMethod = 'download' | 'reinstall'
+
+export type OfficeCliInstallErrorCode =
+  | 'unsupported-platform'
+  | 'network'
+  | 'checksum'
+  | 'write-failed'
+  | 'verify-failed'
+  | 'busy'
+  | 'unknown'
+
+export type OfficeCliInstallProgressPhase =
+  | 'checking'
+  | 'downloading'
+  | 'verifying'
+  | 'installing'
+  | 'done'
+  | 'failed'
+
+export interface OfficeCliInstallProgress {
+  phase: OfficeCliInstallProgressPhase
+  message: string
+}
+
+export type OfficeCliInstallResult =
+  | {
+      ok: true
+      version: string
+      method: OfficeCliInstallMethod
+      binaryPath: string
+      message: string
+      needsRestart: false
+      logPath?: string
+    }
+  | {
+      ok: false
+      code: OfficeCliInstallErrorCode
       message: string
       logPath?: string
       manualUrl: string

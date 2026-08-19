@@ -9,12 +9,14 @@ const execFileAsync = promisify(execFile)
 export type EnvProbeStatus = 'ok' | 'missing' | 'outdated' | 'error'
 
 export interface EnvProbeItem {
-  id: 'node' | 'opencode' | 'chrome'
+  id: 'node' | 'opencode' | 'chrome' | 'officecli'
   label: string
   status: EnvProbeStatus
   detail: string
   /** 建议用户打开的安装说明或下载页 */
   installUrl?: string
+  /** 可选依赖：不计入 EnvProbeResult.ok */
+  optional?: boolean
 }
 
 export interface EnvProbeResult {
@@ -226,11 +228,76 @@ async function probeChrome(): Promise<EnvProbeItem> {
   }
 }
 
-/** 首次引导 / 设置页：探测本机 Node、OpenCode、Chrome */
+async function probeOfficeCli(): Promise<EnvProbeItem> {
+  const { isOfficeCliInstallSupported, resolveConfiguredOfficeCli } =
+    await import('../runtime/officecli-paths')
+  const installUrl = getDocsInstallUrl()
+
+  if (!isOfficeCliInstallSupported()) {
+    return {
+      id: 'officecli',
+      label: 'OfficeCLI（可选）',
+      status: 'missing',
+      detail:
+        '当前仅支持 Windows 64 位一键安装。可选：用于 Word / Excel / PPT 抽文本后再生成画像。',
+      installUrl,
+      optional: true,
+    }
+  }
+
+  const configured = resolveConfiguredOfficeCli()
+  if (!configured) {
+    return {
+      id: 'officecli',
+      label: 'OfficeCLI（可选）',
+      status: 'missing',
+      detail:
+        '未安装。可选：用于 Word / Excel / PPT 抽文本后再生成画像；不装不影响官网与 txt/md。',
+      installUrl,
+      optional: true,
+    }
+  }
+
+  try {
+    const { stdout } = await execFileAsync(configured.exe, ['--version'], {
+      windowsHide: true,
+      timeout: 30_000,
+    })
+    const version = stdout.trim().split(/\r?\n/)[0] ?? ''
+    return {
+      id: 'officecli',
+      label: 'OfficeCLI（可选）',
+      status: 'ok',
+      detail: version
+        ? `${version} · ${configured.exe}（${configured.source}）`
+        : `${configured.exe}（${configured.source}）`,
+      installUrl,
+      optional: true,
+    }
+  } catch {
+    return {
+      id: 'officecli',
+      label: 'OfficeCLI（可选）',
+      status: 'error',
+      detail: `文件存在但无法运行（可能被杀软隔离）：${configured.exe}。可重新安装。`,
+      installUrl,
+      optional: true,
+    }
+  }
+}
+
+/** 首次引导 / 设置页：探测本机 Node、OpenCode、Chrome、可选 OfficeCLI */
 export async function probeEnvironment(): Promise<EnvProbeResult> {
-  const items = await Promise.all([probeNode(), probeOpenCode(), probeChrome()])
+  const items = await Promise.all([
+    probeNode(),
+    probeOpenCode(),
+    probeChrome(),
+    probeOfficeCli(),
+  ])
   return {
-    ok: items.every((item) => item.status === 'ok'),
+    ok: items
+      .filter((item) => !item.optional)
+      .every((item) => item.status === 'ok'),
     checkedAt: new Date().toISOString(),
     items,
   }

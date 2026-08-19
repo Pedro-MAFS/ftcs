@@ -9,6 +9,8 @@ import type {
   OnboardingState,
   OpenCodeInstallProgress,
   OpenCodeInstallResult,
+  OfficeCliInstallProgress,
+  OfficeCliInstallResult,
 } from './onboarding'
 import type { UpdateCheckResult } from './update'
 
@@ -520,6 +522,10 @@ declare global {
       installOpenCode: () => Promise<OpenCodeInstallResult>
       onOpenCodeInstallProgress: (
         handler: (progress: OpenCodeInstallProgress) => void,
+      ) => () => void
+      installOfficeCli: () => Promise<OfficeCliInstallResult>
+      onOfficeCliInstallProgress: (
+        handler: (progress: OfficeCliInstallProgress) => void,
       ) => () => void
       quitApp: () => Promise<{ ok: boolean }>
       getAppVersion: () => Promise<string>

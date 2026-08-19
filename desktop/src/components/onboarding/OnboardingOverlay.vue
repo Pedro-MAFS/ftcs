@@ -10,7 +10,12 @@ import {
   type SettingsSnapshot,
 } from '../../types/settings'
 import { TOUR_STEPS } from '../../types/onboarding'
-import type { EnvProbeItem, NodeInstallResult, OpenCodeInstallResult } from '../../types/onboarding'
+import type {
+  EnvProbeItem,
+  NodeInstallResult,
+  OfficeCliInstallResult,
+  OpenCodeInstallResult,
+} from '../../types/onboarding'
 import Icon from '../shared/Icon.vue'
 
 const router = useRouter()
@@ -54,6 +59,17 @@ const installingOpenCode = ref(false)
 const openCodeInstallProgress = ref('')
 const openCodeInstallResult = ref<OpenCodeInstallResult | null>(null)
 let stopOpenCodeProgress: (() => void) | null = null
+const installingOfficeCli = ref(false)
+const officeCliInstallProgress = ref('')
+const officeCliInstallResult = ref<OfficeCliInstallResult | null>(null)
+let stopOfficeCliProgress: (() => void) | null = null
+
+const anyRuntimeInstalling = computed(
+  () =>
+    installingNode.value ||
+    installingOpenCode.value ||
+    installingOfficeCli.value,
+)
 
 const form = reactive({
   channelMode: 'official' as ChannelMode,
@@ -120,7 +136,7 @@ const header = computed(() => {
     eyebrow: 'FTCS 首次设置 · 步骤 1 / 3',
     title: '先检查运行环境',
     subtitle:
-      '安装包保持轻量，以下依赖需本机就绪。请先就绪 Node.js，再一键安装 OpenCode；装成功后请退出并重启应用，再点重新检测。',
+      '安装包保持轻量，以下依赖需本机就绪。请先就绪 Node.js，再一键安装 OpenCode；装成功后请退出并重启应用，再点重新检测。另有 OfficeCLI（可选）：仅当资料含 Word / Excel / PPT 时需要，可稍后安装。',
   }
 })
 
@@ -162,17 +178,36 @@ function canOneClickInstallOpenCode(item: EnvProbeItem): boolean {
   )
 }
 
+function canOneClickInstallOfficeCli(item: EnvProbeItem): boolean {
+  return (
+    item.id === 'officecli' &&
+    item.status !== 'ok' &&
+    Boolean(window.ftcs?.installOfficeCli) &&
+    window.ftcs?.platform === 'win32'
+  )
+}
+
+function canReinstallOfficeCli(item: EnvProbeItem): boolean {
+  return (
+    item.id === 'officecli' &&
+    item.status === 'ok' &&
+    Boolean(window.ftcs?.installOfficeCli) &&
+    window.ftcs?.platform === 'win32'
+  )
+}
+
 async function openExternal(url: string): Promise<void> {
   if (!window.ftcs?.openExternal || !url) return
   await window.ftcs.openExternal(url)
 }
 
 async function onInstallNode(): Promise<void> {
-  if (!window.ftcs?.installNode || installingNode.value || installingOpenCode.value) return
+  if (!window.ftcs?.installNode || anyRuntimeInstalling.value) return
   installingNode.value = true
   nodeInstallProgress.value = '准备安装…'
   nodeInstallResult.value = null
   openCodeInstallResult.value = null
+  officeCliInstallResult.value = null
   error.value = ''
   stopNodeProgress?.()
   stopNodeProgress = window.ftcs.onNodeInstallProgress?.((p) => {
@@ -198,7 +233,7 @@ async function onInstallNode(): Promise<void> {
 }
 
 async function onInstallOpenCode(): Promise<void> {
-  if (!window.ftcs?.installOpenCode || installingOpenCode.value || installingNode.value) return
+  if (!window.ftcs?.installOpenCode || anyRuntimeInstalling.value) return
   if (!nodeReady.value) {
     error.value =
       'OpenCode 依赖 Node.js。请先完成 Node.js 一键安装（或确保已安装 ≥22），完全退出并重启本应用后，再安装 OpenCode。'
@@ -208,6 +243,7 @@ async function onInstallOpenCode(): Promise<void> {
   openCodeInstallProgress.value = '准备安装…'
   openCodeInstallResult.value = null
   nodeInstallResult.value = null
+  officeCliInstallResult.value = null
   error.value = ''
   stopOpenCodeProgress?.()
   stopOpenCodeProgress =
@@ -230,6 +266,39 @@ async function onInstallOpenCode(): Promise<void> {
     stopOpenCodeProgress?.()
     stopOpenCodeProgress = null
     installingOpenCode.value = false
+  }
+}
+
+async function onInstallOfficeCli(): Promise<void> {
+  if (!window.ftcs?.installOfficeCli || anyRuntimeInstalling.value) return
+  installingOfficeCli.value = true
+  officeCliInstallProgress.value = '准备安装…'
+  officeCliInstallResult.value = null
+  nodeInstallResult.value = null
+  openCodeInstallResult.value = null
+  error.value = ''
+  stopOfficeCliProgress?.()
+  stopOfficeCliProgress =
+    window.ftcs.onOfficeCliInstallProgress?.((p) => {
+      officeCliInstallProgress.value = p.message
+    }) ?? null
+  try {
+    const result = await window.ftcs.installOfficeCli()
+    officeCliInstallResult.value = result
+    if (!result.ok) {
+      error.value = result.message
+      officeCliInstallProgress.value = ''
+    } else {
+      officeCliInstallProgress.value = ''
+      await runProbe()
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+    officeCliInstallProgress.value = ''
+  } finally {
+    stopOfficeCliProgress?.()
+    stopOfficeCliProgress = null
+    installingOfficeCli.value = false
   }
 }
 
@@ -461,7 +530,7 @@ onMounted(() => {
                   v-if="canOneClickInstallNode(item)"
                   type="button"
                   class="btn-primary btn-sm"
-                  :disabled="installingNode || installingOpenCode"
+                  :disabled="anyRuntimeInstalling"
                   @click="onInstallNode"
                 >
                   {{ installingNode ? '安装中…' : '一键安装 Node.js 24.18.0' }}
@@ -470,7 +539,7 @@ onMounted(() => {
                   v-else-if="canUpgradeNode(item)"
                   type="button"
                   class="btn-secondary btn-sm"
-                  :disabled="installingNode || installingOpenCode"
+                  :disabled="anyRuntimeInstalling"
                   @click="onInstallNode"
                 >
                   {{ installingNode ? '安装中…' : '升级到 24.18.0（推荐）' }}
@@ -479,7 +548,7 @@ onMounted(() => {
                   v-if="canOneClickInstallOpenCode(item)"
                   type="button"
                   class="btn-primary btn-sm"
-                  :disabled="installingOpenCode || installingNode || !nodeReady"
+                  :disabled="anyRuntimeInstalling || !nodeReady"
                   :title="
                     nodeReady
                       ? ''
@@ -496,10 +565,32 @@ onMounted(() => {
                   }}
                 </button>
                 <button
+                  v-if="canOneClickInstallOfficeCli(item)"
+                  type="button"
+                  class="btn-primary btn-sm"
+                  :disabled="anyRuntimeInstalling"
+                  @click="onInstallOfficeCli"
+                >
+                  {{
+                    installingOfficeCli
+                      ? '安装中…'
+                      : '一键安装 OfficeCLI 1.0.144'
+                  }}
+                </button>
+                <button
+                  v-else-if="canReinstallOfficeCli(item)"
+                  type="button"
+                  class="btn-secondary btn-sm"
+                  :disabled="anyRuntimeInstalling"
+                  @click="onInstallOfficeCli"
+                >
+                  {{ installingOfficeCli ? '安装中…' : '重新安装' }}
+                </button>
+                <button
                   v-if="item.installUrl"
                   type="button"
                   class="btn-secondary btn-sm"
-                  :disabled="installingNode || installingOpenCode"
+                  :disabled="anyRuntimeInstalling"
                   @click="openExternal(item.installUrl!)"
                 >
                   {{
@@ -507,7 +598,9 @@ onMounted(() => {
                       ? '打开 Node 官网'
                       : item.id === 'chrome'
                         ? '打开 Chrome 下载'
-                        : '查看安装说明'
+                        : item.id === 'officecli'
+                          ? '打开安装说明'
+                          : '查看安装说明'
                   }}
                 </button>
               </div>
@@ -517,6 +610,9 @@ onMounted(() => {
             </p>
             <p v-if="openCodeInstallProgress" class="onboarding__muted">
               {{ openCodeInstallProgress }}
+            </p>
+            <p v-if="officeCliInstallProgress" class="onboarding__muted">
+              {{ officeCliInstallProgress }}
             </p>
             <div
               v-if="nodeInstallResult?.ok"
@@ -544,6 +640,12 @@ onMounted(() => {
                 退出应用
               </button>
             </div>
+            <p
+              v-else-if="officeCliInstallResult?.ok"
+              class="onboarding__ok"
+            >
+              {{ officeCliInstallResult.message }}
+            </p>
             <p v-if="error" class="onboarding__error">{{ error }}</p>
             <button
               v-if="nodeInstallResult && !nodeInstallResult.ok && nodeInstallResult.manualUrl"
@@ -560,6 +662,14 @@ onMounted(() => {
               @click="openExternal(openCodeInstallResult.manualUrl)"
             >
               查看 OpenCode 安装说明
+            </button>
+            <button
+              v-if="officeCliInstallResult && !officeCliInstallResult.ok && officeCliInstallResult.manualUrl"
+              type="button"
+              class="btn-secondary btn-sm"
+              @click="openExternal(officeCliInstallResult.manualUrl)"
+            >
+              查看 OfficeCLI 安装说明
             </button>
           </template>
 

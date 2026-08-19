@@ -1045,7 +1045,7 @@ async function onCheckUpdate(): Promise<void> {
               打开业务引导
             </button>
           </div>
-          <p class="hint-line">用于检测 Node / OpenCode / Chrome，并引导配置密钥与主流程。Windows 上可在引导中一键安装 Node.js 与 OpenCode（OpenCode 需先就绪 Node；装完均需重启应用）。</p>
+          <p class="hint-line">用于检测 Node / OpenCode / Chrome，以及可选的 OfficeCLI（Word/Excel/PPT 抽文本）；并引导配置密钥与主流程。Windows 上可在引导中一键安装 Node.js、OpenCode 与 OfficeCLI（OpenCode 需先就绪 Node，装完需重启；OfficeCLI 装完无需重启）。</p>
 
           <label class="field-label">官网与帮助</label>
           <div class="settings-actions-row">

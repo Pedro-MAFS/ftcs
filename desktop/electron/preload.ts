@@ -54,6 +54,8 @@ import type {
   NodeInstallResult,
   OpenCodeInstallProgress,
   OpenCodeInstallResult,
+  OfficeCliInstallProgress,
+  OfficeCliInstallResult,
   UpdateCheckResult,
 } from './ipc/types'
 
@@ -146,6 +148,22 @@ const api = {
     ipcRenderer.on(IPC.RUNTIME_INSTALL_OPENCODE_PROGRESS, listener)
     return () => {
       ipcRenderer.removeListener(IPC.RUNTIME_INSTALL_OPENCODE_PROGRESS, listener)
+    }
+  },
+  installOfficeCli: (): Promise<OfficeCliInstallResult> =>
+    ipcRenderer.invoke(IPC.RUNTIME_INSTALL_OFFICECLI),
+  onOfficeCliInstallProgress: (
+    handler: (progress: OfficeCliInstallProgress) => void,
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      progress: OfficeCliInstallProgress,
+    ) => {
+      handler(progress)
+    }
+    ipcRenderer.on(IPC.RUNTIME_INSTALL_OFFICECLI_PROGRESS, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.RUNTIME_INSTALL_OFFICECLI_PROGRESS, listener)
     }
   },
   quitApp: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.APP_QUIT),

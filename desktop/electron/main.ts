@@ -98,7 +98,12 @@ import {
 import { probeEnvironment } from './onboarding/env-probe'
 import { installNodeRuntime } from './runtime/install-node-service'
 import { installOpenCodeRuntime } from './runtime/install-opencode-service'
-import type { NodeInstallProgress, OpenCodeInstallProgress } from './ipc/types'
+import { installOfficeCliRuntime } from './runtime/install-officecli-service'
+import type {
+  NodeInstallProgress,
+  OpenCodeInstallProgress,
+  OfficeCliInstallProgress,
+} from './ipc/types'
 import {
   checkForAppUpdate,
   dismissAppUpdate,
@@ -535,6 +540,15 @@ function registerIpcHandlers(): void {
       onProgress: (progress: OpenCodeInstallProgress) => {
         if (!event.sender.isDestroyed()) {
           event.sender.send(IPC.RUNTIME_INSTALL_OPENCODE_PROGRESS, progress)
+        }
+      },
+    })
+  })
+  ipcMain.handle(IPC.RUNTIME_INSTALL_OFFICECLI, async (event) => {
+    return installOfficeCliRuntime({
+      onProgress: (progress: OfficeCliInstallProgress) => {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send(IPC.RUNTIME_INSTALL_OFFICECLI_PROGRESS, progress)
         }
       },
     })
