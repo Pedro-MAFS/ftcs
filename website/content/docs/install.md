@@ -82,6 +82,12 @@ opencode --version
 
 也可在环境变量中指定可执行文件路径：`FTCS_OPENCODE_PATH`。
 
+## OfficeCLI（可选）
+
+若要用 **Word / Excel / PPT**（`.docx` / `.xlsx` / `.pptx`）生成产品画像，可在首次引导或生成提示中**一键安装 OfficeCLI**（装到应用数据目录，不进入主安装包）。未安装时仍可用官网与文本文件生成；遇 Office 文件时可选择安装、跳过该文件或取消。
+
+当前不覆盖 PDF、老格式 `.doc` 的抽取。
+
 ## 首次启动
 
 1. 启动应用，等待 Sidecar / 运行时就绪  

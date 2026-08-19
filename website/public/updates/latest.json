@@ -1,13 +1,13 @@
 {
-  "version": "0.4.1",
-  "releasedAt": "2026-08-09",
+  "version": "0.5.0",
+  "releasedAt": "2026-08-19",
   "minVersion": "0.1.0",
-  "title": "FTCS Desktop 0.4.1",
+  "title": "FTCS Desktop 0.5.0",
   "notes": [
-    "线索页支持导出 CSV：按当前筛选结果所见即所得导出",
-    "导出字段包含公司、阶段、生命周期、域名、国家、联系方式、Tier、评分、匹配理由与来源 URL",
-    "UTF-8 BOM 编码，可用 Excel 直接打开中文内容",
-    "探索任务页可跳转查看对应任务线索，线索页支持按探索任务筛选"
+    "资料库改为单一目录树：网站书签可保存在当前文件夹，与说明书/报价表放在一起",
+    "支持勾选文件夹生成画像；官网、文本、docx/xlsx/pptx 可混合进同一份画像",
+    "Office（docx/xlsx/pptx）生成前抽成文本侧车；引导中可选用一键安装 OfficeCLI（可选，不进主包）",
+    "单文件抽取失败可跳过，不因一个坏文件毁掉整次生成"
   ],
   "downloadPage": "https://ai-utills.com/ftcs/download/"
 }

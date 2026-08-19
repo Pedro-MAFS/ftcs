@@ -27,7 +27,7 @@ workspace/mcp-servers/
 | P2 | web-crawler | 2 | headless 批量爬取，用于定时探索 |
 | P2 | email-sender | 2 | 审核后发送 |
 | P2 | scheduler | 2 | 定时探索 |
-| P2+ | file-parser | 2+ | 特殊文件解析（PDF/Excel/图片），按需扩展 |
+| P2+ | file-parser | 2+ | **仅 pdf / 图片 OCR 等**仍可按需扩展；docx/xlsx/pptx 已在桌面生成前用 OfficeCLI 抽侧车文本（见 docs/17、US-I-11），**不**再做成 Agent 必调 MCP |
 
 ---
 
@@ -255,21 +255,19 @@ SEARCH_DAILY_LIMIT=50
 
 ---
 
-## 7. file-parser（Phase 2+，按需扩展）
+## 7. file-parser（按需扩展，非录入主路径）
 
-**职责**：解析智能体原生工具无法直接读取的特殊文件。
+**职责**：解析桌面端尚未覆盖的特殊文件（主要是 **PDF / 图片 OCR**）。
 
-Phase 1 **不实现**。遇到 PDF、Excel、图片等格式时，Skill 应提示用户：
-- 转换为 txt/md/json/csv，或
-- 提供公司网站 URL，或
-- 等待后续版本支持
+> Word / Excel / PPT（`.docx` / `.xlsx` / `.pptx`）已在桌面主进程生成前用 OfficeCLI 抽出侧车文本（US-I-11），Skill 直接 Read 即可。**不要**再要求 Agent 必调 file-parser 处理这三类。
+
+PDF / 老格式 / 图片：可提示用户转换为 txt/md，或等待后续版本。
 
 后续按需扩展：
 
 | 格式 | 解析方式 |
 |------|---------|
 | PDF | pdf-parse / OCR |
-| Excel | xlsx 库 |
 | 图片 | 多模态模型 OCR |
 
 ---
