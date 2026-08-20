@@ -234,7 +234,6 @@ img {
   color: var(--text);
   border: 1px solid var(--border);
 }
-}
 
 .btn-secondary:hover:not(:disabled) {
   border-color: rgb(59 130 246 / 35%);
