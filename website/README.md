@@ -2,6 +2,10 @@
 
 Vue 3 + Vite 纯静态站：功能展示、帮助文档、软件下载。
 
+**定位**：垂直产品站 [https://ftcs.ai-utills.com/](https://ftcs.ai-utills.com/)（外贸获客智能体）。品牌站为 [https://ai-utills.com/](https://ai-utills.com/)（本仓库不包含主站代码）。
+
+GEO / SEO 执行计划见 [docs/18-官网GEO-SEO双轨优化.md](../docs/18-官网GEO-SEO双轨优化.md)。UI 稿：[docs/design/官网UI设计效果图.pen](../docs/design/官网UI设计效果图.pen)。
+
 **部署路径**：线上为 **https://ftcs.ai-utills.com/**（站点根，Vite `base: '/'`）。构建使用 **vite-ssg** 预渲染各路由 HTML，便于搜索引擎抓取 H1 与正文。
 
 ## 开发
@@ -29,7 +33,7 @@ npm run preview
 2. `vite.config.ts` → `ssgOptions.includedRoutes`
 3. `public/sitemap.xml`
 
-本地可跑 `node scripts/check-ssg-seo.mjs` 抽检 `dist` 内 title / description / h1。
+本地可跑 `npm run check:seo`（先 `npm run build`）抽检 `dist` 内 title / description / h1 / canonical / JSON-LD / `llms.txt`。
 
 ## SEO（robots / sitemap）
 
@@ -39,6 +43,8 @@ npm run preview
 |------|----------|
 | `robots.txt` | https://ftcs.ai-utills.com/robots.txt |
 | `sitemap.xml` | https://ftcs.ai-utills.com/sitemap.xml |
+| `llms.txt` | https://ftcs.ai-utills.com/llms.txt |
+| `llms-full.txt` | https://ftcs.ai-utills.com/llms-full.txt |
 
 文档增删后请同步更新 `public/sitemap.xml` 的 `<loc>` / `<lastmod>`。
 
@@ -122,4 +128,3 @@ Markdown 源文件：`content/docs/*.md`
 |------|------|
 | `ftcs-线索.png` | Hero 主图 + 线索步骤 |
 | `ftcs-录入.png` / `ftcs-产品画像.png` / `ftcs-线索探索.png` / `ftcs-邮件.png` | 功能展示 |
-| `ftcs-设置.png` | 本机配置说明 |

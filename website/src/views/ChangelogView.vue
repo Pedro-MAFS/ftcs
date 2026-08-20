@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { siteConfig } from '../config/site'
+import { seoCopy, siteConfig } from '../config/site'
 import {
   CHANGELOG_STARTED_AT,
   compareVersions,
@@ -12,8 +12,9 @@ import {
 import { usePageSeo } from '../composables/usePageSeo'
 
 usePageSeo({
-  title: '发布日志',
-  description: `查看 ${siteConfig.productName} 各版本更新说明。发布日志自 ${CHANGELOG_STARTED_AT} 起记录。`,
+  title: seoCopy.changelog.title,
+  description: seoCopy.changelog.description,
+  path: seoCopy.changelog.path,
 })
 
 const BEFORE_START = ''

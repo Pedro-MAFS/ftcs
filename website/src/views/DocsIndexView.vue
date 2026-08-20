@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { listDocs } from '../lib/docs'
+import { seoCopy } from '../config/site'
 import { usePageSeo } from '../composables/usePageSeo'
 
 usePageSeo({
-  title: '帮助文档',
-  description: '外贸获客安装、推荐流程与常见问题：官方通道、探索、充值与下载说明。',
+  title: seoCopy.docs.title,
+  description: seoCopy.docs.description,
+  absoluteTitle: true,
+  path: seoCopy.docs.path,
 })
 </script>
 
@@ -12,8 +15,8 @@ usePageSeo({
   <div>
     <header class="page-head">
       <div class="container">
-        <h1>帮助文档</h1>
-        <p>面向业务用户的安装、流程与常见问题说明。</p>
+        <h1>外贸获客智能体 · 帮助</h1>
+        <p>如何安装并使用 FTCS 这套外贸获客系统：安装前置、一次获客闭环与常见问题。</p>
       </div>
     </header>
     <div class="container docs-list">

@@ -1,0 +1,4530 @@
+{
+  "version": "2.17",
+  "children": [
+    {
+      "type": "frame",
+      "id": "gbvt2",
+      "x": 0,
+      "y": 0,
+      "name": "Primary CTA",
+      "reusable": true,
+      "fill": "$accent",
+      "cornerRadius": 4,
+      "gap": 8,
+      "padding": [
+        12,
+        22
+      ],
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "text",
+          "id": "jL0cm",
+          "name": "Label",
+          "fill": "$fg-inverse",
+          "content": "了解 FTCS",
+          "fontFamily": "$font-body",
+          "fontSize": 14,
+          "fontWeight": "600"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "dzmxk",
+      "x": 137,
+      "y": 0,
+      "name": "Ghost CTA",
+      "reusable": true,
+      "cornerRadius": 4,
+      "stroke": "$border-inverse",
+      "strokeWidth": 1,
+      "gap": 8,
+      "padding": [
+        12,
+        22
+      ],
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "text",
+          "id": "dfwMA",
+          "name": "Label",
+          "fill": "$fg-inverse",
+          "content": "了解我们",
+          "fontFamily": "$font-body",
+          "fontSize": 14,
+          "fontWeight": "500"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "BrSite",
+      "x": 0,
+      "y": 164,
+      "name": "主站 · ai-utills.com",
+      "clip": true,
+      "width": 1440,
+      "fill": "$surface-inverse",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "BrNav",
+          "name": "Nav",
+          "width": "fill_container",
+          "height": 72,
+          "fill": "$surface-inverse",
+          "padding": [
+            0,
+            72
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "BrLg1",
+              "name": "Logo",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "BrMk1",
+                  "name": "Mark",
+                  "width": 28,
+                  "height": 28,
+                  "fill": "$accent",
+                  "cornerRadius": 4,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "BrMkT",
+                      "name": "A",
+                      "fill": "$fg-inverse",
+                      "content": "A",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 14,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "BrWm1",
+                  "name": "Wordmark",
+                  "fill": "$fg-inverse",
+                  "content": "AI-Utills",
+                  "fontFamily": "$font-heading",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "BrLn1",
+              "name": "Links",
+              "gap": 36,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "BrL1",
+                  "name": "产品",
+                  "fill": "$fg-muted",
+                  "content": "产品",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "BrL2",
+                  "name": "关于",
+                  "fill": "$fg-muted",
+                  "content": "关于",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "id": "BrCtaN",
+              "type": "ref",
+              "ref": "gbvt2",
+              "name": "Nav CTA"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "BrHero",
+          "name": "Hero",
+          "width": "fill_container",
+          "fill": "$surface-inverse",
+          "layout": "vertical",
+          "gap": 32,
+          "padding": [
+            88,
+            72,
+            100,
+            72
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "BrEb1",
+              "name": "Eyebrow",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "BrDt1",
+                  "name": "Dot",
+                  "fill": "$accent",
+                  "width": 6,
+                  "height": 6
+                },
+                {
+                  "type": "text",
+                  "id": "BrEt1",
+                  "name": "Eyebrow text",
+                  "fill": "$accent",
+                  "content": "AI-UTILLS  ·  垂直软件服务商",
+                  "fontFamily": "$font-body",
+                  "fontSize": 12,
+                  "fontWeight": "500",
+                  "letterSpacing": 2.2
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "BrHl1",
+              "name": "Headline",
+              "fill": "$fg-inverse",
+              "textGrowth": "fixed-width",
+              "width": 1100,
+              "content": "聚焦一条赛道，\n把 AI 做成能交货的产品。",
+              "lineHeight": 1.12,
+              "fontFamily": "$font-heading",
+              "fontSize": 60,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "BrHb1",
+              "name": "Hero Bottom",
+              "width": "fill_container",
+              "gap": 48,
+              "justifyContent": "space_between",
+              "alignItems": "end",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "BrDs1",
+                  "name": "Description",
+                  "fill": "$fg-muted",
+                  "textGrowth": "fixed-width",
+                  "width": 640,
+                  "content": "不做泛科技工具箱。每一款产品只服务一条赛道，并用独立子站承接。当前主力是 FTCS：跑在本机的外贸获客智能体。",
+                  "lineHeight": 1.6,
+                  "fontFamily": "$font-body",
+                  "fontSize": 17,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "BrHa1",
+                  "name": "Actions",
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "BrHp1",
+                      "type": "ref",
+                      "ref": "gbvt2",
+                      "name": "Primary"
+                    },
+                    {
+                      "id": "BrHg1",
+                      "type": "ref",
+                      "ref": "dzmxk",
+                      "name": "Ghost"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "BrMx1",
+          "name": "Product Matrix",
+          "width": "fill_container",
+          "fill": "$surface-primary",
+          "layout": "vertical",
+          "gap": 48,
+          "padding": [
+            88,
+            72,
+            96,
+            72
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "BrMh1",
+              "name": "Head",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "end",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "BrMc1",
+                  "name": "Copy",
+                  "width": 720,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "BrMe1",
+                      "name": "Eyebrow",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "BrMd1",
+                          "name": "Dot",
+                          "fill": "$accent",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "BrMt1",
+                          "name": "Eyebrow text",
+                          "fill": "$accent",
+                          "content": "PRODUCT MATRIX",
+                          "fontFamily": "$font-body",
+                          "fontSize": 12,
+                          "fontWeight": "500",
+                          "letterSpacing": 2.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "BrMhl",
+                      "name": "Headline",
+                      "fill": "$fg-primary",
+                      "content": "现在可进入的产品。",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 40,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "BrMl1",
+                  "name": "Lead",
+                  "fill": "$fg-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": 320,
+                  "content": "一个产品、一个子域。下一条赛道就绪后再加卡片，不预留空位。",
+                  "lineHeight": 1.6,
+                  "textAlign": "right",
+                  "fontFamily": "$font-body",
+                  "fontSize": 15,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "BrCard",
+              "name": "FTCS Card",
+              "width": "fill_container",
+              "stroke": "$border",
+              "strokeWidth": {
+                "top": 2
+              },
+              "gap": 48,
+              "padding": [
+                40,
+                0,
+                8,
+                0
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "BrCi1",
+                  "name": "Identity",
+                  "width": 280,
+                  "layout": "vertical",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "BrCk1",
+                      "name": "Kicker",
+                      "fill": "$accent",
+                      "content": "LIVE  ·  ftcs.ai-utills.com",
+                      "fontFamily": "$font-data",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "BrCn1",
+                      "name": "Name",
+                      "fill": "$fg-primary",
+                      "content": "FTCS",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 28,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "BrCc1",
+                  "name": "Copy",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "BrCs1",
+                      "name": "One-liner",
+                      "fill": "$fg-primary",
+                      "content": "AI 驱动的本机外贸获客智能体",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 20,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "BrCb1",
+                      "name": "Body",
+                      "fill": "$fg-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "把官网与说明书交给它，生成产品画像，在公开网页发现潜在采购商，并写出可改稿的开发信草稿。数据与密钥留在本机。",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "id": "BrCtaC",
+                  "type": "ref",
+                  "ref": "gbvt2",
+                  "name": "Card CTA",
+                  "descendants": {
+                    "jL0cm": {
+                      "content": "进入产品站"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "BrAbout",
+          "name": "About",
+          "width": "fill_container",
+          "fill": "$surface-inverse",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": [
+            72,
+            72,
+            88,
+            72
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "BrAk1",
+              "name": "Kicker",
+              "fill": "$accent",
+              "content": "ABOUT",
+              "fontFamily": "$font-body",
+              "fontSize": 12,
+              "fontWeight": "500",
+              "letterSpacing": 2.4
+            },
+            {
+              "type": "text",
+              "id": "BrAh1",
+              "name": "Headline",
+              "fill": "$fg-inverse",
+              "content": "品牌站只讲公司，产品细节去子站。",
+              "fontFamily": "$font-heading",
+              "fontSize": 28,
+              "fontWeight": "600"
+            },
+            {
+              "type": "text",
+              "id": "BrAd1",
+              "name": "Body",
+              "fill": "$fg-muted",
+              "textGrowth": "fixed-width",
+              "width": 760,
+              "content": "品牌站只建立公司形象与产品入口。具体能力、下载与帮助都在各产品子站。后续赛道就绪后，只在产品矩阵加一张卡片，并开新的子域。",
+              "lineHeight": 1.6,
+              "fontFamily": "$font-body",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "BrFt1",
+          "name": "Footer",
+          "width": "fill_container",
+          "fill": "$surface-inverse",
+          "padding": [
+            28,
+            72
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "BrFc1",
+              "name": "Copy",
+              "fill": "$fg-muted",
+              "content": "AI-Utills  ·  品牌官网 ai-utills.com  ·  产品站 ftcs.ai-utills.com",
+              "fontFamily": "$font-body",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "BrFb1",
+              "name": "Beian",
+              "fill": "$fg-secondary",
+              "content": "鲁ICP备2026033555号-1",
+              "fontFamily": "$font-body",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "BqCeD",
+      "x": 1560,
+      "y": 164,
+      "name": "子站 · ftcs.ai-utills.com",
+      "clip": true,
+      "width": 1440,
+      "fill": "$surface-inverse",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "rEC1l",
+          "name": "Nav",
+          "width": "fill_container",
+          "height": 72,
+          "fill": "$surface-inverse",
+          "padding": [
+            0,
+            72
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "x1nj6",
+              "name": "Logo",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "xDwky",
+                  "name": "Mark",
+                  "width": 28,
+                  "height": 28,
+                  "fill": "$accent",
+                  "cornerRadius": 4,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Ma8N1",
+                      "name": "F",
+                      "fill": "$fg-inverse",
+                      "content": "F",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 14,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "y0RGc",
+                  "name": "Wordmark",
+                  "fill": "$fg-inverse",
+                  "content": "FTCS",
+                  "fontFamily": "$font-heading",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "Ipx54",
+                  "name": "Sep",
+                  "fill": "$fg-secondary",
+                  "content": "/",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "ICvLW",
+                  "name": "Parent",
+                  "fill": "$fg-muted",
+                  "content": "AI-Utills",
+                  "fontFamily": "$font-body",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "uhS65",
+              "name": "Links",
+              "gap": 36,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "eeUB6",
+                  "name": "功能",
+                  "fill": "$fg-muted",
+                  "content": "功能",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "kP0qg",
+                  "name": "场景",
+                  "fill": "$fg-muted",
+                  "content": "场景",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "vI7m1",
+                  "name": "品牌站",
+                  "fill": "$fg-muted",
+                  "content": "品牌站",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "id": "DQclH",
+              "type": "ref",
+              "ref": "gbvt2",
+              "name": "Nav CTA",
+              "descendants": {
+                "jL0cm": {
+                  "content": "下载桌面版"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "bkSaR",
+          "name": "Hero",
+          "width": "fill_container",
+          "fill": "$surface-inverse",
+          "layout": "vertical",
+          "gap": 32,
+          "padding": [
+            88,
+            72,
+            100,
+            72
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "ay9Od",
+              "name": "Eyebrow",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "VyOHx",
+                  "name": "Dot",
+                  "fill": "$accent",
+                  "width": 6,
+                  "height": 6
+                },
+                {
+                  "type": "text",
+                  "id": "q1ii0r",
+                  "name": "Eyebrow text",
+                  "fill": "$accent",
+                  "content": "FTCS  ·  本机 AI 获客智能体",
+                  "fontFamily": "$font-body",
+                  "fontSize": 12,
+                  "fontWeight": "500",
+                  "letterSpacing": 2.2
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "V0PUS8",
+              "name": "Headline",
+              "fill": "$fg-inverse",
+              "textGrowth": "fixed-width",
+              "width": 1100,
+              "content": "告别盲目开发，\n用AI精准锁定全球买家。",
+              "lineHeight": 1.12,
+              "fontFamily": "$font-heading",
+              "fontSize": 60,
+              "fontWeight": "600"
+            },
+            {
+              "type": "frame",
+              "id": "kmE3h",
+              "name": "Hero Bottom",
+              "width": "fill_container",
+              "gap": 48,
+              "justifyContent": "space_between",
+              "alignItems": "end",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "f5ys2f",
+                  "name": "Description",
+                  "fill": "$fg-muted",
+                  "textGrowth": "fixed-width",
+                  "width": 640,
+                  "content": "FTCS 是跑在你电脑上的外贸获客智能体。把官网与说明书交给它，由 AI 生成产品与买家画像，再全网探索潜在采购商、评分去重，并写出可改稿的开发信草稿。数据与密钥留在本机。",
+                  "lineHeight": 1.6,
+                  "fontFamily": "$font-body",
+                  "fontSize": 17,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "qgNbb",
+                  "name": "Actions",
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "id": "osUfe",
+                      "type": "ref",
+                      "ref": "gbvt2",
+                      "name": "Primary",
+                      "descendants": {
+                        "jL0cm": {
+                          "content": "下载桌面版"
+                        }
+                      }
+                    },
+                    {
+                      "id": "IvgQY",
+                      "type": "ref",
+                      "ref": "dzmxk",
+                      "name": "Ghost",
+                      "descendants": {
+                        "dfwMA": {
+                          "content": "查看流水线"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "rBbC0",
+          "name": "Hero Visual",
+          "metadata": {
+            "type": "unsplash",
+            "username": "bernhardvisuals",
+            "link": "https://unsplash.com/@bernhardvisuals",
+            "author": "Tim Bernhard"
+          },
+          "clip": true,
+          "width": "fill_container",
+          "height": 480,
+          "fill": {
+            "type": "image",
+            "enabled": true,
+            "url": "screenshots/pipeline.png",
+            "mode": "fill"
+          },
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "K8i0G",
+              "x": 0,
+              "y": 0,
+              "name": "Grid Overlay",
+              "enabled": false,
+              "opacity": 0.18,
+              "clip": true,
+              "width": 1440,
+              "height": 420,
+              "layout": "none",
+              "children": [
+                {
+                  "type": "rectangle",
+                  "id": "HdINy",
+                  "x": 510,
+                  "y": 0,
+                  "fill": "#97D4FC",
+                  "width": 420,
+                  "height": 420
+                },
+                {
+                  "type": "path",
+                  "id": "wjkg3",
+                  "x": 510,
+                  "y": 12.88,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "NoyF8",
+                  "x": 510,
+                  "y": 26.88,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "Wh2Tj",
+                  "x": 510,
+                  "y": 39.76,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "oA3Mi",
+                  "x": 510,
+                  "y": 53.2,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "d0Qpn",
+                  "x": 510,
+                  "y": 66.64,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "sRI4r",
+                  "x": 510,
+                  "y": 80.64,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "fFsS2",
+                  "x": 510,
+                  "y": 94.64,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "xhySb",
+                  "x": 510,
+                  "y": 120.68,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "I39JmM",
+                  "x": 510,
+                  "y": 133.28,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "o2gYLw",
+                  "x": 510,
+                  "y": 147.84,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "iqLFe",
+                  "x": 510,
+                  "y": 161.84,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "V5Sdfy",
+                  "x": 510,
+                  "y": 188.72,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "e2YMin",
+                  "x": 510,
+                  "y": 209.16,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "U8XLb",
+                  "x": 510,
+                  "y": 230.72,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "rfSee",
+                  "x": 510,
+                  "y": 244.44,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "cLG8V",
+                  "x": 510,
+                  "y": 257.6,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "mW2Rc",
+                  "x": 510,
+                  "y": 283.64,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "cJkUu",
+                  "x": 510,
+                  "y": 298.2,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "ThvZJ",
+                  "x": 510,
+                  "y": 313.04,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "cMCNZ",
+                  "x": 510,
+                  "y": 326.2,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "bEfdn",
+                  "x": 510,
+                  "y": 338.8,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "Y6mYU",
+                  "x": 510,
+                  "y": 363.44,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "UyPYY",
+                  "x": 510,
+                  "y": 378,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "Z06Rhs",
+                  "x": 510,
+                  "y": 392.84,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "cDBtP",
+                  "x": 510,
+                  "y": 406.84,
+                  "geometry": "M0 0l420 0",
+                  "width": 420,
+                  "height": 0,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "path",
+                  "id": "J13uM",
+                  "x": 524,
+                  "y": 0,
+                  "geometry": "M0 420l0-420m13.15997 420l0-420m14 420l0-420m14 420l0-420m14.28003 420l0-420m14 420l0-420m14.83997 420l0-420m13.44 420l0-420m13.72003 420l0-420m14.84003 420l0-420m14.27997 420l0-420m14 420l0-420m13.72003 420l0-420m14 420l0-420m14.27997 420l0-420m12.88 420l0-420m14 420l0-420m14 420l0-420m14.27997 420l0-420m14 420l0-420m13.72003 420l0-420m14.27997 420l0-420m14.56006 420l0-420m13.15997 420l0-420m14.56 420l0-420m14.56 420l0-420m14.56 420l0-420m12.88 420l0-420m14 420l0-420",
+                  "width": 392,
+                  "height": 420,
+                  "stroke": "#3A8CCF",
+                  "strokeWidth": 0.5599999999999999
+                },
+                {
+                  "type": "ellipse",
+                  "id": "bUr2r",
+                  "x": 522.88,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "a9xxgW",
+                  "x": 522.88,
+                  "y": 38.36,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "AOiIq",
+                  "x": 522.88,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "yta4y",
+                  "x": 522.88,
+                  "y": 106.68,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "HKFod",
+                  "x": 522.88,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "CFK3K",
+                  "x": 522.88,
+                  "y": 175,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "GTyYG",
+                  "x": 522.88,
+                  "y": 202.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "R2xbDw",
+                  "x": 522.88,
+                  "y": 229.32,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "LfzjI",
+                  "x": 522.88,
+                  "y": 269.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "D9VKT6",
+                  "x": 522.88,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "t3xeH",
+                  "x": 522.88,
+                  "y": 325.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "w7bqGy",
+                  "x": 522.88,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "yQMGc",
+                  "x": 522.88,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "sv2EP",
+                  "x": 522.88,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ptf5H",
+                  "x": 550.04,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ZnqDx",
+                  "x": 550.04,
+                  "y": 38.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "zxTjy",
+                  "x": 564.32,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "JrnS4",
+                  "x": 550.04,
+                  "y": 93.24,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "e6Rxg",
+                  "x": 550.04,
+                  "y": 119.56,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "WeEVj",
+                  "x": 550.04,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "CeGET",
+                  "x": 550.04,
+                  "y": 175,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "WcabS",
+                  "x": 550.04,
+                  "y": 202.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "xGYh7",
+                  "x": 550.6,
+                  "y": 242.76,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Zecag",
+                  "x": 550.04,
+                  "y": 269.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "DNbmu",
+                  "x": 550.04,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "IccOX",
+                  "x": 550.04,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "YhAAL",
+                  "x": 550.04,
+                  "y": 325.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "xuWya",
+                  "x": 550.04,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "JZ9vl",
+                  "x": 550.04,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "M7RaA",
+                  "x": 550.04,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "e3i1hM",
+                  "x": 578.6,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "kDaxK",
+                  "x": 578.6,
+                  "y": 38.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Al0or",
+                  "x": 578.6,
+                  "y": 93.24,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "X8OrS",
+                  "x": 578.6,
+                  "y": 119.56,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "kEjrU",
+                  "x": 578.6,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "B9AIxM",
+                  "x": 578.6,
+                  "y": 175,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "OFPS2",
+                  "x": 578.6,
+                  "y": 202.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "eve5T",
+                  "x": 578.6,
+                  "y": 242.76,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "i5iWR",
+                  "x": 564.32,
+                  "y": 106.4,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "yLSgs",
+                  "x": 564.32,
+                  "y": 131.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ymgnl",
+                  "x": 564.32,
+                  "y": 161,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "KjgB3",
+                  "x": 564.32,
+                  "y": 255.92,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ygx7D",
+                  "x": 564.32,
+                  "y": 297.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "rFzoe",
+                  "x": 578.6,
+                  "y": 269.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "BxkYn",
+                  "x": 578.6,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "OGk1U",
+                  "x": 578.6,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "k3lHf",
+                  "x": 578.6,
+                  "y": 325.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "wSHtr",
+                  "x": 578.6,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "UUzcn",
+                  "x": 578.6,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "fd7yd",
+                  "x": 578.6,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "MGbIw",
+                  "x": 607.16,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "hVV1P",
+                  "x": 607.16,
+                  "y": 38.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "BjMfF",
+                  "x": 607.16,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "V7EiRg",
+                  "x": 607.16,
+                  "y": 106.4,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "pfeNw",
+                  "x": 607.16,
+                  "y": 131.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "YToQG",
+                  "x": 607.16,
+                  "y": 161,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "t4Qv1f",
+                  "x": 607.16,
+                  "y": 188.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "mYtwz",
+                  "x": 607.16,
+                  "y": 229.32,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "a0BD1N",
+                  "x": 607.16,
+                  "y": 256.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "lngUn",
+                  "x": 607.16,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "s9PW4",
+                  "x": 607.16,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ZMPh1",
+                  "x": 607.16,
+                  "y": 325.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "lNWv1",
+                  "x": 607.16,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "U4c91",
+                  "x": 607.16,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Y4ihm",
+                  "x": 607.16,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "yyPgc",
+                  "x": 635.16,
+                  "y": 93.8,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "h3Cpha",
+                  "x": 634.88,
+                  "y": 119.56,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "QLHfZ",
+                  "x": 634.88,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "g6kMN",
+                  "x": 635.16,
+                  "y": 175.28,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "mJAIz",
+                  "x": 635.16,
+                  "y": 202.72,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "vRQjV",
+                  "x": 635.16,
+                  "y": 243.04,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "iYKjE",
+                  "x": 635.16,
+                  "y": 269.92,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "J8fwu",
+                  "x": 634.88,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "zZuEw",
+                  "x": 634.88,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "O6dpNl",
+                  "x": 649.44,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "VozG7",
+                  "x": 649.44,
+                  "y": 38.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "mLeJG",
+                  "x": 649.44,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "y9YKwt",
+                  "x": 649.44,
+                  "y": 106.68,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ant98",
+                  "x": 649.44,
+                  "y": 131.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "a9kvt",
+                  "x": 649.44,
+                  "y": 161,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "pwQxr",
+                  "x": 649.44,
+                  "y": 188.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "El05j",
+                  "x": 649.44,
+                  "y": 229.32,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "qmGUc",
+                  "x": 649.44,
+                  "y": 256.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "rdme9",
+                  "x": 649.44,
+                  "y": 297.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Sc3XM",
+                  "x": 649.44,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "bILUD",
+                  "x": 649.44,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "pZTkm",
+                  "x": 649.44,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "jQnUE",
+                  "x": 664,
+                  "y": 11.76,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "mZcpv",
+                  "x": 664,
+                  "y": 52.36,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "PinKa",
+                  "x": 663.72,
+                  "y": 93.24,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "X6SJs",
+                  "x": 663.72,
+                  "y": 119.56,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "TNi0W",
+                  "x": 663.72,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "I2t2wI",
+                  "x": 663.72,
+                  "y": 175,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "hKEQr",
+                  "x": 664,
+                  "y": 243.04,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Talzd",
+                  "x": 664.28,
+                  "y": 270.2,
+                  "fill": "#3A8CCF",
+                  "width": 1.12,
+                  "height": 1.12
+                },
+                {
+                  "type": "ellipse",
+                  "id": "uuV0u",
+                  "x": 663.72,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "e04kVF",
+                  "x": 663.72,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Q1pf2",
+                  "x": 663.72,
+                  "y": 325.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "GqvOC",
+                  "x": 663.72,
+                  "y": 391.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "v16eJz",
+                  "x": 691.44,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "H5pe4",
+                  "x": 691.44,
+                  "y": 38.36,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "mZ3Z8",
+                  "x": 691.44,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "P08w9E",
+                  "x": 691.44,
+                  "y": 106.68,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ak0GJ",
+                  "x": 691.44,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "qfivt",
+                  "x": 691.44,
+                  "y": 175,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "taBcz",
+                  "x": 691.44,
+                  "y": 202.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "pgyGG",
+                  "x": 691.44,
+                  "y": 229.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ffBCS",
+                  "x": 691.44,
+                  "y": 256.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "RSoqs",
+                  "x": 691.44,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "lPpp0",
+                  "x": 691.44,
+                  "y": 296.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Q10EcK",
+                  "x": 691.44,
+                  "y": 325.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "sUhvH",
+                  "x": 691.44,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "dUTpB",
+                  "x": 691.44,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "OVruC",
+                  "x": 691.44,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ADu5s",
+                  "x": 718.88,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "R4IaBM",
+                  "x": 718.88,
+                  "y": 38.36,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "aXmfJ",
+                  "x": 718.88,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "av9Bd",
+                  "x": 718.88,
+                  "y": 106.68,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "I6JmX",
+                  "x": 718.88,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "R4oKUR",
+                  "x": 718.88,
+                  "y": 188.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Q9NdBE",
+                  "x": 718.88,
+                  "y": 229.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "hG6De",
+                  "x": 718.88,
+                  "y": 269.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "C8iC9",
+                  "x": 718.88,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "OSQtt",
+                  "x": 718.88,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "XjwXw",
+                  "x": 718.88,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "BYEUs",
+                  "x": 718.88,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "qSvrk",
+                  "x": 718.88,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "IPc0R",
+                  "x": 746.32,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "CoH90",
+                  "x": 746.32,
+                  "y": 38.36,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Hb4iY",
+                  "x": 746.32,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "T87pZ",
+                  "x": 746.32,
+                  "y": 106.68,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Rm6He",
+                  "x": 746.32,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "qzCdy",
+                  "x": 746.32,
+                  "y": 175,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "hbPPn",
+                  "x": 760.88,
+                  "y": 161.28,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "TNA5U",
+                  "x": 760.88,
+                  "y": 216.16,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "FT4wB",
+                  "x": 746.32,
+                  "y": 202.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "z1W5o",
+                  "x": 746.32,
+                  "y": 229.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "FiqI2",
+                  "x": 746.32,
+                  "y": 256.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "J5fLW",
+                  "x": 746.32,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "geDfE",
+                  "x": 760.6,
+                  "y": 269.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "KyJDB",
+                  "x": 746.32,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "aGCQM",
+                  "x": 746.6,
+                  "y": 325.36,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "YotzV",
+                  "x": 746.32,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "GowNg",
+                  "x": 746.32,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "r47s7d",
+                  "x": 746.32,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "AwPhp",
+                  "x": 774.88,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "o4p9Qp",
+                  "x": 774.88,
+                  "y": 38.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "KvHcU",
+                  "x": 774.88,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "o0jnb",
+                  "x": 774.88,
+                  "y": 106.4,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "WIHya",
+                  "x": 760.6,
+                  "y": 131.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "oKPjR",
+                  "x": 774.88,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "f2hutw",
+                  "x": 774.88,
+                  "y": 175,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Ddu12",
+                  "x": 789.72,
+                  "y": 188.72,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "bQVEh",
+                  "x": 774.88,
+                  "y": 202.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "G9UvJ",
+                  "x": 774.88,
+                  "y": 229.32,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Qu3i5",
+                  "x": 774.88,
+                  "y": 256.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "WvNC1",
+                  "x": 774.88,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "YcWrg",
+                  "x": 788.88,
+                  "y": 269.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "PPL7C",
+                  "x": 774.88,
+                  "y": 297.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Yk81O",
+                  "x": 788.88,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ySmRX",
+                  "x": 774.88,
+                  "y": 325.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "jddZT",
+                  "x": 774.88,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "tQ7rs",
+                  "x": 774.88,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "W1HJoe",
+                  "x": 775.16,
+                  "y": 406,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "tnSHP",
+                  "x": 789.16,
+                  "y": 131.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "JDGzx",
+                  "x": 788.88,
+                  "y": 161,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "a7Ukw",
+                  "x": 802.6,
+                  "y": 175.28,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ziZCE",
+                  "x": 802.6,
+                  "y": 202.72,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Hy20o",
+                  "x": 802.32,
+                  "y": 256.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "rR9gp",
+                  "x": 802.32,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "z5ZK79",
+                  "x": 802.32,
+                  "y": 297.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "tXObU",
+                  "x": 802.32,
+                  "y": 325.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "i7ceOu",
+                  "x": 802.32,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "LcNBl",
+                  "x": 802.32,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "jrweC",
+                  "x": 831.16,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "O2GS7S",
+                  "x": 831.44,
+                  "y": 38.36,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "E1OPAz",
+                  "x": 831.44,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "hXy7a",
+                  "x": 831.44,
+                  "y": 106.68,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "CiUnv",
+                  "x": 831.44,
+                  "y": 131.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "yzz8z",
+                  "x": 831.44,
+                  "y": 161,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "FXkin",
+                  "x": 831.44,
+                  "y": 188.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ovqnC",
+                  "x": 831.44,
+                  "y": 229.32,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "oTVI5",
+                  "x": 831.44,
+                  "y": 256.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "w6t29H",
+                  "x": 831.44,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "UCQpi",
+                  "x": 831.44,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "t6qy8j",
+                  "x": 831.44,
+                  "y": 325.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "l5hUo3",
+                  "x": 831.44,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "NNRCV",
+                  "x": 831.44,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "muniL",
+                  "x": 831.44,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "eGkgf",
+                  "x": 859.16,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ATpZe",
+                  "x": 859.16,
+                  "y": 38.36,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "g8vecn",
+                  "x": 859.72,
+                  "y": 66.36,
+                  "fill": "#3A8CCF",
+                  "width": 1.12,
+                  "height": 1.12
+                },
+                {
+                  "type": "ellipse",
+                  "id": "WDzqT",
+                  "x": 859.16,
+                  "y": 93.24,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "WnS8e",
+                  "x": 859.16,
+                  "y": 119.56,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "VkyNN",
+                  "x": 859.16,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "bJGNE",
+                  "x": 859.16,
+                  "y": 175,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "E1iHw9",
+                  "x": 859.16,
+                  "y": 202.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "xhfqC",
+                  "x": 859.16,
+                  "y": 229.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "UwvTJ",
+                  "x": 859.16,
+                  "y": 256.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "EKnHq",
+                  "x": 859.16,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "FM9UR",
+                  "x": 859.16,
+                  "y": 296.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "VTTvX",
+                  "x": 859.16,
+                  "y": 325.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "sf5Ye",
+                  "x": 859.16,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "C5Yy7",
+                  "x": 859.16,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "n4RtXH",
+                  "x": 859.16,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "tNVoJ",
+                  "x": 888,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "P1Caee",
+                  "x": 888,
+                  "y": 38.36,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "ZBjwb",
+                  "x": 888,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "w8IPKN",
+                  "x": 888,
+                  "y": 93.24,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "So9Gl",
+                  "x": 888,
+                  "y": 119.56,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "GXvsm",
+                  "x": 888,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "nRr8v",
+                  "x": 888,
+                  "y": 175,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "S4Sx56",
+                  "x": 888,
+                  "y": 202.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "cgYoQ",
+                  "x": 888,
+                  "y": 229.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "dOzqO",
+                  "x": 888,
+                  "y": 256.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "gZkTD",
+                  "x": 888,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "pwgvJ",
+                  "x": 888,
+                  "y": 296.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "nNGTU",
+                  "x": 888,
+                  "y": 325.08,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "tRNX9",
+                  "x": 888,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "gmRja",
+                  "x": 888,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "WNcFZ",
+                  "x": 888,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "x69N8",
+                  "x": 914.88,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "BIXkG",
+                  "x": 914.88,
+                  "y": 38.36,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "P50baY",
+                  "x": 914.88,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "FnoJU",
+                  "x": 914.88,
+                  "y": 106.68,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "OEU8I",
+                  "x": 914.88,
+                  "y": 146.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "fPQsz",
+                  "x": 914.88,
+                  "y": 188.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "AMmj2",
+                  "x": 914.88,
+                  "y": 229.32,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Si5Ij",
+                  "x": 914.88,
+                  "y": 269.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Mvo08",
+                  "x": 914.88,
+                  "y": 282.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "QcN56",
+                  "x": 914.88,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "aYJVN",
+                  "x": 914.88,
+                  "y": 351.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "AHw4m",
+                  "x": 914.88,
+                  "y": 379.12,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "MIoMz",
+                  "x": 914.88,
+                  "y": 405.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Bc1hd",
+                  "x": 802.32,
+                  "y": 11.48,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "DHKtn",
+                  "x": 802.32,
+                  "y": 38.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "bej4X",
+                  "x": 802.32,
+                  "y": 65.8,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "xfLjF",
+                  "x": 802.32,
+                  "y": 106.4,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "vzPOT",
+                  "x": 802.32,
+                  "y": 146.72,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "bvgra",
+                  "x": 872.6,
+                  "y": 106.68,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "W1POad",
+                  "x": 873.72,
+                  "y": 131.6,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "r49TW",
+                  "x": 873.72,
+                  "y": 161,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "NxBCV",
+                  "x": 873.72,
+                  "y": 188.44,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "btlFz",
+                  "x": 874,
+                  "y": 243.04,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                },
+                {
+                  "type": "ellipse",
+                  "id": "OP6AY",
+                  "x": 873.72,
+                  "y": 269.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "viz8q",
+                  "x": 873.72,
+                  "y": 311.64,
+                  "fill": "#3A8CCF",
+                  "width": 2.24,
+                  "height": 2.24
+                },
+                {
+                  "type": "ellipse",
+                  "id": "Gxy2g",
+                  "x": 874,
+                  "y": 392,
+                  "fill": "#3A8CCF",
+                  "width": 1.68,
+                  "height": 1.68
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "L05KG",
+              "x": 72,
+              "y": 392,
+              "name": "Meta Chip",
+              "fill": "#0A0A0ACC",
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                12,
+                16
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "AAPkC",
+                  "name": "Meta title",
+                  "fill": "$accent",
+                  "content": "META TITLE",
+                  "fontFamily": "$font-data",
+                  "fontSize": 10,
+                  "fontWeight": "normal",
+                  "letterSpacing": 1.6
+                },
+                {
+                  "type": "text",
+                  "id": "h1Ir6",
+                  "name": "Meta value",
+                  "fill": "$fg-inverse",
+                  "content": "FTCS - AI外贸获客系统 | 产品画像、全网线索与开发信草稿",
+                  "fontFamily": "$font-body",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "t7y2o6",
+          "name": "Agent Pipeline",
+          "width": "fill_container",
+          "fill": "$surface-primary",
+          "layout": "vertical",
+          "gap": 48,
+          "padding": [
+            88,
+            72,
+            96,
+            72
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "dE5FJ",
+              "name": "Head",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "end",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "V2JFCD",
+                  "name": "Copy",
+                  "width": 640,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "vMLfy",
+                      "name": "Eyebrow",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "Tp2fe",
+                          "name": "Dot",
+                          "fill": "$accent",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "SCFKC",
+                          "name": "Eyebrow text",
+                          "fill": "$accent",
+                          "content": "AGENT PIPELINE",
+                          "fontFamily": "$font-body",
+                          "fontSize": 12,
+                          "fontWeight": "500",
+                          "letterSpacing": 2.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "JkSCv",
+                      "name": "Headline",
+                      "fill": "$fg-primary",
+                      "content": "一条智能体流水线。",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 40,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "u4JCr2",
+                  "name": "Lead",
+                  "fill": "$fg-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": 300,
+                  "content": "桌面应用内完成编排。\n官网只做展示与下载入口。",
+                  "lineHeight": 1.6,
+                  "textAlign": "right",
+                  "fontFamily": "$font-body",
+                  "fontSize": 15,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "fn4Pb",
+              "name": "Modules",
+              "width": "fill_container",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "I38nV",
+                  "name": "产品录入",
+                  "width": "fill_container",
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "gap": 40,
+                  "padding": [
+                    28,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Vc70r",
+                      "name": "Index",
+                      "fill": "$accent",
+                      "content": "01",
+                      "fontFamily": "$font-data",
+                      "fontSize": 22,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "HwaKU",
+                      "name": "Title",
+                      "fill": "$fg-primary",
+                      "textGrowth": "fixed-width",
+                      "width": 280,
+                      "content": "产品录入",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 24,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "X4Pbcc",
+                      "name": "Scene",
+                      "fill": "$fg-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": 640,
+                      "content": "按文件夹整理官网书签与说明书，勾选文件或整个产品目录，交给智能体生成画像。",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "N91WO",
+                  "name": "产品画像",
+                  "width": "fill_container",
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "gap": 40,
+                  "padding": [
+                    28,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "nnUdp",
+                      "name": "Index",
+                      "fill": "$accent",
+                      "content": "02",
+                      "fontFamily": "$font-data",
+                      "fontSize": 22,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "mB8vh",
+                      "name": "Title",
+                      "fill": "$fg-primary",
+                      "textGrowth": "fixed-width",
+                      "width": 280,
+                      "content": "产品画像",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 24,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "LDBj1",
+                      "name": "Scene",
+                      "fill": "$fg-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": 640,
+                      "content": "AI 抽出公司、产品、买家与目标市场。画像是后续关键词与全网探索的基础。",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "UeZlX",
+                  "name": "获客探索",
+                  "width": "fill_container",
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "gap": 40,
+                  "padding": [
+                    28,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "q4yDM",
+                      "name": "Index",
+                      "fill": "$accent",
+                      "content": "03",
+                      "fontFamily": "$font-data",
+                      "fontSize": 22,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "z1WO9Y",
+                      "name": "Title",
+                      "fill": "$fg-primary",
+                      "textGrowth": "fixed-width",
+                      "width": 280,
+                      "content": "获客探索",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 24,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "YiwjX",
+                      "name": "Scene",
+                      "fill": "$fg-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": 640,
+                      "content": "AI 按产品、场景、买家、地理扩展关键词，在公开网页中发现潜在采购商，而不是在黄页里碰运气。",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "fREZR",
+                  "name": "线索评分",
+                  "width": "fill_container",
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "gap": 40,
+                  "padding": [
+                    28,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "v9UQL1",
+                      "name": "Index",
+                      "fill": "$accent",
+                      "content": "04",
+                      "fontFamily": "$font-data",
+                      "fontSize": 22,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "h85Jj",
+                      "name": "Title",
+                      "fill": "$fg-primary",
+                      "textGrowth": "fixed-width",
+                      "width": 280,
+                      "content": "线索评分",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 24,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Jbt12",
+                      "name": "Scene",
+                      "fill": "$fg-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": 640,
+                      "content": "智能体去重分级到 A/B/C，聚焦高意向线索。支持人工校对后再写邮件。",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ijegW",
+                  "name": "开发信草稿",
+                  "width": "fill_container",
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "gap": 40,
+                  "padding": [
+                    28,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "s6V6TK",
+                      "name": "Index",
+                      "fill": "$accent",
+                      "content": "05",
+                      "fontFamily": "$font-data",
+                      "fontSize": 22,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "lqFTo",
+                      "name": "Title",
+                      "fill": "$fg-primary",
+                      "textGrowth": "fixed-width",
+                      "width": 280,
+                      "content": "开发信草稿",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 24,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "JxBsW",
+                      "name": "Scene",
+                      "fill": "$fg-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": 640,
+                      "content": "AI 为高意向线索生成短函与正式函变体，改稿后通过并保存。当前版本不发送。",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "t8w603",
+          "name": "Workflow",
+          "width": "fill_container",
+          "fill": "$surface-inverse",
+          "layout": "vertical",
+          "gap": 48,
+          "padding": [
+            88,
+            72,
+            96,
+            72
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "Fpz95",
+              "name": "Head",
+              "layout": "vertical",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "bUukO",
+                  "name": "Eyebrow",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "BsJGT",
+                      "name": "Dot",
+                      "fill": "$accent",
+                      "width": 6,
+                      "height": 6
+                    },
+                    {
+                      "type": "text",
+                      "id": "RfaKQ",
+                      "name": "Eyebrow text",
+                      "fill": "$accent",
+                      "content": "LOCAL AGENT  ·  AI LOOP",
+                      "fontFamily": "$font-body",
+                      "fontSize": 12,
+                      "fontWeight": "500",
+                      "letterSpacing": 2.4
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "SQz94",
+                  "name": "Headline",
+                  "fill": "$fg-inverse",
+                  "content": "把资料交给智能体，跑通一次获客闭环。",
+                  "fontFamily": "$font-heading",
+                  "fontSize": 36,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "PUXeB",
+              "name": "Steps",
+              "width": "fill_container",
+              "gap": 24,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "OhG0v",
+                  "name": "录入产品",
+                  "width": "fill_container",
+                  "stroke": "$accent",
+                  "strokeWidth": {
+                    "top": 2
+                  },
+                  "layout": "vertical",
+                  "gap": 14,
+                  "padding": [
+                    24,
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "CQA4n",
+                      "name": "Index",
+                      "fill": "$accent",
+                      "content": "01",
+                      "fontFamily": "$font-data",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "B4tXL",
+                      "name": "Title",
+                      "fill": "$fg-inverse",
+                      "content": "资料进本机",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 22,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "KciSE",
+                      "name": "Desc",
+                      "fill": "$fg-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "官网书签与说明书进同一产品夹，勾选后由 AI 生成画像。密钥留在本机，不上传官网。",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-body",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "N36ki",
+                  "name": "锁定买家",
+                  "width": "fill_container",
+                  "stroke": "$accent",
+                  "strokeWidth": {
+                    "top": 2
+                  },
+                  "layout": "vertical",
+                  "gap": 14,
+                  "padding": [
+                    24,
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "E1FJD",
+                      "name": "Index",
+                      "fill": "$accent",
+                      "content": "02",
+                      "fontFamily": "$font-data",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "g40r91",
+                      "name": "Title",
+                      "fill": "$fg-inverse",
+                      "content": "全网探索",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 22,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "nzflD",
+                      "name": "Desc",
+                      "fill": "$fg-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "AI 扩展关键词并全网探索。线索库评分去重，只盯高意向。",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-body",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "kwAfR",
+                  "name": "写信跟进",
+                  "width": "fill_container",
+                  "stroke": "$accent",
+                  "strokeWidth": {
+                    "top": 2
+                  },
+                  "layout": "vertical",
+                  "gap": 14,
+                  "padding": [
+                    24,
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "a88QxP",
+                      "name": "Index",
+                      "fill": "$accent",
+                      "content": "03",
+                      "fontFamily": "$font-data",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "HotkK",
+                      "name": "Title",
+                      "fill": "$fg-inverse",
+                      "content": "人审出信",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 22,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "lMsQL",
+                      "name": "Desc",
+                      "fill": "$fg-muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "切换话术变体并改稿，通过后落盘。当前不发送，避免误触达。",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-body",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "FtSc1",
+          "name": "Fit",
+          "width": "fill_container",
+          "fill": "$surface-primary",
+          "layout": "vertical",
+          "gap": 48,
+          "padding": [
+            88,
+            72,
+            96,
+            72
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "FtHd1",
+              "name": "Head",
+              "width": "fill_container",
+              "justifyContent": "space_between",
+              "alignItems": "end",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "FtCp1",
+                  "name": "Copy",
+                  "width": 640,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "FtEb1",
+                      "name": "Eyebrow",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "ellipse",
+                          "id": "FtDt1",
+                          "name": "Dot",
+                          "fill": "$accent",
+                          "width": 6,
+                          "height": 6
+                        },
+                        {
+                          "type": "text",
+                          "id": "FtEt1",
+                          "name": "Eyebrow text",
+                          "fill": "$accent",
+                          "content": "WHO IT IS FOR",
+                          "fontFamily": "$font-body",
+                          "fontSize": 12,
+                          "fontWeight": "500",
+                          "letterSpacing": 2.4
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "FtHl1",
+                      "name": "Headline",
+                      "fill": "$fg-primary",
+                      "content": "给一线外贸用的 AI 智能体。",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 40,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "FtLd1",
+                  "name": "Lead",
+                  "fill": "$fg-secondary",
+                  "textGrowth": "fixed-width",
+                  "width": 360,
+                  "content": "先对齐预期，再下载桌面版。",
+                  "lineHeight": 1.6,
+                  "textAlign": "right",
+                  "fontFamily": "$font-body",
+                  "fontSize": 15,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "FtCl1",
+              "name": "Columns",
+              "width": "fill_container",
+              "gap": 32,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "FtYes",
+                  "name": "适合",
+                  "width": "fill_container",
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 2
+                  },
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": [
+                    24,
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "FtYk1",
+                      "name": "Kicker",
+                      "fill": "$accent",
+                      "content": "适合",
+                      "fontFamily": "$font-data",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "FtYt1",
+                      "name": "Title",
+                      "fill": "$fg-primary",
+                      "content": "已有产品资料的出海团队",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 22,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "FtYd1",
+                      "name": "Body",
+                      "fill": "$fg-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "中小工厂与外贸业务员：把官网、说明书交给本机智能体，用 AI 生成画像、发现线索、写出可改稿开发信。资料和密钥不出境。",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "FtNo1",
+                  "name": "明确不做",
+                  "width": "fill_container",
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 2
+                  },
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": [
+                    24,
+                    0,
+                    0,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "FtNk1",
+                      "name": "Kicker",
+                      "fill": "$fg-muted",
+                      "content": "明确不做",
+                      "fontFamily": "$font-data",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "FtNt1",
+                      "name": "Title",
+                      "fill": "$fg-primary",
+                      "content": "不是海关库，也不是 CRM",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 22,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "FtNd1",
+                      "name": "Body",
+                      "fill": "$fg-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "不提供海关进口商名单，不替代领英决策人挖掘，不做成完整客户管理。当前版本不群发邮件。",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "FqSc1",
+          "name": "FAQ",
+          "width": "fill_container",
+          "fill": "$surface-inverse",
+          "layout": "vertical",
+          "gap": 48,
+          "padding": [
+            88,
+            72,
+            96,
+            72
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "FqHd1",
+              "name": "Head",
+              "layout": "vertical",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "FqEb1",
+                  "name": "Eyebrow",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "FqDt1",
+                      "name": "Dot",
+                      "fill": "$accent",
+                      "width": 6,
+                      "height": 6
+                    },
+                    {
+                      "type": "text",
+                      "id": "FqEt1",
+                      "name": "Eyebrow text",
+                      "fill": "$accent",
+                      "content": "FAQ",
+                      "fontFamily": "$font-body",
+                      "fontSize": 12,
+                      "fontWeight": "500",
+                      "letterSpacing": 2.4
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "FqHl1",
+                  "name": "Headline",
+                  "fill": "$fg-inverse",
+                  "content": "先把这三件事问清楚。",
+                  "fontFamily": "$font-heading",
+                  "fontSize": 36,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "FqLs1",
+              "name": "Questions",
+              "width": "fill_container",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "FqQ1",
+                  "name": "Q1",
+                  "width": "fill_container",
+                  "stroke": "$border-inverse",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    28,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "FqQ1t",
+                      "name": "Question",
+                      "fill": "$fg-inverse",
+                      "content": "FTCS 是什么？",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 20,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "FqQ1a",
+                      "name": "Answer",
+                      "fill": "$fg-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 980,
+                      "content": "AI-Utills 旗下的 Windows 桌面外贸获客智能体。在本机把产品资料变成画像、公开网页线索和可改稿开发信。产品站：ftcs.ai-utills.com。",
+                      "lineHeight": 1.6,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "FqQ2",
+                  "name": "Q2",
+                  "width": "fill_container",
+                  "stroke": "$border-inverse",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    28,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "FqQ2t",
+                      "name": "Question",
+                      "fill": "$fg-inverse",
+                      "content": "和海关数据、领英开发有什么不同？",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 20,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "FqQ2a",
+                      "name": "Answer",
+                      "fill": "$fg-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 980,
+                      "content": "FTCS 不卖海关进口商名单，也不做领英决策人挖掘。它按你的产品画像在公开网页里找潜在采购商，并起草开发信，由你审核。",
+                      "lineHeight": 1.6,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "FqQ3",
+                  "name": "Q3",
+                  "width": "fill_container",
+                  "stroke": "$border-inverse",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    28,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "FqQ3t",
+                      "name": "Question",
+                      "fill": "$fg-inverse",
+                      "content": "数据会上传到官网吗？现在能直接发信吗？",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 20,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "FqQ3a",
+                      "name": "Answer",
+                      "fill": "$fg-muted",
+                      "textGrowth": "fixed-width",
+                      "width": 980,
+                      "content": "业务数据与密钥留在本机，官网只做展示与下载。开发信目前是草稿，通过后落盘；发送属于后续版本，避免误触达。",
+                      "lineHeight": 1.6,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "Hh8e1",
+          "name": "CTA Slab",
+          "width": "fill_container",
+          "fill": "$surface-primary",
+          "padding": [
+            56,
+            72
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "sNwyq",
+              "name": "CTA Copy",
+              "width": 720,
+              "layout": "vertical",
+              "gap": 10,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "r3M1Q",
+                  "name": "Headline",
+                  "fill": "$fg-primary",
+                  "content": "把产品资料，变成可行动的线索与开发信草稿。",
+                  "fontFamily": "$font-heading",
+                  "fontSize": 28,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "YQBXx",
+                  "name": "Sub",
+                  "fill": "$fg-secondary",
+                  "content": "Windows 桌面智能体。密钥留在本机；官方通道开通即可探索，无需自备模型与搜索 Key。",
+                  "fontFamily": "$font-body",
+                  "fontSize": 15,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "id": "P1AgEN",
+              "type": "ref",
+              "ref": "gbvt2",
+              "name": "CTA",
+              "descendants": {
+                "jL0cm": {
+                  "content": "下载桌面版"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "k27LL",
+          "name": "Footer",
+          "width": "fill_container",
+          "fill": "$surface-inverse",
+          "padding": [
+            28,
+            72
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "n5DZog",
+              "name": "Copy",
+              "fill": "$fg-muted",
+              "content": "FTCS  ·  品牌站 ai-utills.com  ·  产品站 ftcs.ai-utills.com",
+              "fontFamily": "$font-body",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "F2sOx",
+              "name": "Beian",
+              "fill": "$fg-secondary",
+              "content": "鲁ICP备2026033555号-1",
+              "fontFamily": "$font-body",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "surface-primary": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "surface-inverse": {
+      "type": "color",
+      "value": "#0A0A0A"
+    },
+    "fg-primary": {
+      "type": "color",
+      "value": "#1A1A1A"
+    },
+    "fg-secondary": {
+      "type": "color",
+      "value": "#666666"
+    },
+    "fg-inverse": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "fg-muted": {
+      "type": "color",
+      "value": "#9A9A9A"
+    },
+    "border": {
+      "type": "color",
+      "value": "#EEF0F2"
+    },
+    "border-inverse": {
+      "type": "color",
+      "value": "#2A2A2A"
+    },
+    "accent": {
+      "type": "color",
+      "value": "#4A9FD8"
+    },
+    "accent-soft": {
+      "type": "color",
+      "value": "#B3D9F0"
+    },
+    "font-heading": {
+      "type": "string",
+      "value": "Geist"
+    },
+    "font-body": {
+      "type": "string",
+      "value": "Inter"
+    },
+    "font-data": {
+      "type": "string",
+      "value": "Geist Mono"
+    }
+  },
+  "fileToken": "8bb449de-2d76-4936-9533-93aefc0fbf70"
+}

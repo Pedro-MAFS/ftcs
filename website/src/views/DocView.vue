@@ -5,6 +5,8 @@ import { marked } from 'marked'
 import { getDoc, listDocs } from '../lib/docs'
 import { rewriteHtmlHrefs } from '../lib/base'
 import { useDocPageSeo } from '../composables/usePageSeo'
+import { useFaqJsonLd } from '../composables/useJsonLd'
+import { geoFaqs } from '../config/site'
 
 const props = defineProps<{ slug: string }>()
 const route = useRoute()
@@ -19,9 +21,13 @@ const html = computed(() => {
 })
 
 useDocPageSeo(() => ({
-  title: doc.value?.meta.title ?? '文档未找到',
+  title: doc.value?.meta.seoTitle ?? doc.value?.meta.title ?? '文档未找到',
   description: doc.value?.meta.description ?? '该文档不存在或已移动。',
+  absoluteTitle: Boolean(doc.value?.meta.seoTitle),
+  path: doc.value ? `/docs/${doc.value.meta.slug}` : '/docs',
 }))
+
+useFaqJsonLd(computed(() => (props.slug === 'faq' ? geoFaqs : [])))
 
 watch(
   () => [html.value, route.hash] as const,

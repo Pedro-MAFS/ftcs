@@ -1,24 +1,37 @@
 <script setup lang="ts">
 import { siteConfig } from '../config/site'
-import { withBase } from '../lib/base'
-
-const iconSrc = withBase('icon.png')
 </script>
 
 <template>
   <header class="site-header">
     <div class="container site-header__inner">
-      <RouterLink class="brand" to="/">
-        <img class="brand__mark" :src="iconSrc" width="28" height="28" alt="" />
-        <span class="brand__text">
-          {{ siteConfig.brand }}
-          <span class="brand__product">{{ siteConfig.productName }}</span>
-        </span>
-      </RouterLink>
+      <div class="brand">
+        <RouterLink class="brand__product" to="/" aria-label="FTCS 首页">
+          <span class="brand__mark" aria-hidden="true">F</span>
+          <span class="brand__name">{{ siteConfig.brand }}</span>
+        </RouterLink>
+        <span class="brand__sep" aria-hidden="true">/</span>
+        <a
+          class="brand__parent"
+          :href="siteConfig.brandSiteUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {{ siteConfig.brandSiteName }}
+        </a>
+      </div>
       <nav class="nav" aria-label="主导航">
-        <RouterLink to="/">功能</RouterLink>
-        <RouterLink to="/docs">帮助</RouterLink>
-        <RouterLink class="nav__cta" to="/download">下载</RouterLink>
+        <RouterLink :to="{ path: '/', hash: '#pipeline' }">功能</RouterLink>
+        <RouterLink :to="{ path: '/', hash: '#fit' }">场景</RouterLink>
+        <RouterLink class="nav--page" to="/docs">帮助</RouterLink>
+        <a
+          :href="siteConfig.brandSiteUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          品牌站
+        </a>
+        <RouterLink class="nav__cta" to="/download">下载桌面版</RouterLink>
       </nav>
     </div>
   </header>
