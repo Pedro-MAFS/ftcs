@@ -8,12 +8,12 @@ function trimTrailingSlash(url: string): string {
 }
 
 export const SITE_ORIGIN = trimTrailingSlash(
-  import.meta.env.VITE_FTCS_SITE_ORIGIN || 'https://ai-utills.com',
+  import.meta.env.VITE_FTCS_SITE_ORIGIN || 'https://ftcs.ai-utills.com',
 )
 
 export const USER_ORIGIN = trimTrailingSlash(
   import.meta.env.VITE_FTCS_USER_ORIGIN || 'https://user.ai-utills.com',
 )
 
-/** 产品站前缀，如 https://ai-utills.com/ftcs */
-export const PRODUCT_BASE_URL = `${SITE_ORIGIN}/ftcs`
+/** 产品站即官网根，如 https://ftcs.ai-utills.com */
+export const PRODUCT_BASE_URL = SITE_ORIGIN

@@ -9,5 +9,5 @@
     "Office（docx/xlsx/pptx）生成前抽成文本侧车；引导中可选用一键安装 OfficeCLI（可选，不进主包）",
     "单文件抽取失败可跳过，不因一个坏文件毁掉整次生成"
   ],
-  "downloadPage": "https://ai-utills.com/ftcs/download/"
+  "downloadPage": "https://ftcs.ai-utills.com/download/"
 }

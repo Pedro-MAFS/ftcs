@@ -4,11 +4,10 @@ import { fileURLToPath, URL } from 'node:url'
 import type { ViteSSGOptions } from 'vite-ssg'
 
 /**
- * 部署到 nginx html/ftcs/ 时 base 必须为 /ftcs/
- * 本地开发访问：http://localhost:5173/ftcs/
+ * 线上挂在 https://ftcs.ai-utills.com/（站点根）。本地开发：http://localhost:5173/
  */
 export default defineConfig({
-  base: '/ftcs/',
+  base: '/',
   plugins: [vue()],
   resolve: {
     alias: {

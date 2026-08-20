@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => {
 
   const siteOrigin =
     pickOrigin(fileEnv, 'FTCS_SITE_ORIGIN', 'VITE_FTCS_SITE_ORIGIN') ||
-    'https://ai-utills.com'
+    'https://ftcs.ai-utills.com'
   const userOrigin =
     pickOrigin(
       fileEnv,

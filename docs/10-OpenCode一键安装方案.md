@@ -118,7 +118,7 @@ export const OPENCODE_INSTALL = {
   // 或以 package.bin 解析为准
   registryOfficial: 'https://registry.npmjs.org',
   registryMirror: 'https://registry.npmmirror.com',
-  manualDocsUrl: 'https://ai-utills.com/ftcs/docs/install',
+  manualDocsUrl: 'https://ftcs.ai-utills.com/docs/install',
 } as const
 ```
 

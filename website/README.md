@@ -2,7 +2,7 @@
 
 Vue 3 + Vite 纯静态站：功能展示、帮助文档、软件下载。
 
-**部署路径**：默认按 nginx `html/ftcs/` 子目录发布（Vite `base: '/ftcs/'`）。构建使用 **vite-ssg** 预渲染各路由 HTML，便于搜索引擎抓取 H1 与正文。
+**部署路径**：线上为 **https://ftcs.ai-utills.com/**（站点根，Vite `base: '/'`）。构建使用 **vite-ssg** 预渲染各路由 HTML，便于搜索引擎抓取 H1 与正文。
 
 ## 开发
 
@@ -12,7 +12,7 @@ npm install
 npm run dev
 ```
 
-浏览器打开：**http://localhost:5173/ftcs/**（注意带 `/ftcs/` 前缀）。
+浏览器打开：**http://localhost:5173/**
 
 ## 构建
 
@@ -21,7 +21,7 @@ npm run build
 npm run preview
 ```
 
-产物在 `website/dist/`。预览地址同样为 `http://localhost:4173/ftcs/`。
+产物在 `website/dist/`。预览地址为 `http://localhost:4173/`。
 
 构建使用 **vite-ssg** 预渲染各路由为静态 HTML（`dirStyle: 'nested'`，如 `download/index.html`），源码中即含 `<h1>` 与各页 `title` / `description`，便于搜索引擎收录。新增文档时请同步：
 
@@ -37,37 +37,23 @@ npm run preview
 
 | 文件 | 线上地址 |
 |------|----------|
-| `robots.txt` | https://ai-utills.com/ftcs/robots.txt |
-| `sitemap.xml` | https://ai-utills.com/ftcs/sitemap.xml |
+| `robots.txt` | https://ftcs.ai-utills.com/robots.txt |
+| `sitemap.xml` | https://ftcs.ai-utills.com/sitemap.xml |
 
-域名根 `https://ai-utills.com/robots.txt`（主站）需包含 `Sitemap: https://ai-utills.com/ftcs/sitemap.xml`，搜索引擎才会从根目录发现本站地图。文档增删后请同步更新 `public/sitemap.xml` 的 `<loc>` / `<lastmod>`。
+文档增删后请同步更新 `public/sitemap.xml` 的 `<loc>` / `<lastmod>`。
 
-## 部署到 Nginx（html/ftcs）
+## 部署到 Nginx（站点根）
 
-1. 构建：`npm run build`
-2. 将 `dist/` **内全部文件**拷到服务器 nginx html 下的 `ftcs` 目录，例如：
-
-```text
-/usr/share/nginx/html/ftcs/
-  index.html
-  assets/
-  icon.png
-  screenshots/
-  ...
-```
-
-3. Nginx 需支持 SPA history 回退（刷新 `/ftcs/docs` 等路径不 404）。文件放在 `html/ftcs/` 时推荐：
+线上由阿里云流水线发布。本地若要对照 nginx，将 `dist/` 放到站点 html 根目录，并做 SPA 回退：
 
 ```nginx
-location /ftcs/ {
+location / {
     root /usr/share/nginx/html;
-    try_files $uri $uri/ /ftcs/index.html;
+    try_files $uri $uri/ /index.html;
 }
 ```
 
-访问：`https://你的域名/ftcs/`
-
-> 若将来改挂到站点根目录，把 `vite.config.ts` 的 `base` 改为 `'/'` 后重新构建即可。
+访问：`https://ftcs.ai-utills.com/`
 
 ## 配置下载链接
 
@@ -100,7 +86,7 @@ location /ftcs/ {
 
 ## 桌面端更新清单
 
-发版时同步更新 [`public/updates/latest.json`](public/updates/latest.json)（部署后地址：`https://ai-utills.com/ftcs/updates/latest.json`）：
+发版时同步更新 [`public/updates/latest.json`](public/updates/latest.json)（部署后地址：`https://ftcs.ai-utills.com/updates/latest.json`）：
 
 ```json
 {
@@ -109,7 +95,7 @@ location /ftcs/ {
   "minVersion": "0.1.0",
   "title": "FTCS Desktop 0.4.1",
   "notes": ["更新说明条目"],
-  "downloadPage": "https://ai-utills.com/ftcs/download/"
+  "downloadPage": "https://ftcs.ai-utills.com/download/"
 }
 ```
 
