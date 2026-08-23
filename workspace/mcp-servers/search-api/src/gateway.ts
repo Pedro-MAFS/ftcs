@@ -1,4 +1,4 @@
-import type { TavilySearchResponse } from "./tavily.js";
+import { prepareIncludeDomains, type TavilySearchResponse } from "./tavily.js";
 
 export class GatewaySearchError extends Error {
   readonly code: string;
@@ -70,13 +70,33 @@ function mapGatewayFailure(status: number, bodyText: string): GatewaySearchError
 }
 
 /**
- * 经 Token 网关搜索（US-FTCS-S01）。
+ * 经 Token 网关搜索（US-FTCS-S01 / US-E-02）。
  * POST {base}/search，Bearer sk；勿传 api_key / num_results。
  */
+export function buildGatewaySearchBody(
+  query: string,
+  numResults: number,
+  language: string,
+  includeDomains?: string[],
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    query,
+    max_results: Math.min(Math.max(numResults, 1), 10),
+    search_depth: "basic",
+    language: language || "en",
+  };
+  const prepared = prepareIncludeDomains(includeDomains);
+  if (prepared.upstream.length) {
+    body.include_domains = prepared.upstream;
+  }
+  return body;
+}
+
 export async function searchViaGateway(
   query: string,
   numResults: number,
-  language: string
+  language: string,
+  includeDomains?: string[],
 ): Promise<TavilySearchResponse> {
   const apiKey = getGatewayApiKey();
   const base = getGatewayBaseUrl();
@@ -87,12 +107,7 @@ export async function searchViaGateway(
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      query,
-      max_results: Math.min(Math.max(numResults, 1), 10),
-      search_depth: "basic",
-      language: language || "en",
-    }),
+    body: JSON.stringify(buildGatewaySearchBody(query, numResults, language, includeDomains)),
   });
 
   if (!response.ok) {

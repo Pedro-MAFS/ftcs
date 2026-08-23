@@ -58,6 +58,44 @@ test("cache read/write roundtrip", () => {
   }
 });
 
+test("cache key is unchanged without include_domains (R1 compatible)", () => {
+  const baseline = buildCacheKey("WPC Decking importer Germany", "en", 5);
+  assert.equal(buildCacheKey("WPC Decking importer Germany", "en", 5, undefined), baseline);
+  assert.equal(buildCacheKey("WPC Decking importer Germany", "en", 5, []), baseline);
+  assert.equal(buildCacheKey("WPC Decking importer Germany", "en", 5, ["", "  "]), baseline);
+});
+
+test("cache key changes when include_domains is set", () => {
+  const none = buildCacheKey("q", "en", 5);
+  const facebook = buildCacheKey("q", "en", 5, ["facebook.com"]);
+  const linkedin = buildCacheKey("q", "en", 5, ["linkedin.com/company"]);
+  assert.notEqual(none, facebook);
+  assert.notEqual(facebook, linkedin);
+  assert.equal(
+    buildCacheKey("q", "en", 5, ["b.com", "a.com"]),
+    buildCacheKey("q", "en", 5, ["a.com", "b.com"]),
+  );
+});
+
+test("cache read/write with include_domains does not collide with R1 entry", () => {
+  const root = mkdtempSync(join(tmpdir(), "ftcs-search-cache-include-"));
+  try {
+    mkdirSync(join(root, "data", "cache", "search"), { recursive: true });
+    const r1 = [{ title: "Site", url: "https://example.com", snippet: "r1", position: 1 }];
+    const r2 = [{ title: "FB", url: "https://facebook.com/acme", snippet: "r2", position: 1 }];
+
+    writeCache(root, "q", "en", 5, "tavily", r1);
+    writeCache(root, "q", "en", 5, "tavily", r2, ["facebook.com"]);
+
+    const cachedR1 = readCache(root, "q", "en", 5);
+    const cachedR2 = readCache(root, "q", "en", 5, ["facebook.com"]);
+    assert.equal(cachedR1?.results[0]?.url, "https://example.com");
+    assert.equal(cachedR2?.results[0]?.url, "https://facebook.com/acme");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("daily usage increments and enforces limit", () => {
   const root = mkdtempSync(join(tmpdir(), "ftcs-search-usage-"));
   try {

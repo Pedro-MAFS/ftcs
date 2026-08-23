@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getGatewayBaseUrl, GatewaySearchError } from "./gateway.js";
+import { buildGatewaySearchBody, getGatewayBaseUrl, GatewaySearchError } from "./gateway.js";
 
 test("getGatewayBaseUrl trims trailing slash", () => {
   const prev = process.env.FTCS_TOKEN_GATEWAY_BASE_URL;
@@ -11,6 +11,20 @@ test("getGatewayBaseUrl trims trailing slash", () => {
     if (prev === undefined) delete process.env.FTCS_TOKEN_GATEWAY_BASE_URL;
     else process.env.FTCS_TOKEN_GATEWAY_BASE_URL = prev;
   }
+});
+
+test("buildGatewaySearchBody omits include_domains when empty", () => {
+  const none = buildGatewaySearchBody("q", 5, "en");
+  assert.equal("include_domains" in none, false);
+
+  const empty = buildGatewaySearchBody("q", 5, "en", []);
+  assert.equal("include_domains" in empty, false);
+
+  const withInclude = buildGatewaySearchBody("q", 5, "en", ["linkedin.com/company"]);
+  assert.deepEqual(withInclude.include_domains, ["linkedin.com/company"]);
+  assert.equal("api_key" in withInclude, false);
+  assert.equal("num_results" in withInclude, false);
+  assert.equal("include_answer" in withInclude, false);
 });
 
 test("GatewaySearchError carries code and status", () => {

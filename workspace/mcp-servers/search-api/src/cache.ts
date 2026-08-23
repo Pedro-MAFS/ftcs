@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { findProjectRoot } from "./paths.js";
+import { prepareIncludeDomains } from "./tavily.js";
 
 export interface SearchCacheEntry {
   query: string;
@@ -24,20 +25,29 @@ export function getCacheDir(root: string): string {
   return join(root, "data", "cache", "search");
 }
 
-export function buildCacheKey(query: string, language: string, numResults: number): string {
-  return createHash("sha256")
-    .update(`${query}|${language}|${numResults}`)
-    .digest("hex");
+export function buildCacheKey(
+  query: string,
+  language: string,
+  numResults: number,
+  includeDomains?: string[],
+): string {
+  const token = prepareIncludeDomains(includeDomains).cacheToken;
+  const raw =
+    token === "none"
+      ? `${query}|${language}|${numResults}`
+      : `${query}|${language}|${numResults}|${token}`;
+  return createHash("sha256").update(raw).digest("hex");
 }
 
 export function readCache(
   root: string,
   query: string,
   language: string,
-  numResults: number
+  numResults: number,
+  includeDomains?: string[],
 ): SearchCacheEntry | null {
   const cacheDir = getCacheDir(root);
-  const key = buildCacheKey(query, language, numResults);
+  const key = buildCacheKey(query, language, numResults, includeDomains);
   const cachePath = join(cacheDir, `${key}.json`);
 
   if (!existsSync(cachePath)) {
@@ -58,7 +68,8 @@ export function writeCache(
   language: string,
   numResults: number,
   provider: string,
-  results: SearchCacheEntry["results"]
+  results: SearchCacheEntry["results"],
+  includeDomains?: string[],
 ): SearchCacheEntry {
   const cacheDir = getCacheDir(root);
   mkdirSync(cacheDir, { recursive: true });
@@ -74,7 +85,7 @@ export function writeCache(
     results,
   };
 
-  const key = buildCacheKey(query, language, numResults);
+  const key = buildCacheKey(query, language, numResults, includeDomains);
   const cachePath = join(cacheDir, `${key}.json`);
   writeFileSync(cachePath, `${JSON.stringify(entry, null, 2)}\n`, "utf8");
   return entry;

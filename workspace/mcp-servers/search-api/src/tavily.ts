@@ -63,19 +63,123 @@ export function normalizeHost(url: string): string | null {
   }
 }
 
-export function shouldExcludeUrl(url: string): boolean {
+function stripWww(host: string): string {
+  return host.replace(/^www\./, "");
+}
+
+/** 校验并整理 include_domains；空结果视为未传。非法项抛错。 */
+export function prepareIncludeDomains(raw?: string[]): {
+  upstream: string[];
+  cacheToken: string;
+} {
+  if (!raw?.length) {
+    return { upstream: [], cacheToken: "none" };
+  }
+
+  const upstream: string[] = [];
+  const seen = new Set<string>();
+
+  for (const item of raw) {
+    const trimmed = String(item ?? "").trim();
+    if (!trimmed) continue;
+    if (/\s/.test(trimmed) || !trimmed.includes(".")) {
+      throw new Error(`invalid include_domains entry: ${trimmed}`);
+    }
+    if (trimmed.length > 200) {
+      throw new Error(`invalid include_domains entry: too long`);
+    }
+    const key = trimmed
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    upstream.push(trimmed);
+  }
+
+  if (!upstream.length) {
+    return { upstream: [], cacheToken: "none" };
+  }
+
+  const cacheToken = [...seen].sort().join(",");
+  return { upstream, cacheToken };
+}
+
+export function isPersonalProfileUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const host = stripWww(parsed.hostname.toLowerCase());
+  const path = parsed.pathname.toLowerCase();
+
+  if (host === "linkedin.com" || host.endsWith(".linkedin.com")) {
+    if (path === "/in" || path.startsWith("/in/") || path === "/pub" || path.startsWith("/pub/")) {
+      return true;
+    }
+  }
+
+  if (host === "facebook.com" || host.endsWith(".facebook.com")) {
+    if (path === "/profile.php" || path.startsWith("/people/") || path.startsWith("/groups/")) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function matchesIncludeDomain(url: string, include: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  const urlHost = stripWww(parsed.hostname.toLowerCase());
+  const urlPath = parsed.pathname.toLowerCase() || "/";
+  const entry = include.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "");
+  const slash = entry.indexOf("/");
+  const entryHost = slash === -1 ? entry : entry.slice(0, slash);
+  const entryPath = slash === -1 ? "" : `/${entry.slice(slash + 1)}`.replace(/\/+$/, "");
+
+  const hostOk = urlHost === entryHost || urlHost.endsWith(`.${entryHost}`);
+  if (!hostOk) return false;
+  if (!entryPath || entryPath === "/") return true;
+
+  const prefix = entryPath.toLowerCase();
+  return urlPath === prefix || urlPath.startsWith(`${prefix}/`);
+}
+
+export function shouldExcludeUrl(url: string, includeDomains?: string[]): boolean {
   const host = normalizeHost(url);
   if (!host) {
     return true;
   }
+  if (isPersonalProfileUrl(url)) {
+    return true;
+  }
+
+  const prepared = prepareIncludeDomains(includeDomains);
+  if (prepared.upstream.length) {
+    return !prepared.upstream.some((entry) => matchesIncludeDomain(url, entry));
+  }
+
   return EXCLUDED_HOST_PATTERNS.some((pattern) => pattern.test(host));
 }
 
-export function mapTavilyResults(results: TavilySearchResult[]): SearchResult[] {
+export function mapTavilyResults(
+  results: TavilySearchResult[],
+  includeDomains?: string[],
+): SearchResult[] {
+  const include = prepareIncludeDomains(includeDomains).upstream;
+  const includeArg = include.length ? include : undefined;
   const mapped: SearchResult[] = [];
 
-  for (const [index, item] of results.entries()) {
-    if (shouldExcludeUrl(item.url)) {
+  for (const item of results) {
+    if (shouldExcludeUrl(item.url, includeArg)) {
       continue;
     }
     mapped.push({
@@ -87,30 +191,44 @@ export function mapTavilyResults(results: TavilySearchResult[]): SearchResult[] 
     if (mapped.length >= 10) {
       break;
     }
-    void index;
   }
 
   return mapped;
 }
 
+export function buildTavilySearchBody(
+  query: string,
+  numResults: number,
+  apiKey: string,
+  includeDomains?: string[],
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    api_key: apiKey,
+    query,
+    search_depth: "basic",
+    max_results: Math.min(Math.max(numResults, 1), 10),
+    include_answer: false,
+    include_raw_content: false,
+  };
+  const prepared = prepareIncludeDomains(includeDomains);
+  if (prepared.upstream.length) {
+    body.include_domains = prepared.upstream;
+  }
+  return body;
+}
+
 export async function searchTavily(
   query: string,
   numResults: number,
-  apiKey: string
+  apiKey: string,
+  includeDomains?: string[],
 ): Promise<TavilySearchResponse> {
   const response = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      api_key: apiKey,
-      query,
-      search_depth: "basic",
-      max_results: Math.min(Math.max(numResults, 1), 10),
-      include_answer: false,
-      include_raw_content: false,
-    }),
+    body: JSON.stringify(buildTavilySearchBody(query, numResults, apiKey, includeDomains)),
   });
 
   if (!response.ok) {

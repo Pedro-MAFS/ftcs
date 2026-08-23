@@ -125,9 +125,12 @@ workspace/mcp-servers/
 {
   "query": "industrial ball valve distributor Germany",
   "language": "en",
-  "num_results": 10
+  "num_results": 10,
+  "include_domains": ["linkedin.com/company"]
 }
 ```
+
+`include_domains` 可选。有值时原样传给 Tavily（自定义）或网关 `POST /v1/search`（官方），并只保留匹配这些 host/路径前缀、且非个人主页的结果。不传、空数组或全空串时行为与现网 R1 相同（不把该字段发给上游；Facebook 等仍走黑名单）。非法项（含空格、无点号纯词）整次失败。
 
 **返回**：
 
@@ -158,7 +161,7 @@ SEARCH_DAILY_LIMIT=50
 
 ### 实现要点
 
-- 搜索结果缓存至 `data/cache/search/{hash}.json`（TTL 24h）
+- 搜索结果缓存至 `data/cache/search/{hash}.json`（TTL 24h）；hash 含 `include_domains`（未传时与现网 R1 相同，避免旧缓存失效）
 - 超出 `SEARCH_DAILY_LIMIT` 时返回错误，不静默失败
 - 记录 API 用量至探索运行记录
 

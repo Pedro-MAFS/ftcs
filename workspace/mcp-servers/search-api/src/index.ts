@@ -9,6 +9,7 @@ import {
   getSearchProvider,
   getTavilyApiKey,
   mapTavilyResults,
+  prepareIncludeDomains,
   SearchResponseSchema,
   searchTavily,
 } from "./tavily.js";
@@ -16,7 +17,7 @@ import { getDailyUsage, incrementSearchUsage } from "./usage.js";
 
 const server = new McpServer({
   name: "search-api",
-  version: "0.4.1",
+  version: "0.4.2",
 });
 
 function isGatewayProvider(provider: string): boolean {
@@ -25,13 +26,18 @@ function isGatewayProvider(provider: string): boolean {
 
 server.tool(
   "search_web",
-  "Search the web and return structured results (title, url, snippet). Uses cache; official channel bills via token gateway.",
+  "Search the web and return structured results (title, url, snippet). Uses cache; official channel bills via token gateway. Optional include_domains limits results to those hosts (e.g. linkedin.com/company).",
   {
     query: z.string().describe("Search query string"),
     language: z.string().default("en").describe("Language hint for cache key, e.g. en, de"),
     num_results: z.number().int().min(1).max(10).default(5).describe("Max results to return"),
+    include_domains: z
+      .array(z.string().max(200))
+      .max(10)
+      .optional()
+      .describe("Optional host/path prefixes for Tavily include_domains, e.g. linkedin.com/company"),
   },
-  async ({ query, language, num_results }) => {
+  async ({ query, language, num_results, include_domains }) => {
     const root = findProjectRoot();
     const provider = getSearchProvider();
     const gateway = isGatewayProvider(provider);
@@ -53,7 +59,10 @@ server.tool(
     }
 
     try {
-      const cached = readCache(root, query, language, num_results);
+      const prepared = prepareIncludeDomains(include_domains);
+      const includeDomains = prepared.upstream.length ? prepared.upstream : undefined;
+
+      const cached = readCache(root, query, language, num_results, includeDomains);
       const usage = getDailyUsage(root);
 
       if (cached) {
@@ -80,10 +89,10 @@ server.tool(
       }
 
       const raw = gateway
-        ? await searchViaGateway(query, num_results, language)
-        : await searchTavily(query, num_results, getTavilyApiKey());
-      const results = mapTavilyResults(raw.results).slice(0, num_results);
-      writeCache(root, query, language, num_results, provider, results);
+        ? await searchViaGateway(query, num_results, language, includeDomains)
+        : await searchTavily(query, num_results, getTavilyApiKey(), includeDomains);
+      const results = mapTavilyResults(raw.results, includeDomains).slice(0, num_results);
+      writeCache(root, query, language, num_results, provider, results, includeDomains);
 
       const updatedUsage = getDailyUsage(root);
       const payload = SearchResponseSchema.parse({
