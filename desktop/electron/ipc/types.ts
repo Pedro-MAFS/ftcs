@@ -38,6 +38,8 @@ export const IPC = {
   KEYWORDS_SAVE: 'keywords:save',
   EXPLORATION_LIST_TASKS: 'exploration:list-tasks',
   EXPLORATION_START_R1: 'exploration:start-r1',
+  EXPLORATION_GET_R2_SITES: 'exploration:get-r2-sites',
+  EXPLORATION_SET_R2_SITE_ENABLED: 'exploration:set-r2-site-enabled',
   LEADS_LIST: 'leads:list',
   LEADS_SAVE_RAW: 'leads:save-raw',
   LEADS_EXPORT_CSV: 'leads:export-csv',
@@ -367,6 +369,7 @@ export interface KeywordsSaveInput {
     language?: string
     priority?: string
     round?: string
+    site_id?: string
   }>
 }
 
@@ -387,6 +390,7 @@ export interface KeywordExpansionDto {
     language: string
     priority: string
     round: string
+    site_id?: string
   }>
   stats: {
     total_queries: number
@@ -399,6 +403,14 @@ export interface KeywordsSaveResult {
   ok: boolean
   message: string
   expansion?: KeywordExpansionDto
+}
+
+export interface ExploreR2SiteDto {
+  id: string
+  label: string
+  include_domains: string[]
+  default_enabled: boolean
+  enabled: boolean
 }
 
 export interface DiscoverLeadsInput {

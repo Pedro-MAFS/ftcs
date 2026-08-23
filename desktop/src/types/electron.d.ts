@@ -133,6 +133,7 @@ export interface KeywordsSaveInput {
     language?: string
     priority?: string
     round?: string
+    site_id?: string
   }>
 }
 
@@ -153,6 +154,7 @@ export interface KeywordExpansionDto {
     language: string
     priority: string
     round: string
+    site_id?: string
   }>
   stats: {
     total_queries: number
@@ -165,6 +167,14 @@ export interface KeywordsSaveResult {
   ok: boolean
   message: string
   expansion?: KeywordExpansionDto
+}
+
+export interface ExploreR2SiteDto {
+  id: string
+  label: string
+  include_domains: string[]
+  default_enabled: boolean
+  enabled: boolean
 }
 
 export interface DiscoverLeadsInput {
@@ -566,6 +576,15 @@ declare global {
       expandKeywords: (productId: string) => Promise<KeywordsExpandResult>
       getKeywords: (productId: string) => Promise<KeywordExpansionDto | null>
       saveKeywords: (input: KeywordsSaveInput) => Promise<KeywordsSaveResult>
+      getExploreR2Sites: () => Promise<{
+        ok: boolean
+        sites: ExploreR2SiteDto[]
+        message?: string
+      }>
+      setExploreR2SiteEnabled: (
+        siteId: string,
+        enabled: boolean,
+      ) => Promise<{ ok: boolean; sites: ExploreR2SiteDto[]; message?: string }>
       listExploreTasks: (productId: string) => Promise<ExploreTasksSnapshotDto>
       startExploreR1: (input: DiscoverLeadsInput) => Promise<DiscoverLeadsResult>
       listLeads: (productId: string) => Promise<LeadsSnapshotDto>

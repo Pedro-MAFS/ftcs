@@ -1,6 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getWorkspaceRoot } from '../config/paths'
+import { loadExploreR2Registry } from '../exploration/r2-sites'
+import { validateSearchQueryForSave } from './keyword-query-rules'
 
 export type KeywordDimension = 'product' | 'scenario' | 'buyer' | 'geo' | 'competitor'
 
@@ -11,6 +13,7 @@ export interface SearchQuery {
   language: string
   priority: string
   round: string
+  site_id?: string
 }
 
 export interface KeywordExpansion {
@@ -55,6 +58,7 @@ export function loadExpansion(
     const queriesRaw = Array.isArray(raw.search_queries) ? raw.search_queries : []
     const search_queries: SearchQuery[] = queriesRaw.map((item, index) => {
       const row = asRecord(item) ?? {}
+      const siteId = String(row.site_id || '').trim()
       return {
         id: String(row.id || `q_${index + 1}`),
         query: String(row.query || ''),
@@ -62,6 +66,7 @@ export function loadExpansion(
         language: String(row.language || 'en'),
         priority: String(row.priority || 'medium'),
         round: String(row.round || 'R1'),
+        ...(siteId ? { site_id: siteId } : {}),
       }
     })
 
@@ -160,6 +165,7 @@ export interface SaveExpansionInput {
     language?: string
     priority?: string
     round?: string
+    site_id?: string
   }>
   /** 若不传则按 search_queries 重建维度词表 */
   dimensions?: KeywordExpansion['dimensions']
@@ -226,6 +232,9 @@ export function saveExpansion(input: SaveExpansionInput): SaveExpansionResult {
   }
 
   const existing = loadExpansion(productId)
+  const knownSiteIds = new Set(
+    loadExploreR2Registry(getWorkspaceRoot()).map((site) => site.id),
+  )
   const cleaned: SearchQuery[] = []
   for (let index = 0; index < (input.search_queries ?? []).length; index++) {
     const row = input.search_queries[index]
@@ -235,6 +244,14 @@ export function saveExpansion(input: SaveExpansionInput): SaveExpansionResult {
     const round = ROUNDS.has(roundRaw) ? roundRaw : 'R1'
     const priorityRaw = String(row?.priority || 'medium').toLowerCase()
     const priority = PRIORITIES.has(priorityRaw) ? priorityRaw : 'medium'
+    const siteId = String(row?.site_id || '').trim()
+    const invalid = validateSearchQueryForSave(
+      { query, round, site_id: siteId || undefined },
+      knownSiteIds,
+    )
+    if (invalid) {
+      return { ok: false, message: `第 ${index + 1} 条：${invalid}` }
+    }
     cleaned.push({
       id: String(row?.id || `q_${String(index + 1).padStart(3, '0')}`),
       query,
@@ -242,6 +259,7 @@ export function saveExpansion(input: SaveExpansionInput): SaveExpansionResult {
       language: String(row?.language || 'en').trim() || 'en',
       priority,
       round,
+      ...(round === 'R2' && siteId ? { site_id: siteId } : {}),
     })
   }
 

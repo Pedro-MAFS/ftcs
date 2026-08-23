@@ -6,6 +6,11 @@ import {
 } from '../profile/profile-reader'
 import { patchProfileSourceInputs } from '../profile/profile-writer'
 import { loadExpansion, type KeywordExpansion } from '../keywords/keywords-reader'
+import { getWorkspaceRoot } from '../config/paths'
+import {
+  formatEnabledR2SitesForPrompt,
+  listExploreR2Sites,
+} from '../exploration/r2-sites'
 import {
   findLatestRunAfter,
   type ExplorationRun,
@@ -101,17 +106,20 @@ function buildPrompt(bootstrap: BootstrapResult): string {
 }
 
 function buildExpandKeywordsPrompt(productId: string): string {
+  const siteHint = formatEnabledR2SitesForPrompt(listExploreR2Sites(getWorkspaceRoot()))
   return [
     '请严格按 skill `expand-keywords` 执行，为指定产品扩展获客关键词与搜索查询。',
     '',
     `产品 ID：${productId}`,
     '',
+    siteHint,
+    '',
     '执行要求：',
     '1. 调用 lead-store.product_get 确认画像存在且 status == "ready"。',
-    '2. 根据画像与获客目标，由你（大模型）直接生成五维关键词与 30～50 条 search_queries（覆盖 ≥4 维，R1 占多数）；禁止调用 keywords_expand（该规则工具已移除）。',
+    '2. 由你直接生成五维关键词与 30～50 条 search_queries（覆盖 ≥4 维）。R1 占总数 ≥60%，普通产品/场景/买家/地理/竞品替代句，不要 site_id。R2 只给当前启用站点出词，每条必须带 site_id，query 禁止 site: / intitle: / inurl: / filetype:。不要生成 R3 或 R4。禁止调用 keywords_expand。',
     '3. 调用 lead-store.keywords_save 保存完整 expansion；若校验失败则修正后重试。',
-    '4. 可用 keywords_get 核对 stats；不足则补充后再 save。',
-    '5. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例搜索词、下一步建议（discover-leads / R1）。',
+    '4. 可用 keywords_get 核对 stats；不足则补充后再 save。抽查 R2 均有 site_id，且 by_round 无 R3/R4。',
+    '5. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例（R2 样例请带 site_id）、下一步建议（discover-leads / R1）。说明 R2 渠道执行尚未开通。',
     '',
     `输出路径：data/keywords/${productId}/expansion.json`,
   ].join('\n')

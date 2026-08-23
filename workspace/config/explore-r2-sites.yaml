@@ -1,0 +1,27 @@
+# R2 社媒发现站点。enabled 以 data/prefs/explore-r2.json 覆盖 default_enabled。
+sites:
+  - id: linkedin_company
+    label: LinkedIn 公司页
+    include_domains:
+      - linkedin.com/company
+    default_enabled: true
+  - id: facebook_page
+    label: Facebook 公共主页
+    include_domains:
+      - facebook.com
+    default_enabled: true
+  - id: instagram
+    label: Instagram
+    include_domains:
+      - instagram.com
+    default_enabled: false
+  - id: x
+    label: X
+    include_domains:
+      - x.com
+    default_enabled: false
+  - id: tiktok
+    label: TikTok
+    include_domains:
+      - tiktok.com
+    default_enabled: false

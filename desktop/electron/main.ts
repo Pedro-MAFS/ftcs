@@ -67,6 +67,7 @@ import { listProductSummaries, loadProfile } from './profile/profile-reader'
 import { createEmptyDraftProfile, saveProductProfile, softDeleteProductProfile } from './profile/profile-writer'
 import { loadExpansion, saveExpansion } from './keywords/keywords-reader'
 import { listExploreTasks } from './exploration/explore-tasks'
+import { listExploreR2Sites, setExploreR2SiteEnabled } from './exploration/r2-sites'
 import { listLeadsSnapshot } from './leads/leads-reader'
 import { saveRawLead } from './leads/lead-writer'
 import { saveCsvWithDialog } from './leads/export-csv'
@@ -839,6 +840,38 @@ function registerIpcHandlers(): void {
       }
     }
   })
+
+  ipcMain.handle(IPC.EXPLORATION_GET_R2_SITES, () => {
+    try {
+      return { ok: true as const, sites: listExploreR2Sites(getWorkspaceRoot()) }
+    } catch (err) {
+      return {
+        ok: false as const,
+        sites: [],
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(
+    IPC.EXPLORATION_SET_R2_SITE_ENABLED,
+    (_event, input: { siteId: string; enabled: boolean }) => {
+      try {
+        const siteId = String(input?.siteId || '').trim()
+        if (!siteId) {
+          return { ok: false as const, sites: [], message: '缺少站点 id' }
+        }
+        const sites = setExploreR2SiteEnabled(getWorkspaceRoot(), siteId, Boolean(input.enabled))
+        return { ok: true as const, sites }
+      } catch (err) {
+        return {
+          ok: false as const,
+          sites: listExploreR2Sites(getWorkspaceRoot()),
+          message: err instanceof Error ? err.message : String(err),
+        }
+      }
+    },
+  )
 
   ipcMain.handle(IPC.EXPLORATION_LIST_TASKS, (_event, productId: string) => {
     try {

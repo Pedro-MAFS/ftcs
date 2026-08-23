@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { saveProfile, loadProfile } from "./storage.js";
+import { saveProfile, loadProfile, saveKeywords, loadKeywords } from "./storage.js";
 
 function createTempProject(): string {
   const dir = mkdtempSync(join(tmpdir(), "ftcs-test-"));
@@ -52,6 +52,60 @@ test("saveProfile creates and updates product profile", () => {
     assert.equal(second.created, false);
     assert.equal(second.profile.competitors.length, 1);
     assert.equal(second.profile.readiness.score, 100);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("saveKeywords persists R2 site_id and rejects missing site_id", () => {
+  const root = createTempProject();
+  const dimensions = {
+    product: ["WPC decking"],
+    scenario: [],
+    buyer: ["distributor"],
+    geo: [],
+    competitor: [],
+  };
+
+  try {
+    const saved = saveKeywords(root, "prod_test_001", {
+      product_id: "prod_test_001",
+      dimensions,
+      search_queries: [
+        {
+          id: "q_001",
+          query: "WPC decking distributor Germany",
+          dimension: "buyer",
+          language: "en",
+          priority: "high",
+          round: "R2",
+          site_id: "linkedin_company",
+        },
+      ],
+    });
+    assert.equal(saved.search_queries[0].site_id, "linkedin_company");
+
+    const loaded = loadKeywords(root, "prod_test_001");
+    assert.equal(loaded?.search_queries[0].site_id, "linkedin_company");
+
+    assert.throws(
+      () =>
+        saveKeywords(root, "prod_test_001", {
+          product_id: "prod_test_001",
+          dimensions,
+          search_queries: [
+            {
+              id: "q_002",
+              query: "WPC decking distributor Germany",
+              dimension: "buyer",
+              language: "en",
+              priority: "high",
+              round: "R2",
+            },
+          ],
+        }),
+      /site_id/,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

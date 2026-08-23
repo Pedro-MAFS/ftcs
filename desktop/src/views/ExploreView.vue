@@ -6,7 +6,12 @@ import { useWorkspace } from '../composables/useWorkspace'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
 import KeywordEditorDialog from '../components/shared/KeywordEditorDialog.vue'
-import type { ExploreTaskDto, KeywordExpansionDto } from '../types/electron'
+import type { ExploreTaskDto, ExploreR2SiteDto, KeywordExpansionDto } from '../types/electron'
+import {
+  PLANNED_ROUND_EMPTY,
+  ROUND_FILTER_OPTIONS,
+  roundLabel,
+} from '../explore/round-labels'
 
 const meta = SECTION_META.explore
 const router = useRouter()
@@ -46,13 +51,7 @@ const DIMENSION_OPTIONS = [
   { value: 'competitor', label: '竞品' },
 ]
 
-const ROUND_OPTIONS = [
-  { value: 'all', label: '全部轮次' },
-  { value: 'R1', label: 'R1' },
-  { value: 'R2', label: 'R2' },
-  { value: 'R3', label: 'R3' },
-  { value: 'R4', label: 'R4' },
-]
+const ROUND_OPTIONS = ROUND_FILTER_OPTIONS
 
 const DIM_LABEL: Record<string, string> = {
   product: '产品',
@@ -86,17 +85,55 @@ const filteredQueries = computed(() => {
   })
 })
 
+const r2Sites = ref<ExploreR2SiteDto[]>([])
+
 const previewTitle = computed(() => {
   const round =
-    previewRound.value === 'all'
-      ? '全部轮次'
-      : previewRound.value
+    previewRound.value === 'all' ? '全部轮次' : roundLabel(previewRound.value)
   const dim =
     previewDimension.value === 'all'
       ? '全部维度'
       : DIM_LABEL[previewDimension.value] || previewDimension.value
   return `搜索词预览 · ${round} · ${dim} · ${filteredQueries.value.length} 条`
 })
+
+const previewEmptyText = computed(() => {
+  if (previewRound.value === 'R3' || previewRound.value === 'R4') {
+    return PLANNED_ROUND_EMPTY
+  }
+  return '当前筛选下无搜索词'
+})
+
+function queryPreviewMeta(q: KeywordExpansionDto['search_queries'][number]): string {
+  const dim = DIM_LABEL[q.dimension] || q.dimension
+  if (q.round !== 'R2') return `${dim} · ${q.round}`
+  const site = r2Sites.value.find((s) => s.id === q.site_id)
+  if (site) return `${dim} · R2 · ${site.label}`
+  if (q.site_id) return `${dim} · R2 · ${q.site_id}`
+  return `${dim} · R2 · 旧格式`
+}
+
+async function loadR2Sites(): Promise<void> {
+  if (!window.ftcs?.getExploreR2Sites) return
+  try {
+    const res = await window.ftcs.getExploreR2Sites()
+    if (res.ok) r2Sites.value = res.sites
+  } catch {
+    // ignore
+  }
+}
+
+async function onR2SiteToggle(siteId: string, event: Event): Promise<void> {
+  const enabled = (event.target as HTMLInputElement).checked
+  if (!window.ftcs?.setExploreR2SiteEnabled) return
+  const res = await window.ftcs.setExploreR2SiteEnabled(siteId, enabled)
+  if (res.ok) {
+    r2Sites.value = res.sites
+    return
+  }
+  actionMessage.value = res.message || '保存站点开关失败'
+  await loadR2Sites()
+}
 
 const expandingPlaceholder = computed(() => {
   return (
@@ -395,6 +432,7 @@ onMounted(() => {
     // ignore
   }
   void refreshExploreTasks()
+  void loadR2Sites()
 })
 
 onUnmounted(() => {
@@ -565,15 +603,31 @@ onUnmounted(() => {
                 </select>
               </div>
             </div>
+            <div v-if="r2Sites.length" class="explore-r2-sites">
+              <span class="explore-r2-sites__label">R2 站点</span>
+              <label
+                v-for="site in r2Sites"
+                :key="site.id"
+                class="explore-r2-sites__item"
+              >
+                <input
+                  type="checkbox"
+                  :checked="site.enabled"
+                  @change="onR2SiteToggle(site.id, $event)"
+                />
+                {{ site.label }}
+              </label>
+              <span class="explore-r2-sites__hint">下次生成关键词时生效</span>
+            </div>
             <ul v-if="filteredQueries.length" class="explore-preview__list">
               <li v-for="q in filteredQueries" :key="q.id">
                 <span class="explore-preview__query">{{ q.query }}</span>
                 <span class="explore-preview__meta">
-                  {{ DIM_LABEL[q.dimension] || q.dimension }} · {{ q.round }}
+                  {{ queryPreviewMeta(q) }}
                 </span>
               </li>
             </ul>
-            <p v-else class="explore-preview__empty">当前筛选下无搜索词</p>
+            <p v-else class="explore-preview__empty">{{ previewEmptyText }}</p>
           </div>
 
           <div v-if="task.status === 'running'" class="explore-progress">

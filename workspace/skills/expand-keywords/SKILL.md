@@ -44,8 +44,11 @@ outputs:
 
 - 找到可能采购/经销/进口该产品的海外买家或渠道商
 - 覆盖用户目标市场与买家类型
-- 兼顾广撒网（R1）与更深意图（R2/R3）及少量监控词（R4）
-- 用语贴近真实搜索习惯（Google / 行业站），可含合理行业黑话、缩写、本地语
+- **R1 广撒网**（普通检索句）占多数；**R2 社媒发现**只给当前启用的站点出词（见 `config/explore-r2-sites.yaml` + `data/prefs/explore-r2.json`）
+- **不要**生成 R3 / R4
+- 用语贴近真实搜索习惯，可含合理行业黑话、缩写、本地语
+
+读取启用站点：先读工作区 `config/explore-r2-sites.yaml`，再用 `data/prefs/explore-r2.json` 的 `enabled` 覆盖 `default_enabled`。yaml 不存在则默认启用 `linkedin_company` 与 `facebook_page`。
 
 ### Step 3：由你生成完整 KeywordExpansion
 
@@ -65,11 +68,14 @@ outputs:
 
 - 总数 **30～50**（Phase 1 上限 50）
 - 至少覆盖 **4** 个维度（争取 5 个）
-- 轮次建议比例：R1 ~60%、R2 ~20%、R3 ~15%、R4 ~5%（可按画像微调，但 R1 应占多数）
-- 每条必须含：`id`、`query`、`dimension`、`language`、`priority`、`round`
+- **R1 ≥ 60%**：普通产品 / 场景 / 买家 / 地理 / 竞品替代检索句；**不要** `site_id`；**不要**写 `site:` 等运算符
+- **R2**：只给**当前启用**站点出词；每条必须有 `site_id`（登记表中的 id，如 `linkedin_company`）；query 仍是自然语言，**禁止** `site:` / `intitle:` / `inurl:` / `filetype:`。站点限定由后续搜索层的 `include_domains` 处理。可对同一句话按不同 `site_id` 各出一条
+- **不要**生成 `round=R3` 或 `R4`
+- 0 个启用站点 → 不要 R2 词，全部 R1
+- 每条必须含：`id`、`query`、`dimension`、`language`、`priority`、`round`；R2 另含 `site_id`
 - `dimension`：`product` \| `scenario` \| `buyer` \| `geo` \| `competitor`
 - `priority`：`high` \| `medium` \| `low`
-- `round`：`R1` \| `R2` \| `R3` \| `R4`
+- `round`：`R1` \| `R2`（本阶段扩展不要写 R3/R4）
 - `language`：如 `en` / `zh` / `de` 等，与 query 实际语言一致
 - `id` 唯一，建议 `q_001` 起连续编号
 - **去重**：语义高度重复的合并；避免空泛无产品信息的词
@@ -95,6 +101,8 @@ outputs:
 - `stats.total_queries >= 30`
 - `by_dimension` 中至少 4 个维度 count > 0
 - 抽查 3～5 条是否像真人会搜的词
+- 所有 `round=R2` 均有 `site_id`，query 不含 `site:`
+- `by_round` 中 R3 / R4 为 0 或不出现
 
 不足则继续推理补充并再次 `keywords_save`。
 
@@ -105,7 +113,7 @@ outputs:
 - 产品 ID 与保存路径
 - 总查询数与各轮次/维度分布
 - 每个维度 2～3 条代表性 `search_queries`
-- 下一步建议：执行 `discover-leads`（默认 R1）
+- 下一步建议：执行 `discover-leads`（默认 R1）。R2 渠道执行尚未开通，不要建议开始 R2。
 
 ## 输出要求
 
@@ -145,12 +153,13 @@ outputs:
       "dimension": "buyer",
       "language": "en",
       "priority": "high",
-      "round": "R1"
+      "round": "R2",
+      "site_id": "linkedin_company"
     }
   ],
   "stats": {
-    "total_queries": 45,
-    "by_round": { "R1": 27, "R2": 9, "R3": 7, "R4": 2 },
+    "total_queries": 40,
+    "by_round": { "R1": 28, "R2": 12 },
     "by_dimension": { "product": 10, "scenario": 8, "buyer": 12, "geo": 10, "competitor": 5 }
   }
 }

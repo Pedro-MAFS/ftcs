@@ -17,7 +17,12 @@ import {
   getProductDir,
   getProfilePath,
 } from "./paths.js";
-import type { KeywordExpansion, KeywordExpansionInput } from "./keyword-types.js";
+import {
+  KeywordExpansionWriteSchema,
+  SearchQueryWriteSchema,
+  type KeywordExpansion,
+  type KeywordExpansionInput,
+} from "./keyword-types.js";
 import { KeywordExpansionSchema } from "./keyword-types.js";
 
 function nowIso(): string {
@@ -140,12 +145,14 @@ export function saveKeywords(
   input: KeywordExpansionInput
 ): KeywordExpansion {
   const timestamp = input.generated_at ?? nowIso();
-  const search_queries = input.search_queries.map((query, index) => ({
-    ...query,
-    id: query.id || `q_${String(index + 1).padStart(3, "0")}`,
-  }));
+  const search_queries = input.search_queries.map((query, index) =>
+    SearchQueryWriteSchema.parse({
+      ...query,
+      id: query.id || `q_${String(index + 1).padStart(3, "0")}`,
+    }),
+  );
 
-  const expansion: KeywordExpansion = KeywordExpansionSchema.parse({
+  const expansion: KeywordExpansion = KeywordExpansionWriteSchema.parse({
     product_id: productId,
     generated_at: timestamp,
     dimensions: input.dimensions,

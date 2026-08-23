@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import Icon from './Icon.vue'
-import type { KeywordExpansionDto } from '../../types/electron'
+import type { ExploreR2SiteDto, KeywordExpansionDto } from '../../types/electron'
+import { ROUND_FILTER_OPTIONS, ROUND_SELECT_OPTIONS } from '../../explore/round-labels'
 
 export type QueryDraft = {
   key: string
@@ -11,6 +12,7 @@ export type QueryDraft = {
   language: string
   priority: string
   round: string
+  site_id?: string
 }
 
 const props = defineProps<{
@@ -32,7 +34,6 @@ const DIMENSION_OPTIONS = [
   { value: 'competitor', label: '竞品' },
 ]
 
-const ROUND_OPTIONS = ['R1', 'R2', 'R3', 'R4']
 const PRIORITY_OPTIONS = [
   { value: 'high', label: '高' },
   { value: 'medium', label: '中' },
@@ -40,6 +41,7 @@ const PRIORITY_OPTIONS = [
 ]
 
 const rows = ref<QueryDraft[]>([])
+const r2Sites = ref<ExploreR2SiteDto[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
@@ -61,6 +63,7 @@ function toDrafts(expansion: KeywordExpansionDto): QueryDraft[] {
     language: q.language || 'en',
     priority: q.priority || 'medium',
     round: q.round || 'R1',
+    site_id: q.site_id,
   }))
 }
 
@@ -78,11 +81,22 @@ const validCount = computed(
   () => rows.value.filter((r) => r.query.trim()).length,
 )
 
+async function loadSites(): Promise<void> {
+  if (!window.ftcs?.getExploreR2Sites) return
+  try {
+    const res = await window.ftcs.getExploreR2Sites()
+    if (res.ok) r2Sites.value = res.sites
+  } catch {
+    // ignore
+  }
+}
+
 async function load(): Promise<void> {
   if (!props.productId || !window.ftcs?.getKeywords) return
   loading.value = true
   error.value = ''
   try {
+    await loadSites()
     const expansion = await window.ftcs.getKeywords(props.productId)
     if (!expansion) {
       rows.value = []
@@ -97,7 +111,14 @@ async function load(): Promise<void> {
   }
 }
 
+function onRoundChange(row: QueryDraft): void {
+  if (row.round !== 'R2') {
+    row.site_id = undefined
+  }
+}
+
 function addRow(): void {
+  const round = filterRound.value === 'all' ? 'R1' : filterRound.value
   rows.value.push({
     key: nextKey(),
     id: '',
@@ -105,7 +126,8 @@ function addRow(): void {
     dimension: filterDimension.value === 'all' ? 'product' : filterDimension.value,
     language: 'en',
     priority: 'medium',
-    round: filterRound.value === 'all' ? 'R1' : filterRound.value,
+    round,
+    site_id: round === 'R2' ? r2Sites.value[0]?.id : undefined,
   })
 }
 
@@ -131,6 +153,7 @@ async function save(): Promise<void> {
         language: r.language,
         priority: r.priority,
         round: r.round,
+        ...(r.round === 'R2' && r.site_id ? { site_id: r.site_id } : {}),
       })),
     })
     if (!res.ok || !res.expansion) {
@@ -192,8 +215,13 @@ onUnmounted(() => {
           </div>
           <div class="kw-editor__filters">
             <select v-model="filterRound" class="text-input kw-editor__select">
-              <option value="all">全部轮次</option>
-              <option v-for="r in ROUND_OPTIONS" :key="r" :value="r">{{ r }}</option>
+              <option
+                v-for="opt in ROUND_FILTER_OPTIONS"
+                :key="opt.value"
+                :value="opt.value"
+              >
+                {{ opt.label }}
+              </option>
             </select>
             <select v-model="filterDimension" class="text-input kw-editor__select">
               <option value="all">全部维度</option>
@@ -218,6 +246,7 @@ onUnmounted(() => {
                 <th class="kw-col-query">搜索词</th>
                 <th class="kw-col-dim">维度</th>
                 <th class="kw-col-round">轮次</th>
+                <th class="kw-col-site">站点</th>
                 <th class="kw-col-pri">优先级</th>
                 <th class="kw-col-act" />
               </tr>
@@ -244,9 +273,36 @@ onUnmounted(() => {
                   </select>
                 </td>
                 <td>
-                  <select v-model="row.round" class="text-input">
-                    <option v-for="r in ROUND_OPTIONS" :key="r" :value="r">{{ r }}</option>
+                  <select
+                    v-model="row.round"
+                    class="text-input"
+                    @change="onRoundChange(row)"
+                  >
+                    <option
+                      v-for="opt in ROUND_SELECT_OPTIONS"
+                      :key="opt.value"
+                      :value="opt.value"
+                    >
+                      {{ opt.label }}
+                    </option>
                   </select>
+                </td>
+                <td>
+                  <select
+                    v-if="row.round === 'R2'"
+                    v-model="row.site_id"
+                    class="text-input"
+                  >
+                    <option value="">选择站点</option>
+                    <option
+                      v-for="site in r2Sites"
+                      :key="site.id"
+                      :value="site.id"
+                    >
+                      {{ site.label }}
+                    </option>
+                  </select>
+                  <span v-else class="kw-editor__dash">—</span>
                 </td>
                 <td>
                   <select v-model="row.priority" class="text-input">

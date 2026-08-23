@@ -9,6 +9,7 @@ import type {
   KeywordsExpandResult,
   KeywordsSaveInput,
   KeywordsSaveResult,
+  ExploreR2SiteDto,
   DiscoverLeadsInput,
   DiscoverLeadsResult,
   LeadsSnapshotDto,
@@ -231,6 +232,16 @@ const api = {
     ipcRenderer.invoke(IPC.KEYWORDS_GET, productId),
   saveKeywords: (input: KeywordsSaveInput): Promise<KeywordsSaveResult> =>
     ipcRenderer.invoke(IPC.KEYWORDS_SAVE, input),
+  getExploreR2Sites: (): Promise<{
+    ok: boolean
+    sites: ExploreR2SiteDto[]
+    message?: string
+  }> => ipcRenderer.invoke(IPC.EXPLORATION_GET_R2_SITES),
+  setExploreR2SiteEnabled: (
+    siteId: string,
+    enabled: boolean,
+  ): Promise<{ ok: boolean; sites: ExploreR2SiteDto[]; message?: string }> =>
+    ipcRenderer.invoke(IPC.EXPLORATION_SET_R2_SITE_ENABLED, { siteId, enabled }),
   listExploreTasks: (productId: string): Promise<ExploreTasksSnapshotDto> =>
     ipcRenderer.invoke(IPC.EXPLORATION_LIST_TASKS, productId),
   startExploreR1: (input: DiscoverLeadsInput): Promise<DiscoverLeadsResult> =>

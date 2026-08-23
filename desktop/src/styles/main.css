@@ -3979,7 +3979,7 @@ select.text-input {
 
 .explore-preview__select {
   width: auto;
-  min-width: 96px;
+  min-width: 128px;
   height: 26px;
   padding: 0 8px;
   font-size: 11px;
@@ -4036,6 +4036,40 @@ select.text-input {
   padding: 8px 0 2px;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.explore-r2-sites {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 8px;
+  padding: 6px 0 2px;
+  border-top: 1px dashed var(--border);
+}
+
+.explore-r2-sites__label,
+.explore-r2-sites__hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.explore-r2-sites__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.explore-r2-sites__item input {
+  margin: 0;
+}
+
+.explore-r2-sites__hint {
+  margin-left: auto;
 }
 
 .explore-progress {
@@ -4122,7 +4156,7 @@ select.text-input {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  width: min(920px, 100%);
+  width: min(1040px, 100%);
   max-height: min(820px, calc(100vh - 48px));
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
@@ -4162,7 +4196,7 @@ select.text-input {
 
 .kw-editor__select {
   width: auto;
-  min-width: 110px;
+  min-width: 148px;
   height: 30px;
   padding: 0 8px;
 }
@@ -4223,7 +4257,11 @@ select.text-input {
 }
 
 .kw-col-round {
-  width: 72px;
+  width: 132px;
+}
+
+.kw-col-site {
+  width: 148px;
 }
 
 .kw-col-pri {
@@ -4232,6 +4270,12 @@ select.text-input {
 
 .kw-col-act {
   width: 36px;
+}
+
+.kw-editor__dash {
+  display: inline-block;
+  padding: 0 8px;
+  color: var(--text-muted);
 }
 
 .kw-editor__table .text-input {
