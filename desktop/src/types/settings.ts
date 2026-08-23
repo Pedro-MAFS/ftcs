@@ -100,6 +100,7 @@ export type SettingsCategory =
   | 'account'
   | 'model'
   | 'search'
+  | 'explore'
   | 'workspace'
   | 'opencode'
   | 'about'

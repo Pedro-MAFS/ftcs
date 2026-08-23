@@ -16,7 +16,7 @@
 | `expand-keywords` 按 R1~60% / R2~20% / R3~15% / R4~5% 出词；R2/R3 只是更深的普通检索句 | R1 仍为普通聚合词；R2 为「产品/买家/地理句 + `site_id`」；**不再生成 R3/R4 词** |
 | `search_queries` 无站点字段；query 里也没有稳定的站点绑定 | R2 必填 `site_id`；query **禁止** Google 运算符（含 `site:`） |
 | 探索页筛选标签为「R1」「R2」「R3」「R4」 | R1 广撒网、R2 社媒发现、R3/R4 带「规划中」 |
-| 无站点开关 | 探索页可开关 R2 站点；再次扩展后只为启用站出词 |
+| 无站点开关 | 设置页「探索」可开关 R2 站点；再次扩展后只为启用站出词 |
 | 「开始 R1」唯一执行入口 | **不动**（E-05 再加开始 R2） |
 
 ---
@@ -26,7 +26,7 @@
 | 项 | 决定 |
 |----|------|
 | **Q1 站点登记表** | 仓库 [`workspace/config/explore-r2-sites.yaml`](../../workspace/config/explore-r2-sites.yaml)（随应用分发）。字段：`id`、`label`、`include_domains`、`default_enabled`。`include_domains` 本故事只登记，**不调用搜索**（E-02 才用） |
-| **Q2 用户开关** | 覆盖文件 `data/prefs/explore-r2.json`：`{ "enabled": { "<site_id>": true/false } }`。缺省用登记表 `default_enabled`。探索页关键词预览区提供勾选，改完即保存 |
+| **Q2 用户开关** | 覆盖文件 `data/prefs/explore-r2.json`：`{ "enabled": { "<site_id>": true/false } }`。缺省用登记表 `default_enabled`。**设置页「探索」分类**提供勾选，改完即保存（不必点「保存配置」） |
 | **Q3 词如何绑站点** | `search_queries[].site_id`。仅 `round=R2` 必填且必须是登记表中的 id；R1/R3/R4 **不得**带 `site_id` |
 | **Q4 还出不出 R3/R4** | **扩展时不再生成**。编辑器仍可选手改 round（兼容旧文件）；预览里 R3/R4 标规划中，本故事不执行 |
 | **Q5 数量** | 总数仍 **30～50**。R1 **≥ 60%**。其余给 R2，按**当前启用站点**均分，每站至少 2 条（启用 1 站则 R2 全给该站）。0 个启用站 → 没有 R2 词，全是 R1 |
@@ -54,7 +54,7 @@
 | 打开官网、写 `raw/R2.jsonl` | US-E-04 |
 | 「开始 R2」、启动 `discover-leads-r2` | US-E-05 |
 | 给 `discover-leads` 加 R2 分支 | 已否决（§5.5） |
-| 设置页里的站点管理、多工作区同步 | 本故事不需要；开关在探索页即可 |
+| 多工作区同步站点开关 | 本故事不需要；prefs 跟当前工作区走 |
 | 登记具体行业论坛站 | 默认关闭且本故事不建空 `include_domains` 的论坛项 |
 
 ---
@@ -123,16 +123,21 @@ sites:
 
 选 R2 且有词：列表 meta 为 `维度 · R2 · {站点 label}`。
 
-### 4.2 探索页 · R2 站点开关
+### 4.2 设置页 · R2 站点开关
 
-放在关键词预览筛选行附近（`keywords_ready` 时可见）：
+放在设置页 **探索** 分类（不要放在探索页关键词预览旁，以免被当成筛选）：
 
 ```text
-R2 站点  [x] LinkedIn 公司页  [x] Facebook 公共主页  [ ] Instagram  [ ] X  [ ] TikTok
+R2 社媒发现站点
+  [x] LinkedIn 公司页    linkedin.com/company
+  [x] Facebook 公共主页  facebook.com
+  [ ] Instagram          instagram.com
+  [ ] X                  x.com
+  [ ] TikTok             tiktok.com
 ```
 
-- 勾选变化 → 立即写 `data/prefs/explore-r2.json`。  
-- **不**自动重跑扩展；旁注：「下次生成关键词时生效」。  
+- 勾选变化 → 立即写 `data/prefs/explore-r2.json`，不必点设置页「保存配置」。  
+- **不**自动重跑扩展；说明「下次生成关键词时生效」。  
 - 本故事不因此启用「开始 R2」。
 
 ### 4.3 关键词编辑器
@@ -260,7 +265,7 @@ site_id?: string  // 仅 R2
 1. `explore-r2-sites.yaml` + 解析 + prefs 读写 + IPC。  
 2. `SearchQuery.site_id`：lead-store zod、桌面 reader/save、DTO。  
 3. `expand-keywords` Skill + `buildExpandKeywordsPrompt` 注入启用站。  
-4. 探索页轮次文案、站点勾选、R2 meta。  
+4. 探索页轮次文案与 R2 meta；设置页「探索」站点勾选。  
 5. 关键词编辑器站点下拉与保存校验。  
 6. 手工走 A1–A9；把本故事与 17 号文档本条状态改为「编码已落地」。
 
@@ -271,7 +276,7 @@ site_id?: string  // 仅 R2
 | # | 议题 | 决定 |
 |---|------|------|
 | Q1 | 登记表位置 | `workspace/config/explore-r2-sites.yaml` |
-| Q2 | 开关落盘 | `data/prefs/explore-r2.json` + 探索页勾选 |
+| Q2 | 开关落盘 | `data/prefs/explore-r2.json` + 设置页「探索」勾选 |
 | Q3 | 词绑站点 | `site_id`，不写进 query |
 | Q4 | R3/R4 词 | 扩展不再生成 |
 | Q5 | 比例 | 总数 30～50，R1≥60%，其余按启用站均分 |

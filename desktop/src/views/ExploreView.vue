@@ -123,18 +123,6 @@ async function loadR2Sites(): Promise<void> {
   }
 }
 
-async function onR2SiteToggle(siteId: string, event: Event): Promise<void> {
-  const enabled = (event.target as HTMLInputElement).checked
-  if (!window.ftcs?.setExploreR2SiteEnabled) return
-  const res = await window.ftcs.setExploreR2SiteEnabled(siteId, enabled)
-  if (res.ok) {
-    r2Sites.value = res.sites
-    return
-  }
-  actionMessage.value = res.message || '保存站点开关失败'
-  await loadR2Sites()
-}
-
 const expandingPlaceholder = computed(() => {
   return (
     generating.value &&
@@ -602,22 +590,6 @@ onUnmounted(() => {
                   </option>
                 </select>
               </div>
-            </div>
-            <div v-if="r2Sites.length" class="explore-r2-sites">
-              <span class="explore-r2-sites__label">R2 站点</span>
-              <label
-                v-for="site in r2Sites"
-                :key="site.id"
-                class="explore-r2-sites__item"
-              >
-                <input
-                  type="checkbox"
-                  :checked="site.enabled"
-                  @change="onR2SiteToggle(site.id, $event)"
-                />
-                {{ site.label }}
-              </label>
-              <span class="explore-r2-sites__hint">下次生成关键词时生效</span>
             </div>
             <ul v-if="filteredQueries.length" class="explore-preview__list">
               <li v-for="q in filteredQueries" :key="q.id">

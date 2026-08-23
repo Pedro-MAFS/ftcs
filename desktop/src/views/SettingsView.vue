@@ -6,6 +6,7 @@ import { useAuth } from '../composables/useAuth'
 import { useSettingsNav } from '../composables/useSettingsNav'
 import { SECTION_META } from '../types/workspace'
 import type { ChannelMode, SettingsSnapshot } from '../types/settings'
+import type { ExploreR2SiteDto } from '../types/electron'
 import { OFFICIAL_MODEL_CATALOG } from '../types/settings'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import { PRODUCT_LINKS } from '../config/links'
@@ -54,6 +55,8 @@ const error = ref('')
 const showApiKey = ref(false)
 const showTavilyKey = ref(false)
 const snapshot = ref<SettingsSnapshot | null>(null)
+const r2Sites = ref<ExploreR2SiteDto[]>([])
+const r2SitesHint = ref('')
 
 const form = reactive({
   channelMode: 'official' as ChannelMode,
@@ -77,6 +80,7 @@ const categories: Array<{ id: typeof activeCategory.value; label: string }> = [
   { id: 'account', label: '账号与授权' },
   { id: 'model', label: '模型通道' },
   { id: 'search', label: '搜索服务' },
+  { id: 'explore', label: '探索' },
   { id: 'workspace', label: '工作区' },
   { id: 'opencode', label: 'OpenCode 运行时' },
   { id: 'about', label: '关于与隐私' },
@@ -413,6 +417,7 @@ async function onPickWorkspace(): Promise<void> {
         ? `工作区已切换并初始化：${initReason}`
         : `工作区已切换为 ${result.path}，OpenCode 已重启`
       await refresh()
+      await loadR2Sites()
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -425,8 +430,37 @@ function scrollTo(category: typeof activeCategory.value): void {
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
+async function loadR2Sites(): Promise<void> {
+  if (!window.ftcs?.getExploreR2Sites) return
+  try {
+    const res = await window.ftcs.getExploreR2Sites()
+    if (res.ok) {
+      r2Sites.value = res.sites
+      return
+    }
+    r2SitesHint.value = res.message || '无法读取 R2 站点'
+  } catch (err) {
+    r2SitesHint.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
+async function onR2SiteToggle(siteId: string, event: Event): Promise<void> {
+  const enabled = (event.target as HTMLInputElement).checked
+  if (!window.ftcs?.setExploreR2SiteEnabled) return
+  r2SitesHint.value = ''
+  const res = await window.ftcs.setExploreR2SiteEnabled(siteId, enabled)
+  if (res.ok) {
+    r2Sites.value = res.sites
+    r2SitesHint.value = '已保存，下次生成关键词时生效'
+    return
+  }
+  error.value = res.message || '保存站点开关失败'
+  await loadR2Sites()
+}
+
 onMounted(() => {
   void loadSettings()
+  void loadR2Sites()
   void refreshAppVersion()
 })
 
@@ -916,6 +950,39 @@ async function onCheckUpdate(): Promise<void> {
               <span class="mono muted">{{ usagePct }}%</span>
             </div>
           </template>
+        </section>
+
+        <hr class="settings-divider" />
+
+        <!-- 探索 -->
+        <section id="settings-explore" class="settings-block">
+          <div class="settings-block__head">
+            <h3>探索</h3>
+            <span class="muted mono">data/prefs/explore-r2.json</span>
+          </div>
+          <p class="hint-line">
+            <Icon name="info" :size="12" />
+            选择 R2 社媒发现要去哪些站点出词。勾选后立即保存，不必点上方「保存配置」。下次生成关键词时生效，不会改已经生成的词。
+          </p>
+          <div v-if="r2Sites.length" class="settings-r2-sites">
+            <label
+              v-for="site in r2Sites"
+              :key="site.id"
+              class="settings-r2-sites__item"
+            >
+              <input
+                type="checkbox"
+                :checked="site.enabled"
+                @change="onR2SiteToggle(site.id, $event)"
+              />
+              <span>
+                <strong>{{ site.label }}</strong>
+                <span class="muted mono"> {{ site.include_domains.join(', ') }}</span>
+              </span>
+            </label>
+          </div>
+          <p v-else class="hint-line">暂无站点登记表，将使用默认的 LinkedIn 公司页与 Facebook 公共主页。</p>
+          <p v-if="r2SitesHint" class="hint-line">{{ r2SitesHint }}</p>
         </section>
 
         <hr class="settings-divider" />
