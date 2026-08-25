@@ -35,25 +35,45 @@ export interface TavilySearchResponse {
   results: TavilySearchResult[];
 }
 
-const EXCLUDED_HOST_PATTERNS = [
-  /^www\.google\./,
-  /^google\./,
-  /^www\.youtube\.com$/,
-  /^youtube\.com$/,
-  /^www\.facebook\.com$/,
-  /^facebook\.com$/,
-  /^www\.instagram\.com$/,
-  /^www\.twitter\.com$/,
-  /^x\.com$/,
-  /^www\.pinterest\.com$/,
-  /^www\.wikipedia\.org$/,
-  /^en\.wikipedia\.org$/,
-  /^www\.reddit\.com$/,
-  /^www\.quora\.com$/,
-  /^www\.amazon\./,
-  /^www\.ebay\./,
-  /^www\.tiktok\.com$/,
+/**
+ * R1（无 include_domains）发给 Tavily / 官方网关的排除站点。
+ * 有 include 时不要附带本列表：Tavily 以 include 为准，且 R2 需要放行社媒。
+ * Tavily 按域名匹配（含 www / 子域），不能表达路径，也不能覆盖全部国别 TLD。
+ */
+export const TAVILY_EXCLUDE_DOMAINS: string[] = [
+  "google.com",
+  "google.co.uk",
+  "google.de",
+  "google.fr",
+  "youtube.com",
+  "facebook.com",
+  "instagram.com",
+  "twitter.com",
+  "x.com",
+  "pinterest.com",
+  "wikipedia.org",
+  "reddit.com",
+  "quora.com",
+  "amazon.com",
+  "amazon.de",
+  "amazon.co.uk",
+  "ebay.com",
+  "ebay.de",
+  "ebay.co.uk",
+  "tiktok.com",
 ];
+
+/** 直连 Tavily 与官方网关共用：有 include 只传 include，否则传 exclude。不会两个都传。 */
+export function buildSearchDomainFilters(includeDomains?: string[]): {
+  include_domains?: string[];
+  exclude_domains?: string[];
+} {
+  const include = prepareIncludeDomains(includeDomains).upstream;
+  if (include.length) {
+    return { include_domains: include };
+  }
+  return { exclude_domains: [...TAVILY_EXCLUDE_DOMAINS] };
+}
 
 export function normalizeHost(url: string): string | null {
   try {
@@ -153,33 +173,20 @@ export function matchesIncludeDomain(url: string, include: string): boolean {
   return urlPath === prefix || urlPath.startsWith(`${prefix}/`);
 }
 
-export function shouldExcludeUrl(url: string, includeDomains?: string[]): boolean {
+/** 非法 URL 与个人主页路径仍在本地丢掉；站点收窄交给上游 include/exclude。 */
+export function shouldExcludeUrl(url: string): boolean {
   const host = normalizeHost(url);
   if (!host) {
     return true;
   }
-  if (isPersonalProfileUrl(url)) {
-    return true;
-  }
-
-  const prepared = prepareIncludeDomains(includeDomains);
-  if (prepared.upstream.length) {
-    return !prepared.upstream.some((entry) => matchesIncludeDomain(url, entry));
-  }
-
-  return EXCLUDED_HOST_PATTERNS.some((pattern) => pattern.test(host));
+  return isPersonalProfileUrl(url);
 }
 
-export function mapTavilyResults(
-  results: TavilySearchResult[],
-  includeDomains?: string[],
-): SearchResult[] {
-  const include = prepareIncludeDomains(includeDomains).upstream;
-  const includeArg = include.length ? include : undefined;
+export function mapTavilyResults(results: TavilySearchResult[]): SearchResult[] {
   const mapped: SearchResult[] = [];
 
   for (const item of results) {
-    if (shouldExcludeUrl(item.url, includeArg)) {
+    if (shouldExcludeUrl(item.url)) {
       continue;
     }
     mapped.push({
@@ -210,11 +217,10 @@ export function buildTavilySearchBody(
     include_answer: false,
     include_raw_content: false,
   };
-  const prepared = prepareIncludeDomains(includeDomains);
-  if (prepared.upstream.length) {
-    body.include_domains = prepared.upstream;
-  }
-  return body;
+  return {
+    ...body,
+    ...buildSearchDomainFilters(includeDomains),
+  };
 }
 
 export async function searchTavily(

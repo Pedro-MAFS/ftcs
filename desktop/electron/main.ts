@@ -1131,7 +1131,7 @@ function registerIpcHandlers(): void {
           productId,
           (payload) => emitAgentEvent(sender, payload),
           {
-            rounds: input.rounds,
+            channel: 'r1',
             maxQueries: input.maxQueries,
           },
         )
@@ -1147,6 +1147,49 @@ function registerIpcHandlers(): void {
       return {
         ok: true,
         message: `正在为 ${productId} 启动 R1 探索…`,
+        productId,
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.EXPLORATION_START_R2, async (event, input: DiscoverLeadsInput) => {
+    try {
+      const productId = input?.productId
+      if (!productId || typeof productId !== 'string') {
+        return { ok: false, message: '缺少 productId' }
+      }
+      const preflight = await gateAgentStart('discover-leads-r2')
+      if (!preflight.ok) {
+        return { ok: false, message: preflight.message }
+      }
+
+      const sender = event.sender
+      void getAgentRunner()
+        .runDiscoverLeads(
+          productId,
+          (payload) => emitAgentEvent(sender, payload),
+          {
+            channel: 'r2',
+            maxQueries: input.maxQueries,
+          },
+        )
+        .catch((err) => {
+          emitAgentEvent(sender, {
+            type: 'done',
+            ok: false,
+            productId,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        })
+
+      return {
+        ok: true,
+        message: `正在为 ${productId} 启动 R2 社媒发现…`,
         productId,
       }
     } catch (err) {

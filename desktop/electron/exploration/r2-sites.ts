@@ -216,6 +216,16 @@ export function setExploreR2SiteEnabled(
   return listExploreR2Sites(workspaceRoot)
 }
 
+export function formatR2IncludeDomainsForPrompt(sites: ExploreR2SiteRecord[]): string {
+  if (!sites.length) {
+    return '未读到 R2 站点登记表。请读取工作区 config/explore-r2-sites.yaml，按词上的 site_id 取 include_domains。'
+  }
+  const lines = sites.map(
+    (site) => `- ${site.id}（${site.label}）：${site.include_domains.join(', ')}`,
+  )
+  return `R2 站点对照表（search_web 的 include_domains 必须用下列原串，不要写 site:）：\n${lines.join('\n')}`
+}
+
 export function formatEnabledR2SitesForPrompt(sites: ExploreR2SiteDto[]): string {
   const enabled = sites.filter((site) => site.enabled)
   if (!enabled.length) {

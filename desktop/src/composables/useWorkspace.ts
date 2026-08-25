@@ -22,7 +22,7 @@ const exploreTasks = ref<ExploreTasksSnapshotDto | null>(null)
 const pipelineSteps = ref<PipelineStep[]>([
   { id: 'input', label: '1 产品录入', status: 'pending', statusLabel: '待执行' },
   { id: 'keywords', label: '2 关键词扩展', status: 'pending', statusLabel: '待执行' },
-  { id: 'explore', label: '3 R1 探索', status: 'pending', statusLabel: '待执行' },
+      { id: 'explore', label: '3 获客探索', status: 'pending', statusLabel: '待执行' },
   { id: 'score', label: '4 线索评分', status: 'pending', statusLabel: '待执行' },
   { id: 'email', label: '5 邮件草稿', status: 'pending', statusLabel: '待执行' },
 ])
@@ -166,7 +166,8 @@ function updatePipelineFromProfile(): void {
   const expanding =
     agentStatus.value === 'running' && agentSkill.value === 'expand-keywords'
   const exploring =
-    agentStatus.value === 'running' && agentSkill.value === 'discover-leads'
+    agentStatus.value === 'running' &&
+    (agentSkill.value === 'discover-leads' || agentSkill.value === 'discover-leads-r2')
   const scoring =
     agentStatus.value === 'running' && agentSkill.value === 'score-and-dedupe'
   const drafting =
@@ -192,7 +193,7 @@ function updatePipelineFromProfile(): void {
     },
     {
       id: 'explore',
-      label: '3 R1 探索',
+      label: '3 获客探索',
       status: hasCompleted
         ? 'done'
         : hasRunning || exploring
@@ -377,8 +378,8 @@ export function useWorkspace() {
     ]
   }
 
-  function resetAgentForDiscoverLeads(maxQueries = 0): void {
-    agentSkill.value = 'discover-leads'
+  function resetAgentForDiscoverLeads(maxQueries = 0, skill = 'discover-leads'): void {
+    agentSkill.value = skill
     agentStatus.value = 'running'
     agentTimeline.value = []
     agentExpanded.value = {}

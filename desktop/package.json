@@ -11,7 +11,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
-    "test:library": "npx tsx --test electron/library/library-tree.test.ts electron/library/library-import.test.ts electron/library/library-website.test.ts electron/library/library-name.test.ts electron/library/library-mutate.test.ts electron/profile/profile-inputs.test.ts electron/profile/profile-sources.test.ts electron/profile/profile-office-extract.test.ts electron/exploration/r2-sites.test.ts electron/keywords/keywords-reader.test.ts src/components/library/library-context.test.ts src/components/library/library-select.test.ts src/components/library/library-generate.test.ts src/components/library/library-office.test.ts",
+    "test:library": "npx tsx --test electron/library/library-tree.test.ts electron/library/library-import.test.ts electron/library/library-website.test.ts electron/library/library-name.test.ts electron/library/library-mutate.test.ts electron/profile/profile-inputs.test.ts electron/profile/profile-sources.test.ts electron/profile/profile-office-extract.test.ts electron/exploration/r2-sites.test.ts electron/exploration/r2-query.test.ts electron/keywords/keywords-reader.test.ts src/components/library/library-context.test.ts src/components/library/library-select.test.ts src/components/library/library-generate.test.ts src/components/library/library-office.test.ts",
     "build:mcp": "node scripts/build-mcp.mjs",
     "prepare:template": "node scripts/prepare-workspace-template.mjs",
     "make:icon": "node scripts/make-icon.mjs",

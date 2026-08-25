@@ -7,9 +7,12 @@ import {
 import { patchProfileSourceInputs } from '../profile/profile-writer'
 import { loadExpansion, type KeywordExpansion } from '../keywords/keywords-reader'
 import { getWorkspaceRoot } from '../config/paths'
+import { isEligibleR2Query } from '../exploration/r2-query'
 import {
   formatEnabledR2SitesForPrompt,
+  formatR2IncludeDomainsForPrompt,
   listExploreR2Sites,
+  loadExploreR2Registry,
 } from '../exploration/r2-sites'
 import {
   findLatestRunAfter,
@@ -119,7 +122,7 @@ function buildExpandKeywordsPrompt(productId: string): string {
     '2. 由你直接生成五维关键词与 30～50 条 search_queries（覆盖 ≥4 维）。R1 占总数 ≥60%，普通产品/场景/买家/地理/竞品替代句，不要 site_id。R2 只给当前启用站点出词，每条必须带 site_id，query 禁止 site: / intitle: / inurl: / filetype:。不要生成 R3 或 R4。禁止调用 keywords_expand。',
     '3. 调用 lead-store.keywords_save 保存完整 expansion；若校验失败则修正后重试。',
     '4. 可用 keywords_get 核对 stats；不足则补充后再 save。抽查 R2 均有 site_id，且 by_round 无 R3/R4。',
-    '5. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例（R2 样例请带 site_id）、下一步建议（discover-leads / R1）。说明 R2 渠道执行尚未开通。',
+    '5. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例（R2 样例请带 site_id）、下一步建议（探索页「开始 R1」或「开始 R2」）。',
     '',
     `输出路径：data/keywords/${productId}/expansion.json`,
   ].join('\n')
@@ -132,7 +135,7 @@ function buildScoreAndDedupePrompt(productId: string): string {
     `产品 ID：${productId}`,
     '',
     '执行要求：',
-    '1. 调用 lead-store.lead_list_raw 确认存在原始线索；若 total == 0 则停止并提示先运行 discover-leads。',
+    '1. 调用 lead-store.lead_list_raw 确认存在原始线索；若 total == 0 则停止并提示先在探索页完成 R1 或 R2。',
     '2. 调用 lead-store.leads_score_and_dedupe（传入上述 product_id）完成去重、六维评分与 tier 分级；保留写入 scored.json，同域名淘汰写入 discarded.json。',
     '3. 调用 lead-store.leads_get_scored 核对：deduped_total ≤ raw_total，discarded_total = raw_total - deduped_total，每条含 score_breakdown 与 tier。',
     '4. 用简短中文汇报：原始数→去重后数量→淘汰数量、高/中/低意向分布、Top 5 线索（公司/分数/tier/匹配理由）、下一步 draft-outreach-email。',
@@ -161,6 +164,34 @@ function buildDraftOutreachPrompt(
     '4. 用简短中文汇报：生成数量、跳过数量、每条公司名/收件邮箱/short subject、草稿路径；提醒人工审核后再发送。',
     '',
     `输出路径：data/emails/{lead_id}/draft.json 、 data/emails/{lead_id}/draft.md`,
+  ].join('\n')
+}
+
+function buildDiscoverLeadsR2Prompt(
+  productId: string,
+  maxQueries: number,
+): string {
+  const includeHint = formatR2IncludeDomainsForPrompt(loadExploreR2Registry(getWorkspaceRoot()))
+  return [
+    '请严格按 skill `discover-leads-r2` 执行 R2 社媒发现。不要调用 skill `discover-leads`，不要给它传 rounds=["R2"]。',
+    '',
+    `产品 ID：${productId}`,
+    `最多搜索词 max_queries：${maxQueries}`,
+    '',
+    includeHint,
+    '',
+    '执行要求：',
+    '1. lead-store.product_get 确认画像 ready；lead-store.keywords_get 读取 search_queries。',
+    '2. 读取 config/explore-r2-sites.yaml（与上表冲突时以文件为准）。',
+    '3. search-api.search_usage 确认当日配额未用尽（官方通道以余额为准）。',
+    '4. lead-store.exploration_start({ product_id, rounds: ["R2"] })，记住 run_id。',
+    '5. 只跑 round=R2 且带 site_id 的词，按 priority 取前 max_queries 条。无 site_id 的旧 R2 跳过。',
+    '6. 对每个词：search_web 必须带该 site_id 对应的 include_domains；不要打开社媒 URL。抽出公司并解析官网后，chrome 只打开官网，按 R1 口径判断，通过才 lead_append_raw（round=R2，run_id 必填，snippet 以「发现：」+ 社媒 URL 开头）。',
+    '7. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。全程未通过官网判断也允许 completed 且 0 条线索。',
+    '8. 用简短中文汇报：run_id、R2 词数、社媒/二次搜索/官网打开次数、线索数、跳过原因、3～5 条样例或「无新线索」、下一步 score-and-dedupe。',
+    '',
+    `线索输出：data/leads/${productId}/raw/R2.jsonl`,
+    `运行记录：data/exploration/${productId}/runs/`,
   ].join('\n')
 }
 
@@ -1058,7 +1089,7 @@ export class AgentRunController {
   async runDiscoverLeads(
     productId: string,
     emit: AgentEventSink,
-    options?: { rounds?: string[]; maxQueries?: number },
+    options?: { rounds?: string[]; maxQueries?: number; channel?: 'r1' | 'r2' },
   ): Promise<{ ok: boolean; message: string; explorationRun?: ExplorationRun }> {
     if (this.running) {
       throw new Error('已有 Agent 任务在运行，请稍候或先中止')
@@ -1082,17 +1113,23 @@ export class AgentRunController {
       throw new Error('尚未扩展关键词，请先在画像页「新建探索任务」')
     }
 
-    const rounds = (options?.rounds?.length ? options.rounds : ['R1']).map((r) =>
-      r.toUpperCase(),
-    )
-    const r1Count = expansion.search_queries.filter((q) =>
-      rounds.includes(String(q.round).toUpperCase()),
-    ).length
-    if (r1Count === 0) {
-      throw new Error(`expansion.json 中没有 ${rounds.join('/')} 轮次的搜索词`)
+    const isR2 = options?.channel === 'r2'
+    const skillName = isR2 ? 'discover-leads-r2' : 'discover-leads'
+    const roundName = isR2 ? 'R2 社媒发现' : 'R1 广撒网'
+    const rounds = isR2 ? ['R2'] : ['R1']
+    const availableCount = isR2
+      ? expansion.search_queries.filter(isEligibleR2Query).length
+      : expansion.search_queries.filter((q) => String(q.round).toUpperCase() === 'R1')
+          .length
+    if (availableCount === 0) {
+      throw new Error(
+        isR2
+          ? 'expansion.json 中没有带站点的 R2 搜索词，请重新扩展关键词'
+          : 'expansion.json 中没有 R1 轮次的搜索词',
+      )
     }
     // 未传 maxQueries 时按当前轮次可用词数全量执行（不再默认截断为 10）
-    const maxQueries = Math.max(1, options?.maxQueries ?? r1Count)
+    const maxQueries = Math.max(1, options?.maxQueries ?? availableCount)
 
     this.running = true
     this.abort = new AbortController()
@@ -1124,11 +1161,11 @@ export class AgentRunController {
       }
       const progress =
         run != null
-          ? `${run.queries_executed}/${Math.min(maxQueries, r1Count)}`
-          : `0/${Math.min(maxQueries, r1Count)}`
+          ? `${run.queries_executed}/${Math.min(maxQueries, availableCount)}`
+          : `0/${Math.min(maxQueries, availableCount)}`
       emit({
         type: 'state',
-        skill: 'discover-leads',
+        skill: skillName,
         status,
         productId,
         meta: [
@@ -1143,20 +1180,22 @@ export class AgentRunController {
       })
     }
 
-    const promptText = buildDiscoverLeadsPrompt(productId, { rounds, maxQueries })
+    const promptText = isR2
+      ? buildDiscoverLeadsR2Prompt(productId, maxQueries)
+      : buildDiscoverLeadsPrompt(productId, { rounds, maxQueries })
     timeline.reset()
     timeline.addPrefix({
       id: 'sys-prepare',
       kind: 'system',
       time: nowTime(),
       title: '系统',
-      body: `准备为 ${productId}（${profile.companyName || '未命名'}）执行 ${rounds.join('+')} 探索 · 最多 ${maxQueries} 词（可用 ${r1Count}）`,
+      body: `准备为 ${productId}（${profile.companyName || '未命名'}）执行 ${roundName} · 最多 ${maxQueries} 词（可用 ${availableCount}）`,
     })
     timeline.addPrefix({
       id: 'user-discover',
       kind: 'user',
       time: nowTime(),
-      title: '你的指令 · 开始 R1 探索',
+      title: `你的指令 · 开始 ${roundName}`,
       body: promptText,
       collapsed: true,
     })
@@ -1167,7 +1206,7 @@ export class AgentRunController {
 
     try {
       const created = await client.session.create({
-        title: `discover-leads · ${productId}`,
+        title: `${skillName} · ${productId}`,
       })
       if (created.error || !created.data?.id) {
         throw new Error(
@@ -1223,7 +1262,7 @@ export class AgentRunController {
         const abortedRun = failLatestRunningExploration(
           productId,
           afterIso,
-          '用户中止了 R1 探索',
+          `用户中止了 ${roundName}`,
         )
         pushState('error', abortedRun ?? undefined)
         timeline.addSuffix({
@@ -1232,20 +1271,20 @@ export class AgentRunController {
           time: nowTime(),
           title: '已中止',
           body: abortedRun
-            ? `用户中止了 R1 探索\nrun ${abortedRun.id} 已标记为 failed`
-            : '用户中止了 R1 探索',
+            ? `用户中止了 ${roundName}\nrun ${abortedRun.id} 已标记为 failed`
+            : `用户中止了 ${roundName}`,
         })
         flushTimeline()
         emit({
           type: 'done',
           ok: false,
           productId,
-          message: '已中止 R1 探索',
+          message: `已中止 ${roundName}`,
           explorationRun: abortedRun ?? undefined,
         })
         return {
           ok: false,
-          message: '已中止 R1 探索',
+          message: `已中止 ${roundName}`,
           explorationRun: abortedRun ?? undefined,
         }
       }
@@ -1279,7 +1318,7 @@ export class AgentRunController {
             afterIso,
             '会话已结束但未调用 exploration_finish，已标记为 failed',
           ) ?? run
-        const message = `R1 探索未完成：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
+        const message = `${roundName}未完成：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
         timeline.addSuffix({
           id: 'sys-incomplete',
           kind: 'error',
@@ -1300,7 +1339,7 @@ export class AgentRunController {
       }
 
       if (run.status === 'failed') {
-        const message = `R1 探索失败：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
+        const message = `${roundName}失败：${run.id} · 已执行 ${run.queries_executed} 词 · 线索 ${run.leads_found}`
         timeline.addSuffix({
           id: 'sys-failed',
           kind: 'error',
@@ -1320,7 +1359,7 @@ export class AgentRunController {
         return { ok: false, message, explorationRun: run }
       }
 
-      const message = `R1 探索完成：${run.id} · ${run.queries_executed} 词 · 线索 ${run.leads_found}`
+      const message = `${roundName}完成：${run.id} · ${run.queries_executed} 词 · 线索 ${run.leads_found}`
       timeline.addSuffix({
         id: 'sys-done',
         kind: 'system',

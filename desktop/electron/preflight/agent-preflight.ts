@@ -5,6 +5,7 @@ export type AgentPreflightKind =
   | 'extract-profile'
   | 'expand-keywords'
   | 'discover-leads'
+  | 'discover-leads-r2'
   | 'score-and-dedupe'
   | 'draft-email'
 
@@ -27,11 +28,15 @@ export interface AgentPreflightContext {
 }
 
 function needsSearch(kind: AgentPreflightKind): boolean {
-  return kind === 'discover-leads'
+  return kind === 'discover-leads' || kind === 'discover-leads-r2'
 }
 
 function needsChrome(kind: AgentPreflightKind): boolean {
-  return kind === 'extract-profile' || kind === 'discover-leads'
+  return (
+    kind === 'extract-profile' ||
+    kind === 'discover-leads' ||
+    kind === 'discover-leads-r2'
+  )
 }
 
 function mcpOk(

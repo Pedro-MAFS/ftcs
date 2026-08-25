@@ -17,7 +17,7 @@ import { getDailyUsage, incrementSearchUsage } from "./usage.js";
 
 const server = new McpServer({
   name: "search-api",
-  version: "0.4.2",
+  version: "0.4.3",
 });
 
 function isGatewayProvider(provider: string): boolean {
@@ -26,7 +26,7 @@ function isGatewayProvider(provider: string): boolean {
 
 server.tool(
   "search_web",
-  "Search the web and return structured results (title, url, snippet). Uses cache; official channel bills via token gateway. Optional include_domains limits results to those hosts (e.g. linkedin.com/company).",
+  "Search the web and return structured results (title, url, snippet). Uses cache; official channel bills via token gateway. Optional include_domains is forwarded to Tavily (R2). Without it, R1 sends exclude_domains for social/directory hosts.",
   {
     query: z.string().describe("Search query string"),
     language: z.string().default("en").describe("Language hint for cache key, e.g. en, de"),
@@ -91,7 +91,7 @@ server.tool(
       const raw = gateway
         ? await searchViaGateway(query, num_results, language, includeDomains)
         : await searchTavily(query, num_results, getTavilyApiKey(), includeDomains);
-      const results = mapTavilyResults(raw.results, includeDomains).slice(0, num_results);
+      const results = mapTavilyResults(raw.results).slice(0, num_results);
       writeCache(root, query, language, num_results, provider, results, includeDomains);
 
       const updatedUsage = getDailyUsage(root);

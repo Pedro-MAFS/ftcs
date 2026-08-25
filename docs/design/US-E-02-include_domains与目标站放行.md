@@ -1,7 +1,7 @@
 # US-E-02 include_domains 与目标站放行设计
 
 > **用户故事**：[../17-需求-业务效率工具.md](../17-需求-业务效率工具.md) · US-E-02  
-> **状态**：编码已落地（自定义已落地，官方待网关透传 `include_domains`）  
+> **状态**：编码已落地（桌面直连与官方请求已发 `include_domains` / `exclude_domains`；官方点收仍待网关透传）  
 > **范围**：`search_web` 可传 `include_domains` 并到达 Tavily；带该参数时放行目标社媒 URL；不带时 R1 仍过滤社媒；丢掉个人主页路径；官方通道把同一字段交给网关  
 > **依赖**：现网 `search-api`（自定义直连 Tavily；官方 `POST /v1/search`）；E-01 登记表的 `include_domains` 字符串（本故事只按原样传入，不改 yaml）  
 > **不做**：抽公司 / 二次搜官网（E-03）；打开页面写线索（E-04）；「开始 R2」（E-05）；改 `discover-leads`；`include_raw_content` / `search_depth=advanced`；打开社媒真页  
@@ -15,7 +15,7 @@
 |------|----------|
 | `search_web` 只有 `query` / `language` / `num_results` | 增加可选 `include_domains: string[]` |
 | 自定义 `searchTavily`、官方 `searchViaGateway` 请求体都不带站点限定 | 有值则写入 Tavily / 网关请求的 `include_domains` |
-| `mapTavilyResults` → `shouldExcludeUrl` 整站丢掉 Facebook / Instagram / X / TikTok 等 | **未传** `include_domains`：行为与现网一致。**传了**：匹配 include 的 URL 不再因黑名单丢掉；再按 include 前缀收窄；个人主页路径仍丢 |
+| `mapTavilyResults` → `shouldExcludeUrl` 整站丢掉 Facebook / Instagram / X / TikTok 等 | **站点收窄改由上游完成**：无 include 时请求带 `exclude_domains`；有 include 时只带 `include_domains`。MCP 不再按站点黑/白名单过滤。个人主页路径仍丢 |
 | 缓存 key = `query\|language\|num_results` | key 必须带上规范化后的 `include_domains`，避免 R1 / R2 串缓存 |
 | 无 UI、无 R2 Skill | **本故事仍无探索页按钮、不写 `discover-leads-r2`**。验收用 MCP `search_web` 直调 |
 
@@ -29,7 +29,7 @@ LinkedIn **本来就不在** `EXCLUDED_HOST_PATTERNS` 里。R1 主要靠 `discov
 |----|------|
 | **Q1 工具参数** | 只加 `include_domains`。**不加** `site_id`。`site_id` → 域名列表的查找留给 E-03 Skill（读 E-01 登记表）。E-02 手工验收直接传入 yaml 里的字符串，如 `["linkedin.com/company"]` |
 | **Q2 空值** | `undefined`、缺省、`[]`、去掉空串后为空 → 与现网相同，**不**把该字段发给 Tavily/网关 |
-| **Q3 过滤顺序** | 非法 URL 丢 → 个人主页路径丢 → 若有 include：不匹配 include 的丢（此时不再套黑名单）→ 若无 include：现网 `EXCLUDED_HOST_PATTERNS` |
+| **Q3 过滤顺序** | 上游：有 include 传 `include_domains`，无 include 传 `exclude_domains`（直连与官方网关相同）。MCP：非法 URL 丢 → 个人主页路径丢。不再本地按站点黑名单/include 前缀收窄 |
 | **Q4 个人主页** | 即使 include 命中也丢。Must：`linkedin.com/in/`、`linkedin.com/pub/`。Should：`facebook.com/profile.php`、`facebook.com/people/`、`facebook.com/groups/`。不在本故事对 Instagram 用户名做「公司/个人」分类 |
 | **Q5 缓存** | `buildCacheKey` 增加 include 段：排序、小写、去空白后加入 hash。同一 query 有/无 include 不得撞 key |
 | **Q6 官方通道** | `searchViaGateway` 请求 JSON **原样带上** `include_domains`（有值时）。网关须转到 Tavily 后，官方路径才能点收。网关未透传 ≠ 桌面没传 |
@@ -99,33 +99,29 @@ search-api `package.json` version **递增**（现 0.4.1），以便工作区同
 
 ## 4. 结果过滤
 
-改 [`mapTavilyResults` / `shouldExcludeUrl`](../../workspace/mcp-servers/search-api/src/tavily.ts)，增加可选 `includeDomains: string[]`。
+站点黑/白名单 **不要**在 [`mapTavilyResults`](../../workspace/mcp-servers/search-api/src/tavily.ts) 里做，改由 Tavily 请求字段：
 
-### 4.1 匹配 include
+- R1：`exclude_domains` = `TAVILY_EXCLUDE_DOMAINS`（Facebook / Google / Wikipedia 等）
+- R2：只传该词的 `include_domains`，**不要**同时传 `exclude_domains`
 
-把每条 include 看成 `host[/pathPrefix]`（host 去 `www.`）。
+[`buildSearchDomainFilters`](../../workspace/mcp-servers/search-api/src/tavily.ts) 直连与官方网关共用。
 
-URL 的 host（去 `www.`）等于该 host，或为其子域。若 include 带 pathPrefix（如 `linkedin.com/company`）：
+### 4.1 include 原样发给上游
 
-- pathname 等于 `/company`，或前缀为 `/company/`（大小写不敏感）。
-
-无 pathPrefix（如 `facebook.com`）：host 匹配即算 include 命中。
+登记表字符串原样进入 `include_domains`（如 `linkedin.com/company`）。路径前缀是否生效由 Tavily 决定，MCP 不再二次按前缀丢掉「站外」URL。
 
 ### 4.2 个人主页（Must / Should）
 
-在 host 去 `www.` 之后看 pathname + search：
+域名排除表达不了路径，MCP 仍丢：
 
 | 模式 | 级别 |
 |------|------|
 | `linkedin.com` 且 path 以 `/in/` 或 `/pub/` 开头 | Must 丢 |
 | `facebook.com` 且 path 以 `/people/`、`/groups/` 开头，或 path 为 `/profile.php` | Should 丢 |
 
-不在本故事根据 Instagram / X / TikTok 的 handle 判断公私。关闭的站 E-03 不会去搜。
-
 ### 4.3 与黑名单
 
-- **无 include**：现网 `EXCLUDED_HOST_PATTERNS` 原样，单测保持 Facebook / YouTube 等仍丢。  
-- **有 include**：只保留 include 命中且非个人主页的 URL。黑名单不作用于已命中 include 的 Facebook 等。未命中 include 的（例如搜 Facebook 却返回 wikipedia）丢掉。
+黑名单只作为 R1 的 `exclude_domains` 发给上游。有 include 时不发排除列表，以便 Facebook 等出现在 R2 结果里。
 
 `mapTavilyResults` 仍最多 10 条、重排 `position`。
 
@@ -196,7 +192,7 @@ include 段：规范化、排序、`"none"`（无 include）与 `"a.com,b.com"` 
 | G1 | 官方通道已开通 | 同 A1 的 `search_web` | 出站 `POST {gateway}/v1/search` JSON 含 `include_domains` |
 | G2 | 网关已透传到 Tavily | 同 A1 | 行为与自定义 A1 一致（可出现 company URL） |
 
-单测（不打网、Must）：Facebook URL 无 include 则 `shouldExcludeUrl` 为 true；有 `facebook.com` include 且非个人路径则为 false；`linkedin.com/in/` 在 include 下仍丢；cache key 随 include 变化。
+单测（不打网、Must）：R1 请求含 `exclude_domains` 且含 `facebook.com`；R2 请求含 `include_domains` 且不含 `exclude_domains`；`linkedin.com/in/` 仍被 MCP 丢掉；cache key 随 include 变化。
 
 ---
 

@@ -7,13 +7,14 @@ import { buildCacheKey, readCache, writeCache } from "./cache.js";
 import { mapTavilyResults, shouldExcludeUrl } from "./tavily.js";
 import { assertCanSearch, incrementSearchUsage, getDailyUsage } from "./usage.js";
 
-test("shouldExcludeUrl filters common non-company hosts", () => {
-  assert.equal(shouldExcludeUrl("https://www.google.com/search?q=test"), true);
-  assert.equal(shouldExcludeUrl("https://www.youtube.com/watch?v=1"), true);
+test("shouldExcludeUrl only drops invalid and personal-profile URLs", () => {
+  assert.equal(shouldExcludeUrl("https://www.google.com/search?q=test"), false);
+  assert.equal(shouldExcludeUrl("https://www.youtube.com/watch?v=1"), false);
   assert.equal(shouldExcludeUrl("https://abc-decking.de/products"), false);
+  assert.equal(shouldExcludeUrl("https://www.linkedin.com/in/jane"), true);
 });
 
-test("mapTavilyResults maps and filters results", () => {
+test("mapTavilyResults maps valid results without dropping excluded hosts", () => {
   const mapped = mapTavilyResults([
     {
       title: "Good Lead",
@@ -27,9 +28,9 @@ test("mapTavilyResults maps and filters results", () => {
     },
   ]);
 
-  assert.equal(mapped.length, 1);
+  assert.equal(mapped.length, 2);
   assert.equal(mapped[0]?.url, "https://example-decking.de");
-  assert.equal(mapped[0]?.position, 1);
+  assert.equal(mapped[1]?.url, "https://www.google.com/search?q=test");
 });
 
 test("cache read/write roundtrip", () => {

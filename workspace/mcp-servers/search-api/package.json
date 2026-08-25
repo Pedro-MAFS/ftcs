@@ -1,6 +1,6 @@
 {
   "name": "@ftcs/search-api",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "type": "module",
   "description": "MCP server for web search via Tavily or FTCS token gateway",

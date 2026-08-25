@@ -246,6 +246,8 @@ const api = {
     ipcRenderer.invoke(IPC.EXPLORATION_LIST_TASKS, productId),
   startExploreR1: (input: DiscoverLeadsInput): Promise<DiscoverLeadsResult> =>
     ipcRenderer.invoke(IPC.EXPLORATION_START_R1, input),
+  startExploreR2: (input: DiscoverLeadsInput): Promise<DiscoverLeadsResult> =>
+    ipcRenderer.invoke(IPC.EXPLORATION_START_R2, input),
   listLeads: (productId: string): Promise<LeadsSnapshotDto> =>
     ipcRenderer.invoke(IPC.LEADS_LIST, productId),
   saveRawLead: (input: RawLeadSaveInput): Promise<RawLeadSaveResult> =>

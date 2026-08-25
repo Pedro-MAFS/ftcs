@@ -6,6 +6,7 @@ import path from 'node:path'
 import {
   DEFAULT_EXPLORE_R2_SITES,
   formatEnabledR2SitesForPrompt,
+  formatR2IncludeDomainsForPrompt,
   listExploreR2Sites,
   parseExploreR2SitesYaml,
   setExploreR2SiteEnabled,
@@ -99,4 +100,12 @@ test('formatEnabledR2SitesForPrompt tells model to skip R2 when none enabled', (
     DEFAULT_EXPLORE_R2_SITES.map((site) => ({ ...site, enabled: false })),
   )
   assert.match(text, /不要生成 round=R2/)
+})
+
+test('formatR2IncludeDomainsForPrompt lists yaml include_domains originals', () => {
+  const text = formatR2IncludeDomainsForPrompt(DEFAULT_EXPLORE_R2_SITES)
+  assert.match(text, /linkedin_company/)
+  assert.match(text, /linkedin\.com\/company/)
+  assert.match(text, /facebook\.com/)
+  assert.match(text, /不要写 site:/)
 })

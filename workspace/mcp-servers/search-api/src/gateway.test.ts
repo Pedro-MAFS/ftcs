@@ -13,15 +13,19 @@ test("getGatewayBaseUrl trims trailing slash", () => {
   }
 });
 
-test("buildGatewaySearchBody omits include_domains when empty", () => {
+test("buildGatewaySearchBody sends exclude on R1 and include on R2", () => {
   const none = buildGatewaySearchBody("q", 5, "en");
   assert.equal("include_domains" in none, false);
+  assert.ok(Array.isArray(none.exclude_domains));
+  assert.ok((none.exclude_domains as string[]).includes("facebook.com"));
 
   const empty = buildGatewaySearchBody("q", 5, "en", []);
   assert.equal("include_domains" in empty, false);
+  assert.ok(Array.isArray(empty.exclude_domains));
 
   const withInclude = buildGatewaySearchBody("q", 5, "en", ["linkedin.com/company"]);
   assert.deepEqual(withInclude.include_domains, ["linkedin.com/company"]);
+  assert.equal("exclude_domains" in withInclude, false);
   assert.equal("api_key" in withInclude, false);
   assert.equal("num_results" in withInclude, false);
   assert.equal("include_answer" in withInclude, false);

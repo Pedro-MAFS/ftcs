@@ -113,7 +113,7 @@ outputs:
 - 产品 ID 与保存路径
 - 总查询数与各轮次/维度分布
 - 每个维度 2～3 条代表性 `search_queries`
-- 下一步建议：执行 `discover-leads`（默认 R1）。R2 请用独立 skill `discover-leads-r2`（探索页「开始 R2」尚未接通）。
+- 下一步建议：探索页「开始 R1」（`discover-leads`）或「开始 R2」（`discover-leads-r2`）。
 
 ## 输出要求
 

@@ -33,10 +33,11 @@ const actionMessage = ref('')
 const loading = ref(false)
 const editorOpen = ref(false)
 const startingR1 = ref(false)
+const startingR2 = ref(false)
 const scoringLeads = ref(false)
 const previewRound = ref('R1')
 const previewDimension = ref('all')
-/** 最多执行的 R1 词数；null/0 = 不限制，有多少 R1 执行多少 */
+/** 最多执行词数；null/0 = 不限制。开始 R1 按 R1 词截断，开始 R2 按合格 R2 词截断 */
 const maxQueriesLimit = ref<number | null>(null)
 const MAX_QUERIES_STORAGE_KEY = 'ftcs.explore.maxQueriesLimit'
 
@@ -139,6 +140,14 @@ const discoveringPlaceholder = computed(() => {
   )
 })
 
+const discoveringR2Placeholder = computed(() => {
+  return (
+    generating.value &&
+    agentSkill.value === 'discover-leads-r2' &&
+    !tasks.value.some((t) => t.status === 'running')
+  )
+})
+
 const hasKeywordsReady = computed(() =>
   tasks.value.some((t) => t.status === 'keywords_ready'),
 )
@@ -147,19 +156,55 @@ const r1QueryCount = computed(
   () => allQueries.value.filter((q) => q.round === 'R1').length,
 )
 
+const r2QueryCount = computed(
+  () =>
+    allQueries.value.filter((q) => q.round === 'R2' && Boolean(q.site_id?.trim())).length,
+)
+
+const r2LegacyCount = computed(
+  () =>
+    allQueries.value.filter((q) => q.round === 'R2' && !q.site_id?.trim()).length,
+)
+
 const canStartR1 = computed(() => {
   return (
     !!activeProductId.value &&
     hasKeywordsReady.value &&
     r1QueryCount.value > 0 &&
     !generating.value &&
-    !startingR1.value
+    !startingR1.value &&
+    !startingR2.value
   )
 })
 
-const isDiscovering = computed(
+const canStartR2 = computed(() => {
+  return (
+    !!activeProductId.value &&
+    hasKeywordsReady.value &&
+    r2QueryCount.value > 0 &&
+    !generating.value &&
+    !startingR1.value &&
+    !startingR2.value
+  )
+})
+
+const startR2DisabledReason = computed(() => {
+  if (generating.value || startingR1.value || startingR2.value) return '已有任务在运行'
+  if (!hasKeywordsReady.value) return '请先完成关键词扩展'
+  if (r2QueryCount.value > 0) return ''
+  if (r2LegacyCount.value > 0) return '当前 R2 词没有站点，请重新扩展关键词'
+  return '没有可用的 R2 词。请在设置页启用社媒站点后重新扩展'
+})
+
+const isDiscoveringR1 = computed(
   () => generating.value && agentSkill.value === 'discover-leads',
 )
+
+const isDiscoveringR2 = computed(
+  () => generating.value && agentSkill.value === 'discover-leads-r2',
+)
+
+const isDiscovering = computed(() => isDiscoveringR1.value || isDiscoveringR2.value)
 
 const isScoring = computed(
   () =>
@@ -224,9 +269,8 @@ async function stopAgent(): Promise<void> {
   stopProgressPolling()
 }
 
-/** 默认全部 R1；若填写了正数上限则取 min(上限, R1 数量) */
-function resolveMaxQueries(): number {
-  const available = Math.max(0, r1QueryCount.value)
+/** 默认该轮全部词；若填写了正数上限则取 min(上限, 可用数) */
+function resolveMaxQueries(available: number): number {
   const limit = maxQueriesLimit.value
   if (limit == null || !Number.isFinite(limit) || limit <= 0) {
     return Math.max(1, available)
@@ -276,8 +320,8 @@ async function startR1(): Promise<void> {
 
   startingR1.value = true
   actionMessage.value = ''
-  const maxQueries = resolveMaxQueries()
-  resetAgentForDiscoverLeads(maxQueries)
+  const maxQueries = resolveMaxQueries(r1QueryCount.value)
+  resetAgentForDiscoverLeads(maxQueries, 'discover-leads')
   startProgressPolling()
 
   try {
@@ -299,6 +343,46 @@ async function startR1(): Promise<void> {
     stopProgressPolling()
   } finally {
     startingR1.value = false
+  }
+}
+
+async function startR2(): Promise<void> {
+  if (!activeProductId.value || !window.ftcs?.startExploreR2) return
+  if (!canStartR2.value) {
+    actionMessage.value = startR2DisabledReason.value
+    return
+  }
+
+  const preflightError = await ensureAgentReady('discover-leads-r2')
+  if (preflightError) {
+    actionMessage.value = preflightError
+    return
+  }
+
+  startingR2.value = true
+  actionMessage.value = ''
+  const maxQueries = resolveMaxQueries(r2QueryCount.value)
+  resetAgentForDiscoverLeads(maxQueries, 'discover-leads-r2')
+  startProgressPolling()
+
+  try {
+    const res = await window.ftcs.startExploreR2({
+      productId: activeProductId.value,
+      maxQueries,
+    })
+    if (!res.ok) {
+      actionMessage.value = res.message
+      agentStatus.value = 'error'
+      stopProgressPolling()
+      return
+    }
+    actionMessage.value = res.message
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+    agentStatus.value = 'error'
+    stopProgressPolling()
+  } finally {
+    startingR2.value = false
   }
 }
 
@@ -436,16 +520,23 @@ onUnmounted(() => {
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
-        <label class="explore-max-queries" title="留空表示执行全部 R1 关键词">
+        <label
+          class="explore-max-queries"
+          title="留空表示执行该次开始的轮次全部词。开始 R1 按 R1 词计数，开始 R2 按带站点的 R2 词计数。"
+        >
           <span class="muted">最多词数</span>
           <input
             class="text-input explore-max-queries__input"
             type="number"
             min="1"
             step="1"
-            :placeholder="r1QueryCount ? `全部 ${r1QueryCount}` : '全部'"
+            :placeholder="
+              r1QueryCount || r2QueryCount
+                ? `R1 ${r1QueryCount} · R2 ${r2QueryCount}`
+                : '全部'
+            "
             :value="maxQueriesLimit ?? ''"
-            :disabled="startingR1 || isDiscovering"
+            :disabled="startingR1 || startingR2 || isDiscovering"
             @input="onMaxQueriesInput"
           />
         </label>
@@ -464,7 +555,17 @@ onUnmounted(() => {
           @click="startR1"
         >
           <Icon name="play" :size="12" />
-          {{ startingR1 || isDiscovering ? '探索中…' : '开始 R1' }}
+          {{ startingR1 || isDiscoveringR1 ? '探索中…' : '开始 R1' }}
+        </button>
+        <button
+          type="button"
+          class="btn-primary"
+          :disabled="!canStartR2"
+          :title="canStartR2 ? '按社媒站点搜索并解析官网' : startR2DisabledReason"
+          @click="startR2"
+        >
+          <Icon name="play" :size="12" />
+          {{ startingR2 || isDiscoveringR2 ? '探索中…' : '开始 R2' }}
         </button>
       </div>
     </header>
@@ -482,6 +583,12 @@ onUnmounted(() => {
     </div>
 
     <p v-if="actionMessage" class="explore-action-msg">{{ actionMessage }}</p>
+    <p
+      v-if="hasKeywordsReady && !canStartR2 && !generating && startR2DisabledReason"
+      class="explore-action-msg"
+    >
+      {{ startR2DisabledReason }}
+    </p>
 
     <div class="explore-task-list">
       <div v-if="expandingPlaceholder" class="explore-task is-expanded">
@@ -505,10 +612,27 @@ onUnmounted(() => {
         <button type="button" class="explore-task__head" disabled>
           <div class="explore-task__title-block">
             <div class="explore-task__title-row">
-              <strong>R1 探索</strong>
+              <strong>R1 广撒网</strong>
               <span class="explore-status is-accent">启动中</span>
             </div>
             <p>正在调用 discover-leads，创建探索运行记录…</p>
+          </div>
+        </button>
+        <div class="explore-task__body">
+          <div class="explore-progress">
+            <div class="explore-progress__bar is-indeterminate" />
+          </div>
+        </div>
+      </div>
+
+      <div v-if="discoveringR2Placeholder" class="explore-task is-expanded">
+        <button type="button" class="explore-task__head" disabled>
+          <div class="explore-task__title-block">
+            <div class="explore-task__title-row">
+              <strong>R2 社媒发现</strong>
+              <span class="explore-status is-accent">启动中</span>
+            </div>
+            <p>正在调用 discover-leads-r2，创建探索运行记录…</p>
           </div>
         </button>
         <div class="explore-task__body">
@@ -625,7 +749,17 @@ onUnmounted(() => {
               @click="startR1"
             >
               <Icon name="play" :size="11" />
-              {{ startingR1 || isDiscovering ? '探索中…' : '开始 R1' }}
+              {{ startingR1 || isDiscoveringR1 ? '探索中…' : '开始 R1' }}
+            </button>
+            <button
+              type="button"
+              class="btn-primary btn-secondary--sm"
+              :disabled="!canStartR2"
+              :title="canStartR2 ? '按社媒站点搜索并解析官网' : startR2DisabledReason"
+              @click="startR2"
+            >
+              <Icon name="play" :size="11" />
+              {{ startingR2 || isDiscoveringR2 ? '探索中…' : '开始 R2' }}
             </button>
           </div>
 
@@ -655,7 +789,7 @@ onUnmounted(() => {
       </div>
 
       <div
-        v-if="!tasks.length && !expandingPlaceholder && !discoveringPlaceholder"
+        v-if="!tasks.length && !expandingPlaceholder && !discoveringPlaceholder && !discoveringR2Placeholder"
         class="explore-empty"
       >
         <h2>暂无探索任务</h2>

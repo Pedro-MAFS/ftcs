@@ -38,6 +38,7 @@ export const IPC = {
   KEYWORDS_SAVE: 'keywords:save',
   EXPLORATION_LIST_TASKS: 'exploration:list-tasks',
   EXPLORATION_START_R1: 'exploration:start-r1',
+  EXPLORATION_START_R2: 'exploration:start-r2',
   EXPLORATION_GET_R2_SITES: 'exploration:get-r2-sites',
   EXPLORATION_SET_R2_SITE_ENABLED: 'exploration:set-r2-site-enabled',
   LEADS_LIST: 'leads:list',
@@ -783,6 +784,7 @@ export type AgentPreflightKind =
   | 'extract-profile'
   | 'expand-keywords'
   | 'discover-leads'
+  | 'discover-leads-r2'
   | 'score-and-dedupe'
   | 'draft-email'
 

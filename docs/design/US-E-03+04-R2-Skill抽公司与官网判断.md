@@ -1,7 +1,7 @@
 # US-E-03 + US-E-04 R2 Skill：抽公司、解析官网、判断写入
 
 > **用户故事**：[../17-需求-业务效率工具.md](../17-需求-业务效率工具.md) · US-E-03、US-E-04  
-> **状态**：编码已落地（探索页「开始 R2」仍待 US-E-05）  
+> **状态**：编码已落地  
 > **范围**：新增独立 Skill `discover-leads-r2`。对 R2 词做社媒搜索（`include_domains`）→ 从摘要抽公司 → 解析稳定官网 → 打开**官网**按 R1 口径判断 → 通过才写入 `raw/R2.jsonl`  
 > **依赖**：US-E-01（R2 词 + `site_id` + 登记表）；US-E-02（`search_web` 的 `include_domains` 与目标站放行）。官方通道仍依赖网关透传 include（与 E-02 相同）  
 > **不做**：「开始 R2」按钮与 `agent-runner` 接线（US-E-05）；改 `discover-leads`；打开社媒真页；无官网也写 Lead；人员主页建线索（US-C）；`include_raw_content` / `search_depth=advanced`  
@@ -64,7 +64,7 @@ E-03 与 E-04 是**同一份 Skill 的前后段**，不是两个 Skill。中间�
 
 | 不做 | 归属 |
 |------|------|
-| 探索页「开始 R2」、任务列表标 R2、预检接线 | US-E-05 |
+| 探索页「开始 R2」、任务列表标 R2、预检接线 | US-E-05（已落地） |
 | 改 `discover-leads` 或删「跳过社交媒体」 | 已否决兼跑 |
 | 打开领英 / Facebook / Instagram 真页 | 17 §5.5；缓做/不做 |
 | 无官网也写 Lead；个人主页建成公司线索 | 已否决 |

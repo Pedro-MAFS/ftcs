@@ -130,7 +130,7 @@ workspace/mcp-servers/
 }
 ```
 
-`include_domains` 可选。有值时原样传给 Tavily（自定义）或网关 `POST /v1/search`（官方），并只保留匹配这些 host/路径前缀、且非个人主页的结果。不传、空数组或全空串时行为与现网 R1 相同（不把该字段发给上游；Facebook 等仍走黑名单）。非法项（含空格、无点号纯词）整次失败。
+`include_domains` 可选。有值时 **原样**传给 Tavily（自定义）或网关 `POST /v1/search`（官方），**不再**在 MCP 里按站点收窄结果。不传、空数组或全空串时走 R1：请求带固定 `exclude_domains`（Facebook / Google / Wikipedia 等），同样由上游过滤。非法 include 项（含空格、无点号纯词）整次失败。MCP 仅丢掉非法 URL 以及个人主页路径（`linkedin.com/in/` 等）。
 
 **返回**：
 

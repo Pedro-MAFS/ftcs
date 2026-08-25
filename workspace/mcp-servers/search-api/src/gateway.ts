@@ -1,4 +1,4 @@
-import { prepareIncludeDomains, type TavilySearchResponse } from "./tavily.js";
+import { buildSearchDomainFilters, type TavilySearchResponse } from "./tavily.js";
 
 export class GatewaySearchError extends Error {
   readonly code: string;
@@ -71,7 +71,8 @@ function mapGatewayFailure(status: number, bodyText: string): GatewaySearchError
 
 /**
  * 经 Token 网关搜索（US-FTCS-S01 / US-E-02）。
- * POST {base}/search，Bearer sk；勿传 api_key / num_results。
+ * POST {base}/search，Bearer sk；勿传 api_key / num_results / include_answer。
+ * 站点收窄与直连 Tavily 相同：R2 传 include_domains，R1 传 exclude_domains。
  */
 export function buildGatewaySearchBody(
   query: string,
@@ -79,17 +80,13 @@ export function buildGatewaySearchBody(
   language: string,
   includeDomains?: string[],
 ): Record<string, unknown> {
-  const body: Record<string, unknown> = {
+  return {
     query,
     max_results: Math.min(Math.max(numResults, 1), 10),
     search_depth: "basic",
     language: language || "en",
+    ...buildSearchDomainFilters(includeDomains),
   };
-  const prepared = prepareIncludeDomains(includeDomains);
-  if (prepared.upstream.length) {
-    body.include_domains = prepared.upstream;
-  }
-  return body;
 }
 
 export async function searchViaGateway(

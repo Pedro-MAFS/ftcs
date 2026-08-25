@@ -26,7 +26,7 @@ outputs:
 
 - 产品画像与关键词扩展已完成，且 expansion 里有带 `site_id` 的 R2 词
 - 用户说「开始 R2」「社媒获客」「按 discover-leads-r2 执行」
-- 探索页「开始 R2」接通前（US-E-05），在 Cursor / OpenCode 直调本 Skill
+- 探索页点「开始 R2」（桌面 IPC `exploration:start-r2`）
 
 ## 前置条件
 
@@ -338,4 +338,4 @@ lead-store.exploration_finish({
 
 - 上一步：`expand-keywords`（R2 词须带 `site_id`）
 - 下一步：`score-and-dedupe`
-- 并列：R1 仍用 `discover-leads`；探索页「开始 R2」由 US-E-05 接线
+- 并列：R1 仍用 `discover-leads`；探索页「开始 R2」启动本 Skill

@@ -34,6 +34,6 @@ npm test
 
 - 搜索结果缓存 24 小时（`data/cache/search/`）
 - 超出 `SEARCH_DAILY_LIMIT` 返回 `DAILY_LIMIT_EXCEEDED`
-- 自动过滤 Google、YouTube、Wikipedia 等非目标客户站点
-- 传入 `include_domains` 时改为只保留匹配项，并放行 Facebook 等目标社媒；个人主页路径（如 `linkedin.com/in/`）仍丢弃
-- 不传 `include_domains`（含空数组）时请求体与 R1 相同，不把该字段发给上游
+- 站点收窄交给 Tavily：R1 传 `exclude_domains`（Google / Facebook / Wikipedia 等）；传入 `include_domains` 时改为只传 include（R2），不再本地按站点过滤
+- 个人主页路径（如 `linkedin.com/in/`）仍由 MCP 丢弃（域名排除表达不了路径）
+- 不传 `include_domains`（含空数组）时不把该字段发给上游，改为发 `exclude_domains`

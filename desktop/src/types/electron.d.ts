@@ -424,6 +424,7 @@ export type AgentPreflightKind =
   | 'extract-profile'
   | 'expand-keywords'
   | 'discover-leads'
+  | 'discover-leads-r2'
   | 'score-and-dedupe'
   | 'draft-email'
 
@@ -587,6 +588,7 @@ declare global {
       ) => Promise<{ ok: boolean; sites: ExploreR2SiteDto[]; message?: string }>
       listExploreTasks: (productId: string) => Promise<ExploreTasksSnapshotDto>
       startExploreR1: (input: DiscoverLeadsInput) => Promise<DiscoverLeadsResult>
+      startExploreR2: (input: DiscoverLeadsInput) => Promise<DiscoverLeadsResult>
       listLeads: (productId: string) => Promise<LeadsSnapshotDto>
       saveRawLead: (input: RawLeadSaveInput) => Promise<RawLeadSaveResult>
       exportLeadsCsv: (input: ExportLeadsCsvInput) => Promise<ExportLeadsCsvResult>

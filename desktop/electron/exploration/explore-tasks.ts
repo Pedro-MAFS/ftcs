@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getWorkspaceRoot } from '../config/paths'
+import { exploreRunTitle, isEligibleR2Query } from './r2-query'
 import { loadExpansion, type KeywordExpansion } from '../keywords/keywords-reader'
 
 export type ExploreTaskStatus =
@@ -91,7 +92,7 @@ function keywordsReadyTask(expansion: KeywordExpansion): ExploreTask {
     title: '关键词扩展',
     subtitle: timeLabel
       ? `expand-keywords 已完成 · ${timeLabel}`
-      : 'expand-keywords 已完成，可开始 R1 探索',
+      : 'expand-keywords 已完成，可开始 R1 或 R2 探索',
     startedAt: expansion.generated_at,
     finishedAt: expansion.generated_at,
     totalQueries: total,
@@ -125,12 +126,21 @@ function runToTask(
   const leadsFound = typeof raw.leads_found === 'number' ? raw.leads_found : 0
   const leadsAfterDedupe =
     typeof raw.leads_after_dedupe === 'number' ? raw.leads_after_dedupe : undefined
-  const totalQueries = expansion?.stats.total_queries ?? queriesExecuted
   const rounds = Array.isArray(raw.rounds) ? raw.rounds.map(String) : ['R1']
   const id = String(raw.id || 'run_unknown')
   const startedAt = raw.started_at ? String(raw.started_at) : undefined
   const finishedAt =
     raw.finished_at == null ? null : String(raw.finished_at)
+
+  const roundQueryCount = expansion
+    ? expansion.search_queries.filter((q) => {
+        if (!rounds.includes(String(q.round))) return false
+        if (String(q.round).toUpperCase() === 'R2') return isEligibleR2Query(q)
+        return true
+      }).length
+    : 0
+  const totalQueries =
+    roundQueryCount > 0 ? roundQueryCount : (expansion?.stats.total_queries ?? queriesExecuted)
 
   let subtitle = ''
   if (status === 'running') {
@@ -146,7 +156,7 @@ function runToTask(
     id,
     productId,
     status,
-    title: rounds.join('+') || '探索任务',
+    title: exploreRunTitle(rounds),
     subtitle,
     startedAt,
     finishedAt,
