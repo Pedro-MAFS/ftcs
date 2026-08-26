@@ -36,6 +36,7 @@ const agentMeta = ref<AgentMetaItem[]>([
 ])
 const agentTimeline = ref<AgentTimelineItem[]>([])
 const agentExpanded = ref<Record<string, boolean>>({})
+const agentHasMoreOlder = ref(false)
 const agentPrompt = ref('')
 const generating = computed(() => agentStatus.value === 'running')
 
@@ -251,6 +252,9 @@ function handleAgentEvent(payload: AgentEventPayload): void {
   }
   if (payload.type === 'timeline') {
     agentTimeline.value = payload.items
+    if (payload.hasMoreOlder != null) {
+      agentHasMoreOlder.value = payload.hasMoreOlder
+    }
     return
   }
   if (payload.type === 'done') {
@@ -346,11 +350,16 @@ export function useWorkspace() {
     }
   }
 
+  function resetTimelineView(): void {
+    agentTimeline.value = []
+    agentExpanded.value = {}
+    agentHasMoreOlder.value = false
+  }
+
   function resetAgentForGenerate(selectedCount: number): void {
     agentSkill.value = 'extract-product-profile'
     agentStatus.value = 'running'
-    agentTimeline.value = []
-    agentExpanded.value = {}
+    resetTimelineView()
     agentMeta.value = [
       { label: '就绪度', value: '生成中', tone: 'accent' },
       { label: '选中', value: `${selectedCount} 项` },
@@ -361,16 +370,14 @@ export function useWorkspace() {
   /** 生成未真正启动（如无可导入资料）时解除右侧面板占用 */
   function clearAgentStartFailed(): void {
     agentStatus.value = 'idle'
-    agentTimeline.value = []
-    agentExpanded.value = {}
+    resetTimelineView()
     agentMeta.value = []
   }
 
   function resetAgentForExpandKeywords(): void {
     agentSkill.value = 'expand-keywords'
     agentStatus.value = 'running'
-    agentTimeline.value = []
-    agentExpanded.value = {}
+    resetTimelineView()
     agentMeta.value = [
       { label: '状态', value: '扩展中', tone: 'accent' },
       { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
@@ -381,8 +388,7 @@ export function useWorkspace() {
   function resetAgentForDiscoverLeads(maxQueries = 0, skill = 'discover-leads'): void {
     agentSkill.value = skill
     agentStatus.value = 'running'
-    agentTimeline.value = []
-    agentExpanded.value = {}
+    resetTimelineView()
     const total = maxQueries > 0 ? String(maxQueries) : '—'
     agentMeta.value = [
       { label: '状态', value: '探索中', tone: 'accent' },
@@ -395,8 +401,7 @@ export function useWorkspace() {
   function resetAgentForScoreAndDedupe(rawCount?: number): void {
     agentSkill.value = 'score-and-dedupe'
     agentStatus.value = 'running'
-    agentTimeline.value = []
-    agentExpanded.value = {}
+    resetTimelineView()
     agentMeta.value = [
       { label: '状态', value: '评分中', tone: 'accent' },
       { label: '原始', value: rawCount != null ? String(rawCount) : '—' },
@@ -407,8 +412,7 @@ export function useWorkspace() {
   function resetAgentForDraftEmail(targetCount?: number): void {
     agentSkill.value = 'draft-outreach-email'
     agentStatus.value = 'running'
-    agentTimeline.value = []
-    agentExpanded.value = {}
+    resetTimelineView()
     agentMeta.value = [
       { label: '状态', value: '起草中', tone: 'accent' },
       { label: '目标', value: targetCount != null ? String(targetCount) : '—' },
@@ -430,6 +434,19 @@ export function useWorkspace() {
     return !item.collapsed
   }
 
+  async function loadOlderAgentTimeline(): Promise<{
+    ok: boolean
+    hasMoreOlder: boolean
+    message: string
+  }> {
+    if (!window.ftcs?.loadOlderAgentTimeline) {
+      return { ok: false, hasMoreOlder: false, message: '翻页接口不可用' }
+    }
+    const res = await window.ftcs.loadOlderAgentTimeline()
+    agentHasMoreOlder.value = res.hasMoreOlder
+    return res
+  }
+
   return {
     products,
     activeProductId,
@@ -442,6 +459,7 @@ export function useWorkspace() {
     agentStatus,
     agentMeta,
     agentTimeline,
+    agentHasMoreOlder,
     agentPrompt,
     generating,
     selectProduct,
@@ -456,6 +474,7 @@ export function useWorkspace() {
     resetAgentForDraftEmail,
     toggleTimelineExpand,
     isTimelineExpanded,
+    loadOlderAgentTimeline,
     refreshProducts,
     loadActiveProfile,
     refreshExploreTasks,

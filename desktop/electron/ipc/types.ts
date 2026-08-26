@@ -50,6 +50,7 @@ export const IPC = {
   EMAIL_DRAFT_REJECT: 'email:draft-reject',
   EMAIL_DRAFT_APPROVE: 'email:draft-approve',
   AGENT_EVENT: 'agent:event',
+  AGENT_LOAD_OLDER: 'agent:load-older-timeline',
   APP_OPEN_EXTERNAL: 'app:open-external',
   AUTH_GET_SESSION: 'auth:get-session',
   AUTH_LOGIN: 'auth:login',
@@ -723,6 +724,7 @@ export type AgentEventPayload =
   | {
       type: 'timeline'
       items: AgentTimelineItem[]
+      hasMoreOlder?: boolean
     }
   | {
       type: 'done'
@@ -735,6 +737,12 @@ export type AgentEventPayload =
       scored?: ScoredLeadsSummaryDto
       emailDrafts?: EmailDraftsSummaryDto
     }
+
+export type LoadOlderTimelineResult = {
+  ok: boolean
+  hasMoreOlder: boolean
+  message: string
+}
 
 export type OpenCodeRuntimeState = 'idle' | 'starting' | 'running' | 'error' | 'stopped'
 

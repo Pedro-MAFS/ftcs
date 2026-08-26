@@ -55,6 +55,8 @@ export type AgentEventPayload =
       /** 整段替换时间线（权威顺序） */
       type: 'timeline'
       items: AgentTimelineItem[]
+      /** 当前会话是否还能向前翻到更早的消息 */
+      hasMoreOlder?: boolean
     }
   | {
       type: 'done'
@@ -250,13 +252,171 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-function summarizeJson(value: unknown, max = 160): string {
+const LIVE_MESSAGE_LIMIT = 80
+const COLLAPSE_BODY_CHARS = 400
+
+/** 完整序列化工具出入参，不做长度截断；折叠由 UI 的 collapsed 处理 */
+function formatJsonFull(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        return JSON.stringify(JSON.parse(trimmed), null, 2)
+      } catch {
+        return value
+      }
+    }
+    return value
+  }
   try {
-    const raw = typeof value === 'string' ? value : JSON.stringify(value)
-    if (!raw) return ''
-    return raw.length > max ? `${raw.slice(0, max)}…` : raw
+    return JSON.stringify(value, null, 2)
   } catch {
     return ''
+  }
+}
+
+function normalizeMessageRows(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw
+  const rec = asRecord(raw)
+  if (!rec) return []
+  if (Array.isArray(rec.data)) return rec.data
+  if (Array.isArray(rec.messages)) return rec.messages
+  return []
+}
+
+function rowsToTimelineItems(
+  rows: unknown[],
+  userPrompt: string,
+): { items: AgentTimelineItem[]; messageIds: string[] } {
+  const items: AgentTimelineItem[] = []
+  const messageIds: string[] = []
+  const seenMsg = new Set<string>()
+  const promptTrimmed = userPrompt.trim()
+
+  for (const row of rows) {
+    const info = asRecord(asRecord(row)?.info) ?? asRecord(row)
+    const role = asString(info?.role)
+    const messageId = asString(info?.id) || `msg-${items.length}`
+    if (messageId && !seenMsg.has(messageId)) {
+      seenMsg.add(messageId)
+      messageIds.push(messageId)
+    }
+    const parts = Array.isArray(asRecord(row)?.parts)
+      ? (asRecord(row)!.parts as unknown[])
+      : []
+
+    if (role === 'user') {
+      const text = parts
+        .map((p) => asRecord(p))
+        .filter((p) => p && asString(p.type) === 'text' && !p.ignored)
+        .map((p) => asString(p!.text))
+        .join('\n')
+        .trim()
+      if (!text || text === promptTrimmed) continue
+      items.push({
+        id: `user-${messageId}`,
+        kind: 'user',
+        time: nowTime(),
+        title: '你的补充指令',
+        body: text,
+        collapsed: text.length > 280,
+      })
+      continue
+    }
+
+    if (role !== 'assistant') continue
+
+    for (const rawPart of parts) {
+      const part = asRecord(rawPart)
+      if (!part || part.ignored === true) continue
+      const partType = asString(part.type)
+      const partId = asString(part.id) || `${messageId}-${partType}-${items.length}`
+
+      if (partType === 'reasoning') {
+        const text = asString(part.text)
+        if (!text) continue
+        items.push({
+          id: `reasoning-${partId}`,
+          kind: 'reasoning',
+          time: nowTime(),
+          title: '思考',
+          body: text,
+          collapsed: text.length > COLLAPSE_BODY_CHARS,
+        })
+        continue
+      }
+
+      if (partType === 'text') {
+        const text = asString(part.text)
+        if (!text) continue
+        items.push({
+          id: `assistant-${partId}`,
+          kind: 'assistant',
+          time: nowTime(),
+          title: '模型回复',
+          body: text,
+        })
+        continue
+      }
+
+      if (partType === 'tool') {
+        const toolName = asString(part.tool) || 'tool'
+        const state = asRecord(part.state)
+        const statusRaw = asString(state?.status)
+        let status: 'running' | 'done' | 'error' = 'running'
+        if (statusRaw === 'completed') status = 'done'
+        else if (statusRaw === 'error') status = 'error'
+        const title =
+          status === 'done'
+            ? `工具 · ${toolName} · 完成`
+            : status === 'error'
+              ? `工具 · ${toolName} · 失败`
+              : `工具 · ${toolName}`
+        const detailParts: string[] = []
+        const stateTitle = asString(state?.title)
+        if (stateTitle) detailParts.push(stateTitle)
+        const input = formatJsonFull(state?.input)
+        if (input) detailParts.push(`输入:\n${input}`)
+        if (status === 'done') {
+          const out = formatJsonFull(state?.output)
+          if (out) detailParts.push(`输出:\n${out}`)
+          const meta = formatJsonFull(state?.metadata)
+          if (meta && meta !== out) detailParts.push(`其它:\n${meta}`)
+        }
+        if (status === 'error') {
+          const errText = formatJsonFull(state?.error) || asString(state?.error) || '调用失败'
+          detailParts.push(`错误:\n${errText}`)
+        }
+        const body = detailParts.join('\n\n') || '执行中…'
+        items.push({
+          id: `tool-${partId}`,
+          kind: 'tool',
+          time: nowTime(),
+          title,
+          body,
+          status,
+          collapsed: body.length > COLLAPSE_BODY_CHARS,
+        })
+      }
+    }
+  }
+
+  return { items, messageIds }
+}
+
+function preserveLongerBody(
+  prev: AgentTimelineItem | undefined,
+  item: AgentTimelineItem,
+): AgentTimelineItem {
+  if (!prev) return { ...item }
+  if (prev.body.length > item.body.length && prev.body.startsWith(item.body)) {
+    return { ...item, body: prev.body, time: prev.time || item.time }
+  }
+  return {
+    ...item,
+    time: prev.time || item.time,
+    collapsed: item.collapsed ?? prev.collapsed,
   }
 }
 
@@ -301,6 +461,10 @@ class TimelineBuilder {
   private sessionItems: AgentTimelineItem[] = []
   private suffix: AgentTimelineItem[] = []
   private byId = new Map<string, AgentTimelineItem>()
+  private messageIds: string[] = []
+  private messageIdSet = new Set<string>()
+  private hasMoreOlder = false
+  private reachedOldest = false
   private lastFingerprint = ''
 
   reset(): void {
@@ -308,7 +472,24 @@ class TimelineBuilder {
     this.sessionItems = []
     this.suffix = []
     this.byId.clear()
+    this.messageIds = []
+    this.messageIdSet.clear()
+    this.hasMoreOlder = false
+    this.reachedOldest = false
     this.lastFingerprint = ''
+  }
+
+  getHasMoreOlder(): boolean {
+    return this.hasMoreOlder
+  }
+
+  setHasMoreOlder(value: boolean): void {
+    this.hasMoreOlder = value
+    if (!value) this.reachedOldest = true
+  }
+
+  oldestMessageId(): string {
+    return this.messageIds[0] ?? ''
   }
 
   addPrefix(item: AgentTimelineItem): void {
@@ -357,28 +538,58 @@ class TimelineBuilder {
     return true
   }
 
-  /** 用会话消息权威列表替换 session 段（保留 prefix） */
-  replaceSessionItems(items: AgentTimelineItem[]): void {
-    const merged = items.map((item) => {
-      const prev = this.byId.get(item.id)
-      if (
-        prev &&
-        prev.body.length > item.body.length &&
-        prev.body.startsWith(item.body)
-      ) {
-        // 保留 SSE 已追加的更长正文
-        return { ...item, body: prev.body, time: prev.time || item.time }
-      }
-      if (prev) {
-        return { ...item, time: prev.time || item.time, collapsed: item.collapsed ?? prev.collapsed }
-      }
-      return { ...item }
-    })
-    this.sessionItems = merged
+  private rebuildById(): void {
     this.byId = new Map()
     for (const item of this.prefix) this.byId.set(item.id, item)
     for (const item of this.sessionItems) this.byId.set(item.id, item)
     for (const item of this.suffix) this.byId.set(item.id, item)
+  }
+
+  private rememberMessageIds(ids: string[], mode: 'live' | 'older'): void {
+    const fresh = ids.filter((id) => id && !this.messageIdSet.has(id))
+    if (fresh.length === 0) return
+    for (const id of fresh) this.messageIdSet.add(id)
+    if (mode === 'older') this.messageIds = [...fresh, ...this.messageIds]
+    else this.messageIds = [...this.messageIds, ...fresh]
+  }
+
+  /**
+   * 用最近一页（limit=80）覆盖「窗口内」条目并保持其顺序；
+   * 窗口外已加载的更早条目保留在前面，避免轮询冲掉翻页结果。
+   */
+  mergeLiveItems(items: AgentTimelineItem[], messageIds: string[]): void {
+    const liveIds = new Set(items.map((item) => item.id))
+    const olderKept = this.sessionItems.filter((item) => !liveIds.has(item.id))
+    const liveUpdated = items.map((item) => preserveLongerBody(this.byId.get(item.id), item))
+    this.sessionItems = [...olderKept, ...liveUpdated]
+    this.rebuildById()
+    this.rememberMessageIds(messageIds, 'live')
+    if (!this.reachedOldest && messageIds.length >= LIVE_MESSAGE_LIMIT) {
+      this.hasMoreOlder = true
+    }
+  }
+
+  /** 把更早一页插到会话段前面。返回新出现的条目数。 */
+  prependOlderItems(
+    items: AgentTimelineItem[],
+    messageIds: string[],
+    pageSize: number,
+  ): number {
+    const freshItems = items
+      .filter((item) => !this.byId.has(item.id))
+      .map((item) => ({ ...item }))
+    this.sessionItems = [...freshItems, ...this.sessionItems]
+    this.rebuildById()
+    const beforeCount = this.messageIdSet.size
+    this.rememberMessageIds(messageIds, 'older')
+    const addedIds = this.messageIdSet.size - beforeCount
+    if (pageSize === 0 || pageSize < LIVE_MESSAGE_LIMIT || addedIds === 0) {
+      this.reachedOldest = true
+      this.hasMoreOlder = false
+    } else {
+      this.hasMoreOlder = true
+    }
+    return freshItems.length
   }
 
   has(id: string): boolean {
@@ -394,9 +605,9 @@ class TimelineBuilder {
   /** 内容有变化才返回 items，否则 null */
   emitIfChanged(): AgentTimelineItem[] | null {
     const items = this.snapshot()
-    const fingerprint = items
+    const fingerprint = `${this.hasMoreOlder ? 1 : 0}#${items
       .map((i) => `${i.id}|${i.status ?? ''}|${i.body.length}|${i.title}`)
-      .join('||')
+      .join('||')}`
     if (fingerprint === this.lastFingerprint) return null
     this.lastFingerprint = fingerprint
     return items
@@ -407,8 +618,73 @@ export class AgentRunController {
   private abort: AbortController | null = null
   private sessionId: string | null = null
   private running = false
+  private timeline: TimelineBuilder | null = null
+  private timelineUserPrompt = ''
+  private timelineIo: Promise<void> = Promise.resolve()
 
   constructor(private readonly getClient: () => OpencodeClient | null) {}
+
+  private attachTimeline(timeline: TimelineBuilder, userPrompt: string): void {
+    this.timeline = timeline
+    this.timelineUserPrompt = userPrompt
+  }
+
+  private enqueueTimelineIo<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.timelineIo.then(fn, fn)
+    this.timelineIo = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
+  }
+
+  async loadOlderTimeline(
+    emit: AgentEventSink,
+  ): Promise<{ ok: boolean; hasMoreOlder: boolean; message: string }> {
+    const client = this.getClient()
+    const timeline = this.timeline
+    const sessionId = this.sessionId
+    if (!client || !timeline || !sessionId) {
+      return { ok: false, hasMoreOlder: false, message: '当前没有可翻页的会话' }
+    }
+    const before = timeline.oldestMessageId()
+    if (!before) {
+      timeline.setHasMoreOlder(false)
+      emit({ type: 'timeline', items: timeline.snapshot(), hasMoreOlder: false })
+      return { ok: true, hasMoreOlder: false, message: '没有更早的记录' }
+    }
+
+    try {
+      await this.enqueueTimelineIo(async () => {
+        const res = await client.session.messages({
+          sessionID: sessionId,
+          limit: LIVE_MESSAGE_LIMIT,
+          before,
+        })
+        const rows = normalizeMessageRows(res.data)
+        const parsed = rowsToTimelineItems(rows, this.timelineUserPrompt)
+        timeline.prependOlderItems(parsed.items, parsed.messageIds, rows.length)
+        emit({
+          type: 'timeline',
+          items: timeline.snapshot(),
+          hasMoreOlder: timeline.getHasMoreOlder(),
+        })
+      })
+      const hasMoreOlder = timeline.getHasMoreOlder()
+      return {
+        ok: true,
+        hasMoreOlder,
+        message: hasMoreOlder ? '已加载更早记录' : '已到最早记录',
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return {
+        ok: false,
+        hasMoreOlder: timeline.getHasMoreOlder(),
+        message,
+      }
+    }
+  }
 
   isRunning(): boolean {
     return this.running
@@ -459,7 +735,7 @@ export class AgentRunController {
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
-      if (items) emit({ type: 'timeline', items })
+      if (items) emit({ type: 'timeline', items, hasMoreOlder: timeline.getHasMoreOlder() })
     }
 
     const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
@@ -490,6 +766,7 @@ export class AgentRunController {
     }
 
     const promptText = buildExpandKeywordsPrompt(productId)
+    this.attachTimeline(timeline, promptText)
     timeline.reset()
     timeline.addPrefix({
       id: 'sys-prepare',
@@ -630,7 +907,6 @@ export class AgentRunController {
     } finally {
       stopEvents?.()
       this.running = false
-      this.sessionId = null
       this.abort = null
     }
   }
@@ -667,7 +943,7 @@ export class AgentRunController {
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
-      if (items) emit({ type: 'timeline', items })
+      if (items) emit({ type: 'timeline', items, hasMoreOlder: timeline.getHasMoreOlder() })
     }
 
     const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
@@ -698,6 +974,7 @@ export class AgentRunController {
     }
 
     const promptText = buildScoreAndDedupePrompt(productId)
+    this.attachTimeline(timeline, promptText)
     timeline.reset()
     timeline.addPrefix({
       id: 'sys-prepare',
@@ -843,7 +1120,6 @@ export class AgentRunController {
     } finally {
       stopEvents?.()
       this.running = false
-      this.sessionId = null
       this.abort = null
     }
   }
@@ -907,7 +1183,7 @@ export class AgentRunController {
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
-      if (items) emit({ type: 'timeline', items })
+      if (items) emit({ type: 'timeline', items, hasMoreOlder: timeline.getHasMoreOlder() })
     }
 
     const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
@@ -938,6 +1214,7 @@ export class AgentRunController {
     }
 
     const promptText = buildDraftOutreachPrompt(productId, leadIds)
+    this.attachTimeline(timeline, promptText)
     timeline.reset()
     timeline.addPrefix({
       id: 'sys-prepare',
@@ -1081,7 +1358,6 @@ export class AgentRunController {
     } finally {
       stopEvents?.()
       this.running = false
-      this.sessionId = null
       this.abort = null
     }
   }
@@ -1140,7 +1416,7 @@ export class AgentRunController {
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
-      if (items) emit({ type: 'timeline', items })
+      if (items) emit({ type: 'timeline', items, hasMoreOlder: timeline.getHasMoreOlder() })
     }
 
     const pushState = (
@@ -1183,6 +1459,7 @@ export class AgentRunController {
     const promptText = isR2
       ? buildDiscoverLeadsR2Prompt(productId, maxQueries)
       : buildDiscoverLeadsPrompt(productId, { rounds, maxQueries })
+    this.attachTimeline(timeline, promptText)
     timeline.reset()
     timeline.addPrefix({
       id: 'sys-prepare',
@@ -1400,7 +1677,6 @@ export class AgentRunController {
     } finally {
       stopEvents?.()
       this.running = false
-      this.sessionId = null
       this.abort = null
     }
   }
@@ -1426,7 +1702,7 @@ export class AgentRunController {
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
-      if (items) emit({ type: 'timeline', items })
+      if (items) emit({ type: 'timeline', items, hasMoreOlder: timeline.getHasMoreOlder() })
     }
 
     const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
@@ -1460,6 +1736,7 @@ export class AgentRunController {
     }
 
     const promptText = buildPrompt(bootstrap)
+    this.attachTimeline(timeline, promptText)
     timeline.reset()
     timeline.addPrefix({
       id: 'sys-prepare',
@@ -1621,7 +1898,6 @@ export class AgentRunController {
     } finally {
       stopEvents?.()
       this.running = false
-      this.sessionId = null
       this.abort = null
     }
   }
@@ -1739,122 +2015,19 @@ export class AgentRunController {
   ): { stop: () => void; ingestNow: () => Promise<void> } {
     let stopped = false
 
-    const normalizeMessageRows = (raw: unknown): unknown[] => {
-      if (Array.isArray(raw)) return raw
-      const rec = asRecord(raw)
-      if (!rec) return []
-      if (Array.isArray(rec.data)) return rec.data
-      if (Array.isArray(rec.messages)) return rec.messages
-      return []
-    }
-
-    const ingestMessages = async () => {
-      const res = await client.session.messages({ sessionID: sessionId, limit: 80 })
-      const rows = normalizeMessageRows(res.data)
-      const nextSession: AgentTimelineItem[] = []
-
-      for (const row of rows) {
-        const info = asRecord(asRecord(row)?.info) ?? asRecord(row)
-        const role = asString(info?.role)
-        const messageId = asString(info?.id) || `msg-${nextSession.length}`
-        const parts = Array.isArray(asRecord(row)?.parts)
-          ? (asRecord(row)!.parts as unknown[])
-          : []
-
-        if (role === 'user') {
-          const text = parts
-            .map((p) => asRecord(p))
-            .filter((p) => p && asString(p.type) === 'text' && !p.ignored)
-            .map((p) => asString(p!.text))
-            .join('\n')
-            .trim()
-          if (!text || text === userPrompt.trim()) continue
-          nextSession.push({
-            id: `user-${messageId}`,
-            kind: 'user',
-            time: nowTime(),
-            title: '你的补充指令',
-            body: text,
-            collapsed: text.length > 280,
-          })
-          continue
-        }
-
-        if (role !== 'assistant') continue
-
-        for (const raw of parts) {
-          const part = asRecord(raw)
-          if (!part || part.ignored === true) continue
-          const partType = asString(part.type)
-          const partId = asString(part.id) || `${messageId}-${partType}-${nextSession.length}`
-
-          if (partType === 'reasoning') {
-            const text = asString(part.text)
-            if (!text) continue
-            nextSession.push({
-              id: `reasoning-${partId}`,
-              kind: 'reasoning',
-              time: nowTime(),
-              title: '思考',
-              body: text,
-              collapsed: text.length > 400,
-            })
-            continue
-          }
-
-          if (partType === 'text') {
-            const text = asString(part.text)
-            if (!text) continue
-            nextSession.push({
-              id: `assistant-${partId}`,
-              kind: 'assistant',
-              time: nowTime(),
-              title: '模型回复',
-              body: text,
-            })
-            continue
-          }
-
-          if (partType === 'tool') {
-            const toolName = asString(part.tool) || 'tool'
-            const state = asRecord(part.state)
-            const statusRaw = asString(state?.status)
-            let status: 'running' | 'done' | 'error' = 'running'
-            if (statusRaw === 'completed') status = 'done'
-            else if (statusRaw === 'error') status = 'error'
-            const title =
-              status === 'done'
-                ? `工具 · ${toolName} · 完成`
-                : status === 'error'
-                  ? `工具 · ${toolName} · 失败`
-                  : `工具 · ${toolName}`
-            const detailParts: string[] = []
-            const stateTitle = asString(state?.title)
-            if (stateTitle) detailParts.push(stateTitle)
-            const input = summarizeJson(state?.input, 200)
-            if (input) detailParts.push(`输入: ${input}`)
-            if (status === 'done') {
-              const out = asString(state?.output)
-              if (out) detailParts.push(`输出: ${out.slice(0, 240)}${out.length > 240 ? '…' : ''}`)
-            }
-            if (status === 'error') {
-              detailParts.push(asString(state?.error) || '调用失败')
-            }
-            nextSession.push({
-              id: `tool-${partId}`,
-              kind: 'tool',
-              time: nowTime(),
-              title,
-              body: detailParts.join('\n') || '执行中…',
-              status,
-            })
-          }
-        }
-      }
-
-      timeline.replaceSessionItems(nextSession)
-      flush()
-    }
+    const ingestMessages = () =>
+      this.enqueueTimelineIo(async () => {
+        if (stopped) return
+        const res = await client.session.messages({
+          sessionID: sessionId,
+          limit: LIVE_MESSAGE_LIMIT,
+        })
+        if (stopped) return
+        const rows = normalizeMessageRows(res.data)
+        const parsed = rowsToTimelineItems(rows, userPrompt)
+        timeline.mergeLiveItems(parsed.items, parsed.messageIds)
+        flush()
+      })
 
     const upsertTextItem = (
       kind: 'assistant' | 'reasoning',
