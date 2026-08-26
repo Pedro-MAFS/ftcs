@@ -16,3 +16,10 @@ export const PLANNED_ROUND_EMPTY =
 export function roundLabel(round: string): string {
   return ROUND_FILTER_OPTIONS.find((opt) => opt.value === round)?.label ?? round
 }
+
+/** 线索表 / CSV「匹配理由」前的轮次标记 */
+export function leadRoundTag(round?: string | null): string {
+  const value = (round || 'R1').trim().toUpperCase()
+  if (value === 'R2' || value === 'R3' || value === 'R4') return value
+  return 'R1'
+}

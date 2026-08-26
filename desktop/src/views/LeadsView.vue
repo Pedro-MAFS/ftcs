@@ -3,11 +3,13 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { useExploreStart } from '../composables/useExploreStart'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
+import ExploreStartControl from '../components/explore/ExploreStartControl.vue'
 import LeadDetailDrawer from '../components/shared/LeadDetailDrawer.vue'
 import type { LeadRowDto, LeadsSnapshotDto } from '../types/electron'
-import { buildLeadsCsv, defaultLeadsCsvFileName } from '../utils/leads-export'
+import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonDisplay } from '../utils/leads-export'
 
 const meta = SECTION_META.leads
 const route = useRoute()
@@ -64,6 +66,16 @@ const isDrafting = computed(
     (generating.value && agentSkill.value === 'draft-outreach-email'),
 )
 
+const {
+  exploreRound,
+  canStartSelected,
+  startDisabledReason,
+  isStartingExplore,
+  startExplore,
+} = useExploreStart({
+  extraBusy: () => scoring.value || drafting.value,
+})
+
 const canScore = computed(() => {
   return (
     !!activeProductId.value &&
@@ -97,7 +109,7 @@ const runOptions = computed(() => {
 const subtitle = computed(() => {
   if (!activeProductId.value) return '请先在侧栏选择产品'
   const s = stats.value
-  if (s.total === 0) return '暂无线索 · 可在探索页完成 R1 后回来查看'
+  if (s.total === 0) return '暂无线索 · 可在本页或探索页开始探索后回来查看'
   const parts = [`${s.total} 条`, `未评分 ${s.raw}`, `已评分 ${s.scored}`]
   if (s.discarded > 0) parts.push(`淘汰 ${s.discarded}`)
   if (runFilter.value) parts.push(`任务 ${runFilter.value}`)
@@ -290,7 +302,7 @@ async function refreshLeads(): Promise<void> {
 async function onScoreClick(): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.scoreAndDedupeLeads) return
   if (stats.value.raw <= 0) {
-    actionMessage.value = '暂无未评分原始线索，请先完成 R1 探索'
+    actionMessage.value = '暂无未评分原始线索，请先完成探索'
     return
   }
   if (generating.value) {
@@ -388,8 +400,8 @@ function goEmailLead(lead: LeadRowDto): void {
     .catch(() => undefined)
 }
 
-function goExplore(): void {
-  router.push({ name: 'explore' }).catch(() => undefined)
+async function onStartExplore(): Promise<void> {
+  actionMessage.value = await startExplore()
 }
 
 async function onExportCsv(): Promise<void> {
@@ -475,6 +487,13 @@ watch(
 watch(agentStatus, (status) => {
   if (
     (status === 'done' || status === 'error') &&
+    (agentSkill.value === 'discover-leads' ||
+      agentSkill.value === 'discover-leads-r2')
+  ) {
+    void refreshLeads()
+  }
+  if (
+    (status === 'done' || status === 'error') &&
     agentSkill.value === 'score-and-dedupe'
   ) {
     void refreshLeads().then(() => {
@@ -555,15 +574,15 @@ onUnmounted(() => {
         >
           {{ isScoring ? '评分中…' : '评分去重' }}
         </button>
-        <button
-          type="button"
-          class="btn-secondary"
-          :disabled="!activeProductId"
-          @click="goExplore"
-        >
-          <Icon name="play" :size="12" />
-          一键 R1
-        </button>
+        <ExploreStartControl
+          compact
+          :round="exploreRound"
+          :disabled="!canStartSelected"
+          :disabled-reason="startDisabledReason"
+          :busy="isStartingExplore"
+          @update:round="exploreRound = $event"
+          @start="onStartExplore"
+        />
       </div>
     </header>
 
@@ -631,7 +650,7 @@ onUnmounted(() => {
         <p class="muted">
           {{
             rows.length === 0
-              ? '前往探索页启动 R1，原始线索将出现在此'
+              ? '在本页或探索页开始探索，原始线索将出现在此'
               : runFilter
                 ? '当前探索任务下无匹配线索（历史无线索无 run_id，不会出现在此筛选）'
                 : '试试切换「全部 / 未评分 / 已评分 / 重复淘汰」、探索任务或清空搜索'
@@ -695,17 +714,11 @@ onUnmounted(() => {
           <span class="table-cell leads-table__score">
             {{ row.score != null ? row.score : '—' }}
           </span>
-          <span class="table-cell leads-table__reason" :title="row.matchReason">
-            <template v-if="row.phase === 'discarded'">
-              保留 {{ row.keptLeadId || '—' }}
-              <template v-if="row.matchReason"> · {{ row.matchReason }}</template>
-            </template>
-            <template v-else-if="row.phase === 'raw' && row.matchReason">
-              R1 · {{ row.matchReason }}
-            </template>
-            <template v-else>
-              {{ row.matchReason || '—' }}
-            </template>
+          <span
+            class="table-cell leads-table__reason"
+            :title="matchReasonDisplay(row) || row.matchReason"
+          >
+            {{ matchReasonDisplay(row) || '—' }}
           </span>
           <span class="table-cell leads-table__actions">
             <button

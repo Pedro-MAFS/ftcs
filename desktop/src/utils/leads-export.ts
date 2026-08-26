@@ -1,3 +1,4 @@
+import { leadRoundTag } from '../explore/round-labels'
 import type { LeadRowDto } from '../types/electron'
 import { rowsToCsv } from './csv'
 
@@ -35,15 +36,15 @@ function lifecycleLabel(status: string | null | undefined): string {
 }
 
 /** 与线索表「匹配理由」列展示一致 */
-function matchReasonDisplay(row: LeadRowDto): string {
+export function matchReasonDisplay(row: LeadRowDto): string {
   if (row.phase === 'discarded') {
     const kept = row.keptLeadId || '—'
     return row.matchReason ? `保留 ${kept} · ${row.matchReason}` : `保留 ${kept}`
   }
-  if (row.phase === 'raw' && row.matchReason) {
-    return `R1 · ${row.matchReason}`
+  if (row.matchReason) {
+    return `${leadRoundTag(row.round)} · ${row.matchReason}`
   }
-  return row.matchReason || ''
+  return ''
 }
 
 function sourceUrl(row: LeadRowDto): string {

@@ -3836,6 +3836,39 @@ select.text-input {
   font-size: 12px;
 }
 
+.explore-start {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.explore-start__round {
+  width: auto;
+  min-width: 118px;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: 0;
+}
+
+.explore-start__run {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.explore-start.is-compact .explore-start__round {
+  height: 26px;
+  min-width: 108px;
+  font-size: 11px;
+}
+
+.explore-start.is-compact .explore-start__run {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
 .explore-summary {
   display: flex;
   align-items: center;

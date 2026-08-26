@@ -3,8 +3,10 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { useExploreStart } from '../composables/useExploreStart'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
+import ExploreStartControl from '../components/explore/ExploreStartControl.vue'
 import KeywordEditorDialog from '../components/shared/KeywordEditorDialog.vue'
 import type { ExploreTaskDto, ExploreR2SiteDto, KeywordExpansionDto } from '../types/electron'
 import {
@@ -24,7 +26,6 @@ const {
   agentSkill,
   agentStatus,
   refreshExploreTasks,
-  resetAgentForDiscoverLeads,
   resetAgentForScoreAndDedupe,
 } = useWorkspace()
 
@@ -32,8 +33,6 @@ const expandedId = ref('')
 const actionMessage = ref('')
 const loading = ref(false)
 const editorOpen = ref(false)
-const startingR1 = ref(false)
-const startingR2 = ref(false)
 const scoringLeads = ref(false)
 const previewRound = ref('R1')
 const previewDimension = ref('all')
@@ -148,64 +147,6 @@ const discoveringR2Placeholder = computed(() => {
   )
 })
 
-const hasKeywordsReady = computed(() =>
-  tasks.value.some((t) => t.status === 'keywords_ready'),
-)
-
-const r1QueryCount = computed(
-  () => allQueries.value.filter((q) => q.round === 'R1').length,
-)
-
-const r2QueryCount = computed(
-  () =>
-    allQueries.value.filter((q) => q.round === 'R2' && Boolean(q.site_id?.trim())).length,
-)
-
-const r2LegacyCount = computed(
-  () =>
-    allQueries.value.filter((q) => q.round === 'R2' && !q.site_id?.trim()).length,
-)
-
-const canStartR1 = computed(() => {
-  return (
-    !!activeProductId.value &&
-    hasKeywordsReady.value &&
-    r1QueryCount.value > 0 &&
-    !generating.value &&
-    !startingR1.value &&
-    !startingR2.value
-  )
-})
-
-const canStartR2 = computed(() => {
-  return (
-    !!activeProductId.value &&
-    hasKeywordsReady.value &&
-    r2QueryCount.value > 0 &&
-    !generating.value &&
-    !startingR1.value &&
-    !startingR2.value
-  )
-})
-
-const startR2DisabledReason = computed(() => {
-  if (generating.value || startingR1.value || startingR2.value) return '已有任务在运行'
-  if (!hasKeywordsReady.value) return '请先完成关键词扩展'
-  if (r2QueryCount.value > 0) return ''
-  if (r2LegacyCount.value > 0) return '当前 R2 词没有站点，请重新扩展关键词'
-  return '没有可用的 R2 词。请在设置页启用社媒站点后重新扩展'
-})
-
-const isDiscoveringR1 = computed(
-  () => generating.value && agentSkill.value === 'discover-leads',
-)
-
-const isDiscoveringR2 = computed(
-  () => generating.value && agentSkill.value === 'discover-leads-r2',
-)
-
-const isDiscovering = computed(() => isDiscoveringR1.value || isDiscoveringR2.value)
-
 const isScoring = computed(
   () =>
     scoringLeads.value ||
@@ -269,15 +210,6 @@ async function stopAgent(): Promise<void> {
   stopProgressPolling()
 }
 
-/** 默认该轮全部词；若填写了正数上限则取 min(上限, 可用数) */
-function resolveMaxQueries(available: number): number {
-  const limit = maxQueriesLimit.value
-  if (limit == null || !Number.isFinite(limit) || limit <= 0) {
-    return Math.max(1, available)
-  }
-  return Math.max(1, Math.min(Math.floor(limit), available || Math.floor(limit)))
-}
-
 function persistMaxQueriesLimit(): void {
   try {
     if (maxQueriesLimit.value == null || maxQueriesLimit.value <= 0) {
@@ -301,89 +233,24 @@ function onMaxQueriesInput(event: Event): void {
   persistMaxQueriesLimit()
 }
 
-async function startR1(): Promise<void> {
-  if (!activeProductId.value || !window.ftcs?.startExploreR1) return
-  if (!canStartR1.value) {
-    if (!hasKeywordsReady.value) {
-      actionMessage.value = '请先完成关键词扩展'
-    } else if (r1QueryCount.value === 0) {
-      actionMessage.value = '当前没有 R1 搜索词，请编辑关键词后重试'
-    }
-    return
-  }
+const {
+  exploreRound,
+  hasKeywordsReady,
+  r1QueryCount,
+  r2QueryCount,
+  canStartSelected,
+  startDisabledReason,
+  isStartingExplore,
+  startExplore: runExploreStart,
+} = useExploreStart({
+  maxQueriesLimit,
+  extraBusy: () => scoringLeads.value,
+  onLaunch: startProgressPolling,
+  onFail: stopProgressPolling,
+})
 
-  const preflightError = await ensureAgentReady('discover-leads')
-  if (preflightError) {
-    actionMessage.value = preflightError
-    return
-  }
-
-  startingR1.value = true
-  actionMessage.value = ''
-  const maxQueries = resolveMaxQueries(r1QueryCount.value)
-  resetAgentForDiscoverLeads(maxQueries, 'discover-leads')
-  startProgressPolling()
-
-  try {
-    const res = await window.ftcs.startExploreR1({
-      productId: activeProductId.value,
-      rounds: ['R1'],
-      maxQueries,
-    })
-    if (!res.ok) {
-      actionMessage.value = res.message
-      agentStatus.value = 'error'
-      stopProgressPolling()
-      return
-    }
-    actionMessage.value = res.message
-  } catch (err) {
-    actionMessage.value = err instanceof Error ? err.message : String(err)
-    agentStatus.value = 'error'
-    stopProgressPolling()
-  } finally {
-    startingR1.value = false
-  }
-}
-
-async function startR2(): Promise<void> {
-  if (!activeProductId.value || !window.ftcs?.startExploreR2) return
-  if (!canStartR2.value) {
-    actionMessage.value = startR2DisabledReason.value
-    return
-  }
-
-  const preflightError = await ensureAgentReady('discover-leads-r2')
-  if (preflightError) {
-    actionMessage.value = preflightError
-    return
-  }
-
-  startingR2.value = true
-  actionMessage.value = ''
-  const maxQueries = resolveMaxQueries(r2QueryCount.value)
-  resetAgentForDiscoverLeads(maxQueries, 'discover-leads-r2')
-  startProgressPolling()
-
-  try {
-    const res = await window.ftcs.startExploreR2({
-      productId: activeProductId.value,
-      maxQueries,
-    })
-    if (!res.ok) {
-      actionMessage.value = res.message
-      agentStatus.value = 'error'
-      stopProgressPolling()
-      return
-    }
-    actionMessage.value = res.message
-  } catch (err) {
-    actionMessage.value = err instanceof Error ? err.message : String(err)
-    agentStatus.value = 'error'
-    stopProgressPolling()
-  } finally {
-    startingR2.value = false
-  }
+async function startExplore(): Promise<void> {
+  actionMessage.value = await runExploreStart()
 }
 
 function goLeads(task?: ExploreTaskDto): void {
@@ -536,7 +403,7 @@ onUnmounted(() => {
                 : '全部'
             "
             :value="maxQueriesLimit ?? ''"
-            :disabled="startingR1 || startingR2 || isDiscovering"
+            :disabled="isStartingExplore"
             @input="onMaxQueriesInput"
           />
         </label>
@@ -548,25 +415,14 @@ onUnmounted(() => {
         >
           停止
         </button>
-        <button
-          type="button"
-          class="btn-primary"
-          :disabled="!canStartR1"
-          @click="startR1"
-        >
-          <Icon name="play" :size="12" />
-          {{ startingR1 || isDiscoveringR1 ? '探索中…' : '开始 R1' }}
-        </button>
-        <button
-          type="button"
-          class="btn-primary"
-          :disabled="!canStartR2"
-          :title="canStartR2 ? '按社媒站点搜索并解析官网' : startR2DisabledReason"
-          @click="startR2"
-        >
-          <Icon name="play" :size="12" />
-          {{ startingR2 || isDiscoveringR2 ? '探索中…' : '开始 R2' }}
-        </button>
+        <ExploreStartControl
+          :round="exploreRound"
+          :disabled="!canStartSelected"
+          :disabled-reason="startDisabledReason"
+          :busy="isStartingExplore"
+          @update:round="exploreRound = $event"
+          @start="startExplore"
+        />
       </div>
     </header>
 
@@ -584,10 +440,10 @@ onUnmounted(() => {
 
     <p v-if="actionMessage" class="explore-action-msg">{{ actionMessage }}</p>
     <p
-      v-if="hasKeywordsReady && !canStartR2 && !generating && startR2DisabledReason"
+      v-if="hasKeywordsReady && !canStartSelected && !generating && startDisabledReason"
       class="explore-action-msg"
     >
-      {{ startR2DisabledReason }}
+      {{ startDisabledReason }}
     </p>
 
     <div class="explore-task-list">
@@ -742,25 +598,15 @@ onUnmounted(() => {
             >
               编辑关键词
             </button>
-            <button
-              type="button"
-              class="btn-primary btn-secondary--sm"
-              :disabled="!canStartR1"
-              @click="startR1"
-            >
-              <Icon name="play" :size="11" />
-              {{ startingR1 || isDiscoveringR1 ? '探索中…' : '开始 R1' }}
-            </button>
-            <button
-              type="button"
-              class="btn-primary btn-secondary--sm"
-              :disabled="!canStartR2"
-              :title="canStartR2 ? '按社媒站点搜索并解析官网' : startR2DisabledReason"
-              @click="startR2"
-            >
-              <Icon name="play" :size="11" />
-              {{ startingR2 || isDiscoveringR2 ? '探索中…' : '开始 R2' }}
-            </button>
+            <ExploreStartControl
+              compact
+              :round="exploreRound"
+              :disabled="!canStartSelected"
+              :disabled-reason="startDisabledReason"
+              :busy="isStartingExplore"
+              @update:round="exploreRound = $event"
+              @start="startExplore"
+            />
           </div>
 
           <div
