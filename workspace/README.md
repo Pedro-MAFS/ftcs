@@ -2,9 +2,10 @@
 
 本目录是本项目 **唯一** 需要维护工作流的地方。
 
-| 子目录 | 用途 | 是否手改 |
+| 路径 | 用途 | 是否手改 |
 |--------|------|----------|
-| `skills/` | Agent Skills 权威源（OpenCode 直接读） | ✅ 在此维护 |
+| `AGENTS.md` | 跨 Skill 全局约定（OpenCode 每个会话加载） | ✅ 在此维护 |
+| `skills/` | Agent Skills 权威源（OpenCode 按任务加载） | ✅ 在此维护 |
 | `mcp-servers/` | MCP 工具实现与构建 | ✅ 在此维护 |
 | `config/` | scoring-rules、opencode.json | ✅ 在此维护 |
 | `data/` | 画像、线索、邮件等业务数据 | 运行时写入 |

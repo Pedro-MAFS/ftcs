@@ -120,6 +120,12 @@ function main() {
     fs.copyFileSync(readme, path.join(destRoot, 'README.md'))
   }
 
+  const agents = path.join(sourceRoot, 'AGENTS.md')
+  if (fs.existsSync(agents)) {
+    fs.copyFileSync(agents, path.join(destRoot, 'AGENTS.md'))
+    console.log('[prepare-template] 复制 AGENTS.md')
+  }
+
   const srcData = path.join(sourceRoot, 'data')
   if (fs.existsSync(srcData)) {
     console.log('[prepare-template] 复制 data/products/_example/')

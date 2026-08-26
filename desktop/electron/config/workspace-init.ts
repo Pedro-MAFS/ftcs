@@ -8,10 +8,13 @@ import { getRepoRoot } from './paths'
  * 模板版本：改动标准 workspace 中 skills/mcp/config 结构时递增，
  * 启动时若目标区标记版本落后，会重新同步托管目录。
  */
-export const WORKSPACE_TEMPLATE_VERSION = '2026.08.25-search-upstream-filter'
+export const WORKSPACE_TEMPLATE_VERSION = '2026.08.26-agents-md'
 
 /** 始终从模板覆盖同步（用户业务数据不在此列） */
 export const MANAGED_WORKSPACE_DIRS = ['skills', 'mcp-servers', 'config'] as const
+
+/** 工作区根上随模板覆盖的说明文件（OpenCode 会话会加载 AGENTS.md） */
+export const MANAGED_WORKSPACE_FILES = ['AGENTS.md'] as const
 
 const SKIP_DIR_NAMES = new Set([
   'node_modules',
@@ -156,6 +159,8 @@ function bootstrapEnvExample(templateRoot: string, workspaceRoot: string): strin
     created.push('README.md')
   }
 
+  created.push(...syncManagedRootFiles(templateRoot, workspaceRoot))
+
   const envPath = path.join(workspaceRoot, '.env')
   if (!fs.existsSync(envPath) && fs.existsSync(exampleDest)) {
     fs.copyFileSync(exampleDest, envPath)
@@ -210,6 +215,19 @@ function migrateModelPrefsToEnv(workspaceRoot: string): string[] {
   return Object.keys(updates)
 }
 
+/** 覆盖工作区根上的托管说明文件（如 AGENTS.md） */
+function syncManagedRootFiles(templateRoot: string, workspaceRoot: string): string[] {
+  const copied: string[] = []
+  for (const name of MANAGED_WORKSPACE_FILES) {
+    const src = path.join(templateRoot, name)
+    const dest = path.join(workspaceRoot, name)
+    if (!fs.existsSync(src)) continue
+    fs.copyFileSync(src, dest)
+    copied.push(name)
+  }
+  return copied
+}
+
 /**
  * 同步 opencode.json：纯模板覆盖。
  * 用户模型/密钥等偏好在 .env，不在此文件中，避免模板更新冲掉用户设置。
@@ -258,6 +276,9 @@ function needsManagedSync(workspaceRoot: string, force: boolean): boolean {
   }
   if (!fs.existsSync(path.join(workspaceRoot, 'config', 'opencode', 'opencode.json'))) {
     return true
+  }
+  for (const name of MANAGED_WORKSPACE_FILES) {
+    if (!fs.existsSync(path.join(workspaceRoot, name))) return true
   }
   // 预打包 MCP 入口缺失 → 重新同步
   const mcpRoot = path.join(workspaceRoot, 'mcp-servers')
