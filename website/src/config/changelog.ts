@@ -13,6 +13,17 @@ export const CHANGELOG_STARTED_AT = '0.5.0'
  */
 export const changelogReleases: ChangelogRelease[] = [
   {
+    version: '0.5.1',
+    releasedAt: '2026-08-26',
+    title: '社媒发现',
+    notes: [
+      '探索可选择广撒网或社媒发现，线索页也可直接开始',
+      '社媒发现只检索已启用站点的公开摘要，核对官网后再写入线索；不打开领英 / 脸书真页',
+      '社媒站点开关在设置中；改完后请重新扩展关键词。匹配理由会标出来源',
+      '遇到人机验证或登录墙即停，不会尝试绕过',
+    ],
+  },
+  {
     version: '0.5.0',
     releasedAt: '2026-08-19',
     title: '资料工程树与 Office 抽取',

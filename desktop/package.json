@@ -1,6 +1,6 @@
 {
   "name": "@ftcs/desktop",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "外贸获客桌面应用（Electron + Vue3 + OpenCode SDK Server/Client）",
   "author": "FTCS",
