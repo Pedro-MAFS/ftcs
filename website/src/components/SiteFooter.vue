@@ -29,6 +29,9 @@ const productHost = siteConfig.siteUrl.replace(/^https:\/\//, '')
           鲁ICP备2026033555号-1
         </a>
       </p>
+      <p v-if="siteConfig.clarityProjectId">
+        本站使用 Microsoft Clarity 收集匿名访问行为数据，用于改进产品体验
+      </p>
     </div>
     <div v-if="siteConfig.phone || siteConfig.email" class="container site-footer__contact">
       <a v-if="siteConfig.phone" :href="`tel:${siteConfig.phone}`">电话 {{ siteConfig.phone }}</a>

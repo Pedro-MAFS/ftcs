@@ -1,6 +1,7 @@
 import { ViteSSG } from 'vite-ssg'
 import App from './App.vue'
 import { routes } from './router/routes'
+import { initClarity } from './lib/clarity'
 import './styles/main.css'
 
 export const createApp = ViteSSG(
@@ -17,5 +18,6 @@ export const createApp = ViteSSG(
   },
   () => {
     // plugins / head 由 vite-ssg 内置 @unhead/vue 处理
+    initClarity()
   },
 )

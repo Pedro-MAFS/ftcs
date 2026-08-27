@@ -90,6 +90,16 @@ location / {
 
 无需后端；改完后重新 `npm run build` 并发布 `dist/`。
 
+## 访问统计（Microsoft Clarity）
+
+站点已集成 [Microsoft Clarity](https://clarity.microsoft.com/)（流量概览、热力图、会话回放），默认关闭。启用步骤：
+
+1. 在 Clarity 控制台创建项目，复制项目 ID（Settings → Overview，或安装代码片段里 `/tag/` 后面的字符串）。
+2. 填入 [`src/config/site.ts`](src/config/site.ts) 的 `clarityProjectId`。
+3. 重新 `npm run build` 并发布。
+
+仅生产构建加载统计脚本，本地 `npm run dev` 不上报；SPA 路由切换由 Clarity 自动跟踪，无需手动埋点。启用后页脚会自动显示一行统计说明（合规提示）。
+
 ## 桌面端更新清单
 
 发版时同步更新 [`public/updates/latest.json`](public/updates/latest.json)（部署后地址：`https://ftcs.ai-utills.com/updates/latest.json`）：
