@@ -254,6 +254,8 @@ function asString(value: unknown): string {
 
 const LIVE_MESSAGE_LIMIT = 80
 const COLLAPSE_BODY_CHARS = 400
+/** 模型调用持续处于 retry 状态超过该时长则自动中止任务 */
+const RETRY_WATCHDOG_MS = 120_000
 
 /** 完整序列化工具出入参，不做长度截断；折叠由 UI 的 collapsed 处理 */
 function formatJsonFull(value: unknown): string {
@@ -274,6 +276,39 @@ function formatJsonFull(value: unknown): string {
   } catch {
     return ''
   }
+}
+
+/** 助手消息上的供应商错误（欠费、鉴权失败等）→ 可读文案 */
+function formatMessageError(err: unknown): string {
+  const rec = asRecord(err)
+  if (!rec) return asString(err) || '未知错误'
+  const name = asString(rec.name) || 'Error'
+  const data = asRecord(rec.data)
+  const message = asString(data?.message) || formatJsonFull(rec.data) || '模型调用失败'
+  const lines = [`${name}：${message}`]
+  if (data && data.statusCode != null) lines.push(`HTTP ${String(data.statusCode)}`)
+  const body = asString(data?.responseBody).trim()
+  if (body && !message.includes(body.slice(0, 40))) {
+    lines.push(body.length > 600 ? `${body.slice(0, 600)}…` : body)
+  }
+  return lines.join('\n')
+}
+
+/** session.status retry 事件的 message（形如 {"reason":"insufficient_quota"}）→ 中文可读 */
+function friendlyRetryReason(raw: string): string {
+  let reason = raw.trim()
+  try {
+    const parsed = asRecord(JSON.parse(reason))
+    reason = asString(parsed?.reason) || reason
+  } catch {
+    // 保留原文
+  }
+  if (!reason) return '模型调用失败'
+  if (reason === 'insufficient_quota') return '余额不足或已欠费（insufficient_quota）'
+  if (reason === 'rate_limit' || reason === 'rate_limit_exceeded') {
+    return '触发速率限制（rate_limit）'
+  }
+  return reason
 }
 
 function normalizeMessageRows(raw: unknown): unknown[] {
@@ -326,6 +361,17 @@ function rowsToTimelineItems(
     }
 
     if (role !== 'assistant') continue
+
+    // 模型调用失败（如欠费）时助手消息通常没有 parts，错误挂在 info.error 上
+    if (info?.error) {
+      items.push({
+        id: `error-${messageId}`,
+        kind: 'error',
+        time: nowTime(),
+        title: '模型调用失败',
+        body: formatMessageError(info.error),
+      })
+    }
 
     for (const rawPart of parts) {
       const part = asRecord(rawPart)
@@ -621,12 +667,15 @@ export class AgentRunController {
   private timeline: TimelineBuilder | null = null
   private timelineUserPrompt = ''
   private timelineIo: Promise<void> = Promise.resolve()
+  /** 看门狗自动中止的原因（模型持续重试不可用）；非空则中止分支按失败展示 */
+  private autoAbortReason: string | null = null
 
   constructor(private readonly getClient: () => OpencodeClient | null) {}
 
   private attachTimeline(timeline: TimelineBuilder, userPrompt: string): void {
     this.timeline = timeline
     this.timelineUserPrompt = userPrompt
+    this.autoAbortReason = null
   }
 
   private enqueueTimelineIo<T>(fn: () => Promise<T>): Promise<T> {
@@ -832,22 +881,23 @@ export class AgentRunController {
       )
 
       if (idleResult === 'abort') {
+        const abortMessage = this.autoAbortReason ?? '用户中止了关键词扩展'
         pushState('error')
         timeline.addSuffix({
           id: 'sys-abort',
           kind: 'error',
           time: nowTime(),
-          title: '已中止',
-          body: '用户中止了关键词扩展',
+          title: this.autoAbortReason ? '失败' : '已中止',
+          body: abortMessage,
         })
         flushTimeline()
         emit({
           type: 'done',
           ok: false,
           productId,
-          message: '已中止关键词扩展',
+          message: abortMessage,
         })
-        return { ok: false, message: '已中止关键词扩展' }
+        return { ok: false, message: abortMessage }
       }
 
       if (idleResult === 'timeout') {
@@ -862,8 +912,10 @@ export class AgentRunController {
       )
 
       if (!expansion) {
+        const sessionError = await this.fetchSessionErrorMessage(client)
         throw new Error(
-          '会话已结束，但未找到 expansion.json。请向上滚动查看工具调用与模型输出。',
+          sessionError ??
+            '会话已结束，但未找到 expansion.json。请向上滚动查看工具调用与模型输出。',
         )
       }
 
@@ -1040,22 +1092,23 @@ export class AgentRunController {
       )
 
       if (idleResult === 'abort') {
+        const abortMessage = this.autoAbortReason ?? '用户中止了评分去重'
         pushState('error')
         timeline.addSuffix({
           id: 'sys-abort',
           kind: 'error',
           time: nowTime(),
-          title: '已中止',
-          body: '用户中止了评分去重',
+          title: this.autoAbortReason ? '失败' : '已中止',
+          body: abortMessage,
         })
         flushTimeline()
         emit({
           type: 'done',
           ok: false,
           productId,
-          message: '已中止评分去重',
+          message: abortMessage,
         })
-        return { ok: false, message: '已中止评分去重' }
+        return { ok: false, message: abortMessage }
       }
 
       if (idleResult === 'timeout') {
@@ -1076,8 +1129,10 @@ export class AgentRunController {
       )
 
       if (!scored) {
+        const sessionError = await this.fetchSessionErrorMessage(client)
         throw new Error(
-          '会话已结束，但未找到更新后的 scored.json。请确认已调用 leads_score_and_dedupe。',
+          sessionError ??
+            '会话已结束，但未找到更新后的 scored.json。请确认已调用 leads_score_and_dedupe。',
         )
       }
 
@@ -1280,22 +1335,23 @@ export class AgentRunController {
       )
 
       if (idleResult === 'abort') {
+        const abortMessage = this.autoAbortReason ?? '用户中止了邮件起草'
         pushState('error')
         timeline.addSuffix({
           id: 'sys-abort',
           kind: 'error',
           time: nowTime(),
-          title: '已中止',
-          body: '用户中止了邮件起草',
+          title: this.autoAbortReason ? '失败' : '已中止',
+          body: abortMessage,
         })
         flushTimeline()
         emit({
           type: 'done',
           ok: false,
           productId,
-          message: '已中止邮件起草',
+          message: abortMessage,
         })
-        return { ok: false, message: '已中止邮件起草' }
+        return { ok: false, message: abortMessage }
       }
 
       if (idleResult === 'timeout') {
@@ -1314,8 +1370,10 @@ export class AgentRunController {
       )
 
       if (!emailDrafts) {
+        const sessionError = await this.fetchSessionErrorMessage(client)
         throw new Error(
-          '会话已结束，但未找到目标线索的 draft.json。请确认已调用 email_draft_generate。',
+          sessionError ??
+            '会话已结束，但未找到目标线索的 draft.json。请确认已调用 email_draft_generate。',
         )
       }
 
@@ -1536,32 +1594,33 @@ export class AgentRunController {
       }
 
       if (idleResult === 'abort') {
+        const abortMessage = this.autoAbortReason ?? `用户中止了 ${roundName}`
         const abortedRun = failLatestRunningExploration(
           productId,
           afterIso,
-          `用户中止了 ${roundName}`,
+          abortMessage,
         )
         pushState('error', abortedRun ?? undefined)
         timeline.addSuffix({
           id: 'sys-abort',
           kind: 'error',
           time: nowTime(),
-          title: '已中止',
+          title: this.autoAbortReason ? '失败' : '已中止',
           body: abortedRun
-            ? `用户中止了 ${roundName}\nrun ${abortedRun.id} 已标记为 failed`
-            : `用户中止了 ${roundName}`,
+            ? `${abortMessage}\nrun ${abortedRun.id} 已标记为 failed`
+            : abortMessage,
         })
         flushTimeline()
         emit({
           type: 'done',
           ok: false,
           productId,
-          message: `已中止 ${roundName}`,
+          message: abortMessage,
           explorationRun: abortedRun ?? undefined,
         })
         return {
           ok: false,
-          message: `已中止 ${roundName}`,
+          message: abortMessage,
           explorationRun: abortedRun ?? undefined,
         }
       }
@@ -1583,8 +1642,10 @@ export class AgentRunController {
       )
 
       if (!run) {
+        const sessionError = await this.fetchSessionErrorMessage(client)
         throw new Error(
-          '会话已结束，但未找到探索运行记录。请确认已调用 exploration_start / exploration_finish。',
+          sessionError ??
+            '会话已结束，但未找到探索运行记录。请确认已调用 exploration_start / exploration_finish。',
         )
       }
 
@@ -1820,22 +1881,23 @@ export class AgentRunController {
       )
 
       if (idleResult === 'abort') {
+        const abortMessage = this.autoAbortReason ?? '用户中止了画像生成'
         pushState('error')
         timeline.addSuffix({
           id: 'sys-abort',
           kind: 'error',
           time: nowTime(),
-          title: '已中止',
-          body: '用户中止了画像生成',
+          title: this.autoAbortReason ? '失败' : '已中止',
+          body: abortMessage,
         })
         flushTimeline()
         emit({
           type: 'done',
           ok: false,
           productId: bootstrap.productId,
-          message: '已中止画像生成',
+          message: abortMessage,
         })
-        return { ok: false, message: '已中止画像生成' }
+        return { ok: false, message: abortMessage }
       }
 
       if (idleResult === 'timeout') {
@@ -1850,8 +1912,10 @@ export class AgentRunController {
       )
 
       if (!profile) {
+        const sessionError = await this.fetchSessionErrorMessage(client)
         throw new Error(
-          '会话已结束，但未找到 profile.json。请向上滚动查看工具调用与模型输出。',
+          sessionError ??
+            '会话已结束，但未找到 profile.json。请向上滚动查看工具调用与模型输出。',
         )
       }
 
@@ -1899,6 +1963,32 @@ export class AgentRunController {
       stopEvents?.()
       this.running = false
       this.abort = null
+    }
+  }
+
+  /**
+   * 会话结束后取真实失败原因：找最后一条带 error 的助手消息（欠费、鉴权失败等）。
+   * 仅在产物缺失时由调用方使用，避免误伤「中途报错但已恢复并产出」的会话。
+   */
+  private async fetchSessionErrorMessage(client: OpencodeClient): Promise<string | null> {
+    const sessionId = this.sessionId
+    if (!sessionId) return null
+    try {
+      const res = await client.session.messages({
+        sessionID: sessionId,
+        limit: LIVE_MESSAGE_LIMIT,
+      })
+      const rows = normalizeMessageRows(res.data)
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const info = asRecord(asRecord(rows[i])?.info) ?? asRecord(rows[i])
+        if (asString(info?.role) !== 'assistant') continue
+        if (info?.error) {
+          return `模型调用失败，任务未能完成：\n${formatMessageError(info.error)}`
+        }
+      }
+      return null
+    } catch {
+      return null
     }
   }
 
@@ -2014,6 +2104,14 @@ export class AgentRunController {
     userPrompt: string,
   ): { stop: () => void; ingestNow: () => Promise<void> } {
     let stopped = false
+    /** messageID → role，用于过滤用户消息 part 回声 */
+    const messageRoles = new Map<string, string>()
+    /** 首次进入 retry 的时间戳；0 表示未在重试 */
+    let retrySince = 0
+    let lastRetryBody = ''
+    /** 重试耗尽后的 session.error 已收到 */
+    let sawSessionError = false
+    let watchdogFired = false
 
     const ingestMessages = () =>
       this.enqueueTimelineIo(async () => {
@@ -2061,6 +2159,81 @@ export class AgentRunController {
       const type = eventType(event)
       const props = eventProps(event)
 
+      if (type === 'message.updated') {
+        const info = asRecord(props.info)
+        const mid = asString(info?.id)
+        const role = asString(info?.role)
+        if (mid && role) messageRoles.set(mid, role)
+        return
+      }
+
+      // 重试耗尽后的终局错误（含供应商完整错误，如欠费 30002）
+      if (type === 'session.error') {
+        sawSessionError = true
+        const err = props.error
+        timeline.addSuffix({
+          id: 'session-error',
+          kind: 'error',
+          time: nowTime(),
+          title: '模型调用失败',
+          body: err ? formatMessageError(err) : '模型调用失败（未返回错误详情）',
+        })
+        if (retrySince) {
+          timeline.addSuffix({
+            id: 'session-retry',
+            kind: 'error',
+            time: nowTime(),
+            title: '模型重试失败，已停止',
+            body: lastRetryBody,
+          })
+          retrySince = 0
+        }
+        flush()
+        return
+      }
+
+      // 模型调用失败后的自动重试：欠费/限流期间会话一直处于 retry 而非 idle
+      if (type === 'session.status' || type === 'session.idle') {
+        const status = asRecord(props.status)
+        const stType = type === 'session.idle' ? 'idle' : asString(status?.type)
+        if (stType === 'retry') {
+          if (!retrySince) retrySince = Date.now()
+          const attempt = Number(status?.attempt ?? 0) || 1
+          const nextMs = Number(status?.next ?? 0)
+          const waitSec = nextMs ? Math.max(1, Math.round((nextMs - Date.now()) / 1000)) : 0
+          lastRetryBody = [
+            `原因：${friendlyRetryReason(asString(status?.message))}`,
+            waitSec ? `约 ${waitSec} 秒后进行下一次尝试` : '',
+            '若持续重试约 2 分钟仍不可用，任务将自动停止；欠费请先充值后再试。',
+          ].filter(Boolean).join('\n')
+          timeline.addSuffix({
+            id: 'session-retry',
+            kind: 'error',
+            time: nowTime(),
+            title: `模型调用失败，重试中 · 第 ${attempt} 次`,
+            body: lastRetryBody,
+          })
+          flush()
+          return
+        }
+        if (stType === 'idle') {
+          if (retrySince && !sawSessionError) {
+            timeline.addSuffix({
+              id: 'session-retry',
+              kind: 'system',
+              time: nowTime(),
+              title: '模型重试已恢复',
+              body: `${lastRetryBody}\n已恢复，继续执行。`,
+            })
+            flush()
+          }
+          retrySince = 0
+          sawSessionError = false
+        }
+        // busy：可能是 retry 之后正在进行的重试，不清除 retrySince
+        return
+      }
+
       if (type === 'session.next.text.started') {
         const textId = asString(props.textID) || asString(props.partID)
         upsertTextItem('assistant', textId, '', 'set', '模型回复')
@@ -2094,6 +2267,7 @@ export class AgentRunController {
         return
       }
       if (type === 'message.part.delta') {
+        if (messageRoles.get(asString(props.messageID)) === 'user') return
         const field = asString(props.field)
         const kind = field.includes('reason') ? 'reasoning' : 'assistant'
         const partId = asString(props.partID) || 'live'
@@ -2109,11 +2283,14 @@ export class AgentRunController {
       if (type === 'message.part.updated') {
         const part = asRecord(props.part)
         if (!part || part.ignored === true) return
+        if (messageRoles.get(asString(part.messageID)) === 'user') return
         const partType = asString(part.type)
         const partId = asString(part.id)
         if (partType === 'text' && partId) {
           const text = asString(part.text)
-          if (text) upsertTextItem('assistant', partId, text, 'set', '模型回复')
+          // 双保险：用户指令的 part 回声不当作模型回复
+          if (!text || text.trim() === userPrompt.trim()) return
+          upsertTextItem('assistant', partId, text, 'set', '模型回复')
         } else if (partType === 'reasoning' && partId) {
           const text = asString(part.text)
           if (text) upsertTextItem('reasoning', partId, text, 'set', '思考')
@@ -2147,6 +2324,7 @@ export class AgentRunController {
             type.includes('text.ended') ||
             type.includes('reasoning.ended') ||
             type === 'session.idle' ||
+            type === 'session.error' ||
             type.includes('message.updated')
           ) {
             try {
@@ -2163,6 +2341,21 @@ export class AgentRunController {
 
     const pollTimer = setInterval(() => {
       if (stopped) return
+      // 看门狗：模型持续重试不可用（欠费/限流）时自动中止，避免干等到任务超时
+      if (retrySince && !watchdogFired && Date.now() - retrySince > RETRY_WATCHDOG_MS) {
+        watchdogFired = true
+        const reason = `模型服务持续不可用（自动重试超过 ${Math.round(RETRY_WATCHDOG_MS / 60000)} 分钟），任务已自动停止。\n${lastRetryBody}`
+        this.autoAbortReason = reason
+        timeline.addSuffix({
+          id: 'session-retry-watchdog',
+          kind: 'error',
+          time: nowTime(),
+          title: '已自动停止',
+          body: reason,
+        })
+        flush()
+        void client.session.abort({ sessionID: sessionId }).catch(() => undefined)
+      }
       void ingestMessages().catch(() => undefined)
       void (async () => {
         try {
