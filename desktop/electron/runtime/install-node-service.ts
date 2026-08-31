@@ -71,30 +71,36 @@ $ErrorActionPreference = 'Stop'
 $msi = '${msiPath.replace(/'/g, "''")}'
 $resultFile = '${resultFile.replace(/'/g, "''")}'
 $msiLog = '${msiLog.replace(/'/g, "''")}'
+function Write-InstallResult([string]$Content) {
+  $parent = Split-Path -LiteralPath $resultFile -Parent
+  if ($parent) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+  Set-Content -LiteralPath $resultFile -Value $Content -Encoding utf8
+}
 try {
   $p = Start-Process -FilePath "$env:SystemRoot\\System32\\msiexec.exe" -ArgumentList @(
     '/i', $msi, '/qn', '/norestart', '/L*v', $msiLog
   ) -Wait -PassThru -Verb RunAs
   if ($null -eq $p) {
-    Set-Content -LiteralPath $resultFile -Value 'status=null-process' -Encoding utf8
+    Write-InstallResult 'status=null-process'
     exit 1223
   }
   $code = $p.ExitCode
   if ($null -eq $code) {
-    Set-Content -LiteralPath $resultFile -Value 'status=null-exitcode' -Encoding utf8
+    Write-InstallResult 'status=null-exitcode'
     exit 1
   }
-  Set-Content -LiteralPath $resultFile -Value ("status=ok;exit=" + $code) -Encoding utf8
+  Write-InstallResult ("status=ok;exit=" + $code)
   exit $code
 } catch {
   $msg = $_.Exception.Message
-  Set-Content -LiteralPath $resultFile -Value ("status=error;" + $msg) -Encoding utf8
+  Write-InstallResult ("status=error;" + $msg)
   if ($msg -match 'canceled|cancelled|取消|denied|拒绝') { exit 1223 }
   exit 1
 }
 `.trim()
 
-  await fs.promises.writeFile(scriptPath, script, 'utf8')
+  // UTF-8 BOM：PowerShell 5 -File 才能正确解析脚本内中文路径
+  await fs.promises.writeFile(scriptPath, `\uFEFF${script}`, 'utf8')
   await appendLog(logPath, `msiexec script: ${scriptPath}\nmsi: ${msiPath}\n`)
 
   let stdout = ''
