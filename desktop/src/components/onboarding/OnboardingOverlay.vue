@@ -647,6 +647,12 @@ onMounted(() => {
               {{ officeCliInstallResult.message }}
             </p>
             <p v-if="error" class="onboarding__error">{{ error }}</p>
+            <p
+              v-if="nodeInstallResult && !nodeInstallResult.ok && nodeInstallResult.logPath"
+              class="onboarding__log-path"
+            >
+              安装日志：{{ nodeInstallResult.logPath }}
+            </p>
             <button
               v-if="nodeInstallResult && !nodeInstallResult.ok && nodeInstallResult.manualUrl"
               type="button"
@@ -1343,6 +1349,15 @@ onMounted(() => {
 
 .onboarding__error {
   color: var(--danger, #f87171);
+}
+
+.onboarding__log-path {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  color: var(--text-muted);
+  word-break: break-all;
+  user-select: all;
 }
 
 .onboarding__ok {
