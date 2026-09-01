@@ -54,6 +54,7 @@ const message = ref('')
 const error = ref('')
 const showApiKey = ref(false)
 const showTavilyKey = ref(false)
+const showPlacesKey = ref(false)
 const snapshot = ref<SettingsSnapshot | null>(null)
 const r2Sites = ref<ExploreR2SiteDto[]>([])
 const r2SitesHint = ref('')
@@ -68,6 +69,7 @@ const form = reactive({
   customSmallModelId: '',
   searchProvider: 'tavily',
   tavilyApiKey: '',
+  placesApiKey: '',
   searchDailyLimit: 50,
 })
 
@@ -187,6 +189,7 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.smallModel = data.smallModel
   form.searchProvider = data.searchProvider
   form.tavilyApiKey = data.tavilyApiKeyMasked
+  form.placesApiKey = data.placesApiKeyMasked
   form.searchDailyLimit = data.searchDailyLimit
   if (data.channelMode === 'custom') {
     form.customModelId = data.model.includes('/')
@@ -386,6 +389,7 @@ async function onSave(): Promise<void> {
       smallModel,
       searchProvider: form.searchProvider,
       tavilyApiKey: form.tavilyApiKey,
+      placesApiKey: form.placesApiKey,
       searchDailyLimit: form.searchDailyLimit,
     })
     applySnapshot(result.settings)
@@ -983,6 +987,31 @@ async function onCheckUpdate(): Promise<void> {
           </div>
           <p v-else class="hint-line">暂无站点登记表，将使用默认的 LinkedIn 公司页与 Facebook 公共主页。</p>
           <p v-if="r2SitesHint" class="hint-line">{{ r2SitesHint }}</p>
+
+          <div class="settings-block__sub">
+            <h4>R3 地图发现（Google Places）</h4>
+            <p class="hint-line">
+              <Icon name="info" :size="12" />
+              仅在跑 R3 地图发现时需要；只跑 R1/R2 可不填。Key 来自 Google Cloud Console，须启用
+              <strong>Places API (New)</strong>；费用计入你的 GCP 结算账号。
+            </p>
+            <label class="field-label">Google Places API Key</label>
+            <div class="input-row">
+              <input
+                v-model="form.placesApiKey"
+                class="text-input"
+                :type="showPlacesKey ? 'text' : 'password'"
+                autocomplete="off"
+                :placeholder="snapshot?.placesApiKeySet ? '已配置（修改则覆盖；留空并保存可清除）' : 'AIza…'"
+              />
+              <button type="button" class="icon-btn" @click="showPlacesKey = !showPlacesKey">
+                <Icon :name="showPlacesKey ? 'eye' : 'eye-off'" :size="14" />
+              </button>
+            </div>
+            <p class="hint-line muted">
+              与模型 / Tavily 搜索通道独立；保存后请重启 OpenCode 使 MCP 生效。
+            </p>
+          </div>
         </section>
 
         <hr class="settings-divider" />

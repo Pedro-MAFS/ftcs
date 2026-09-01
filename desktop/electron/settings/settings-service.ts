@@ -5,6 +5,7 @@ import {
   isMaskedSecret,
   maskSecret,
   readEnvFile,
+  removeEnvKeys,
   upsertEnvFile,
 } from '../config/env-file'
 import { getOpenCodeConfigPath, getWorkspaceRoot } from '../config/paths'
@@ -26,6 +27,8 @@ type LegacyProviderId =
   | 'google'
   | 'custom'
 
+export type PlacesProvider = 'custom' | 'gateway'
+
 export interface SettingsSnapshot {
   workspaceRoot: string
   channelMode: ChannelMode
@@ -43,6 +46,9 @@ export interface SettingsSnapshot {
   searchProvider: string
   tavilyApiKeyMasked: string
   tavilyApiKeySet: boolean
+  placesApiKeyMasked: string
+  placesApiKeySet: boolean
+  placesProvider: PlacesProvider
   searchDailyLimit: number
   searchUsedToday: number
   modelOptions: Array<{ id: string; label: string }>
@@ -59,6 +65,8 @@ export interface SettingsSaveInput {
   smallModel: string
   searchProvider: string
   tavilyApiKey: string
+  /** 省略则不修改；空字符串且非掩码则清除 */
+  placesApiKey?: string
   searchDailyLimit: number
 }
 
@@ -97,6 +105,8 @@ const LEGACY_PROVIDER_ENV_KEY: Record<Exclude<LegacyProviderId, 'custom'>, strin
 const CUSTOM_ENV_KEY = 'FTCS_CUSTOM_API_KEY'
 const GATEWAY_KEY_ENV = 'FTCS_GATEWAY_API_KEY'
 const CHANNEL_MODE_ENV = 'FTCS_CHANNEL_MODE'
+const PLACES_KEY_ENV = 'GOOGLE_PLACES_API_KEY'
+const PLACES_PROVIDER_ENV = 'PLACES_PROVIDER'
 const DEEPSEEK_DEFAULT_BASE = 'https://api.deepseek.com/v1'
 
 function getEnvPath(workspaceRoot: string): string {
@@ -239,6 +249,9 @@ export function getSettingsSnapshot(): SettingsSnapshot {
   const apiKey = channelMode === 'custom' ? resolveCustomApiKey(env) : ''
   const gatewayKey = (env[GATEWAY_KEY_ENV] || '').trim()
   const tavilyKey = env.TAVILY_API_KEY || ''
+  const placesKey = env[PLACES_KEY_ENV] || ''
+  const placesProvider: PlacesProvider =
+    env[PLACES_PROVIDER_ENV] === 'gateway' ? 'gateway' : 'custom'
   const baseUrl = env.FTCS_MODEL_BASE_URL || ''
   const gatewayBaseUrl = getTokenGatewayBaseUrl({ ...process.env, ...env })
   const cache = getOfficialModelsCache()
@@ -283,6 +296,9 @@ export function getSettingsSnapshot(): SettingsSnapshot {
       channelMode === 'official' ? 'gateway' : env.SEARCH_PROVIDER || 'tavily',
     tavilyApiKeyMasked: maskSecret(tavilyKey),
     tavilyApiKeySet: Boolean(tavilyKey),
+    placesApiKeyMasked: maskSecret(placesKey),
+    placesApiKeySet: Boolean(placesKey),
+    placesProvider,
     searchDailyLimit:
       channelMode === 'official'
         ? 999999
@@ -349,7 +365,28 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
       ? input.tavilyApiKey.trim()
       : prevTavily
 
+  const prevPlaces = env[PLACES_KEY_ENV] || ''
+  let clearPlacesKey = false
+  if (input.placesApiKey === undefined) {
+    if (prevPlaces) {
+      envUpdates[PLACES_KEY_ENV] = prevPlaces
+    }
+  } else if (isMaskedSecret(input.placesApiKey)) {
+    if (prevPlaces) {
+      envUpdates[PLACES_KEY_ENV] = prevPlaces
+    }
+  } else if (!input.placesApiKey.trim()) {
+    clearPlacesKey = true
+  } else {
+    envUpdates[PLACES_KEY_ENV] = input.placesApiKey.trim()
+  }
+  envUpdates[PLACES_PROVIDER_ENV] = 'custom'
+
   upsertEnvFile(envPath, envUpdates)
+  if (clearPlacesKey) {
+    removeEnvKeys(envPath, [PLACES_KEY_ENV])
+    delete process.env[PLACES_KEY_ENV]
+  }
   Object.assign(process.env, envUpdates)
   process.env.FTCS_WORKSPACE = workspaceRoot
 

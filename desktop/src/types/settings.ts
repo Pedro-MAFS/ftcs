@@ -41,6 +41,9 @@ export interface SettingsSnapshot {
   searchProvider: string
   tavilyApiKeyMasked: string
   tavilyApiKeySet: boolean
+  placesApiKeyMasked: string
+  placesApiKeySet: boolean
+  placesProvider: 'custom' | 'gateway'
   searchDailyLimit: number
   searchUsedToday: number
   modelOptions: Array<{ id: string; label: string }>
@@ -58,6 +61,7 @@ export interface SettingsSaveInput {
   smallModel: string
   searchProvider: string
   tavilyApiKey: string
+  placesApiKey?: string
   searchDailyLimit: number
 }
 

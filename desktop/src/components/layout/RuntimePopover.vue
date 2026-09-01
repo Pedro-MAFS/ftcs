@@ -9,6 +9,7 @@ import { useSettingsNav } from '../../composables/useSettingsNav'
 const MCP_META: Record<string, string> = {
   'lead-store': '线索读写',
   'search-api': 'Tavily 搜索',
+  'places-api': 'Places 地图',
   'chrome-devtools': '浏览器抓取',
 }
 

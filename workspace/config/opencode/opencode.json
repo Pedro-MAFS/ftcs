@@ -29,6 +29,15 @@
         "SEARCH_DAILY_LIMIT": "50"
       }
     },
+    "places-api": {
+      "type": "local",
+      "command": ["node", "mcp-servers/places-api/dist/mcp.js"],
+      "enabled": true,
+      "environment": {
+        "FTCS_WORKSPACE": ".",
+        "PLACES_PROVIDER": "custom"
+      }
+    },
     "chrome-devtools": {
       "type": "local",
       "command": [

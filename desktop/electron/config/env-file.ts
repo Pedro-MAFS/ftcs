@@ -79,6 +79,27 @@ function escapeEnvValue(value: string): string {
   return value
 }
 
+export function removeEnvKeys(envPath: string, keys: string[]): void {
+  if (keys.length === 0) return
+  if (!fs.existsSync(envPath)) return
+
+  const keySet = new Set(keys)
+  const existing = fs.readFileSync(envPath, 'utf8')
+  const lines = existing.split(/\r?\n/)
+  const nextLines = lines.filter((line) => {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) return true
+    const eq = trimmed.indexOf('=')
+    if (eq <= 0) return true
+    const key = trimmed.slice(0, eq).trim()
+    return !keySet.has(key)
+  })
+
+  let body = nextLines.join('\n')
+  if (!body.endsWith('\n')) body += '\n'
+  fs.writeFileSync(envPath, body, 'utf8')
+}
+
 export function maskSecret(value: string): string {
   const v = value.trim()
   if (!v) return ''

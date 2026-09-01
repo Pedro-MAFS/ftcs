@@ -2283,6 +2283,19 @@ button:focus-visible {
   color: var(--text);
 }
 
+.settings-block__sub {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-block__sub h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .settings-block__head {
   display: flex;
   align-items: center;

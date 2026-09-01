@@ -463,6 +463,14 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
           : {}),
       }
 
+  const placesEnv = {
+    FTCS_WORKSPACE: workspaceRoot,
+    PLACES_PROVIDER: process.env.PLACES_PROVIDER || 'custom',
+    ...(process.env.GOOGLE_PLACES_API_KEY
+      ? { GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY }
+      : {}),
+  }
+
   const nextMcp: Record<string, unknown> = {}
   for (const [name, server] of Object.entries(mcp)) {
     if (!server || typeof server !== 'object') {
@@ -472,7 +480,9 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
     const extra =
       name === 'search-api'
         ? searchEnv
-        : { FTCS_WORKSPACE: workspaceRoot }
+        : name === 'places-api'
+          ? placesEnv
+          : { FTCS_WORKSPACE: workspaceRoot }
     nextMcp[name] = {
       ...server,
       environment: {

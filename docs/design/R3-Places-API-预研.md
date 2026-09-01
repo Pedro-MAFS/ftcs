@@ -17,7 +17,7 @@
 | 每词 Text Search | `pageSize` 最多 **20**；首发 **不翻页**（第二页 = 又一次 Text Search 计费） |
 | 每词 Details 上限 | 产品参数 **`max_details_per_keyword`**（详设前建议 spike 对比 10 / 15 / 20） |
 | 落库 | 仅官网打开并 R1 判断通过后写 `raw/R3.jsonl`；Places 不能单独落线索 |
-| 下一步 | US-E-06～10 按 §14 实施（**E-06 详设已冻结**；先 E-06 编码 → E-07 自定义 Key → …） |
+| 下一步 | US-E-06 已落地；**US-E-07 详设已冻结** → E-07 编码 → E-08 Skill → … |
 
 **Go/No-Go**：Postman spike 已通过；R3 按 Places 方案推进。生产环境仍须关注德区窄品类召回与 website 覆盖率，必要时调整 `max_details_per_keyword` 与过滤规则。
 
@@ -290,11 +290,11 @@ X-Goog-FieldMask: id,displayName,websiteUri,formattedAddress,types
 
 | 项 | 方向 |
 |----|------|
-| MCP | **places-api**：`places_text_search` / `place_details` |
+| MCP | **places-api**：`places_text_search` / `place_details` — 详设 [US-E-07-Places-MCP自定义Key.md](US-E-07-Places-MCP自定义Key.md) |
 | Provider | **`custom`**（BYOK 直连，**Must 首发**）· **`gateway`**（token 网关，**Should，优先级低**） |
 | Skill | `discover-leads-r3`（US-E-08） |
 | Key | 设置页 **可选** Places Key；**仅 R3 Preflight 需要**（US-E-09） |
-| 缓存 | place_id → details 短 TTL；不长期缓存整段响应 |
+| 缓存 | Text Search 与 Details 均 **24h** 本地 TTL（键见 US-E-07 §6.2）；不长期缓存整段响应到 Lead |
 | 配额 | 与 R1 Tavily 分开；官方网关用量见 US-E-10 |
 
 ---
