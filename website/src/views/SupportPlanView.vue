@@ -61,7 +61,7 @@ function resetFilters(): void {
       <div class="container">
         <h1>支持计划</h1>
         <p>
-          根据用户反馈整理的支持方向。仅收录已纳入计划的事项，不承诺具体发布时间。
+          根据用户反馈整理的支持方向，按优先级持续更新。
         </p>
       </div>
     </header>

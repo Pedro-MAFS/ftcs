@@ -192,7 +192,7 @@
               "fill": "$fg-secondary",
               "textGrowth": "fixed-width",
               "width": 640,
-              "content": "根据用户反馈整理的支持方向。仅收录已纳入计划的事项，不承诺具体发布时间。",
+              "content": "根据用户反馈整理的支持方向，按优先级持续更新。",
               "lineHeight": 1.6,
               "fontFamily": "$font-body",
               "fontSize": 16,
