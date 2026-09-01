@@ -16,6 +16,8 @@ export interface AuthActionResult {
   message: string
   session: AuthSessionSnapshot
   needLogin?: boolean
+  /** 换号登录且本地已有官方网关 sk */
+  promptGatewayReset?: boolean
 }
 
 export function emptyAuthSession(): AuthSessionSnapshot {

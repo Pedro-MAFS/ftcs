@@ -19,6 +19,7 @@ import {
   saveTokenBundle,
   type StoredTokenBundle,
 } from './token-store'
+import { evaluateLoginAccountSwitch } from './auth-account-switch'
 
 export interface AuthSessionSnapshot {
   loggedIn: boolean
@@ -39,6 +40,8 @@ export interface AuthActionResult {
   session: AuthSessionSnapshot
   /** 需要先登录（如反馈） */
   needLogin?: boolean
+  /** 换号登录且本地已有官方网关 sk，建议重置 */
+  promptGatewayReset?: boolean
 }
 
 type PendingLogin = {
@@ -215,7 +218,12 @@ export async function ensureFreshTokens(options?: {
   if (!options?.force && stillFresh) {
     return bundle
   }
-  if (!bundle.refreshToken) return bundle
+  if (!bundle.refreshToken) {
+    if (options?.force || !stillFresh) {
+      return invalidateStoredAuth('登录已失效，请重新登录')
+    }
+    return bundle
+  }
 
   try {
     const refreshed = await refreshAccessToken(bundle.refreshToken)
@@ -230,10 +238,20 @@ export async function ensureFreshTokens(options?: {
       obtainedAt: Date.now(),
     }
     saveTokenBundle(bundle)
+    notifySession()
     return bundle
-  } catch {
-    return bundle
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    console.warn('[ftcs:auth] refresh token failed:', detail)
+    return invalidateStoredAuth('登录已失效，请重新登录')
   }
+}
+
+function invalidateStoredAuth(message: string): null {
+  clearTokenBundle()
+  lastError = message
+  notifySession()
+  return null
 }
 
 function settlePending(result: AuthActionResult): void {
@@ -379,11 +397,16 @@ async function handleCallbackRequest(
     }
     saveTokenBundle(bundle)
     lastError = ''
+    const { promptGatewayReset } = evaluateLoginAccountSwitch({
+      sub: bundle.sub,
+      email: bundle.email,
+    })
     writeCallbackPage(res, true, '登录成功，可以返回外贸获客应用。')
     settlePending({
       ok: true,
       message: '登录成功',
       session: getAuthSession(),
+      promptGatewayReset,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

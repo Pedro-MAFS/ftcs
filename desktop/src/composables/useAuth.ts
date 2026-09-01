@@ -4,6 +4,8 @@ import { emptyAuthSession, type AuthActionResult, type AuthSessionSnapshot } fro
 const session = ref<AuthSessionSnapshot>(emptyAuthSession())
 const busy = ref(false)
 const message = ref('')
+const gatewayResetPromptOpen = ref(false)
+const gatewayResetBusy = ref(false)
 let subscribers = 0
 let unsubChanged: (() => void) | undefined
 
@@ -35,6 +37,9 @@ async function login(): Promise<AuthActionResult> {
     const res = await window.ftcs.loginWithOAuth()
     session.value = res.session
     message.value = res.message
+    if (res.ok && res.promptGatewayReset) {
+      gatewayResetPromptOpen.value = true
+    }
     return res
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -70,6 +75,27 @@ async function logout(): Promise<AuthActionResult> {
     return res
   } finally {
     busy.value = false
+  }
+}
+
+function dismissGatewayResetPrompt(): void {
+  gatewayResetPromptOpen.value = false
+}
+
+async function confirmGatewayReset(): Promise<void> {
+  if (!window.ftcs?.provisionOfficialChannel) {
+    dismissGatewayResetPrompt()
+    return
+  }
+  gatewayResetBusy.value = true
+  try {
+    const res = await window.ftcs.provisionOfficialChannel({ reset: true })
+    message.value = res.ok ? res.message : res.message
+  } catch (err) {
+    message.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    gatewayResetBusy.value = false
+    gatewayResetPromptOpen.value = false
   }
 }
 
@@ -121,10 +147,14 @@ export function useAuth() {
     loggedIn,
     loginPending,
     emailMasked,
+    gatewayResetPromptOpen,
+    gatewayResetBusy,
     refreshSession,
     login,
     cancelLogin,
     logout,
     openFeedback,
+    dismissGatewayResetPrompt,
+    confirmGatewayReset,
   }
 }

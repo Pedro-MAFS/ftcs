@@ -277,6 +277,7 @@ export interface AuthActionResult {
   message: string
   session: AuthSessionSnapshot
   needLogin?: boolean
+  promptGatewayReset?: boolean
 }
 
 export type {
