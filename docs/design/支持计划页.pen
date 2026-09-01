@@ -1,0 +1,989 @@
+{
+  "version": "2.17",
+  "children": [
+    {
+      "type": "frame",
+      "id": "SpPg01",
+      "x": 0,
+      "y": 0,
+      "name": "支持计划 · ftcs.ai-utills.com/plan",
+      "clip": true,
+      "width": 1440,
+      "fill": "$surface-primary",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "SpNav1",
+          "name": "Nav",
+          "width": "fill_container",
+          "height": 72,
+          "fill": "$surface-inverse",
+          "padding": [
+            0,
+            72
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "SpLogo",
+              "name": "Logo",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "SpMark",
+                  "name": "Mark",
+                  "width": 28,
+                  "height": 28,
+                  "fill": "$accent",
+                  "cornerRadius": 4,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "SpMarkT",
+                      "fill": "$fg-inverse",
+                      "content": "F",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 14,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "SpBrand",
+                  "fill": "$fg-inverse",
+                  "content": "FTCS",
+                  "fontFamily": "$font-heading",
+                  "fontSize": 16,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "SpSep",
+                  "fill": "$fg-secondary",
+                  "content": "/",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "SpParent",
+                  "fill": "$fg-muted",
+                  "content": "AI-Utills",
+                  "fontFamily": "$font-body",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "SpLinks",
+              "name": "Links",
+              "gap": 36,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "SpL1",
+                  "fill": "$fg-muted",
+                  "content": "功能",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "SpL2",
+                  "fill": "$fg-muted",
+                  "content": "场景",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "SpL3",
+                  "fill": "$fg-inverse",
+                  "content": "支持计划",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "SpL4",
+                  "fill": "$fg-muted",
+                  "content": "帮助",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "SpL5",
+                  "fill": "$fg-muted",
+                  "content": "品牌站",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "SpCta",
+              "name": "Nav CTA",
+              "fill": "$accent",
+              "cornerRadius": 4,
+              "padding": [
+                12,
+                22
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "SpCtaT",
+                  "fill": "$fg-inverse",
+                  "content": "下载桌面版",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "SpHead",
+          "name": "Page Head",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 12,
+          "padding": [
+            44,
+            72,
+            28,
+            72
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "SpH1",
+              "fill": "$fg-primary",
+              "content": "支持计划",
+              "fontFamily": "$font-heading",
+              "fontSize": 44,
+              "fontWeight": "600",
+              "letterSpacing": -1.2
+            },
+            {
+              "type": "text",
+              "id": "SpSub",
+              "fill": "$fg-secondary",
+              "textGrowth": "fixed-width",
+              "width": 640,
+              "content": "根据用户反馈整理的支持方向。仅收录已纳入计划的事项，不承诺具体发布时间。",
+              "lineHeight": 1.6,
+              "fontFamily": "$font-body",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "SpBody",
+          "name": "Content",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 32,
+          "padding": [
+            0,
+            72,
+            56,
+            72
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "SpLegend",
+              "name": "Legend",
+              "width": "fill_container",
+              "fill": "$bg-soft",
+              "cornerRadius": 4,
+              "stroke": "$border",
+              "strokeWidth": 1,
+              "layout": "vertical",
+              "gap": 14,
+              "padding": [
+                18,
+                22
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "SpLegPri",
+                  "name": "Priority legend",
+                  "gap": 16,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "SpLegPriL",
+                      "fill": "$fg-secondary",
+                      "content": "优先级",
+                      "fontFamily": "$font-body",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SpP0Badge",
+                      "fill": "$accent-soft",
+                      "cornerRadius": 4,
+                      "padding": [
+                        4,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "SpP0T",
+                          "fill": "$accent",
+                          "content": "P0",
+                          "fontFamily": "$font-data",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "SpP0D",
+                      "fill": "$fg-muted",
+                      "content": "当前最高优先",
+                      "fontFamily": "$font-body",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SpP1Badge",
+                      "fill": "#F4F5F7",
+                      "cornerRadius": 4,
+                      "padding": [
+                        4,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "SpP1T",
+                          "fill": "$fg-secondary",
+                          "content": "P1",
+                          "fontFamily": "$font-data",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "SpP1D",
+                      "fill": "$fg-muted",
+                      "content": "次优先",
+                      "fontFamily": "$font-body",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SpP2Badge",
+                      "fill": "#F4F5F7",
+                      "cornerRadius": 4,
+                      "padding": [
+                        4,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "SpP2T",
+                          "fill": "$fg-muted",
+                          "content": "P2",
+                          "fontFamily": "$font-data",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "SpP2D",
+                      "fill": "$fg-muted",
+                      "content": "排期靠后",
+                      "fontFamily": "$font-body",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "SpLegSta",
+                  "name": "Status legend",
+                  "gap": 16,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "SpLegStaL",
+                      "fill": "$fg-secondary",
+                      "content": "状态",
+                      "fontFamily": "$font-body",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SpDevBadge",
+                      "fill": "$accent-soft",
+                      "cornerRadius": 4,
+                      "padding": [
+                        4,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "SpDevT",
+                          "fill": "$accent",
+                          "content": "开发中",
+                          "fontFamily": "$font-body",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "SpDevD",
+                      "fill": "$fg-muted",
+                      "content": "已在推进",
+                      "fontFamily": "$font-body",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SpPlanBadge",
+                      "fill": "#F4F5F7",
+                      "cornerRadius": 4,
+                      "stroke": "$border",
+                      "strokeWidth": 1,
+                      "padding": [
+                        4,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "SpPlanT",
+                          "fill": "$fg-secondary",
+                          "content": "规划中",
+                          "fontFamily": "$font-body",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "SpPlanD",
+                      "fill": "$fg-muted",
+                      "content": "已纳入计划，尚未开工",
+                      "fontFamily": "$font-body",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "SpSecDev",
+              "name": "Section · 开发中",
+              "width": "fill_container",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "SpSecDevH",
+                  "width": "fill_container",
+                  "gap": 10,
+                  "padding": [
+                    0,
+                    0,
+                    16,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "SpSecDevT",
+                      "fill": "$fg-primary",
+                      "content": "开发中",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 20,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "SpSecDevC",
+                      "fill": "$fg-muted",
+                      "content": "1 项",
+                      "fontFamily": "$font-data",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "SpItem1",
+                  "name": "Item · R3 地图发现",
+                  "width": "fill_container",
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    24,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "SpItem1Top",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "xIFOJ",
+                          "fill": "$accent-soft",
+                          "cornerRadius": 4,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Oo0Ba",
+                              "fill": "$accent",
+                              "content": "P0",
+                              "fontFamily": "$font-data",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "F1bE2",
+                          "fill": "$accent-soft",
+                          "cornerRadius": 4,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "JBXhZ",
+                              "fill": "$accent",
+                              "content": "开发中",
+                              "fontFamily": "$font-body",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "OyxaM",
+                          "fill": "$fg-primary",
+                          "content": "R3 地图发现",
+                          "fontFamily": "$font-heading",
+                          "fontSize": 18,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "keuWc",
+                      "fill": "$fg-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": 960,
+                      "content": "按地区通过 Places API 发现潜在采购商，无官网时补搜后再打开官网判断；通过后写入线索。不打开地图真页。",
+                      "lineHeight": 1.6,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "SpSecPlan",
+              "name": "Section · 规划中",
+              "width": "fill_container",
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "SpSecPlanH",
+                  "width": "fill_container",
+                  "gap": 10,
+                  "padding": [
+                    8,
+                    0,
+                    16,
+                    0
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "R6TrO",
+                      "fill": "$fg-primary",
+                      "content": "规划中",
+                      "fontFamily": "$font-heading",
+                      "fontSize": 20,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "mRkEu",
+                      "fill": "$fg-muted",
+                      "content": "3 项",
+                      "fontFamily": "$font-data",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "SpItem2",
+                  "name": "Item · 人员联系画像",
+                  "width": "fill_container",
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    24,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "WoXX0",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "oObTI",
+                          "fill": "$accent-soft",
+                          "cornerRadius": 4,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "WwwPW",
+                              "fill": "$accent",
+                              "content": "P0",
+                              "fontFamily": "$font-data",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "ZBwDv",
+                          "fill": "#F4F5F7",
+                          "cornerRadius": 4,
+                          "stroke": "$border",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "qMXna",
+                              "fill": "$fg-secondary",
+                              "content": "规划中",
+                              "fontFamily": "$font-body",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "wgbYW",
+                          "fill": "$fg-primary",
+                          "content": "人员联系画像",
+                          "fontFamily": "$font-heading",
+                          "fontSize": 18,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "OZQfx",
+                      "fill": "$fg-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": 960,
+                      "content": "在已有公司线索上，按买家角色补全关键联系人（姓名、职位、来源与匹配理由），供开发信选用收件人。默认人工触发。",
+                      "lineHeight": 1.6,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "SpItem4",
+                  "name": "Item · R4 黄页名录",
+                  "width": "fill_container",
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1,
+                    "bottom": 1
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": [
+                    24,
+                    0
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "f5FMvc",
+                      "gap": 10,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "w4fhY",
+                          "fill": "#F4F5F7",
+                          "cornerRadius": 4,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "cOp8p",
+                              "fill": "$fg-muted",
+                              "content": "P2",
+                              "fontFamily": "$font-data",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "KZeIZ",
+                          "fill": "#F4F5F7",
+                          "cornerRadius": 4,
+                          "stroke": "$border",
+                          "strokeWidth": 1,
+                          "padding": [
+                            4,
+                            10
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "Ulgkk",
+                              "fill": "$fg-secondary",
+                              "content": "规划中",
+                              "fontFamily": "$font-body",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "id": "aSqpq",
+                          "fill": "$fg-primary",
+                          "content": "R4 黄页名录探索",
+                          "fontFamily": "$font-heading",
+                          "fontSize": 18,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "jncPK",
+                      "fill": "$fg-secondary",
+                      "textGrowth": "fixed-width",
+                      "width": 960,
+                      "content": "按行业黄页 / 名录站点发现公司并核对官网。评审通过后再拆用户故事与详设。",
+                      "lineHeight": 1.6,
+                      "fontFamily": "$font-body",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "SpFoot",
+              "name": "Page foot",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": 6,
+              "padding": [
+                8,
+                0,
+                0,
+                0
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "z9vRrB",
+                  "fill": "$fg-muted",
+                  "textGrowth": "fixed-width",
+                  "width": 720,
+                  "content": "有新想法或问题？请通过桌面版设置中的「意见反馈」提交（需登录，便于跟进）。",
+                  "lineHeight": 1.55,
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "text",
+                  "id": "shsgX",
+                  "fill": "$fg-muted",
+                  "content": "已交付能力见 发布日志。",
+                  "fontFamily": "$font-body",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "SpFooter",
+          "name": "Footer",
+          "width": "fill_container",
+          "fill": "$surface-inverse",
+          "layout": "vertical",
+          "gap": 8,
+          "padding": [
+            28,
+            72
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "V2UAJ",
+              "fill": "$fg-muted",
+              "content": "帮助 · 支持计划 · 发布日志 · 下载 · 品牌站 ai-utills.com",
+              "fontFamily": "$font-body",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "text",
+              "id": "k00nIx",
+              "fill": "$fg-secondary",
+              "content": "© 2026 FTCS · 鲁ICP备2026033555号-1",
+              "fontFamily": "$font-body",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "SpNote",
+      "x": 1520,
+      "y": 0,
+      "name": "设计说明",
+      "width": 360,
+      "fill": "#FAFBFC",
+      "stroke": "$border",
+      "strokeWidth": 1,
+      "layout": "vertical",
+      "gap": 12,
+      "padding": [
+        24,
+        20
+      ],
+      "children": [
+        {
+          "type": "text",
+          "id": "rBS2Y",
+          "fill": "$fg-primary",
+          "content": "设计说明",
+          "fontFamily": "$font-heading",
+          "fontSize": 16,
+          "fontWeight": "600"
+        },
+        {
+          "type": "text",
+          "id": "OSQQK",
+          "fill": "$fg-secondary",
+          "textGrowth": "fixed-width",
+          "width": 320,
+          "content": "静态页 /plan。内页白底 + 顶栏深色，与发布日志、帮助页一致。",
+          "lineHeight": 1.55,
+          "fontFamily": "$font-body",
+          "fontSize": 13,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "P6fqJ",
+          "fill": "$fg-secondary",
+          "textGrowth": "fixed-width",
+          "width": 320,
+          "content": "优先级 P0–P2 仅表达相对顺序，不写日期。状态仅「开发中 / 规划中」。",
+          "lineHeight": 1.55,
+          "fontFamily": "$font-body",
+          "fontSize": 13,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "XEb4s",
+          "fill": "$fg-secondary",
+          "textGrowth": "fixed-width",
+          "width": 320,
+          "content": "条目按状态分区：开发中在上，规划在下；同区内按 P0→P2 排序。",
+          "lineHeight": 1.55,
+          "fontFamily": "$font-body",
+          "fontSize": 13,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "text",
+          "id": "zHa8O",
+          "fill": "$fg-secondary",
+          "textGrowth": "fixed-width",
+          "width": 320,
+          "content": "示例文案来自 docs/17 当前规划，实现时改为 support-plan.ts 静态配置。",
+          "lineHeight": 1.55,
+          "fontFamily": "$font-body",
+          "fontSize": 13,
+          "fontWeight": "normal"
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "surface-primary": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "surface-inverse": {
+      "type": "color",
+      "value": "#0A0A0A"
+    },
+    "bg-soft": {
+      "type": "color",
+      "value": "#F4F5F7"
+    },
+    "fg-primary": {
+      "type": "color",
+      "value": "#1A1A1A"
+    },
+    "fg-secondary": {
+      "type": "color",
+      "value": "#666666"
+    },
+    "fg-inverse": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "fg-muted": {
+      "type": "color",
+      "value": "#9A9A9A"
+    },
+    "border": {
+      "type": "color",
+      "value": "#EEF0F2"
+    },
+    "border-inverse": {
+      "type": "color",
+      "value": "#2A2A2A"
+    },
+    "accent": {
+      "type": "color",
+      "value": "#4A9FD8"
+    },
+    "accent-soft": {
+      "type": "color",
+      "value": "#E8F4FC"
+    },
+    "font-heading": {
+      "type": "string",
+      "value": "Geist"
+    },
+    "font-body": {
+      "type": "string",
+      "value": "Inter"
+    },
+    "font-data": {
+      "type": "string",
+      "value": "Geist Mono"
+    }
+  },
+  "fileToken": "e82af5c6-2d66-4c90-aa76-8c9e2ee5e656"
+}

@@ -11,6 +11,8 @@ const year = new Date().getFullYear()
       <nav class="site-footer__row" aria-label="页脚导航">
         <RouterLink to="/docs">帮助</RouterLink>
         <span class="site-footer__sep" aria-hidden="true">·</span>
+        <RouterLink to="/plan">支持计划</RouterLink>
+        <span class="site-footer__sep" aria-hidden="true">·</span>
         <RouterLink to="/changelog">发布日志</RouterLink>
         <span class="site-footer__sep" aria-hidden="true">·</span>
         <RouterLink to="/download">下载</RouterLink>

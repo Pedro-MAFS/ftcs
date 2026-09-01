@@ -142,6 +142,12 @@ export const seoCopy = {
     description: `查看 FTCS 外贸获客系统各版本更新说明。发布日志自 0.5.0 起记录。`,
     path: '/changelog',
   },
+  supportPlan: {
+    title: '支持计划 | FTCS 外贸获客系统',
+    description:
+      '查看 FTCS 已纳入计划的功能方向：优先级、开发中与规划中状态。不承诺发布时间，欢迎通过桌面版意见反馈参与。',
+    path: '/plan',
+  },
 } as const
 
 export const geoFaqs: GeoFaqItem[] = [
