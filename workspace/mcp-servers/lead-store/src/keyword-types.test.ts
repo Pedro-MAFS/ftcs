@@ -63,6 +63,36 @@ test("SearchQueryWriteSchema rejects site_id on R1", () => {
   assert.equal(result.success, false);
 });
 
+const r3Query = {
+  id: "q_041",
+  query: "Bodenbelag Fachhandel München",
+  dimension: "geo" as const,
+  language: "de",
+  priority: "high" as const,
+  round: "R3" as const,
+};
+
+test("SearchQueryWriteSchema accepts R3 without site_id", () => {
+  const result = SearchQueryWriteSchema.safeParse(r3Query);
+  assert.equal(result.success, true);
+});
+
+test("SearchQueryWriteSchema rejects site: in R3 query", () => {
+  const result = SearchQueryWriteSchema.safeParse({
+    ...r3Query,
+    query: "site:maps.google.com flooring Munich",
+  });
+  assert.equal(result.success, false);
+});
+
+test("SearchQueryWriteSchema rejects site_id on R3", () => {
+  const result = SearchQueryWriteSchema.safeParse({
+    ...r3Query,
+    site_id: "linkedin_company",
+  });
+  assert.equal(result.success, false);
+});
+
 test("KeywordExpansionWriteSchema rejects R2 without site_id", () => {
   const result = KeywordExpansionWriteSchema.safeParse(
     expansionWithQueries([r2Query]),

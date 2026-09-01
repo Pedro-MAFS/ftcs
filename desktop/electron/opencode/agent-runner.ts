@@ -121,10 +121,10 @@ function buildExpandKeywordsPrompt(productId: string): string {
     '',
     '执行要求：',
     '1. 调用 lead-store.product_get 确认画像存在且 status == "ready"。',
-    '2. 由你直接生成五维关键词与 30～50 条 search_queries（覆盖 ≥4 维）。R1 占总数 ≥60%，普通产品/场景/买家/地理/竞品替代句，不要 site_id。R2 只给当前启用站点出词，每条必须带 site_id，query 禁止 site: / intitle: / inurl: / filetype:。不要生成 R3 或 R4。禁止调用 keywords_expand。',
+    '2. 由你直接生成五维关键词与 30～50 条 search_queries（覆盖 ≥4 维）。R1 占总数 ≥60%，普通产品/场景/买家/地理/竞品替代句，不要 site_id。R2 只给当前启用站点出词，每条必须带 site_id，query 禁止 site: / intitle: / inurl: / filetype:。R3 地图发现 6～12 条，round=R3，须含城市/区域 + 品类/场景，不要 site_id，query 同样禁止上述运算符。不要 R4。禁止调用 keywords_expand。',
     '3. 调用 lead-store.keywords_save 保存完整 expansion；若校验失败则修正后重试。',
-    '4. 可用 keywords_get 核对 stats；不足则补充后再 save。抽查 R2 均有 site_id，且 by_round 无 R3/R4。',
-    '5. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例（R2 样例请带 site_id）、下一步建议（探索页「开始 R1」或「开始 R2」）。',
+    '4. 可用 keywords_get 核对 stats；不足则补充后再 save。抽查 R2 均有 site_id；by_round.R3 在 6～12（total≥40 时）；无 R4。',
+    '5. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例（含 1～2 条 R3；R2 样例请带 site_id）、下一步建议（探索页「开始 R1」或「开始 R2」；R3 执行尚未开通）。',
     '',
     `输出路径：data/keywords/${productId}/expansion.json`,
   ].join('\n')

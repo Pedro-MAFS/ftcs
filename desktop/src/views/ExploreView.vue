@@ -10,7 +10,8 @@ import ExploreStartControl from '../components/explore/ExploreStartControl.vue'
 import KeywordEditorDialog from '../components/shared/KeywordEditorDialog.vue'
 import type { ExploreTaskDto, ExploreR2SiteDto, KeywordExpansionDto } from '../types/electron'
 import {
-  PLANNED_ROUND_EMPTY,
+  R3_EMPTY,
+  R4_PLANNED_EMPTY,
   ROUND_FILTER_OPTIONS,
   roundLabel,
 } from '../explore/round-labels'
@@ -98,14 +99,14 @@ const previewTitle = computed(() => {
 })
 
 const previewEmptyText = computed(() => {
-  if (previewRound.value === 'R3' || previewRound.value === 'R4') {
-    return PLANNED_ROUND_EMPTY
-  }
+  if (previewRound.value === 'R4') return R4_PLANNED_EMPTY
+  if (previewRound.value === 'R3') return R3_EMPTY
   return '当前筛选下无搜索词'
 })
 
 function queryPreviewMeta(q: KeywordExpansionDto['search_queries'][number]): string {
   const dim = DIM_LABEL[q.dimension] || q.dimension
+  if (q.round === 'R3') return `${dim} · R3 地图发现`
   if (q.round !== 'R2') return `${dim} · ${q.round}`
   const site = r2Sites.value.find((s) => s.id === q.site_id)
   if (site) return `${dim} · R2 · ${site.label}`

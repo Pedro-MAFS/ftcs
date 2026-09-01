@@ -17,7 +17,7 @@
 | 每词 Text Search | `pageSize` 最多 **20**；首发 **不翻页**（第二页 = 又一次 Text Search 计费） |
 | 每词 Details 上限 | 产品参数 **`max_details_per_keyword`**（详设前建议 spike 对比 10 / 15 / 20） |
 | 落库 | 仅官网打开并 R1 判断通过后写 `raw/R3.jsonl`；Places 不能单独落线索 |
-| 下一步 | US-E-06～10 按 §14 实施（先 E-07 自定义 Key，后 E-10 网关） |
+| 下一步 | US-E-06～10 按 §14 实施（**E-06 详设已冻结**；先 E-06 编码 → E-07 自定义 Key → …） |
 
 **Go/No-Go**：Postman spike 已通过；R3 按 Places 方案推进。生产环境仍须关注德区窄品类召回与 website 覆盖率，必要时调整 `max_details_per_keyword` 与过滤规则。
 

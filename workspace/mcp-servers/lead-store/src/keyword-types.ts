@@ -10,8 +10,11 @@ export const KeywordDimensionSchema = z.enum([
 
 export type KeywordDimension = z.infer<typeof KeywordDimensionSchema>;
 
-/** R2 query 不得含 Google 式运算符；站点限定走 site_id / include_domains */
-export const FORBIDDEN_R2_QUERY_OPERATOR = /\b(site|intitle|inurl|filetype)\s*:/i;
+/** R2/R3 query 不得含 Google 式运算符；R2 站点限定走 site_id / include_domains */
+export const FORBIDDEN_CHANNEL_QUERY_OPERATOR = /\b(site|intitle|inurl|filetype)\s*:/i;
+
+/** @deprecated 使用 FORBIDDEN_CHANNEL_QUERY_OPERATOR */
+export const FORBIDDEN_R2_QUERY_OPERATOR = FORBIDDEN_CHANNEL_QUERY_OPERATOR;
 
 export const SearchQuerySchema = z.object({
   id: z.string(),
@@ -30,6 +33,9 @@ export const SearchQuerySchema = z.object({
 
 export type SearchQuery = z.infer<typeof SearchQuerySchema>;
 
+const forbiddenOperatorMessage = (round: string) =>
+  `${round} 搜索词不能包含 site: / intitle: / inurl: / filetype:`;
+
 export const SearchQueryWriteSchema = SearchQuerySchema.superRefine((query, ctx) => {
   if (query.round === "R2") {
     if (!query.site_id) {
@@ -39,10 +45,10 @@ export const SearchQueryWriteSchema = SearchQuerySchema.superRefine((query, ctx)
         path: ["site_id"],
       });
     }
-    if (FORBIDDEN_R2_QUERY_OPERATOR.test(query.query)) {
+    if (FORBIDDEN_CHANNEL_QUERY_OPERATOR.test(query.query)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "R2 搜索词不能包含 site: / intitle: / inurl: / filetype:",
+        message: forbiddenOperatorMessage("R2"),
         path: ["query"],
       });
     }
@@ -53,6 +59,13 @@ export const SearchQueryWriteSchema = SearchQuerySchema.superRefine((query, ctx)
       code: z.ZodIssueCode.custom,
       message: "只有 R2 搜索词可以带 site_id",
       path: ["site_id"],
+    });
+  }
+  if (query.round === "R3" && FORBIDDEN_CHANNEL_QUERY_OPERATOR.test(query.query)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: forbiddenOperatorMessage("R3"),
+      path: ["query"],
     });
   }
 });

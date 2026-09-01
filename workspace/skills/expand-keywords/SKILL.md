@@ -45,7 +45,8 @@ outputs:
 - 找到可能采购/经销/进口该产品的海外买家或渠道商
 - 覆盖用户目标市场与买家类型
 - **R1 广撒网**（普通检索句）占多数；**R2 社媒发现**只给当前启用的站点出词（见 `config/explore-r2-sites.yaml` + `data/prefs/explore-r2.json`）
-- **不要**生成 R3 / R4
+- **R3 地图发现**：6～12 条，城市/区域 + 品类/场景，供 Google Places `textQuery`；**不要** `site_id`；query 禁止 `site:` / `intitle:` / `inurl:` / `filetype:`
+- **不要**生成 R4
 - 用语贴近真实搜索习惯，可含合理行业黑话、缩写、本地语
 
 读取启用站点：先读工作区 `config/explore-r2-sites.yaml`，再用 `data/prefs/explore-r2.json` 的 `enabled` 覆盖 `default_enabled`。yaml 不存在则默认启用 `linkedin_company` 与 `facebook_page`。
@@ -69,13 +70,14 @@ outputs:
 - 总数 **30～50**（Phase 1 上限 50）
 - 至少覆盖 **4** 个维度（争取 5 个）
 - **R1 ≥ 60%**：普通产品 / 场景 / 买家 / 地理 / 竞品替代检索句；**不要** `site_id`；**不要**写 `site:` 等运算符
-- **R2**：只给**当前启用**站点出词；每条必须有 `site_id`（登记表中的 id，如 `linkedin_company`）；query 仍是自然语言，**禁止** `site:` / `intitle:` / `inurl:` / `filetype:`。站点限定由后续搜索层的 `include_domains` 处理。可对同一句话按不同 `site_id` 各出一条
-- **不要**生成 `round=R3` 或 `R4`
-- 0 个启用站点 → 不要 R2 词，全部 R1
+- **R3：6～12 条**（总数 ≥40 时至少 6）：**城市/区域 + 本地商户/品类意图**（如 `Bodenbelag Fachhandel München`、`flooring store Dallas Texas`）；`round=R3`；**不要** `site_id`；禁止 Google 运算符。优先 `dimension=geo` 或 `buyer`，可用 `scenario`；须含明确城市/都会区名，不要仅国家级地理句（那是 R1）
+- **R2**：剩余全部，只给**当前启用**站点出词；每条必须有 `site_id`（登记表中的 id，如 `linkedin_company`）；query 仍是自然语言，**禁止** `site:` / `intitle:` / `inurl:` / `filetype:`。站点限定由后续搜索层的 `include_domains` 处理。可对同一句话按不同 `site_id` 各出一条；按启用站均分，每站至少 2 条
+- **不要**生成 `round=R4`
+- 0 个启用站点 → 不要 R2 词，在 R1 与 R3 间分配
 - 每条必须含：`id`、`query`、`dimension`、`language`、`priority`、`round`；R2 另含 `site_id`
 - `dimension`：`product` \| `scenario` \| `buyer` \| `geo` \| `competitor`
 - `priority`：`high` \| `medium` \| `low`
-- `round`：`R1` \| `R2`（本阶段扩展不要写 R3/R4）
+- `round`：`R1` \| `R2` \| `R3`（扩展不要写 R4）
 - `language`：如 `en` / `zh` / `de` 等，与 query 实际语言一致
 - `id` 唯一，建议 `q_001` 起连续编号
 - **去重**：语义高度重复的合并；避免空泛无产品信息的词
@@ -102,7 +104,8 @@ outputs:
 - `by_dimension` 中至少 4 个维度 count > 0
 - 抽查 3～5 条是否像真人会搜的词
 - 所有 `round=R2` 均有 `site_id`，query 不含 `site:`
-- `by_round` 中 R3 / R4 为 0 或不出现
+- `by_round.R3` ∈ [6, 12]（当 total ≥ 40）；R3 无 `site_id`、无运算符；抽查含城市名
+- `by_round.R4` 为 0 或不出现
 
 不足则继续推理补充并再次 `keywords_save`。
 
@@ -112,8 +115,8 @@ outputs:
 
 - 产品 ID 与保存路径
 - 总查询数与各轮次/维度分布
-- 每个维度 2～3 条代表性 `search_queries`
-- 下一步建议：探索页「开始 R1」（`discover-leads`）或「开始 R2」（`discover-leads-r2`）。
+- 每个维度 2～3 条代表性 `search_queries`（样例须含 **1～2 条 R3**）
+- 下一步建议：探索页「开始 R1」（`discover-leads`）或「开始 R2」（`discover-leads-r2`）；R3 可在探索页预览「R3 地图发现」，**执行 R3 尚未开通**（需后续 E-09）。
 
 ## 输出要求
 
@@ -153,13 +156,29 @@ outputs:
       "dimension": "buyer",
       "language": "en",
       "priority": "high",
+      "round": "R1"
+    },
+    {
+      "id": "q_031",
+      "query": "industrial ball valve distributor Europe",
+      "dimension": "buyer",
+      "language": "en",
+      "priority": "high",
       "round": "R2",
       "site_id": "linkedin_company"
+    },
+    {
+      "id": "q_041",
+      "query": "Bodenbelag Fachhandel München",
+      "dimension": "geo",
+      "language": "de",
+      "priority": "high",
+      "round": "R3"
     }
   ],
   "stats": {
-    "total_queries": 40,
-    "by_round": { "R1": 28, "R2": 12 },
+    "total_queries": 42,
+    "by_round": { "R1": 26, "R2": 8, "R3": 8 },
     "by_dimension": { "product": 10, "scenario": 8, "buyer": 12, "geo": 10, "competitor": 5 }
   }
 }

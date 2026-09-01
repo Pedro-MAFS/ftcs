@@ -63,3 +63,34 @@ test('validateSearchQueryForSave accepts R2 with known site', () => {
     null,
   )
 })
+
+test('validateSearchQueryForSave accepts R3 without site_id', () => {
+  assert.equal(
+    validateSearchQueryForSave({
+      query: 'Bodenbelag Fachhandel München',
+      round: 'R3',
+    }),
+    null,
+  )
+})
+
+test('validateSearchQueryForSave rejects operators in R3 query', () => {
+  assert.match(
+    validateSearchQueryForSave({
+      query: 'site:maps.google.com flooring Munich',
+      round: 'R3',
+    }) ?? '',
+    /site:/,
+  )
+})
+
+test('validateSearchQueryForSave rejects site_id on R3', () => {
+  assert.equal(
+    validateSearchQueryForSave({
+      query: 'flooring store Dallas Texas',
+      round: 'R3',
+      site_id: 'linkedin_company',
+    }),
+    '只有 R2 搜索词可以带站点',
+  )
+})

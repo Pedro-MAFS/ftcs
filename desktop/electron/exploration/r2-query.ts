@@ -13,7 +13,7 @@ export function exploreRunTitle(rounds: string[]): string {
     const round = rounds[0]
     if (round === 'R1') return 'R1 广撒网'
     if (round === 'R2') return 'R2 社媒发现'
-    if (round === 'R3') return 'R3 规划中'
+    if (round === 'R3') return 'R3 地图发现'
     if (round === 'R4') return 'R4 规划中'
   }
   return rounds.join('+') || '探索任务'

@@ -34,6 +34,6 @@ test('countEligibleR2Queries skips legacy R2 rows', () => {
 test('exploreRunTitle names R1 and R2 for the task list', () => {
   assert.equal(exploreRunTitle(['R1']), 'R1 广撒网')
   assert.equal(exploreRunTitle(['R2']), 'R2 社媒发现')
-  assert.equal(exploreRunTitle(['R3']), 'R3 规划中')
+  assert.equal(exploreRunTitle(['R3']), 'R3 地图发现')
   assert.equal(exploreRunTitle(['R1', 'R2']), 'R1+R2')
 })
