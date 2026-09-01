@@ -2,7 +2,7 @@
 
 > **关联需求**：[../17-需求-业务效率工具.md](../17-需求-业务效率工具.md) §5.7 / §5.8 / §14  
 > **状态**：预研与 Postman spike **已通过**（2026-09-01）；用户故事见 [../17-需求-业务效率工具.md](../17-需求-业务效率工具.md) §14（US-E-06～10）  
-> **定价参考**：[../reference/Google Maps Platform 核心服务定价列表  _  Google for Developers.html](../reference/Google%20Maps%20Platform%20核心服务定价列表%20%C2%A0_%20Google%20for%20Developers.html)（本地保存的 Google 官方价目表）  
+> **定价参考**：[../reference/google-maps-platform-pricing/](../reference/google-maps-platform-pricing/)（离线 HTML + [R3 SKU 摘录](../reference/google-maps-platform-pricing/places-api-pricing-r3-summary.md)）  
 > **文档位置**：`docs/design/`
 
 ---
@@ -318,4 +318,5 @@ X-Goog-FieldMask: id,displayName,websiteUri,formattedAddress,types
 - 需求与评审：[../17-需求-业务效率工具.md](../17-需求-业务效率工具.md) §5.7  
 - R2 管道参考（抽公司 → 补官网 → 打开判断）：[US-E-03+04-R2-Skill抽公司与官网判断.md](US-E-03+04-R2-Skill抽公司与官网判断.md)  
 - 线索 Schema：[../03-数据模型.md](../03-数据模型.md)  
-- Google 价目表（本地）：[../reference/Google Maps Platform 核心服务定价列表  _  Google for Developers.html](../reference/Google%20Maps%20Platform%20核心服务定价列表%20%C2%A0_%20Google%20for%20Developers.html)
+- 参考文档索引：[../reference/README.md](../reference/README.md)  
+- Google 价目表（离线）：[../reference/google-maps-platform-pricing/](../reference/google-maps-platform-pricing/) · [R3 SKU 摘录](../reference/google-maps-platform-pricing/places-api-pricing-r3-summary.md)  

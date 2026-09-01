@@ -1,0 +1,28 @@
+(function(_ds){var window=this;var TJa=async function(a){a.eventHandler.listen(a,"DropdownToggled",c=>{c=c.getBrowserEvent();var d;a.Da({category:"devsiteLlmTools",action:((d=c.detail)==null?0:d.open)?"llm_tools_dropdown_open":"llm_tools_dropdown_close",label:"dropdown_toggle"})});a.eventHandler.listen(a,"DropdownItemClicked",c=>{c=c.getBrowserEvent();if(c=a.ea.get(c.detail.id))a.Da({category:"devsiteLlmTools",action:c.kI,label:c.analyticsLabel}),c.action()});var b=SJa();b&&(a.o=b,a.Da({category:"devsiteLlmTools",action:"llm_tools_button_impression"}))},
+SJa=function(){var a=_ds.F();a.pathname=`${a.pathname}.md.txt`;return _ds.Hf(a.href)},UJa=async function(a){if(!a.o)return null;a.Zr=!0;try{let b=await fetch(_ds.cm(a.o.toString()).href);if(b)return await b.text()}catch(b){}finally{a.Zr=!1}return null},VJa=async function(a){try{return a.oa||(a.oa=await UJa(a)),a.oa}catch(b){}return null},VY=function(a,b){a.dispatchEvent(new CustomEvent("devsite-show-custom-snackbar-msg",{detail:{msg:b,showClose:!1},bubbles:!0}))},WJa=async function(a){a.Da({category:"devsiteLlmTools",
+action:"llm_tools_copy_markdown_click",label:"main_button"});var b=await VJa(a);b?await _ds.eu(b):VY(a,"\u672a\u80fd\u590d\u5236\u9875\u9762")},WY=class extends _ds.iw{constructor(){super(...arguments);this.Zr=!1;this.eventHandler=new _ds.v;this.oa=null;this.o=void 0;this.items=[{id:"open-markdown",title:"\u4ee5 Markdown \u683c\u5f0f\u67e5\u770b",action:()=>{this.o?_ds.Sf(window,this.o,"_blank"):VY(this,"\u672a\u80fd\u6253\u5f00 Markdown \u89c6\u56fe\u3002")},kI:"llm_tools_open_markdown_click",analyticsLabel:"dropdown_item"}];
+this.qa=this.items.map(a=>({id:a.id,title:a.title}));this.ea=new Map(this.items.map(a=>[a.id,a]))}Ta(){return this}connectedCallback(){super.connectedCallback();TJa(this)}disconnectedCallback(){super.disconnectedCallback();this.eventHandler.removeAll()}render(){return(0,_ds.O)`
+      <div
+        class="devsite-llm-tools-container"
+        role="group"
+        aria-label="${"LLM \u5de5\u5177"}">
+        <div class="devsite-llm-tools-button-container">
+          <button
+            type="button"
+            class="button button-white devsite-llm-tools-button"
+            ?disabled="${this.Zr}"
+            @click=${()=>{WJa(this)}}
+            aria-label="${"\u5c06\u9875\u9762\u590d\u5236\u4e3a Markdown"}"
+            data-title="${"\u5c06\u9875\u9762\u590d\u5236\u4e3a Markdown"}">
+            <span class="material-icons icon-copy" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="devsite-llm-tools-dropdown-container">
+          <devsite-dropdown-list
+            .listItems="${this.qa}"
+            open-dropdown-aria-label="${"\u66f4\u591a LLM \u5de5\u5177\u9009\u9879"}"
+            close-dropdown-aria-label="${"\u5173\u95ed LLM \u5de5\u5177\u9009\u9879\u83dc\u5355"}">
+          </devsite-dropdown-list>
+        </div>
+      </div>
+    `}};WY.prototype.disconnectedCallback=WY.prototype.disconnectedCallback;_ds.z([_ds.K(),_ds.A("design:type",Object)],WY.prototype,"Zr",void 0);try{customElements.define("devsite-llm-tools",WY)}catch(a){console.warn("Unrecognized DevSite custom element - DevsiteLlmTools",a)};})(_ds_www);

@@ -1,0 +1,10 @@
+(function(_ds){var window=this;var d3=class extends _ds.iw{constructor(){super(["devsite-dialog","devsite-dropdown-list","devsite-view-release-notes-dialog"]);this.Qz=!1;this.releaseNotes=new Map;this.dialog=null;this.path="";this.label="\u7248\u672c\u8bf4\u660e";this.disableAutoOpen=!1}Ta(){return this}async connectedCallback(){super.connectedCallback();try{this.path||(this.path=await _ds.us(_ds.F().href)),this.releaseNotes=await _ds.pu(this.path)}catch(a){}this.releaseNotes.size===0?this.remove():(this.Qz=!0,this.disableAutoOpen||
+location.hash!=="#release__notes"||this.o())}disconnectedCallback(){super.disconnectedCallback();var a;(a=this.dialog)==null||a.remove();this.dialog=null}o(a){a&&(a.preventDefault(),a.stopPropagation());var b;(b=this.dialog)==null||b.remove();this.dialog=document.createElement("devsite-dialog");this.dialog.classList.add("devsite-view-release-notes-dialog-container");_ds.qv((0,_ds.O)`
+      <devsite-view-release-notes-dialog
+        .releaseNotes=${this.releaseNotes}>
+      </devsite-view-release-notes-dialog>
+    `,this.dialog);document.body.appendChild(this.dialog);this.dialog.open=!0;this.Da({category:"Site-Wide Custom Events",action:"release notes: view note",label:`${this.path}`})}render(){if(!this.Qz)return delete this.dataset.shown,(0,_ds.O)``;this.dataset.shown="";return(0,_ds.O)`
+      <button class="view-notes-button" @click="${this.o}">
+        ${this.label}
+      </button>
+    `}};_ds.z([_ds.K(),_ds.A("design:type",Object)],d3.prototype,"Qz",void 0);_ds.z([_ds.I({type:String}),_ds.A("design:type",Object)],d3.prototype,"path",void 0);_ds.z([_ds.I({type:String}),_ds.A("design:type",Object)],d3.prototype,"label",void 0);_ds.z([_ds.I({type:Boolean,Ha:"disable-auto-open"}),_ds.A("design:type",Object)],d3.prototype,"disableAutoOpen",void 0);try{customElements.define("devsite-view-release-notes",d3)}catch(a){console.warn("devsite.app.customElement.DevsiteViewReleaseNotes",a)};})(_ds_www);

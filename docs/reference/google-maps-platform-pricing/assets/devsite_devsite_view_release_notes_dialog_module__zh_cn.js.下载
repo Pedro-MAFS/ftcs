@@ -1,0 +1,46 @@
+(function(_ds){var window=this;var VUa=function(a){a.eventHandler.listen(a,"DropdownItemClicked",b=>{UUa(a,b)})},UUa=async function(a,b){var c=b.getBrowserEvent().detail.id;b=a.querySelector(".devsite-dialog-contents");var d=a.querySelector(`#date-section-${c}`),e,f,g,h,k=((g=d==null?void 0:(e=d.getBoundingClientRect())==null?void 0:e.top)!=null?g:0)-((h=b==null?void 0:(f=b.getBoundingClientRect())==null?void 0:f.top)!=null?h:0);d&&b&&b.scrollBy({top:k,behavior:"smooth"});var l,m;a.Bp=(m=(l=a.Wq.find(n=>n.id===c))==null?void 0:
+l.title)!=null?m:"";a.o.cb(a.Bp)},XUa=function(a){var b=new IntersectionObserver(c=>{c.forEach(d=>{WUa(a,d.isIntersecting,d)})},{root:a.querySelector(".devsite-dialog-contents")});a.querySelectorAll(".release-note-date-section .release-note").forEach(c=>{b.observe(c)})},WUa=function(a,b,c){var d,e={id:(d=c.target.getAttribute("id"))!=null?d:"",type:Number(c.target.getAttribute("type"))};if(b){let f;a.lm=[...((f=a.lm)!=null?f:[]),e]}else a.lm=[...a.lm.filter(f=>f.id!==e.id)]},YUa=function(a){switch(a){case 4:return{title:"Feature",
+color:"green"};case 8:return{title:"Announcement",color:"yellow"};case 2:return{title:"Change",color:"yellow"};case 9:return{title:"Libraries",color:"blue"};case 3:return{title:"Fixed",color:"blue"};case 1:return{title:"Breaking",color:"red"};case 5:return{title:"Deprecated",color:"red"};case 6:return{title:"Issue",color:"red"};case 7:return{title:"Security",color:"orange"};default:return{title:"Unspecified",color:"grey"}}},ZUa=function(a,b){b=YUa(b);return(0,_ds.O)` <span
+      class="release-note-type-chip
+          ${a} ${b.color}">
+      ${b.title}
+    </span>`},$Ua=function(a,b){var c=b.replace(/,?\s/g,"").toLowerCase(),d;return(0,_ds.O)`
+      <div class="release-note-date-section" id="date-section-${c}">
+        <h3 class="release-note-date-header">${b}</h3>
+        ${[...((d=a.releaseNotes.get(b))!=null?d:[])].map((e,f)=>{f=`${c}-${f}`;var g;(g=_ds.B(e,_ds.Fna,4))?(g=_ds.aj(g,2),g=g===null||g===void 0?null:_ds.Pf(g)):g=null;return(0,_ds.O)` <div
+        class="release-note"
+        id="${f}"
+        type="${_ds.D(e,2)}">
+        ${ZUa("large",_ds.D(e,2))}
+        <div class="release-note-content">
+          ${g?(0,_ds.O)`${(0,_ds.uH)(g)}`:(0,_ds.O)`<p>${_ds.C(e,1)}</p>`}
+        </div>
+      </div>`})}
+      </div>
+    `},c3=class extends _ds.iw{constructor(){super(["devsite-dialog","devsite-dropdown-list"]);this.eventHandler=new _ds.v;this.releaseNotes=new Map;this.hideFooter=!1;this.Bp="";this.Wq=[];this.lm=[];this.o=new _ds.yh(async a=>{this.Da({category:"Site-Wide Custom Events",action:"release notes: view old note",label:`${await _ds.us(_ds.F().href)} : ${a}`})},100)}Ta(){return this}async connectedCallback(){super.connectedCallback();this.Bp=[...this.releaseNotes.keys()][0];this.Wq=[...this.releaseNotes.keys()].map(a=>
+({id:a.replace(/,?\s/g,"").toLowerCase(),title:a}));VUa(this)}disconnectedCallback(){super.disconnectedCallback()}j(a){super.j(a);XUa(this)}render(){return(0,_ds.O)`
+      <div class="devsite-dialog-header">
+        <div>
+          <h3 class="no-link title">
+            ${"\u7248\u672c\u8bf4\u660e"}
+          </h3>
+          <div class="chip-wrapper">
+            ${[...(new Set(this.lm.map(a=>a.type)))].map(a=>ZUa("small",a))}
+          </div>
+        </div>
+        <devsite-dropdown-list
+            .listItems=${this.Wq}>
+          <p slot="toggle" class="selected-date-toggle">${this.Bp}</p>
+        </devsite-dropdown-list>
+      </div>
+      <div class="devsite-dialog-contents">
+        ${[...this.releaseNotes.keys()].map(a=>$Ua(this,a))}
+      </div>
+      ${_ds.N(this.hideFooter,()=>"",()=>(0,_ds.O)`
+              <div class="devsite-dialog-footer devsite-dialog-buttons">
+                <button class="button devsite-dialog-close">
+                  Close
+                </button>
+              </div>
+            `)}
+      `}};_ds.z([_ds.I({type:Map}),_ds.A("design:type",Object)],c3.prototype,"releaseNotes",void 0);_ds.z([_ds.I({type:Boolean}),_ds.A("design:type",Object)],c3.prototype,"hideFooter",void 0);_ds.z([_ds.K(),_ds.A("design:type",Object)],c3.prototype,"Bp",void 0);_ds.z([_ds.K(),_ds.A("design:type",Array)],c3.prototype,"Wq",void 0);_ds.z([_ds.K(),_ds.A("design:type",Array)],c3.prototype,"lm",void 0);try{customElements.define("devsite-view-release-notes-dialog",c3)}catch(a){console.warn("devsite.app.customElement.DevsiteViewReleaseNotesDialog",a)};})(_ds_www);
