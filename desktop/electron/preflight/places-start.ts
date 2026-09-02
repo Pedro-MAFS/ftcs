@@ -8,7 +8,7 @@ export interface PlacesStartResolution {
   provider?: PlacesStartProvider
 }
 
-/** E-10 落地后查网关 Places 健康与余额；E-09 恒 false。 */
+/** US-E-10 无限期延后：官方 Places 网关不实现，恒 false。 */
 export function isPlacesGatewayReady(
   _settings: Pick<
     SettingsSnapshot,
@@ -50,7 +50,7 @@ export function resolvePlacesStart(
     return {
       ok: false,
       detail:
-        '官方地图通道尚未就绪。请先在设置 → 探索填写 Google Places API Key，或等待平台开通官方地图代调。',
+        'R3 需自备 Google Places API Key（设置 → 探索）。官方通道不提供 Places 代调，Places 请用 BYOK 直连 Google。',
     }
   }
   return {

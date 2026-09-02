@@ -30,8 +30,8 @@
 | **Q4 Preflight 权威** | `desktop/electron/preflight/agent-preflight.ts` 的 `runAgentPreflight('discover-leads-r3')`；渲染进程 `ensureAgentReady` + 主进程 `gateAgentStart` **双检同一函数** |
 | **Q5 Places 自定义** | `channelMode=custom` 且无 `placesApiKeySet` → **禁止**；文案：「请先在设置 → 探索中配置 Google Places API Key（仅 R3 需要）」 |
 | **Q6 Places BYOK on 官方** | 与 E-07 Q9 一致：**已配 Places Key 则一律 `PLACES_PROVIDER=custom` 直连**，不要求官方网关 |
-| **Q7 官方无 Key** | E-10 未上线 → **禁止**；文案：「官方地图通道尚未就绪。请先在设置 → 探索填写 Google Places API Key，或等待平台开通官方地图代调。」 |
-| **Q8 官方网关（E-10 预留）** | `isPlacesGatewayReady()` 首发恒 `false`；E-10 落地后改为查网关健康 + 余额，通过则 `PLACES_PROVIDER=gateway` |
+| **Q7 官方无 Key** | **禁止**；文案：R3 须 BYOK Places Key；**不提供**官方代调（[US-E-10 无限期延后](US-E-10-Places官方网关.md)） |
+| **Q8 官方 gateway** | `isPlacesGatewayReady()` **恒 false**；`PLACES_PROVIDER=gateway` 不实现；MCP 占位返回 `PLACES_GATEWAY_NOT_READY` |
 | **Q9 不强迫配 Key** | Preflight **仅**在 `discover-leads-r3` 触发；R1/R2/扩展/评分 **不**检查 Places |
 | **Q10 MCP** | R3 Preflight 额外检查：`places-api` connected；仍检查 `lead-store`、`search-api`、`chrome-devtools` |
 | **Q11 无 R3 词** | 按钮 disabled；原因：「当前没有 R3 地图发现词，请重新扩展关键词」 |
@@ -134,5 +134,5 @@ options?: { channel?: 'r1' | 'r2' | 'r3'; maxQueries?: number }
 
 - Skill：[US-E-08-discover-leads-r3-Skill.md](US-E-08-discover-leads-r3-Skill.md)  
 - Places MCP：[US-E-07-Places-MCP自定义Key.md](US-E-07-Places-MCP自定义Key.md)  
-- 官方网关（后续）：US-E-10 详设（待写）  
+- 官方网关（无限期延后）：[US-E-10-Places官方网关.md](US-E-10-Places官方网关.md)  
 - 需求 §5.7 / §14：[../17-需求-业务效率工具.md](../17-需求-业务效率工具.md)

@@ -4,7 +4,7 @@
 > **状态**：编码已落地（待手工 P1–P10 验收）  
 > **范围**：新增 `places-api` **MCP**（`provider=custom` 直连 Google）；设置页 **可选** 填写 **Google Places API Key**；OpenCode 运行时注入；**不写 Lead、不做 Preflight、不接探索页按钮**  
 > **依赖**：[R3-Places-API-预研.md](R3-Places-API-预研.md)（FieldMask、Postman spike 已通过）；US-E-06 已落地（R3 出词形态）；现网 `search-api` / 设置页 `.env` 注入模式（对齐 Tavily BYOK）  
-> **不做**：`provider=gateway` 实现（US-E-10）；`discover-leads-r3`（US-E-08）；探索页「开始 R3」与 Preflight（US-E-09）；Geocoding 工具（可 E-08 仍用 `regionCode` + `textQuery`）；Places 用量/余额 UI（E-10）  
+> **不做**：`provider=gateway` 实现（**US-E-10 无限期延后**）；`discover-leads-r3`（US-E-08）；探索页「开始 R3」与 Preflight（US-E-09）；Geocoding 工具（可 E-08 仍用 `regionCode` + `textQuery`）；Places 用量/余额 UI  
 > **文档位置**：`docs/design/`
 
 ---
@@ -69,7 +69,7 @@
 | -------------------------------------- | ----------------------- |
 | `discover-leads-r3`、写 `raw/R3.jsonl`   | US-E-08                 |
 | 「开始 R3」、Preflight 弹窗                   | US-E-09                 |
-| 网关 `POST /v1/places/...`               | US-E-10 / token-gateway |
+| 网关 `POST /v1/places/...`               | ~~US-E-10~~ 无限期延后 |
 | `max_details_per_keyword` 截断、types 黑名单 | US-E-08 Skill 逻辑        |
 | 打开 Google 地图真页                         | §5.7 禁止                 |
 | 强制所有用户填 Key                            | §14.3                   |
@@ -369,7 +369,7 @@ workspace/mcp-servers/places-api/
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **E-08** | Skill 只调 `places_text_search` / `place_details`；`textQuery` = R3 词；`languageCode` ← `search_queries[].language`；`regionCode` 由 Skill 从画像/句中推断（规则在 E-08 详设） |
 | **E-09** | Preflight 检查 `placesApiKeySet`（custom）或 gateway 可用；注入 `PLACES_PROVIDER`                                                                                    |
-| **E-10** | 实现 `provider.ts` 的 `gateway` 分支；**不改**工具名与 §3 JSON                                                                                                         |
+| **E-10** | ~~实现 gateway 分支~~ **无限期延后**；长期仅 `custom` |
 | **E-06** | R3 词已是合法 `textQuery`；E-07 不读 expansion 文件                                                                                                                  |
 
 

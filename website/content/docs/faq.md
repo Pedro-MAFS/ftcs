@@ -38,8 +38,9 @@ FTCS 是 AI-Utills 旗下的 Windows 桌面外贸获客智能体（Agent）。�
 
 ## 探索没有线索
 
-- **官方通道**：确认已开通官方通道且运行时正常（搜索无需单独 Key）  
+- **官方通道**：确认已开通官方通道且运行时正常（R1/R2 搜索无需单独 Key）  
 - **自定义通道**：确认 Tavily Key 有效且有配额  
+- **R3 地图发现**：确认已配置 [Places API Key](/docs/places-api-key)，且本机网络合法合规、可访问 Google 服务  
 - 确认关键词扩展已生成；社媒发现还需要带站点的关键词  
 - 探索需要一定时间；完成后到线索页刷新查看（线索页也可直接开始探索）
 
@@ -79,6 +80,16 @@ FTCS 是 AI-Utills 旗下的 Windows 桌面外贸获客智能体（Agent）。�
 - **自定义通道**：需要自备 Tavily API Key（直连 Tavily，不经官方余额）。免费用户每月约有 1000 次调用配额（以 [Tavily 官网](https://tavily.com/) 当前说明为准）。在桌面端「设置 → 搜索服务」或首次引导中粘贴 Key。  
 
 官方通道用户可直接开始探索；自定义通道用户可先完成产品画像与关键词扩展，开始探索前再补搜索 Key。
+
+<h2 id="places-api-key">R3 地图发现需要 Places API Key 吗？</h2>
+
+**R1 广撒网 / R2 社媒发现** 不需要。**R3 地图发现** 需要你在 [Google Cloud Console](https://console.cloud.google.com/apis/credentials) 自行申请 **Google Places API Key**，并启用 **Places API (New)**；费用计入你的 GCP 账号。
+
+- **官方通道与自定义通道均需自备 Places Key**（模型 / Tavily 搜索与 Places 独立；FTCS 不提供 Google 代调）。  
+- Key 填在桌面端 **设置 → 探索**，或首次引导 **步骤 2** 底部可选区块；保存后请 **重启 OpenCode**。  
+- 请求由 **本机** 直连 Google 服务，你须在 **合法合规、可访问 Google 服务** 的网络环境中使用，并遵守当地法规与 [Places API 政策](https://developers.google.com/maps/documentation/places/web-service/policies)。
+
+逐步申请说明见 **[申请 Places API Key](/docs/places-api-key)**。
 
 ## 邮件页没有草稿
 

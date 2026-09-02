@@ -295,7 +295,7 @@ X-Goog-FieldMask: id,displayName,websiteUri,formattedAddress,types
 | Skill | `discover-leads-r3`（[US-E-08 详设](US-E-08-discover-leads-r3-Skill.md)） |
 | Key | 设置页 **可选** Places Key；**仅 R3 Preflight 需要**（US-E-09） |
 | 缓存 | Text Search 与 Details 均 **24h** 本地 TTL（键见 US-E-07 §6.2）；不长期缓存整段响应到 Lead |
-| 配额 | 与 R1 Tavily 分开；官方网关用量见 US-E-10 |
+| 配额 | 与 R1 Tavily 分开；~~官方网关用量见 US-E-10~~（E-10 无限期延后，仅 BYOK） |
 
 ---
 

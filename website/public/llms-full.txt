@@ -47,4 +47,5 @@ A: 业务数据与密钥只在你电脑上，官网只做展示与下载。开�
 - https://ftcs.ai-utills.com/docs/install
 - https://ftcs.ai-utills.com/docs/workflow
 - https://ftcs.ai-utills.com/docs/faq
+- https://ftcs.ai-utills.com/docs/places-api-key
 - https://ftcs.ai-utills.com/llms.txt

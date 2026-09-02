@@ -992,8 +992,36 @@ async function onCheckUpdate(): Promise<void> {
             <h4>R3 地图发现（Google Places）</h4>
             <p class="hint-line">
               <Icon name="info" :size="12" />
-              仅在跑 R3 地图发现时需要；只跑 R1/R2 可不填。Key 来自 Google Cloud Console，须启用
-              <strong>Places API (New)</strong>；费用计入你的 GCP 结算账号。
+              仅在跑 R3 地图发现时需要；只跑 R1/R2 可不填。Key 在
+              <button
+                type="button"
+                class="text-link-btn"
+                @click="openProductLink(PRODUCT_LINKS.googleCloudCredentials)"
+              >
+                Google Cloud Console
+              </button>
+              创建，须启用 <strong>Places API (New)</strong>；费用计入你的 GCP 结算账号。
+              申请步骤见
+              <button
+                type="button"
+                class="text-link-btn"
+                @click="openProductLink(PRODUCT_LINKS.docsPlacesApiKey)"
+              >
+                帮助文档
+              </button>
+              。
+            </p>
+            <p class="hint-line">
+              Places 请求由<strong>本机</strong>直连 Google 服务（不经 FTCS 服务器）。你须在
+              <strong>合法合规、可访问 Google 服务</strong>的网络环境中使用，并遵守当地法规与
+              <button
+                type="button"
+                class="text-link-btn"
+                @click="openProductLink(PRODUCT_LINKS.googlePlacesPolicies)"
+              >
+                Google Places 政策
+              </button>
+              。
             </p>
             <label class="field-label">Google Places API Key</label>
             <div class="input-row">

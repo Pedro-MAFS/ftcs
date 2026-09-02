@@ -50,6 +50,7 @@ const keysError = ref('')
 const authHint = ref('')
 const showApiKey = ref(false)
 const showTavilyKey = ref(false)
+const showPlacesKey = ref(false)
 const snapshot = ref<SettingsSnapshot | null>(null)
 const installingNode = ref(false)
 const nodeInstallProgress = ref('')
@@ -81,6 +82,7 @@ const form = reactive({
   customSmallModelId: '',
   searchProvider: 'tavily',
   tavilyApiKey: '',
+  placesApiKey: '',
   searchDailyLimit: 50,
 })
 
@@ -119,9 +121,9 @@ const header = computed(() => {
   if (phase.value === 'keys') {
     return {
       eyebrow: 'FTCS 首次设置 · 步骤 2 / 3',
-      title: '选择模型通道并配置搜索',
+      title: '选择模型通道并配置密钥',
       subtitle:
-        '写入本地 workspace/.env，不会上传。官方通道经公司网关计费；自定义使用自备兼容接口。搜索 Key 用于 R1 线索探索。',
+        '写入本地 workspace/.env，不会上传。搜索 Key 用于 R1/R2；Places Key 可选，仅 R3 地图发现需要。',
     }
   }
   if (phase.value === 'tour') {
@@ -316,6 +318,7 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.smallModel = data.smallModel
   form.searchProvider = data.searchProvider
   form.tavilyApiKey = data.tavilyApiKeyMasked
+  form.placesApiKey = data.placesApiKeyMasked
   form.searchDailyLimit = data.searchDailyLimit
   if (data.channelMode === 'custom') {
     form.customModelId = data.model.includes('/')
@@ -417,6 +420,7 @@ async function onSaveKeys(andContinue: boolean): Promise<void> {
       smallModel,
       searchProvider: form.searchProvider,
       tavilyApiKey: form.tavilyApiKey,
+      placesApiKey: form.placesApiKey,
       searchDailyLimit: form.searchDailyLimit,
     })
     applySnapshot(result.settings)
@@ -885,6 +889,62 @@ onMounted(() => {
                   常见问题
                 </button>
                 。
+              </p>
+            </div>
+
+            <div class="onboarding__section-head">
+              <p class="onboarding__section-label">
+                Google Places API Key · R3 地图发现（可选）
+              </p>
+              <button
+                type="button"
+                class="help-link-btn"
+                title="如何申请 Places API Key？"
+                aria-label="如何申请 Places API Key？"
+                @click="openExternal(PRODUCT_LINKS.docsPlacesApiKey)"
+              >
+                <Icon name="help-circle" :size="14" />
+              </button>
+            </div>
+            <div class="onboarding__card">
+              <div class="onboarding__key-row">
+                <input
+                  v-model="form.placesApiKey"
+                  class="text-input"
+                  :type="showPlacesKey ? 'text' : 'password'"
+                  :placeholder="
+                    snapshot?.placesApiKeySet ? '已配置（修改则覆盖）' : 'AIza…（可选）'
+                  "
+                />
+                <button
+                  type="button"
+                  class="btn-secondary btn-sm"
+                  @click="showPlacesKey = !showPlacesKey"
+                >
+                  {{ showPlacesKey ? '隐藏' : '显示' }}
+                </button>
+              </div>
+              <p class="hint-line">
+                仅 R3 地图发现需要；R1/R2 可不填。Key 在
+                <button
+                  type="button"
+                  class="onboarding__link"
+                  @click="openExternal(PRODUCT_LINKS.googleCloudCredentials)"
+                >
+                  Google Cloud Console
+                </button>
+                创建，须启用 <strong>Places API (New)</strong>。申请步骤见
+                <button
+                  type="button"
+                  class="onboarding__link"
+                  @click="openExternal(PRODUCT_LINKS.docsPlacesApiKey)"
+                >
+                  帮助文档
+                </button>
+                。
+              </p>
+              <p class="hint-line">
+                请求由本机直连 Google 服务。你须在<strong>合法合规、可访问 Google 服务</strong>的网络环境中使用，并遵守当地法规与 Google 政策。与模型 / 搜索通道独立。
               </p>
             </div>
             <p v-if="keysMessage" class="onboarding__ok">{{ keysMessage }}</p>

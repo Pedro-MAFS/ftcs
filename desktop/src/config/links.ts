@@ -9,6 +9,18 @@ export const PRODUCT_LINKS = {
   docsFaqModel: `${PRODUCT_BASE_URL}/docs/faq#model-provider`,
   /** 常见问题：什么是 Tavily 搜索服务 */
   docsFaqSearch: `${PRODUCT_BASE_URL}/docs/faq#tavily-search`,
+  /** 帮助：申请 Google Places API Key（R3 地图发现） */
+  docsPlacesApiKey: `${PRODUCT_BASE_URL}/docs/places-api-key`,
+  /** 常见问题：Places API Key 与 R3 */
+  docsFaqPlaces: `${PRODUCT_BASE_URL}/docs/faq#places-api-key`,
+  /** Google Cloud Console 首页 */
+  googleCloudConsole: 'https://console.cloud.google.com/',
+  /** 凭据（创建 API Key） */
+  googleCloudCredentials: 'https://console.cloud.google.com/apis/credentials',
+  /** 启用 Places API (New) */
+  googlePlacesApiLibrary: 'https://console.cloud.google.com/apis/library/places.googleapis.com',
+  /** Places API 政策 */
+  googlePlacesPolicies: 'https://developers.google.com/maps/documentation/places/web-service/policies',
   download: `${PRODUCT_BASE_URL}/download/`,
   /** 版本发布日志（可带 ?from=&to= 对照区间） */
   changelog: `${PRODUCT_BASE_URL}/changelog/`,

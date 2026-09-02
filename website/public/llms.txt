@@ -32,4 +32,5 @@ FTCS 是专为外贸企业打造的本机 AI 获客系统 / 智能体。把官�
 - Download: https://ftcs.ai-utills.com/download
 - Docs: https://ftcs.ai-utills.com/docs
 - FAQ: https://ftcs.ai-utills.com/docs/faq
+- Places API Key (R3): https://ftcs.ai-utills.com/docs/places-api-key
 - Full text: https://ftcs.ai-utills.com/llms-full.txt

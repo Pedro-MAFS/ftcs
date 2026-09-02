@@ -70,7 +70,7 @@
 |------|------|
 | 探索页「开始 R3」、`buildDiscoverLeadsR3Prompt`、任务列表标 R3 | US-E-09 |
 | Preflight 弹窗、未配 Key 时隐藏 MCP | US-E-09 |
-| `provider=gateway` Places（MCP 已占位） | US-E-10 |
+| `provider=gateway` Places（MCP 占位，**E-10 无限期延后**） | 不实现 |
 | Geocoding / `locationBias` 封装 | 缓做；E-08 用 `textQuery` + `regionCode` |
 | 设置页暴露 `pageSize` / N | 已确认：Skill 常量；与 E-07 讨论结论一致 |
 | 扩展 `ExplorationRun.api_usage` 的 Places 计数 | 缓做；汇报中口头统计 Places 调用次数 |

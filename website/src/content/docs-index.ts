@@ -34,4 +34,11 @@ export const docsIndex: DocMeta[] = [
     description:
       'FTCS 外贸获客智能体是什么、和其他获客方式或领英开发有何不同、数据是否上传、当前能否发信，以及安装与探索排障。',
   },
+  {
+    slug: 'places-api-key',
+    title: '申请 Places API Key',
+    seoTitle: 'Google Places API Key 申请 | R3 地图发现',
+    description:
+      '在 Google Cloud Console 启用 Places API (New)、创建 API Key 并配置到 FTCS 桌面端，用于 R3 地图发现；含网络合规说明。',
+  },
 ]

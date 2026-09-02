@@ -31,6 +31,7 @@ export default defineConfig({
         '/docs/install',
         '/docs/workflow',
         '/docs/faq',
+        '/docs/places-api-key',
       ]
     },
   } satisfies ViteSSGOptions,

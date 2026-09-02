@@ -38,7 +38,7 @@ test('resolvePlacesStart: official channel with BYOK allows custom provider', ()
   assert.equal(result.provider, 'custom')
 })
 
-test('resolvePlacesStart: official channel without key blocks until E-10', () => {
+test('resolvePlacesStart: official channel without key requires BYOK', () => {
   const result = resolvePlacesStart({
     channelMode: 'official',
     placesApiKeySet: false,
@@ -46,10 +46,10 @@ test('resolvePlacesStart: official channel without key blocks until E-10', () =>
     officialProvisioned: true,
   })
   assert.equal(result.ok, false)
-  assert.match(result.detail, /官方地图通道尚未就绪/)
+  assert.match(result.detail, /BYOK|Places API Key/)
 })
 
-test('isPlacesGatewayReady is false before E-10', () => {
+test('isPlacesGatewayReady stays false while E-10 deferred', () => {
   assert.equal(
     isPlacesGatewayReady({
       channelMode: 'official',
