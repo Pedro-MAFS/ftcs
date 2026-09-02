@@ -56,7 +56,7 @@ export const siteConfig: SiteConfig = {
   productFullName: '外贸获客系统',
   agentName: '外贸获客智能体',
   tagline: '把产品信息变成可行动的外贸线索与开发信草稿',
-  version: '0.5.1',
+  version: '0.5.2',
   siteUrl: 'https://ftcs.ai-utills.com',
   brandSiteUrl: 'https://ai-utills.com',
   brandSiteName: 'AI-Utills',
@@ -78,7 +78,7 @@ export const siteConfig: SiteConfig = {
     {
       id: 'setup',
       label: 'Windows 安装包',
-      filename: '外贸获客-Setup-0.5.1.exe',
+      filename: '外贸获客-Setup-0.5.2.exe',
       note: 'NSIS 安装程序',
       mirrors: [
         {
@@ -86,19 +86,19 @@ export const siteConfig: SiteConfig = {
           label: 'Gitee 下载',
           badge: '国内更快',
           primary: true,
-          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.1/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Setup-0.5.1.exe',
+          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.2/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Setup-0.5.2.exe',
         },
         {
           id: 'github',
           label: 'GitHub 下载',
-          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.1/foreign-trade-Setup-0.5.1.exe',
+          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.2/foreign-trade-Setup-0.5.2.exe',
         },
       ],
     },
     {
       id: 'portable',
       label: 'Windows 便携版',
-      filename: '外贸获客-Portable-0.5.1.exe',
+      filename: '外贸获客-Portable-0.5.2.exe',
       note: '解压即用，无需安装',
       mirrors: [
         {
@@ -106,12 +106,12 @@ export const siteConfig: SiteConfig = {
           label: 'Gitee 下载',
           badge: '国内更快',
           primary: true,
-          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.1/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Portable-0.5.1.exe',
+          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.2/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%A2-Portable-0.5.2.exe',
         },
         {
           id: 'github',
           label: 'GitHub 下载',
-          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.1/foreign-trade-Portable-0.5.1.exe',
+          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.2/foreign-trade-Portable-0.5.2.exe',
         },
       ],
     },
@@ -123,7 +123,7 @@ export const seoCopy = {
   home: {
     title: 'FTCS 外贸获客系统 | AI获客智能体（Agent）与开发信草稿',
     description:
-      'FTCS 是专为外贸企业打造的本机 AI 获客系统（智能体 / Agent）。把官网与说明书交给它，生成产品与买家画像，在公开网页广撒网，也可按社媒公开摘要发现公司并核对官网，再评分去重、写出可改稿的开发信草稿。数据与密钥留在本机。',
+      'FTCS 是专为外贸企业打造的本机 AI 获客系统（智能体 / Agent）。把官网与说明书交给它，生成产品与买家画像，在公开网页广撒网，也可按社媒公开摘要或 Google 地图发现公司并核对官网，再评分去重、写出可改稿的开发信草稿。数据与密钥留在本机。',
     path: '/',
   },
   download: {

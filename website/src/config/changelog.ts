@@ -13,6 +13,18 @@ export const CHANGELOG_STARTED_AT = '0.5.0'
  */
 export const changelogReleases: ChangelogRelease[] = [
   {
+    version: '0.5.2',
+    releasedAt: '2026-09-03',
+    title: 'R3 地图发现',
+    notes: [
+      '探索新增 R3 地图发现：用 Google Places 按城市与品类查找本地商户，补全官网并核对后写入线索',
+      'R3 须自备 Google Places API Key（设置 → 探索或首次引导可选填写）；官网帮助有图文申请教程',
+      '扩展关键词会同步生成 R3 地图发现词；探索页「开始 R3」前会 Preflight 检查配置',
+      '官方通道登录失效时可感知并提示；换号登录会提示重置网关凭证',
+      'Agent 聊天框展示模型调用失败与重试原因，持续重试两分钟后自动中止',
+    ],
+  },
+  {
     version: '0.5.1',
     releasedAt: '2026-08-26',
     title: '社媒发现',
