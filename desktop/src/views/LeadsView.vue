@@ -488,7 +488,8 @@ watch(agentStatus, (status) => {
   if (
     (status === 'done' || status === 'error') &&
     (agentSkill.value === 'discover-leads' ||
-      agentSkill.value === 'discover-leads-r2')
+      agentSkill.value === 'discover-leads-r2' ||
+      agentSkill.value === 'discover-leads-r3')
   ) {
     void refreshLeads()
   }

@@ -1200,6 +1200,49 @@ function registerIpcHandlers(): void {
     }
   })
 
+  ipcMain.handle(IPC.EXPLORATION_START_R3, async (event, input: DiscoverLeadsInput) => {
+    try {
+      const productId = input?.productId
+      if (!productId || typeof productId !== 'string') {
+        return { ok: false, message: '缺少 productId' }
+      }
+      const preflight = await gateAgentStart('discover-leads-r3')
+      if (!preflight.ok) {
+        return { ok: false, message: preflight.message }
+      }
+
+      const sender = event.sender
+      void getAgentRunner()
+        .runDiscoverLeads(
+          productId,
+          (payload) => emitAgentEvent(sender, payload),
+          {
+            channel: 'r3',
+            maxQueries: input.maxQueries,
+          },
+        )
+        .catch((err) => {
+          emitAgentEvent(sender, {
+            type: 'done',
+            ok: false,
+            productId,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        })
+
+      return {
+        ok: true,
+        message: `正在为 ${productId} 启动 R3 地图发现…`,
+        productId,
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
   ipcMain.handle(IPC.PROFILE_ABORT, async () => {
     await getAgentRunner().abortCurrent()
     return { ok: true }

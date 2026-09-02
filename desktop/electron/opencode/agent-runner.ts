@@ -124,7 +124,7 @@ function buildExpandKeywordsPrompt(productId: string): string {
     '2. 由你直接生成五维关键词与 30～50 条 search_queries（覆盖 ≥4 维）。R1 占总数 ≥60%，普通产品/场景/买家/地理/竞品替代句，不要 site_id。R2 只给当前启用站点出词，每条必须带 site_id，query 禁止 site: / intitle: / inurl: / filetype:。R3 地图发现 6～12 条，round=R3，须含城市/区域 + 品类/场景，不要 site_id，query 同样禁止上述运算符。不要 R4。禁止调用 keywords_expand。',
     '3. 调用 lead-store.keywords_save 保存完整 expansion；若校验失败则修正后重试。',
     '4. 可用 keywords_get 核对 stats；不足则补充后再 save。抽查 R2 均有 site_id；by_round.R3 在 6～12（total≥40 时）；无 R4。',
-    '5. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例（含 1～2 条 R3；R2 样例请带 site_id）、下一步建议（探索页「开始 R1」或「开始 R2」；R3 执行尚未开通）。',
+    '5. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例（含 1～2 条 R3；R2 样例请带 site_id）、下一步建议（探索页「开始 R1」「开始 R2」或「开始 R3」）。',
     '',
     `输出路径：data/keywords/${productId}/expansion.json`,
   ].join('\n')
@@ -166,6 +166,30 @@ function buildDraftOutreachPrompt(
     '4. 用简短中文汇报：生成数量、跳过数量、每条公司名/收件邮箱/short subject、草稿路径；提醒人工审核后再发送。',
     '',
     `输出路径：data/emails/{lead_id}/draft.json 、 data/emails/{lead_id}/draft.md`,
+  ].join('\n')
+}
+
+function buildDiscoverLeadsR3Prompt(
+  productId: string,
+  maxQueries: number,
+): string {
+  return [
+    '请严格按 skill `discover-leads-r3` 执行 R3 地图发现。',
+    '',
+    `产品 ID：${productId}`,
+    `最多搜索词 max_queries：${maxQueries}`,
+    '',
+    '执行要求：',
+    '1. lead-store.product_get 确认画像 ready；lead-store.keywords_get 读取 search_queries。',
+    '2. search-api.search_usage 确认当日配额未用尽（官方通道以余额为准）。',
+    '3. lead-store.exploration_start({ product_id, rounds: ["R3"] })，记住 run_id。',
+    '4. 只跑 round=R3 且无 site_id 的词，按 priority 取前 max_queries 条。',
+    '5. 对每个词：places_text_search(pageSize=20) → 过滤 → place_details(≤15)；无官网则 Tavily search_web 补搜；chrome 只打开公司官网，对照画像判断是否目标客户，通过才 lead_append_raw（round=R3，run_id 必填，snippet 以「发现：place_id=」开头）。禁止打开 Google 地图。',
+    '6. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。全程未通过官网判断也允许 completed 且 0 条线索。',
+    '7. 用简短中文汇报：run_id、R3 词数、Places Search/Details 次数、Tavily 补搜/官网打开次数、线索数、跳过原因、3～5 条样例或「无新线索」、下一步 score-and-dedupe。',
+    '',
+    `线索输出：data/leads/${productId}/raw/R3.jsonl`,
+    `运行记录：data/exploration/${productId}/runs/`,
   ].join('\n')
 }
 
@@ -1423,7 +1447,11 @@ export class AgentRunController {
   async runDiscoverLeads(
     productId: string,
     emit: AgentEventSink,
-    options?: { rounds?: string[]; maxQueries?: number; channel?: 'r1' | 'r2' },
+    options?: {
+      rounds?: string[]
+      maxQueries?: number
+      channel?: 'r1' | 'r2' | 'r3'
+    },
   ): Promise<{ ok: boolean; message: string; explorationRun?: ExplorationRun }> {
     if (this.running) {
       throw new Error('已有 Agent 任务在运行，请稍候或先中止')
@@ -1447,19 +1475,36 @@ export class AgentRunController {
       throw new Error('尚未扩展关键词，请先在画像页「新建探索任务」')
     }
 
-    const isR2 = options?.channel === 'r2'
-    const skillName = isR2 ? 'discover-leads-r2' : 'discover-leads'
-    const roundName = isR2 ? 'R2 社媒发现' : 'R1 广撒网'
-    const rounds = isR2 ? ['R2'] : ['R1']
-    const availableCount = isR2
-      ? expansion.search_queries.filter(isEligibleR2Query).length
-      : expansion.search_queries.filter((q) => String(q.round).toUpperCase() === 'R1')
-          .length
+    const channel = options?.channel ?? 'r1'
+    const isR2 = channel === 'r2'
+    const isR3 = channel === 'r3'
+    const skillName = isR3
+      ? 'discover-leads-r3'
+      : isR2
+        ? 'discover-leads-r2'
+        : 'discover-leads'
+    const roundName = isR3
+      ? 'R3 地图发现'
+      : isR2
+        ? 'R2 社媒发现'
+        : 'R1 广撒网'
+    const rounds = isR3 ? ['R3'] : isR2 ? ['R2'] : ['R1']
+    const availableCount = isR3
+      ? expansion.search_queries.filter(
+          (q) =>
+            String(q.round).toUpperCase() === 'R3' && !String(q.site_id || '').trim(),
+        ).length
+      : isR2
+        ? expansion.search_queries.filter(isEligibleR2Query).length
+        : expansion.search_queries.filter((q) => String(q.round).toUpperCase() === 'R1')
+            .length
     if (availableCount === 0) {
       throw new Error(
-        isR2
-          ? 'expansion.json 中没有带站点的 R2 搜索词，请重新扩展关键词'
-          : 'expansion.json 中没有 R1 轮次的搜索词',
+        isR3
+          ? 'expansion.json 中没有 R3 地图发现词，请重新扩展关键词'
+          : isR2
+            ? 'expansion.json 中没有带站点的 R2 搜索词，请重新扩展关键词'
+            : 'expansion.json 中没有 R1 轮次的搜索词',
       )
     }
     // 未传 maxQueries 时按当前轮次可用词数全量执行（不再默认截断为 10）
@@ -1514,9 +1559,11 @@ export class AgentRunController {
       })
     }
 
-    const promptText = isR2
-      ? buildDiscoverLeadsR2Prompt(productId, maxQueries)
-      : buildDiscoverLeadsPrompt(productId, { rounds, maxQueries })
+    const promptText = isR3
+      ? buildDiscoverLeadsR3Prompt(productId, maxQueries)
+      : isR2
+        ? buildDiscoverLeadsR2Prompt(productId, maxQueries)
+        : buildDiscoverLeadsPrompt(productId, { rounds, maxQueries })
     this.attachTimeline(timeline, promptText)
     timeline.reset()
     timeline.addPrefix({

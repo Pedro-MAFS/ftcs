@@ -292,7 +292,7 @@ X-Goog-FieldMask: id,displayName,websiteUri,formattedAddress,types
 |----|------|
 | MCP | **places-api**：`places_text_search` / `place_details` — 详设 [US-E-07-Places-MCP自定义Key.md](US-E-07-Places-MCP自定义Key.md) |
 | Provider | **`custom`**（BYOK 直连，**Must 首发**）· **`gateway`**（token 网关，**Should，优先级低**） |
-| Skill | `discover-leads-r3`（US-E-08） |
+| Skill | `discover-leads-r3`（[US-E-08 详设](US-E-08-discover-leads-r3-Skill.md)） |
 | Key | 设置页 **可选** Places Key；**仅 R3 Preflight 需要**（US-E-09） |
 | 缓存 | Text Search 与 Details 均 **24h** 本地 TTL（键见 US-E-07 §6.2）；不长期缓存整段响应到 Lead |
 | 配额 | 与 R1 Tavily 分开；官方网关用量见 US-E-10 |
@@ -304,7 +304,7 @@ X-Goog-FieldMask: id,displayName,websiteUri,formattedAddress,types
 | 参数 | 候选 |
 |------|------|
 | `pageSize` | 20（首发） |
-| `max_details_per_keyword` | 10 / 15 / 20（spike 对比） |
+| `max_details_per_keyword` | **15**（E-08 详设冻结；预研曾候选 10/15/20） |
 | 是否翻页 | 首发 **否** |
 | `languageCode` / `regionCode` / `locationBias` | 以德区样本为准 |
 | `types` 黑名单 | spike 后定（如 `gas_station`） |

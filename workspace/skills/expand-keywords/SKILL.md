@@ -116,7 +116,7 @@ outputs:
 - 产品 ID 与保存路径
 - 总查询数与各轮次/维度分布
 - 每个维度 2～3 条代表性 `search_queries`（样例须含 **1～2 条 R3**）
-- 下一步建议：探索页「开始 R1」（`discover-leads`）或「开始 R2」（`discover-leads-r2`）；R3 可在探索页预览「R3 地图发现」，**执行 R3 尚未开通**（需后续 E-09）。
+- 下一步建议：探索页「开始 R1」（`discover-leads`）、「开始 R2」（`discover-leads-r2`）或「开始 R3」（`discover-leads-r3`）。
 
 ## 输出要求
 
@@ -193,4 +193,4 @@ outputs:
 ## 流水线
 
 - 上一步：`extract-product-profile`
-- 下一步：`discover-leads`（默认 R1）；R2 用 `discover-leads-r2`
+- 下一步：`discover-leads`（R1）；R2 用 `discover-leads-r2`；R3 用 `discover-leads-r3`

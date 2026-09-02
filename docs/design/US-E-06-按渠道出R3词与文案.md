@@ -56,7 +56,7 @@
 | R3 探索执行、写 `raw/R3.jsonl` | US-E-08 |
 | 「开始 R3」、Places Key、Preflight | US-E-09 / E-07 |
 | R4 出词 | §5.9 评审后 |
-| `max_details_per_keyword`、FieldMask | 预研 + E-08 |
+| `max_details_per_keyword`、FieldMask | 预研 + [E-08](US-E-08-discover-leads-r3-Skill.md) |
 | 探索页新增 R3 按钮占位 | E-09 再加 |
 
 ---

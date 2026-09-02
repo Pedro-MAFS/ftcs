@@ -1,11 +1,21 @@
 import { getSettingsSnapshot } from '../settings/settings-service'
 import type { OpenCodeRuntime } from '../opencode/runtime'
+import {
+  isPlacesGatewayReady,
+  resolvePlacesStart,
+  type PlacesStartProvider,
+  type PlacesStartResolution,
+} from './places-start'
+
+export type { PlacesStartProvider, PlacesStartResolution }
+export { isPlacesGatewayReady, resolvePlacesStart }
 
 export type AgentPreflightKind =
   | 'extract-profile'
   | 'expand-keywords'
   | 'discover-leads'
   | 'discover-leads-r2'
+  | 'discover-leads-r3'
   | 'score-and-dedupe'
   | 'draft-email'
 
@@ -28,15 +38,24 @@ export interface AgentPreflightContext {
 }
 
 function needsSearch(kind: AgentPreflightKind): boolean {
-  return kind === 'discover-leads' || kind === 'discover-leads-r2'
+  return (
+    kind === 'discover-leads' ||
+    kind === 'discover-leads-r2' ||
+    kind === 'discover-leads-r3'
+  )
 }
 
 function needsChrome(kind: AgentPreflightKind): boolean {
   return (
     kind === 'extract-profile' ||
     kind === 'discover-leads' ||
-    kind === 'discover-leads-r2'
+    kind === 'discover-leads-r2' ||
+    kind === 'discover-leads-r3'
   )
+}
+
+function needsPlaces(kind: AgentPreflightKind): boolean {
+  return kind === 'discover-leads-r3'
 }
 
 function mcpOk(
@@ -185,6 +204,23 @@ export async function runAgentPreflight(
       detail: chrome.ok
         ? chrome.detail
         : `${chrome.detail || '未连接'}。请确认本机已安装 Google Chrome，并在设置中查看 MCP 状态`,
+    })
+  }
+
+  if (needsPlaces(kind)) {
+    const places = resolvePlacesStart(settings)
+    checks.push({
+      id: 'places',
+      label: 'Google Places（R3）',
+      ok: places.ok,
+      detail: places.detail,
+    })
+    const placesApi = mcpOk(mcpServers, 'places-api')
+    checks.push({
+      id: 'mcp-places-api',
+      label: 'MCP places-api',
+      ok: placesApi.ok,
+      detail: placesApi.detail,
     })
   }
 

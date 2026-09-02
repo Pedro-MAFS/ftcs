@@ -8,7 +8,7 @@ export const EXPLORE_ROUND_STORAGE_KEY = 'ftcs.explore.startRound'
 function readSavedRound(): ExploreStartRound {
   try {
     const saved = localStorage.getItem(EXPLORE_ROUND_STORAGE_KEY)
-    if (saved === 'R1' || saved === 'R2') return saved
+    if (saved === 'R1' || saved === 'R2' || saved === 'R3') return saved
   } catch {
     // ignore
   }
@@ -34,6 +34,7 @@ export function useExploreStart(options?: {
   const exploreRound = ref<ExploreStartRound>(readSavedRound())
   const startingR1 = ref(false)
   const startingR2 = ref(false)
+  const startingR3 = ref(false)
 
   const extraBusy = computed(() => Boolean(toValue(options?.extraBusy)))
 
@@ -53,13 +54,21 @@ export function useExploreStart(options?: {
         .length,
   )
 
+  const r3QueryCount = computed(
+    () =>
+      allQueries.value.filter(
+        (q) => q.round === 'R3' && !String(q.site_id || '').trim(),
+      ).length,
+  )
+
   const r2LegacyCount = computed(
     () =>
       allQueries.value.filter((q) => q.round === 'R2' && !q.site_id?.trim()).length,
   )
 
   const isLaunching = computed(
-    () => startingR1.value || startingR2.value || extraBusy.value,
+    () =>
+      startingR1.value || startingR2.value || startingR3.value || extraBusy.value,
   )
 
   const canStartR1 = computed(() => {
@@ -82,6 +91,16 @@ export function useExploreStart(options?: {
     )
   })
 
+  const canStartR3 = computed(() => {
+    return (
+      !!activeProductId.value &&
+      hasKeywordsReady.value &&
+      r3QueryCount.value > 0 &&
+      !generating.value &&
+      !isLaunching.value
+    )
+  })
+
   const startR1DisabledReason = computed(() => {
     if (generating.value || isLaunching.value) return '已有任务在运行'
     if (!hasKeywordsReady.value) return '请先完成关键词扩展'
@@ -97,25 +116,39 @@ export function useExploreStart(options?: {
     return '没有可用的 R2 词。请在设置页启用社媒站点后重新扩展'
   })
 
-  const canStartSelected = computed(() =>
-    exploreRound.value === 'R2' ? canStartR2.value : canStartR1.value,
-  )
+  const startR3DisabledReason = computed(() => {
+    if (generating.value || isLaunching.value) return '已有任务在运行'
+    if (!hasKeywordsReady.value) return '请先完成关键词扩展'
+    if (r3QueryCount.value > 0) return ''
+    return '当前没有 R3 地图发现词，请重新扩展关键词'
+  })
 
-  const startDisabledReason = computed(() =>
-    exploreRound.value === 'R2'
-      ? startR2DisabledReason.value
-      : startR1DisabledReason.value,
-  )
+  const canStartSelected = computed(() => {
+    if (exploreRound.value === 'R3') return canStartR3.value
+    if (exploreRound.value === 'R2') return canStartR2.value
+    return canStartR1.value
+  })
+
+  const startDisabledReason = computed(() => {
+    if (exploreRound.value === 'R3') return startR3DisabledReason.value
+    if (exploreRound.value === 'R2') return startR2DisabledReason.value
+    return startR1DisabledReason.value
+  })
 
   const isDiscovering = computed(
     () =>
       generating.value &&
       (agentSkill.value === 'discover-leads' ||
-        agentSkill.value === 'discover-leads-r2'),
+        agentSkill.value === 'discover-leads-r2' ||
+        agentSkill.value === 'discover-leads-r3'),
   )
 
   const isStartingExplore = computed(
-    () => startingR1.value || startingR2.value || isDiscovering.value,
+    () =>
+      startingR1.value ||
+      startingR2.value ||
+      startingR3.value ||
+      isDiscovering.value,
   )
 
   watch(exploreRound, (value) => {
@@ -198,7 +231,39 @@ export function useExploreStart(options?: {
     }
   }
 
+  async function startR3(): Promise<string> {
+    if (!activeProductId.value || !window.ftcs?.startExploreR3) return ''
+    if (!canStartR3.value) return startR3DisabledReason.value
+
+    const preflightError = await ensureAgentReady('discover-leads-r3')
+    if (preflightError) return preflightError
+
+    startingR3.value = true
+    const maxQueries = resolveMaxQueries(r3QueryCount.value)
+    resetAgentForDiscoverLeads(maxQueries, 'discover-leads-r3')
+    options?.onLaunch?.()
+
+    try {
+      const res = await window.ftcs.startExploreR3({
+        productId: activeProductId.value,
+        maxQueries,
+      })
+      if (!res.ok) {
+        agentStatus.value = 'error'
+        options?.onFail?.()
+      }
+      return res.message
+    } catch (err) {
+      agentStatus.value = 'error'
+      options?.onFail?.()
+      return err instanceof Error ? err.message : String(err)
+    } finally {
+      startingR3.value = false
+    }
+  }
+
   async function startExplore(): Promise<string> {
+    if (exploreRound.value === 'R3') return startR3()
     if (exploreRound.value === 'R2') return startR2()
     return startR1()
   }
@@ -208,6 +273,7 @@ export function useExploreStart(options?: {
     hasKeywordsReady,
     r1QueryCount,
     r2QueryCount,
+    r3QueryCount,
     canStartSelected,
     startDisabledReason,
     isStartingExplore,

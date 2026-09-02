@@ -148,6 +148,14 @@ const discoveringR2Placeholder = computed(() => {
   )
 })
 
+const discoveringR3Placeholder = computed(() => {
+  return (
+    generating.value &&
+    agentSkill.value === 'discover-leads-r3' &&
+    !tasks.value.some((t) => t.status === 'running')
+  )
+})
+
 const isScoring = computed(
   () =>
     scoringLeads.value ||
@@ -239,6 +247,7 @@ const {
   hasKeywordsReady,
   r1QueryCount,
   r2QueryCount,
+  r3QueryCount,
   canStartSelected,
   startDisabledReason,
   isStartingExplore,
@@ -390,7 +399,7 @@ onUnmounted(() => {
       <div class="main-pane__actions">
         <label
           class="explore-max-queries"
-          title="留空表示执行该次开始的轮次全部词。开始 R1 按 R1 词计数，开始 R2 按带站点的 R2 词计数。"
+          title="留空表示执行该次开始的轮次全部词。开始 R1 按 R1 词计数，开始 R2 按带站点的 R2 词计数，开始 R3 按 R3 地图发现词计数。"
         >
           <span class="muted">最多词数</span>
           <input
@@ -399,8 +408,8 @@ onUnmounted(() => {
             min="1"
             step="1"
             :placeholder="
-              r1QueryCount || r2QueryCount
-                ? `R1 ${r1QueryCount} · R2 ${r2QueryCount}`
+              r1QueryCount || r2QueryCount || r3QueryCount
+                ? `R1 ${r1QueryCount} · R2 ${r2QueryCount} · R3 ${r3QueryCount}`
                 : '全部'
             "
             :value="maxQueriesLimit ?? ''"
@@ -490,6 +499,23 @@ onUnmounted(() => {
               <span class="explore-status is-accent">启动中</span>
             </div>
             <p>正在调用 discover-leads-r2，创建探索运行记录…</p>
+          </div>
+        </button>
+        <div class="explore-task__body">
+          <div class="explore-progress">
+            <div class="explore-progress__bar is-indeterminate" />
+          </div>
+        </div>
+      </div>
+
+      <div v-if="discoveringR3Placeholder" class="explore-task is-expanded">
+        <button type="button" class="explore-task__head" disabled>
+          <div class="explore-task__title-block">
+            <div class="explore-task__title-row">
+              <strong>R3 地图发现</strong>
+              <span class="explore-status is-accent">启动中</span>
+            </div>
+            <p>正在调用 discover-leads-r3，创建探索运行记录…</p>
           </div>
         </button>
         <div class="explore-task__body">

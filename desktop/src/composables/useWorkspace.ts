@@ -168,7 +168,9 @@ function updatePipelineFromProfile(): void {
     agentStatus.value === 'running' && agentSkill.value === 'expand-keywords'
   const exploring =
     agentStatus.value === 'running' &&
-    (agentSkill.value === 'discover-leads' || agentSkill.value === 'discover-leads-r2')
+    (agentSkill.value === 'discover-leads' ||
+      agentSkill.value === 'discover-leads-r2' ||
+      agentSkill.value === 'discover-leads-r3')
   const scoring =
     agentStatus.value === 'running' && agentSkill.value === 'score-and-dedupe'
   const drafting =
