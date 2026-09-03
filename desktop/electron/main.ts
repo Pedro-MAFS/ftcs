@@ -1248,12 +1248,6 @@ function registerIpcHandlers(): void {
     return { ok: true }
   })
 
-  ipcMain.handle(IPC.AGENT_LOAD_OLDER, async (event) => {
-    return getAgentRunner().loadOlderTimeline((payload) =>
-      emitAgentEvent(event.sender, payload),
-    )
-  })
-
   ipcMain.handle(IPC.PROFILE_GENERATE, async (event, input: ProfileGenerateInput) => {
     try {
       const preflight = await gateAgentStart('extract-profile')

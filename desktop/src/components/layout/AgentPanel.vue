@@ -8,20 +8,16 @@ const {
   agentSkill,
   agentMeta,
   agentTimeline,
-  agentHasMoreOlder,
   agentPrompt,
   agentStatus,
   generating,
   toggleTimelineExpand,
   isTimelineExpanded,
-  loadOlderAgentTimeline,
 } = useWorkspace()
 
 const timelineEl = ref<HTMLElement | null>(null)
 const composerHint = ref('')
-const loadingOlder = ref(false)
 const pinToBottom = ref(true)
-const olderHint = ref('')
 
 function kindLabel(kind: AgentTimelineItem['kind']): string {
   switch (kind) {
@@ -63,30 +59,9 @@ function onTimelineScroll(): void {
   pinToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48
 }
 
-async function loadOlder(): Promise<void> {
-  if (loadingOlder.value || !agentHasMoreOlder.value) return
-  const el = timelineEl.value
-  const prevHeight = el?.scrollHeight ?? 0
-  const prevTop = el?.scrollTop ?? 0
-  loadingOlder.value = true
-  pinToBottom.value = false
-  olderHint.value = ''
-  try {
-    const res = await loadOlderAgentTimeline()
-    if (!res.ok) olderHint.value = res.message
-    await nextTick()
-    if (el) {
-      el.scrollTop = prevTop + (el.scrollHeight - prevHeight)
-    }
-  } finally {
-    loadingOlder.value = false
-  }
-}
-
 watch(
   agentTimeline,
   async () => {
-    if (loadingOlder.value) return
     await nextTick()
     if (pinToBottom.value && timelineEl.value) {
       timelineEl.value.scrollTop = timelineEl.value.scrollHeight
@@ -114,18 +89,6 @@ watch(
         </span>
       </div>
     </div>
-
-    <div v-if="agentHasMoreOlder || loadingOlder" class="agent-panel__load-older">
-      <button
-        type="button"
-        class="tl-item__toggle"
-        :disabled="loadingOlder"
-        @click="loadOlder"
-      >
-        {{ loadingOlder ? '正在加载更早记录…' : '加载更早的记录' }}
-      </button>
-    </div>
-    <p v-if="olderHint" class="agent-panel__older-hint" role="status">{{ olderHint }}</p>
 
     <div
       ref="timelineEl"

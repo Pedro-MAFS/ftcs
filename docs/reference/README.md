@@ -2,8 +2,9 @@
 
 本目录存放 R3 / Places API 等技术预研时引用的 **第三方官方文档离线副本**，便于无网或链接变更时查阅。
 
-| 子目录 | 内容 | 在线原文 |
+| 子目录 / 文档 | 内容 | 在线原文 |
 | --- | --- | --- |
+| [opencode-events/](./opencode-events/README.md) | **OpenCode Event** 四种信封分册（Legacy / V2 / Global / Sync）+ 嵌套类型 + 触发说明 | [opencode.ai/docs/server](https://opencode.ai/docs/server/) |
 | [google-maps-platform-pricing/](google-maps-platform-pricing/) | Google Maps Platform **核心服务定价列表**（简体中文） | [developers.google.com/maps/billing-and-pricing/pricing?hl=zh-cn](https://developers.google.com/maps/billing-and-pricing/pricing?hl=zh-cn) |
 
 ## 使用说明

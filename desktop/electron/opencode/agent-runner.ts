@@ -1,4 +1,5 @@
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
+import type { Event, Message, ToolPart } from '@opencode-ai/sdk/v2/types'
 import type { BootstrapResult } from '../profile/profile-bootstrap'
 import {
   loadProfile,
@@ -55,8 +56,6 @@ export type AgentEventPayload =
       /** 整段替换时间线（权威顺序） */
       type: 'timeline'
       items: AgentTimelineItem[]
-      /** 当前会话是否还能向前翻到更早的消息 */
-      hasMoreOlder?: boolean
     }
   | {
       type: 'done'
@@ -276,7 +275,6 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-const LIVE_MESSAGE_LIMIT = 80
 const COLLAPSE_BODY_CHARS = 400
 /** 模型调用持续处于 retry 状态超过该时长则自动中止任务 */
 const RETRY_WATCHDOG_MS = 120_000
@@ -335,206 +333,52 @@ function friendlyRetryReason(raw: string): string {
   return reason
 }
 
-function normalizeMessageRows(raw: unknown): unknown[] {
-  if (Array.isArray(raw)) return raw
-  const rec = asRecord(raw)
-  if (!rec) return []
-  if (Array.isArray(rec.data)) return rec.data
-  if (Array.isArray(rec.messages)) return rec.messages
-  return []
-}
-
-function rowsToTimelineItems(
-  rows: unknown[],
-  userPrompt: string,
-): { items: AgentTimelineItem[]; messageIds: string[] } {
-  const items: AgentTimelineItem[] = []
-  const messageIds: string[] = []
-  const seenMsg = new Set<string>()
-  const promptTrimmed = userPrompt.trim()
-
-  for (const row of rows) {
-    const info = asRecord(asRecord(row)?.info) ?? asRecord(row)
-    const role = asString(info?.role)
-    const messageId = asString(info?.id) || `msg-${items.length}`
-    if (messageId && !seenMsg.has(messageId)) {
-      seenMsg.add(messageId)
-      messageIds.push(messageId)
-    }
-    const parts = Array.isArray(asRecord(row)?.parts)
-      ? (asRecord(row)!.parts as unknown[])
-      : []
-
-    if (role === 'user') {
-      const text = parts
-        .map((p) => asRecord(p))
-        .filter((p) => p && asString(p.type) === 'text' && !p.ignored)
-        .map((p) => asString(p!.text))
-        .join('\n')
-        .trim()
-      if (!text || text === promptTrimmed) continue
-      items.push({
-        id: `user-${messageId}`,
-        kind: 'user',
-        time: nowTime(),
-        title: '你的补充指令',
-        body: text,
-        collapsed: text.length > 280,
-      })
-      continue
-    }
-
-    if (role !== 'assistant') continue
-
-    // 模型调用失败（如欠费）时助手消息通常没有 parts，错误挂在 info.error 上
-    if (info?.error) {
-      items.push({
-        id: `error-${messageId}`,
-        kind: 'error',
-        time: nowTime(),
-        title: '模型调用失败',
-        body: formatMessageError(info.error),
-      })
-    }
-
-    for (const rawPart of parts) {
-      const part = asRecord(rawPart)
-      if (!part || part.ignored === true) continue
-      const partType = asString(part.type)
-      const partId = asString(part.id) || `${messageId}-${partType}-${items.length}`
-
-      if (partType === 'reasoning') {
-        const text = asString(part.text)
-        if (!text) continue
-        items.push({
-          id: `reasoning-${partId}`,
-          kind: 'reasoning',
-          time: nowTime(),
-          title: '思考',
-          body: text,
-          collapsed: text.length > COLLAPSE_BODY_CHARS,
-        })
-        continue
-      }
-
-      if (partType === 'text') {
-        const text = asString(part.text)
-        if (!text) continue
-        items.push({
-          id: `assistant-${partId}`,
-          kind: 'assistant',
-          time: nowTime(),
-          title: '模型回复',
-          body: text,
-        })
-        continue
-      }
-
-      if (partType === 'tool') {
-        const toolName = asString(part.tool) || 'tool'
-        const state = asRecord(part.state)
-        const statusRaw = asString(state?.status)
-        let status: 'running' | 'done' | 'error' = 'running'
-        if (statusRaw === 'completed') status = 'done'
-        else if (statusRaw === 'error') status = 'error'
-        const title =
-          status === 'done'
-            ? `工具 · ${toolName} · 完成`
-            : status === 'error'
-              ? `工具 · ${toolName} · 失败`
-              : `工具 · ${toolName}`
-        const detailParts: string[] = []
-        const stateTitle = asString(state?.title)
-        if (stateTitle) detailParts.push(stateTitle)
-        const input = formatJsonFull(state?.input)
-        if (input) detailParts.push(`输入:\n${input}`)
-        if (status === 'done') {
-          const out = formatJsonFull(state?.output)
-          if (out) detailParts.push(`输出:\n${out}`)
-          const meta = formatJsonFull(state?.metadata)
-          if (meta && meta !== out) detailParts.push(`其它:\n${meta}`)
-        }
-        if (status === 'error') {
-          const errText = formatJsonFull(state?.error) || asString(state?.error) || '调用失败'
-          detailParts.push(`错误:\n${errText}`)
-        }
-        const body = detailParts.join('\n\n') || '执行中…'
-        items.push({
-          id: `tool-${partId}`,
-          kind: 'tool',
-          time: nowTime(),
-          title,
-          body,
-          status,
-          collapsed: body.length > COLLAPSE_BODY_CHARS,
-        })
-      }
-    }
+function toolPartToTimelineItem(part: ToolPart): AgentTimelineItem {
+  const { state } = part
+  let status: 'running' | 'done' | 'error' = 'running'
+  if (state.status === 'completed') status = 'done'
+  else if (state.status === 'error') status = 'error'
+  const title =
+    status === 'done'
+      ? `工具 · ${part.tool} · 完成`
+      : status === 'error'
+        ? `工具 · ${part.tool} · 失败`
+        : `工具 · ${part.tool}`
+  const detailParts: string[] = []
+  if (state.status === 'running' || state.status === 'completed') {
+    if (state.title) detailParts.push(state.title)
   }
-
-  return { items, messageIds }
-}
-
-function preserveLongerBody(
-  prev: AgentTimelineItem | undefined,
-  item: AgentTimelineItem,
-): AgentTimelineItem {
-  if (!prev) return { ...item }
-  if (prev.body.length > item.body.length && prev.body.startsWith(item.body)) {
-    return { ...item, body: prev.body, time: prev.time || item.time }
+  const input = formatJsonFull(state.input)
+  if (input) detailParts.push(`输入:\n${input}`)
+  if (state.status === 'completed') {
+    const out = formatJsonFull(state.output)
+    if (out) detailParts.push(`输出:\n${out}`)
+    const meta = formatJsonFull(state.metadata)
+    if (meta && meta !== out) detailParts.push(`其它:\n${meta}`)
   }
+  if (state.status === 'error') {
+    detailParts.push(`错误:\n${state.error || '调用失败'}`)
+  }
+  const body = detailParts.join('\n\n') || '执行中…'
   return {
-    ...item,
-    time: prev.time || item.time,
-    collapsed: item.collapsed ?? prev.collapsed,
+    id: `tool-${part.id}`,
+    kind: 'tool',
+    time: nowTime(),
+    title,
+    body,
+    status,
+    collapsed: body.length > COLLAPSE_BODY_CHARS,
   }
-}
-
-function eventType(event: unknown): string {
-  return asString(asRecord(event)?.type)
-}
-
-function eventProps(event: unknown): Record<string, unknown> {
-  const root = asRecord(event)
-  if (!root) return {}
-  return asRecord(root.properties) ?? asRecord(root.data) ?? root
-}
-
-function eventSessionId(event: unknown): string {
-  const props = eventProps(event)
-  const part = asRecord(props.part)
-  return (
-    asString(props.sessionID) ||
-    asString(props.sessionId) ||
-    asString(asRecord(props.info)?.sessionID) ||
-    asString(part?.sessionID)
-  )
-}
-
-function getRequestId(event: unknown): string | null {
-  const type = eventType(event)
-  if (!type.includes('permission') || !type.includes('asked')) return null
-  const props = eventProps(event)
-  const id =
-    props.requestID ?? props.requestId ?? props.id ?? asRecord(props.permission)?.id
-  return id != null ? String(id) : null
 }
 
 /**
- * 维护有序时间线：
- * - 前缀 system / user 固定
- * - 会话消息按 OpenCode 返回顺序展开
- * - SSE 只更新已有条目正文，不打乱顺序
+ * 维护有序时间线：本地 prefix / suffix + SSE Part 快照按到达顺序插入。
  */
 class TimelineBuilder {
   private prefix: AgentTimelineItem[] = []
   private sessionItems: AgentTimelineItem[] = []
   private suffix: AgentTimelineItem[] = []
   private byId = new Map<string, AgentTimelineItem>()
-  private messageIds: string[] = []
-  private messageIdSet = new Set<string>()
-  private hasMoreOlder = false
-  private reachedOldest = false
   private lastFingerprint = ''
 
   reset(): void {
@@ -542,24 +386,7 @@ class TimelineBuilder {
     this.sessionItems = []
     this.suffix = []
     this.byId.clear()
-    this.messageIds = []
-    this.messageIdSet.clear()
-    this.hasMoreOlder = false
-    this.reachedOldest = false
     this.lastFingerprint = ''
-  }
-
-  getHasMoreOlder(): boolean {
-    return this.hasMoreOlder
-  }
-
-  setHasMoreOlder(value: boolean): void {
-    this.hasMoreOlder = value
-    if (!value) this.reachedOldest = true
-  }
-
-  oldestMessageId(): string {
-    return this.messageIds[0] ?? ''
   }
 
   addPrefix(item: AgentTimelineItem): void {
@@ -574,96 +401,24 @@ class TimelineBuilder {
     this.byId.set(item.id, item)
   }
 
-  upsertSessionItem(item: AgentTimelineItem, appendIfNew = true): void {
+  upsertSessionItem(item: AgentTimelineItem): void {
     const existing = this.byId.get(item.id)
     if (existing) {
       existing.body = item.body
       existing.title = item.title
       existing.status = item.status
+      existing.collapsed = item.collapsed ?? existing.collapsed
       existing.time = existing.time || item.time
       return
     }
-    if (!appendIfNew) return
     this.sessionItems.push(item)
     this.byId.set(item.id, item)
   }
 
-  appendText(id: string, delta: string): boolean {
-    const item = this.byId.get(id)
-    if (!item || !delta) return false
-    item.body += delta
-    return true
-  }
-
-  setText(id: string, full: string): boolean {
-    const item = this.byId.get(id)
-    if (!item) return false
-    if (item.body === full) return false
-    if (full.startsWith(item.body)) {
-      item.body = full
-      return true
-    }
-    if (item.body.startsWith(full)) return false // stale
-    item.body = full
-    return true
-  }
-
-  private rebuildById(): void {
-    this.byId = new Map()
-    for (const item of this.prefix) this.byId.set(item.id, item)
-    for (const item of this.sessionItems) this.byId.set(item.id, item)
-    for (const item of this.suffix) this.byId.set(item.id, item)
-  }
-
-  private rememberMessageIds(ids: string[], mode: 'live' | 'older'): void {
-    const fresh = ids.filter((id) => id && !this.messageIdSet.has(id))
-    if (fresh.length === 0) return
-    for (const id of fresh) this.messageIdSet.add(id)
-    if (mode === 'older') this.messageIds = [...fresh, ...this.messageIds]
-    else this.messageIds = [...this.messageIds, ...fresh]
-  }
-
-  /**
-   * 用最近一页（limit=80）覆盖「窗口内」条目并保持其顺序；
-   * 窗口外已加载的更早条目保留在前面，避免轮询冲掉翻页结果。
-   */
-  mergeLiveItems(items: AgentTimelineItem[], messageIds: string[]): void {
-    const liveIds = new Set(items.map((item) => item.id))
-    const olderKept = this.sessionItems.filter((item) => !liveIds.has(item.id))
-    const liveUpdated = items.map((item) => preserveLongerBody(this.byId.get(item.id), item))
-    this.sessionItems = [...olderKept, ...liveUpdated]
-    this.rebuildById()
-    this.rememberMessageIds(messageIds, 'live')
-    if (!this.reachedOldest && messageIds.length >= LIVE_MESSAGE_LIMIT) {
-      this.hasMoreOlder = true
-    }
-  }
-
-  /** 把更早一页插到会话段前面。返回新出现的条目数。 */
-  prependOlderItems(
-    items: AgentTimelineItem[],
-    messageIds: string[],
-    pageSize: number,
-  ): number {
-    const freshItems = items
-      .filter((item) => !this.byId.has(item.id))
-      .map((item) => ({ ...item }))
-    this.sessionItems = [...freshItems, ...this.sessionItems]
-    this.rebuildById()
-    const beforeCount = this.messageIdSet.size
-    this.rememberMessageIds(messageIds, 'older')
-    const addedIds = this.messageIdSet.size - beforeCount
-    if (pageSize === 0 || pageSize < LIVE_MESSAGE_LIMIT || addedIds === 0) {
-      this.reachedOldest = true
-      this.hasMoreOlder = false
-    } else {
-      this.hasMoreOlder = true
-    }
-    return freshItems.length
-  }
-
-  has(id: string): boolean {
-    return this.byId.has(id)
+  removeSessionItem(id: string): void {
+    const idx = this.sessionItems.findIndex((x) => x.id === id)
+    if (idx >= 0) this.sessionItems.splice(idx, 1)
+    this.byId.delete(id)
   }
 
   snapshot(): AgentTimelineItem[] {
@@ -672,12 +427,11 @@ class TimelineBuilder {
     }))
   }
 
-  /** 内容有变化才返回 items，否则 null */
   emitIfChanged(): AgentTimelineItem[] | null {
     const items = this.snapshot()
-    const fingerprint = `${this.hasMoreOlder ? 1 : 0}#${items
+    const fingerprint = items
       .map((i) => `${i.id}|${i.status ?? ''}|${i.body.length}|${i.title}`)
-      .join('||')}`
+      .join('||')
     if (fingerprint === this.lastFingerprint) return null
     this.lastFingerprint = fingerprint
     return items
@@ -689,74 +443,17 @@ export class AgentRunController {
   private sessionId: string | null = null
   private running = false
   private timeline: TimelineBuilder | null = null
-  private timelineUserPrompt = ''
-  private timelineIo: Promise<void> = Promise.resolve()
   /** 看门狗自动中止的原因（模型持续重试不可用）；非空则中止分支按失败展示 */
   private autoAbortReason: string | null = null
+  /** session.error / message.updated.info.error 的可读文案，供任务结束读产物失败时使用 */
+  private lastModelError: string | null = null
 
   constructor(private readonly getClient: () => OpencodeClient | null) {}
 
-  private attachTimeline(timeline: TimelineBuilder, userPrompt: string): void {
+  private attachTimeline(timeline: TimelineBuilder): void {
     this.timeline = timeline
-    this.timelineUserPrompt = userPrompt
     this.autoAbortReason = null
-  }
-
-  private enqueueTimelineIo<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.timelineIo.then(fn, fn)
-    this.timelineIo = run.then(
-      () => undefined,
-      () => undefined,
-    )
-    return run
-  }
-
-  async loadOlderTimeline(
-    emit: AgentEventSink,
-  ): Promise<{ ok: boolean; hasMoreOlder: boolean; message: string }> {
-    const client = this.getClient()
-    const timeline = this.timeline
-    const sessionId = this.sessionId
-    if (!client || !timeline || !sessionId) {
-      return { ok: false, hasMoreOlder: false, message: '当前没有可翻页的会话' }
-    }
-    const before = timeline.oldestMessageId()
-    if (!before) {
-      timeline.setHasMoreOlder(false)
-      emit({ type: 'timeline', items: timeline.snapshot(), hasMoreOlder: false })
-      return { ok: true, hasMoreOlder: false, message: '没有更早的记录' }
-    }
-
-    try {
-      await this.enqueueTimelineIo(async () => {
-        const res = await client.session.messages({
-          sessionID: sessionId,
-          limit: LIVE_MESSAGE_LIMIT,
-          before,
-        })
-        const rows = normalizeMessageRows(res.data)
-        const parsed = rowsToTimelineItems(rows, this.timelineUserPrompt)
-        timeline.prependOlderItems(parsed.items, parsed.messageIds, rows.length)
-        emit({
-          type: 'timeline',
-          items: timeline.snapshot(),
-          hasMoreOlder: timeline.getHasMoreOlder(),
-        })
-      })
-      const hasMoreOlder = timeline.getHasMoreOlder()
-      return {
-        ok: true,
-        hasMoreOlder,
-        message: hasMoreOlder ? '已加载更早记录' : '已到最早记录',
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return {
-        ok: false,
-        hasMoreOlder: timeline.getHasMoreOlder(),
-        message,
-      }
-    }
+    this.lastModelError = null
   }
 
   isRunning(): boolean {
@@ -808,7 +505,7 @@ export class AgentRunController {
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
-      if (items) emit({ type: 'timeline', items, hasMoreOlder: timeline.getHasMoreOlder() })
+      if (items) emit({ type: 'timeline', items })
     }
 
     const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
@@ -839,7 +536,7 @@ export class AgentRunController {
     }
 
     const promptText = buildExpandKeywordsPrompt(productId)
-    this.attachTimeline(timeline, promptText)
+    this.attachTimeline(timeline)
     timeline.reset()
     timeline.addPrefix({
       id: 'sys-prepare',
@@ -928,17 +625,14 @@ export class AgentRunController {
         throw new Error('等待 OpenCode 会话 idle 超时')
       }
 
-      await bridge.ingestNow().catch(() => undefined)
-
       const expansion = await loadWithGrace(
         () => loadExpansion(productId),
         { signal, attempts: 12, intervalMs: 500 },
       )
 
       if (!expansion) {
-        const sessionError = await this.fetchSessionErrorMessage(client)
         throw new Error(
-          sessionError ??
+          this.lastModelError ??
             '会话已结束，但未找到 expansion.json。请向上滚动查看工具调用与模型输出。',
         )
       }
@@ -1019,7 +713,7 @@ export class AgentRunController {
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
-      if (items) emit({ type: 'timeline', items, hasMoreOlder: timeline.getHasMoreOlder() })
+      if (items) emit({ type: 'timeline', items })
     }
 
     const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
@@ -1050,7 +744,7 @@ export class AgentRunController {
     }
 
     const promptText = buildScoreAndDedupePrompt(productId)
-    this.attachTimeline(timeline, promptText)
+    this.attachTimeline(timeline)
     timeline.reset()
     timeline.addPrefix({
       id: 'sys-prepare',
@@ -1139,8 +833,6 @@ export class AgentRunController {
         throw new Error('等待 OpenCode 会话 idle 超时')
       }
 
-      await bridge.ingestNow().catch(() => undefined)
-
       const scored = await loadWithGrace(
         () => {
           const artifact = loadScoredArtifact(productId)
@@ -1153,9 +845,8 @@ export class AgentRunController {
       )
 
       if (!scored) {
-        const sessionError = await this.fetchSessionErrorMessage(client)
         throw new Error(
-          sessionError ??
+          this.lastModelError ??
             '会话已结束，但未找到更新后的 scored.json。请确认已调用 leads_score_and_dedupe。',
         )
       }
@@ -1262,7 +953,7 @@ export class AgentRunController {
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
-      if (items) emit({ type: 'timeline', items, hasMoreOlder: timeline.getHasMoreOlder() })
+      if (items) emit({ type: 'timeline', items })
     }
 
     const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
@@ -1293,7 +984,7 @@ export class AgentRunController {
     }
 
     const promptText = buildDraftOutreachPrompt(productId, leadIds)
-    this.attachTimeline(timeline, promptText)
+    this.attachTimeline(timeline)
     timeline.reset()
     timeline.addPrefix({
       id: 'sys-prepare',
@@ -1382,8 +1073,6 @@ export class AgentRunController {
         throw new Error('等待 OpenCode 会话 idle 超时')
       }
 
-      await bridge.ingestNow().catch(() => undefined)
-
       const emailDrafts = await loadWithGrace(
         () =>
           loadEmailDraftsArtifact(productId, {
@@ -1394,9 +1083,8 @@ export class AgentRunController {
       )
 
       if (!emailDrafts) {
-        const sessionError = await this.fetchSessionErrorMessage(client)
         throw new Error(
-          sessionError ??
+          this.lastModelError ??
             '会话已结束，但未找到目标线索的 draft.json。请确认已调用 email_draft_generate。',
         )
       }
@@ -1519,7 +1207,7 @@ export class AgentRunController {
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
-      if (items) emit({ type: 'timeline', items, hasMoreOlder: timeline.getHasMoreOlder() })
+      if (items) emit({ type: 'timeline', items })
     }
 
     const pushState = (
@@ -1564,7 +1252,7 @@ export class AgentRunController {
       : isR2
         ? buildDiscoverLeadsR2Prompt(productId, maxQueries)
         : buildDiscoverLeadsPrompt(productId, { rounds, maxQueries })
-    this.attachTimeline(timeline, promptText)
+    this.attachTimeline(timeline)
     timeline.reset()
     timeline.addPrefix({
       id: 'sys-prepare',
@@ -1681,17 +1369,14 @@ export class AgentRunController {
         throw new Error('等待 OpenCode 会话 idle 超时')
       }
 
-      await bridge.ingestNow().catch(() => undefined)
-
       let run = await loadWithGrace(
         () => findLatestRunAfter(productId, afterIso),
         { signal, attempts: 12, intervalMs: 500 },
       )
 
       if (!run) {
-        const sessionError = await this.fetchSessionErrorMessage(client)
         throw new Error(
-          sessionError ??
+          this.lastModelError ??
             '会话已结束，但未找到探索运行记录。请确认已调用 exploration_start / exploration_finish。',
         )
       }
@@ -1810,7 +1495,7 @@ export class AgentRunController {
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
-      if (items) emit({ type: 'timeline', items, hasMoreOlder: timeline.getHasMoreOlder() })
+      if (items) emit({ type: 'timeline', items })
     }
 
     const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
@@ -1844,7 +1529,7 @@ export class AgentRunController {
     }
 
     const promptText = buildPrompt(bootstrap)
-    this.attachTimeline(timeline, promptText)
+    this.attachTimeline(timeline)
     timeline.reset()
     timeline.addPrefix({
       id: 'sys-prepare',
@@ -1951,17 +1636,14 @@ export class AgentRunController {
         throw new Error('等待 OpenCode 会话 idle 超时')
       }
 
-      await bridge.ingestNow().catch(() => undefined)
-
       let profile = await loadWithGrace(
         () => loadProfile(bootstrap.productId),
         { signal, attempts: 12, intervalMs: 500 },
       )
 
       if (!profile) {
-        const sessionError = await this.fetchSessionErrorMessage(client)
         throw new Error(
-          sessionError ??
+          this.lastModelError ??
             '会话已结束，但未找到 profile.json。请向上滚动查看工具调用与模型输出。',
         )
       }
@@ -2010,32 +1692,6 @@ export class AgentRunController {
       stopEvents?.()
       this.running = false
       this.abort = null
-    }
-  }
-
-  /**
-   * 会话结束后取真实失败原因：找最后一条带 error 的助手消息（欠费、鉴权失败等）。
-   * 仅在产物缺失时由调用方使用，避免误伤「中途报错但已恢复并产出」的会话。
-   */
-  private async fetchSessionErrorMessage(client: OpencodeClient): Promise<string | null> {
-    const sessionId = this.sessionId
-    if (!sessionId) return null
-    try {
-      const res = await client.session.messages({
-        sessionID: sessionId,
-        limit: LIVE_MESSAGE_LIMIT,
-      })
-      const rows = normalizeMessageRows(res.data)
-      for (let i = rows.length - 1; i >= 0; i--) {
-        const info = asRecord(asRecord(rows[i])?.info) ?? asRecord(rows[i])
-        if (asString(info?.role) !== 'assistant') continue
-        if (info?.error) {
-          return `模型调用失败，任务未能完成：\n${formatMessageError(info.error)}`
-        }
-      }
-      return null
-    } catch {
-      return null
     }
   }
 
@@ -2149,248 +1805,49 @@ export class AgentRunController {
     timeline: TimelineBuilder,
     flush: () => void,
     userPrompt: string,
-  ): { stop: () => void; ingestNow: () => Promise<void> } {
+  ): { stop: () => void } {
     let stopped = false
-    /** messageID → role，用于过滤用户消息 part 回声 */
-    const messageRoles = new Map<string, string>()
-    /** 首次进入 retry 的时间戳；0 表示未在重试 */
+    const messageRoles = new Map<string, Message['role']>()
     let retrySince = 0
     let lastRetryBody = ''
-    /** 重试耗尽后的 session.error 已收到 */
     let sawSessionError = false
-    let watchdogFired = false
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null
 
-    const ingestMessages = () =>
-      this.enqueueTimelineIo(async () => {
-        if (stopped) return
-        const res = await client.session.messages({
-          sessionID: sessionId,
-          limit: LIVE_MESSAGE_LIMIT,
-        })
-        if (stopped) return
-        const rows = normalizeMessageRows(res.data)
-        const parsed = rowsToTimelineItems(rows, userPrompt)
-        timeline.mergeLiveItems(parsed.items, parsed.messageIds)
-        flush()
-      })
+    const applySnapshot = (item: AgentTimelineItem): void => {
+      timeline.upsertSessionItem(item)
+      flush()
+    }
 
-    const upsertTextItem = (
-      kind: 'assistant' | 'reasoning',
-      partId: string,
-      deltaOrFull: string,
-      mode: 'append' | 'set',
-      title: string,
-    ) => {
-      if (!partId) return
-      const id = `${kind}-${partId}`
-      if (!timeline.has(id)) {
-        timeline.upsertSessionItem({
-          id,
-          kind,
-          time: nowTime(),
-          title,
-          body: mode === 'set' ? deltaOrFull : deltaOrFull,
-          collapsed: kind === 'reasoning',
-        })
-        flush()
-        return
-      }
-      if (mode === 'set') {
-        if (timeline.setText(id, deltaOrFull)) flush()
-      } else if (timeline.appendText(id, deltaOrFull)) {
-        flush()
+    const disarmWatchdog = (): void => {
+      if (watchdogTimer != null) {
+        clearTimeout(watchdogTimer)
+        watchdogTimer = null
       }
     }
 
-    const handleLiveDelta = (event: unknown) => {
-      const type = eventType(event)
-      const props = eventProps(event)
-
-      if (type === 'message.updated') {
-        const info = asRecord(props.info)
-        const mid = asString(info?.id)
-        const role = asString(info?.role)
-        if (mid && role) messageRoles.set(mid, role)
-        return
-      }
-
-      // 重试耗尽后的终局错误（含供应商完整错误，如欠费 30002）
-      if (type === 'session.error') {
-        sawSessionError = true
-        const err = props.error
-        timeline.addSuffix({
-          id: 'session-error',
-          kind: 'error',
-          time: nowTime(),
-          title: '模型调用失败',
-          body: err ? formatMessageError(err) : '模型调用失败（未返回错误详情）',
-        })
-        if (retrySince) {
-          timeline.addSuffix({
-            id: 'session-retry',
-            kind: 'error',
-            time: nowTime(),
-            title: '模型重试失败，已停止',
-            body: lastRetryBody,
-          })
-          retrySince = 0
-        }
-        flush()
-        return
-      }
-
-      // 模型调用失败后的自动重试：欠费/限流期间会话一直处于 retry 而非 idle
-      if (type === 'session.status' || type === 'session.idle') {
-        const status = asRecord(props.status)
-        const stType = type === 'session.idle' ? 'idle' : asString(status?.type)
-        if (stType === 'retry') {
-          if (!retrySince) retrySince = Date.now()
-          const attempt = Number(status?.attempt ?? 0) || 1
-          const nextMs = Number(status?.next ?? 0)
-          const waitSec = nextMs ? Math.max(1, Math.round((nextMs - Date.now()) / 1000)) : 0
-          lastRetryBody = [
-            `原因：${friendlyRetryReason(asString(status?.message))}`,
-            waitSec ? `约 ${waitSec} 秒后进行下一次尝试` : '',
-            '若持续重试约 2 分钟仍不可用，任务将自动停止；欠费请先充值后再试。',
-          ].filter(Boolean).join('\n')
-          timeline.addSuffix({
-            id: 'session-retry',
-            kind: 'error',
-            time: nowTime(),
-            title: `模型调用失败，重试中 · 第 ${attempt} 次`,
-            body: lastRetryBody,
-          })
-          flush()
-          return
-        }
-        if (stType === 'idle') {
-          if (retrySince && !sawSessionError) {
-            timeline.addSuffix({
-              id: 'session-retry',
-              kind: 'system',
-              time: nowTime(),
-              title: '模型重试已恢复',
-              body: `${lastRetryBody}\n已恢复，继续执行。`,
-            })
-            flush()
-          }
-          retrySince = 0
-          sawSessionError = false
-        }
-        // busy：可能是 retry 之后正在进行的重试，不清除 retrySince
-        return
-      }
-
-      if (type === 'session.next.text.started') {
-        const textId = asString(props.textID) || asString(props.partID)
-        upsertTextItem('assistant', textId, '', 'set', '模型回复')
-        return
-      }
-      if (type === 'session.next.text.delta' || type.endsWith('text.delta')) {
-        const textId = asString(props.textID) || asString(props.partID) || 'live'
-        upsertTextItem('assistant', textId, asString(props.delta), 'append', '模型回复')
-        return
-      }
-      if (type === 'session.next.text.ended' || type.endsWith('text.ended')) {
-        const textId = asString(props.textID) || asString(props.partID) || 'live'
-        const full = asString(props.text)
-        if (full) upsertTextItem('assistant', textId, full, 'set', '模型回复')
-        return
-      }
-      if (type === 'session.next.reasoning.started') {
-        const rid = asString(props.reasoningID) || asString(props.partID)
-        upsertTextItem('reasoning', rid, '', 'set', '思考')
-        return
-      }
-      if (type === 'session.next.reasoning.delta' || type.endsWith('reasoning.delta')) {
-        const rid = asString(props.reasoningID) || asString(props.partID) || 'live'
-        upsertTextItem('reasoning', rid, asString(props.delta), 'append', '思考')
-        return
-      }
-      if (type === 'session.next.reasoning.ended' || type.endsWith('reasoning.ended')) {
-        const rid = asString(props.reasoningID) || asString(props.partID) || 'live'
-        const full = asString(props.text)
-        if (full) upsertTextItem('reasoning', rid, full, 'set', '思考')
-        return
-      }
-      if (type === 'message.part.delta') {
-        if (messageRoles.get(asString(props.messageID)) === 'user') return
-        const field = asString(props.field)
-        const kind = field.includes('reason') ? 'reasoning' : 'assistant'
-        const partId = asString(props.partID) || 'live'
-        upsertTextItem(
-          kind,
-          partId,
-          asString(props.delta),
-          'append',
-          kind === 'reasoning' ? '思考' : '模型回复',
-        )
-        return
-      }
-      if (type === 'message.part.updated') {
-        const part = asRecord(props.part)
-        if (!part || part.ignored === true) return
-        if (messageRoles.get(asString(part.messageID)) === 'user') return
-        const partType = asString(part.type)
-        const partId = asString(part.id)
-        if (partType === 'text' && partId) {
-          const text = asString(part.text)
-          // 双保险：用户指令的 part 回声不当作模型回复
-          if (!text || text.trim() === userPrompt.trim()) return
-          upsertTextItem('assistant', partId, text, 'set', '模型回复')
-        } else if (partType === 'reasoning' && partId) {
-          const text = asString(part.text)
-          if (text) upsertTextItem('reasoning', partId, text, 'set', '思考')
-        }
-      }
-    }
-
-    void (async () => {
-      try {
-        const sub = await client.event.subscribe()
-        for await (const event of sub.stream) {
-          if (stopped) break
-          const sid = eventSessionId(event)
-          const type = eventType(event)
-          if (sid && sid !== sessionId && !type.includes('permission')) continue
-
-          const requestId = getRequestId(event)
-          if (requestId) {
-            try {
-              await client.permission.reply({ requestID: requestId, reply: 'always' })
-            } catch {
-              // ignore
-            }
-          }
-
-          handleLiveDelta(event)
-
-          if (
-            type === 'message.part.updated' ||
-            type.includes('tool.') ||
-            type.includes('text.ended') ||
-            type.includes('reasoning.ended') ||
-            type === 'session.idle' ||
-            type === 'session.error' ||
-            type.includes('message.updated')
-          ) {
-            try {
-              await ingestMessages()
-            } catch {
-              // ignore
-            }
-          }
-        }
-      } catch {
-        // SSE 失败时仅靠轮询
-      }
-    })()
-
-    const pollTimer = setInterval(() => {
+    const failEventBridge = (err: unknown): void => {
       if (stopped) return
-      // 看门狗：模型持续重试不可用（欠费/限流）时自动中止，避免干等到任务超时
-      if (retrySince && !watchdogFired && Date.now() - retrySince > RETRY_WATCHDOG_MS) {
-        watchdogFired = true
+      stopped = true
+      disarmWatchdog()
+      const detail =
+        err instanceof Error ? err.message : err != null ? String(err) : '未知错误'
+      this.autoAbortReason = `OpenCode 事件流不可用：${detail}`
+      timeline.addSuffix({
+        id: 'sse-fatal',
+        kind: 'error',
+        time: nowTime(),
+        title: '事件订阅失败',
+        body: `${this.autoAbortReason}\n任务已中止，请检查 OpenCode 运行时状态后重试。`,
+      })
+      flush()
+      void client.session.abort({ sessionID: sessionId }).catch(() => undefined)
+      this.abort?.abort()
+    }
+
+    const armWatchdog = (): void => {
+      if (watchdogTimer != null) return
+      watchdogTimer = setTimeout(() => {
+        if (stopped) return
         const reason = `模型服务持续不可用（自动重试超过 ${Math.round(RETRY_WATCHDOG_MS / 60000)} 分钟），任务已自动停止。\n${lastRetryBody}`
         this.autoAbortReason = reason
         timeline.addSuffix({
@@ -2402,35 +1859,177 @@ export class AgentRunController {
         })
         flush()
         void client.session.abort({ sessionID: sessionId }).catch(() => undefined)
-      }
-      void ingestMessages().catch(() => undefined)
-      void (async () => {
-        try {
-          const list = await client.permission.list()
-          const items = Array.isArray(list.data) ? list.data : []
-          for (const item of items) {
-            const rec = asRecord(item)
-            const id = rec?.id ?? rec?.requestID
-            if (!id) continue
-            await client.permission.reply({
-              requestID: String(id),
-              reply: 'always',
-            })
-          }
-        } catch {
-          // ignore
-        }
-      })()
-    }, 1000)
+        this.abort?.abort()
+      }, RETRY_WATCHDOG_MS)
+    }
 
-    void ingestMessages().catch(() => undefined)
+    const handleEvent = (event: Event): void => {
+      switch (event.type) {
+        case 'server.instance.disposed':
+          failEventBridge(new Error('OpenCode 实例已释放'))
+          return
+
+        case 'permission.asked':
+        case 'permission.v2.asked':
+          if (event.properties.sessionID !== sessionId) return
+          void client.permission
+            .reply({ requestID: event.properties.id, reply: 'always' })
+            .catch(() => undefined)
+          return
+
+        case 'message.updated': {
+          if (event.properties.sessionID !== sessionId) return
+          const { info } = event.properties
+          messageRoles.set(info.id, info.role)
+          if (info.role === 'assistant' && info.error) {
+            const body = formatMessageError(info.error)
+            this.lastModelError = body
+            timeline.addSuffix({
+              id: `error-${info.id}`,
+              kind: 'error',
+              time: nowTime(),
+              title: '模型调用失败',
+              body,
+            })
+            flush()
+          }
+          return
+        }
+
+        case 'message.part.updated': {
+          if (event.properties.sessionID !== sessionId) return
+          const { part } = event.properties
+          if (messageRoles.get(part.messageID) === 'user') return
+          if (part.type === 'text') {
+            if (part.ignored === true) return
+            if (!part.text || part.text.trim() === userPrompt.trim()) return
+            applySnapshot({
+              id: `assistant-${part.id}`,
+              kind: 'assistant',
+              time: nowTime(),
+              title: '模型回复',
+              body: part.text,
+            })
+            return
+          }
+          if (part.type === 'reasoning') {
+            if (!part.text) return
+            applySnapshot({
+              id: `reasoning-${part.id}`,
+              kind: 'reasoning',
+              time: nowTime(),
+              title: '思考',
+              body: part.text,
+              collapsed: part.text.length > COLLAPSE_BODY_CHARS,
+            })
+            return
+          }
+          if (part.type === 'tool') {
+            applySnapshot(toolPartToTimelineItem(part))
+          }
+          return
+        }
+
+        case 'message.part.removed': {
+          if (event.properties.sessionID !== sessionId) return
+          const { partID } = event.properties
+          timeline.removeSessionItem(`assistant-${partID}`)
+          timeline.removeSessionItem(`reasoning-${partID}`)
+          timeline.removeSessionItem(`tool-${partID}`)
+          flush()
+          return
+        }
+
+        case 'session.error': {
+          if (event.properties.sessionID && event.properties.sessionID !== sessionId) return
+          sawSessionError = true
+          const err = event.properties.error
+          const body = err ? formatMessageError(err) : '模型调用失败（未返回错误详情）'
+          this.lastModelError = body
+          timeline.addSuffix({
+            id: 'session-error',
+            kind: 'error',
+            time: nowTime(),
+            title: '模型调用失败',
+            body,
+          })
+          if (retrySince) {
+            timeline.addSuffix({
+              id: 'session-retry',
+              kind: 'error',
+              time: nowTime(),
+              title: '模型重试失败，已停止',
+              body: lastRetryBody,
+            })
+            retrySince = 0
+          }
+          disarmWatchdog()
+          flush()
+          return
+        }
+
+        case 'session.status': {
+          if (event.properties.sessionID !== sessionId) return
+          const { status } = event.properties
+          if (status.type === 'retry') {
+            if (!retrySince) retrySince = Date.now()
+            const waitSec = Math.max(1, Math.round((status.next - Date.now()) / 1000))
+            lastRetryBody = [
+              `原因：${friendlyRetryReason(status.message)}`,
+              `约 ${waitSec} 秒后进行下一次尝试`,
+              '若持续重试约 2 分钟仍不可用，任务将自动停止；欠费请先充值后再试。',
+            ].join('\n')
+            timeline.addSuffix({
+              id: 'session-retry',
+              kind: 'error',
+              time: nowTime(),
+              title: `模型调用失败，重试中 · 第 ${status.attempt} 次`,
+              body: lastRetryBody,
+            })
+            armWatchdog()
+            flush()
+            return
+          }
+          if (status.type === 'idle') {
+            if (retrySince && !sawSessionError) {
+              timeline.addSuffix({
+                id: 'session-retry',
+                kind: 'system',
+                time: nowTime(),
+                title: '模型重试已恢复',
+                body: `${lastRetryBody}\n已恢复，继续执行。`,
+              })
+              flush()
+            }
+            retrySince = 0
+            sawSessionError = false
+            disarmWatchdog()
+          }
+          return
+        }
+
+        default:
+          return
+      }
+    }
+
+    void (async () => {
+      try {
+        const sub = await client.event.subscribe()
+        for await (const event of sub.stream) {
+          if (stopped) break
+          handleEvent(event)
+        }
+      } catch (err) {
+        failEventBridge(err)
+      }
+    })()
 
     return {
       stop: () => {
         stopped = true
-        clearInterval(pollTimer)
+        disarmWatchdog()
       },
-      ingestNow: ingestMessages,
     }
   }
 }

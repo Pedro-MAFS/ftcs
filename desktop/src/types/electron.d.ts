@@ -36,7 +36,6 @@ export type AgentEventPayload =
   | {
       type: 'timeline'
       items: AgentTimelineItem[]
-      hasMoreOlder?: boolean
     }
   | {
       type: 'done'
@@ -49,12 +48,6 @@ export type AgentEventPayload =
       scored?: ScoredLeadsSummaryDto
       emailDrafts?: EmailDraftsSummaryDto
     }
-
-export type LoadOlderTimelineResult = {
-  ok: boolean
-  hasMoreOlder: boolean
-  message: string
-}
 
 export interface ProfileGenerateInput {
   websitePaths: string[]
@@ -577,7 +570,6 @@ declare global {
       moveLibraryEntry: (relativePath: string, destDir: string, cwd?: string) => Promise<LibraryMutationResult>
       generateProfile: (input: ProfileGenerateInput) => Promise<ProfileGenerateResult>
       abortProfile: () => Promise<{ ok: boolean }>
-      loadOlderAgentTimeline: () => Promise<LoadOlderTimelineResult>
       getProfile: (productId: string) => Promise<ProfileDetail | null>
       listProfiles: () => Promise<ProfileSummary[]>
       saveProfile: (input: ProfileSaveInput) => Promise<ProfileSaveResult>

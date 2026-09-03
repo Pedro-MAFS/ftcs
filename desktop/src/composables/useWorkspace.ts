@@ -36,7 +36,6 @@ const agentMeta = ref<AgentMetaItem[]>([
 ])
 const agentTimeline = ref<AgentTimelineItem[]>([])
 const agentExpanded = ref<Record<string, boolean>>({})
-const agentHasMoreOlder = ref(false)
 const agentPrompt = ref('')
 const generating = computed(() => agentStatus.value === 'running')
 
@@ -254,9 +253,6 @@ function handleAgentEvent(payload: AgentEventPayload): void {
   }
   if (payload.type === 'timeline') {
     agentTimeline.value = payload.items
-    if (payload.hasMoreOlder != null) {
-      agentHasMoreOlder.value = payload.hasMoreOlder
-    }
     return
   }
   if (payload.type === 'done') {
@@ -355,7 +351,6 @@ export function useWorkspace() {
   function resetTimelineView(): void {
     agentTimeline.value = []
     agentExpanded.value = {}
-    agentHasMoreOlder.value = false
   }
 
   function resetAgentForGenerate(selectedCount: number): void {
@@ -436,19 +431,6 @@ export function useWorkspace() {
     return !item.collapsed
   }
 
-  async function loadOlderAgentTimeline(): Promise<{
-    ok: boolean
-    hasMoreOlder: boolean
-    message: string
-  }> {
-    if (!window.ftcs?.loadOlderAgentTimeline) {
-      return { ok: false, hasMoreOlder: false, message: '翻页接口不可用' }
-    }
-    const res = await window.ftcs.loadOlderAgentTimeline()
-    agentHasMoreOlder.value = res.hasMoreOlder
-    return res
-  }
-
   return {
     products,
     activeProductId,
@@ -461,7 +443,6 @@ export function useWorkspace() {
     agentStatus,
     agentMeta,
     agentTimeline,
-    agentHasMoreOlder,
     agentPrompt,
     generating,
     selectProduct,
@@ -476,7 +457,6 @@ export function useWorkspace() {
     resetAgentForDraftEmail,
     toggleTimelineExpand,
     isTimelineExpanded,
-    loadOlderAgentTimeline,
     refreshProducts,
     loadActiveProfile,
     refreshExploreTasks,

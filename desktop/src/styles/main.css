@@ -2763,20 +2763,6 @@ select.text-input {
   gap: 10px;
 }
 
-.agent-panel__load-older {
-  display: flex;
-  justify-content: center;
-  flex-shrink: 0;
-  padding: 4px 14px 0;
-}
-
-.agent-panel__older-hint {
-  margin: 0;
-  text-align: center;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
 .tl-item {
   border: 1px solid var(--border);
   border-radius: 8px;

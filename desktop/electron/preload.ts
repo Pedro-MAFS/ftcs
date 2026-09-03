@@ -2,7 +2,6 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
 import type {
   AgentEventPayload,
-  LoadOlderTimelineResult,
   AppStatus,
   OpenCodeActionResult,
   ExploreTasksSnapshotDto,
@@ -218,8 +217,6 @@ const api = {
   generateProfile: (input: ProfileGenerateInput): Promise<ProfileGenerateResult> =>
     ipcRenderer.invoke(IPC.PROFILE_GENERATE, input),
   abortProfile: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.PROFILE_ABORT),
-  loadOlderAgentTimeline: (): Promise<LoadOlderTimelineResult> =>
-    ipcRenderer.invoke(IPC.AGENT_LOAD_OLDER),
   getProfile: (productId: string): Promise<ProfileDetail | null> =>
     ipcRenderer.invoke(IPC.PROFILE_GET, productId),
   listProfiles: (): Promise<ProfileSummary[]> => ipcRenderer.invoke(IPC.PROFILE_LIST),

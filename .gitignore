@@ -49,7 +49,10 @@ tsconfig.node.tsbuildinfo
 # 桌面端构建 / 发版产物
 desktop/out/
 desktop/release/
+desktop/release-0.4.0/
 desktop/resources/workspace-template/
 
 # electron-builder 本机缓存（可放在任意盘）
 /electron-builder-cache/
+
+/推广/
