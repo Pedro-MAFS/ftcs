@@ -13,6 +13,11 @@ import {
   getDefaultTokenGatewayBaseUrl,
   getTokenGatewayBaseUrl,
 } from '../gateway/gateway-config'
+import {
+  CUSTOM_VISION_ENV,
+  formatEnvBool,
+  parseEnvBool,
+} from '../config/model-vision'
 import { getOfficialModelsCache } from '../gateway/official-models-cache'
 import { getOfficialUsageCache } from '../gateway/official-usage-cache'
 import type { OfficialUsageSnapshot } from '../gateway/official-usage-cache'
@@ -53,6 +58,8 @@ export interface SettingsSnapshot {
   searchUsedToday: number
   modelOptions: Array<{ id: string; label: string }>
   smallModelOptions: Array<{ id: string; label: string }>
+  /** 自定义通道：默认/轻量模型是否声明 OpenCode 读图能力 */
+  customModelSupportsImage: boolean
   opencodeConfigPath: string
   envPath: string
 }
@@ -68,6 +75,8 @@ export interface SettingsSaveInput {
   /** 省略则不修改；空字符串且非掩码则清除 */
   placesApiKey?: string
   searchDailyLimit: number
+  /** 自定义通道：勾选后写入 OpenCode modalities 以支持 Read 图片 */
+  customModelSupportsImage?: boolean
 }
 
 export interface SettingsSaveResult {
@@ -306,6 +315,7 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     searchUsedToday: readSearchUsage(workspaceRoot),
     modelOptions,
     smallModelOptions,
+    customModelSupportsImage: parseEnvBool(env[CUSTOM_VISION_ENV]),
     opencodeConfigPath,
     envPath,
   }
@@ -352,6 +362,7 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
     envUpdates.OPENAI_API_KEY = nextApiKey
     const baseUrl = input.baseUrl.trim()
     envUpdates.FTCS_MODEL_BASE_URL = baseUrl
+    envUpdates[CUSTOM_VISION_ENV] = formatEnvBool(Boolean(input.customModelSupportsImage))
   } else {
     // 官方：不改写自定义 Key；清空自定义 base 以免干扰（Key 保留）
     if (env.FTCS_MODEL_BASE_URL) {

@@ -43,12 +43,14 @@ afterEach(() => {
 })
 
 describe('classifyInputFile', () => {
-  it('marks docx/xlsx/pptx as office', () => {
+  it('marks docx/xlsx/pptx as office and images as image', () => {
     assert.equal(classifyInputFile('a/说明.docx'), 'office')
     assert.equal(classifyInputFile('a/报价.XLSX'), 'office')
     assert.equal(classifyInputFile('a/deck.pptx'), 'office')
     assert.equal(classifyInputFile('a/说明.pdf'), 'special')
     assert.equal(classifyInputFile('a/说明.md'), 'supported')
+    assert.equal(classifyInputFile('a/样品.jpg'), 'image')
+    assert.equal(classifyInputFile('a/宣传.PNG'), 'image')
   })
 })
 
@@ -110,7 +112,7 @@ describe('copyLibrarySourcesToInputs', () => {
     assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '空夹')), false)
   })
 
-  it('skips pdf and images, keeps text, and does not put bookmark md in inputFiles', async () => {
+  it('copies images and skips pdf/unknown; keeps text', async () => {
     const root = makeRoot()
     const filesRoot = path.join(root, 'files')
     const inputsDir = path.join(root, 'inputs')
@@ -129,19 +131,55 @@ describe('copyLibrarySourcesToInputs', () => {
     )
 
     assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '说明.md')), true)
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '图.jpg')), true)
     assert.equal(fs.existsSync(path.join(inputsDir, '绿森', 'www.example.com.md')), true)
     assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '目录.pdf')), false)
-    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '图.jpg')), false)
     assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '无扩展名')), false)
     assert.deepEqual(copied.websiteUrls, ['https://www.example.com'])
-    assert.deepEqual(copied.inputFiles, ['data/products/prod_1/inputs/绿森/说明.md'])
+    assert.deepEqual(copied.inputFiles, [
+      'data/products/prod_1/inputs/绿森/说明.md',
+      'data/products/prod_1/inputs/绿森/图.jpg',
+    ])
     assert.deepEqual(copied.sourceInputs, [
       { type: 'website', library_path: '绿森/www.example.com.md', url: 'https://www.example.com' },
       { type: 'file', library_path: '绿森/说明.md' },
+      { type: 'file', library_path: '绿森/图.jpg' },
     ])
     assert.equal(copied.skipped.includes('绿森/目录.pdf（当前不支持该格式）'), true)
-    assert.equal(copied.skipped.includes('绿森/图.jpg（当前不支持该格式）'), true)
     assert.equal(copied.skipped.includes('绿森/无扩展名（当前不支持该格式）'), true)
+  })
+
+  it('copies image-only selection', async () => {
+    const root = makeRoot()
+    const filesRoot = path.join(root, 'files')
+    const inputsDir = path.join(root, 'inputs')
+    writeFile(path.join(filesRoot, 'MFS', '仅图片', '宣传图.jpg'), 'fake-jpg')
+
+    const copied = await copyLibrarySourcesToInputs(
+      'prod_1',
+      inputsDir,
+      filesRoot,
+      [],
+      ['MFS/仅图片/宣传图.jpg'],
+    )
+
+    assert.equal(fs.existsSync(path.join(inputsDir, 'MFS', '仅图片', '宣传图.jpg')), true)
+    assert.deepEqual(copied.inputFiles, ['data/products/prod_1/inputs/MFS/仅图片/宣传图.jpg'])
+    assert.deepEqual(copied.skipped, [])
+  })
+
+  it('copies large images without a desktop size cap', async () => {
+    const root = makeRoot()
+    const filesRoot = path.join(root, 'files')
+    const inputsDir = path.join(root, 'inputs')
+    fs.mkdirSync(filesRoot, { recursive: true })
+    fs.writeFileSync(path.join(filesRoot, 'big.jpg'), Buffer.alloc(10 * 1024 * 1024 + 1))
+
+    const copied = await copyLibrarySourcesToInputs('prod_1', inputsDir, filesRoot, [], ['big.jpg'])
+
+    assert.equal(fs.existsSync(path.join(inputsDir, 'big.jpg')), true)
+    assert.deepEqual(copied.inputFiles, ['data/products/prod_1/inputs/big.jpg'])
+    assert.deepEqual(copied.skipped, [])
   })
 
   it('extracts office sidecar when CLI ready (injected)', async () => {

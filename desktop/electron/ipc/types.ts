@@ -844,6 +844,7 @@ export interface SettingsSnapshot {
   searchUsedToday: number
   modelOptions: Array<{ id: string; label: string }>
   smallModelOptions: Array<{ id: string; label: string }>
+  customModelSupportsImage: boolean
   opencodeConfigPath: string
   envPath: string
 }
@@ -858,6 +859,7 @@ export interface SettingsSaveInput {
   tavilyApiKey: string
   placesApiKey?: string
   searchDailyLimit: number
+  customModelSupportsImage?: boolean
 }
 
 export interface SettingsSaveResult {

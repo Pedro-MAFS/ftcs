@@ -22,7 +22,7 @@ export interface BootstrapResult {
 
 /**
  * 从资料库选中项分配产品 ID，并按相对路径复制快照到 data/products/{id}/inputs/。
- * Office 文件在拷贝时抽出侧车文本（US-I-11）。
+ * Office 文件在拷贝时抽出侧车文本（US-I-11）；图片原样拷贝（US-I-12）。
  */
 export async function bootstrapProductFromLibrary(
   input: BootstrapInput,

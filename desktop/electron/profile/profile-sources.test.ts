@@ -77,4 +77,21 @@ describe('mergeSourceInputs', () => {
       },
     ])
   })
+
+  it('maps image library_path to original image path', () => {
+    const imageManifest: SourcesManifest = {
+      product_id: 'prod_1',
+      created_at: '2026-08-18T00:00:00.000Z',
+      files: ['data/products/prod_1/inputs/绿森/样品图.jpg'],
+      source_inputs: [{ type: 'file', library_path: '绿森/样品图.jpg' }],
+    }
+    const merged = mergeSourceInputs([], imageManifest)
+    assert.deepEqual(merged, [
+      {
+        type: 'file',
+        path: 'data/products/prod_1/inputs/绿森/样品图.jpg',
+        uploaded_at: '2026-08-18T00:00:00.000Z',
+      },
+    ])
+  })
 })

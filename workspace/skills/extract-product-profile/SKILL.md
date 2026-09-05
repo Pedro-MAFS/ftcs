@@ -1,6 +1,6 @@
 ---
 name: extract-product-profile
-description: 从公司网站或普通文本文件中提取外贸产品画像，计算就绪度并保存。用户提供网站 URL 或 txt/md/json/csv 文件时使用。
+description: 从公司网站、文本文件或产品图片中提取外贸产品画像，计算就绪度并保存。用户提供网站 URL、txt/md/json/csv 或图片时使用。
 phase: -1
 inputs:
   - name: website_url
@@ -25,6 +25,7 @@ outputs:
 
 - 用户提供**公司网站 URL**，需要提取公司与产品信息
 - 用户提供**普通文本类产品资料**（txt/md/json/csv 等）
+- 用户提供**产品图片**（jpg/png/webp 等），需要从画面提取产品信息
 - 用户说「建立产品画像」「分析我的产品」「提取产品信息」
 
 ## 前置条件
@@ -36,14 +37,16 @@ outputs:
 ## 输入分流策略
 
 
-| 输入类型 | 使用工具                       | Phase 1 行为    |
+| 输入类型 | 使用工具                       | 行为    |
 | ---- | -------------------------- | ------------- |
 | 公司网站 | `chrome-devtools-mcp`      | 打开首页，按需自由探索站内页面 |
-| 普通文件 | 智能体原生 Read 工具              | 直接读取文本内容      |
-| 特殊文件 | `lead-store.file_classify` | **跳过该文件**，有官网或其它文本则继续 |
+| 普通文本 | 智能体原生 Read 工具              | 直接读取文本内容      |
+| Office 侧车 | 智能体原生 Read 工具           | 读取桌面端已抽好的 `.docx.txt` 等侧车 |
+| 图片 | 智能体原生 Read（**多模态**）     | 识别画面中的产品名、规格、卖点等，合并进画像 |
+| pdf 等待解析 / 未知 | `lead-store.file_classify` | **跳过该文件**，有其它资料则继续 |
 
 
-**特殊文件**（当前不抽取）：pdf、xlsx、xls、doc、docx、ppt、图片等。抽取归后续 Office 故事。桌面端生成时已跳过拷贝；若仍碰到，不要停止整次生成。
+**仍跳过的格式**：pdf（待桌面端侧车支持）、老 Office 原件（`.doc`/`.xls`/`.ppt`）等。桌面端生成时已过滤或已抽侧车；若仍碰到 special/unknown，**不要停止整次生成**。
 
 ## 执行步骤
 
@@ -56,9 +59,12 @@ outputs:
 
 - 有 `website_url` → 走 **网站分支**（Step 2A）
 - 有 `file_paths` → 对每个文件调用 `lead-store.file_classify`（可选；桌面端已过滤）
-  - `supported` → 走 **文件分支**（Step 2B）
+  - `supported` → 走 **文本文件分支**（Step 2B）
+  - **`image`** → **Read 多模态**读取图片，提取产品信息（Step 2C）
+  - Office 已抽成侧车的路径（如 `说明.docx.txt`）→ 按 **文本文件分支** Read
   - `special` / `unknown` → **跳过该文件并继续**，不要停止整次。可在摘要里说明跳过了哪些格式。
 - 两者都有 → 分别执行后 **合并进同一份画像**
+- **仅图片、无官网无文本**：允许执行；Read 全部图片后组装画像；若全部 Read 失败 → 提示用户补充 txt 或官网
 - `source_inputs`：
   - 每个官网 URL 一条 `{ "type": "website", "url": "...", "crawled_at": "..." }`
   - 每个已读文本一条 `{ "type": "file", "path": "data/products/{id}/inputs/…", "uploaded_at": "..." }`
@@ -104,6 +110,17 @@ outputs:
 3. 在 `source_inputs` 中记录：
   ```json
    { "type": "file", "path": "data/products/{id}/inputs/xxx.txt", "uploaded_at": "..." }
+  ```
+
+### Step 2C：图片分支（Read 多模态）
+
+1. 对每个 `image` 文件（或 Prompt 列表中的 `.jpg`/`.png`/`.webp` 等路径）：
+  - 使用 Read 工具 **多模态**读取（不要当纯文本打开）
+  - 从画面提取：产品名称、规格、材质、卖点、包装、认证标识等可见信息
+2. 某张图片 Read 失败 → **跳过该张**，继续处理其它文件；在最终汇报中说明
+3. 在 `source_inputs` 中记录（path 为 inputs 下 **原图** 路径）：
+  ```json
+   { "type": "file", "path": "data/products/{id}/inputs/…/样品图.jpg", "uploaded_at": "..." }
   ```
 
 ### Step 3：构建画像对象

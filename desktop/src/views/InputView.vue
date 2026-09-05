@@ -26,6 +26,8 @@ import {
   listOfficeGateFiles,
   stripOfficeGateFiles,
 } from '../components/library/library-office'
+import { hasImageFiles } from '../components/library/library-image'
+import { IMAGE_INPUT_HINT } from '../config/copy'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import OfficeCliGenerateGateDialog from '../components/library/OfficeCliGenerateGateDialog.vue'
 
@@ -155,6 +157,11 @@ const selectedCountTitle = computed(() => {
 const generateButtonTitle = computed(() => {
   if (generatePickCount.value || selectedFolderCount.value) return '基于勾选资料生成一份画像'
   return '请先勾选文件、网站或文件夹'
+})
+const selectionHasImages = computed(() => {
+  if (selectedCount.value === 0) return false
+  const expand = expandGenerateSelection(tree.value, selectedIds.value)
+  return hasImageFiles(expand.filePaths)
 })
 const isEmpty = computed(() => tree.value.length === 0)
 const ctxItems = computed(() =>
@@ -983,25 +990,30 @@ onUnmounted(() => {
 <template>
   <section class="main-pane">
     <header class="main-pane__head">
-      <div>
-        <h1>{{ meta.title }}</h1>
-        <p>{{ meta.subtitle }}</p>
+      <div class="main-pane__head-row">
+        <div>
+          <h1>{{ meta.title }}</h1>
+          <p>{{ meta.subtitle }}</p>
+        </div>
+        <div class="main-pane__actions">
+          <span class="library-count" :title="selectedCountTitle">
+            已选 {{ selectedCount }} 项
+          </span>
+          <button
+            type="button"
+            class="btn-primary"
+            :disabled="!canGenerate"
+            :title="generateButtonTitle"
+            @click="generateProfile"
+          >
+            <Icon name="sparkles" :size="12" />
+            {{ generating ? '生成中…' : '生成画像' }}
+          </button>
+        </div>
       </div>
-      <div class="main-pane__actions">
-        <span class="library-count" :title="selectedCountTitle">
-          已选 {{ selectedCount }} 项
-        </span>
-        <button
-          type="button"
-          class="btn-primary"
-          :disabled="!canGenerate"
-          :title="generateButtonTitle"
-          @click="generateProfile"
-        >
-          <Icon name="sparkles" :size="12" />
-          {{ generating ? '生成中…' : '生成画像' }}
-        </button>
-      </div>
+      <p v-if="selectionHasImages" class="library-image-hint hint-line">
+        {{ IMAGE_INPUT_HINT }}
+      </p>
     </header>
 
     <div ref="panelRef" class="library-panel" tabindex="0" @paste="onPaste">

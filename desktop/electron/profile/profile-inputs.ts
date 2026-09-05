@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { isImageFile } from '../library/library-image'
 import { readWebsiteBookmark } from '../library/library-website'
 import {
   extractOfficeTextToString,
@@ -25,21 +26,15 @@ const SUPPORTED_TEXT_EXTENSIONS = new Set([
   '.htm',
 ])
 
-/** pdf / 老格式 / 图片等；docx/xlsx/pptx 已拆到 office（见 US-I-11） */
+/** pdf / 老格式等；图片见 US-I-12；docx/xlsx/pptx 见 office */
 const SPECIAL_FILE_EXTENSIONS = new Set([
   '.pdf',
   '.xls',
   '.doc',
   '.ppt',
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.gif',
-  '.webp',
-  '.bmp',
 ])
 
-export type InputFileKind = 'supported' | 'office' | 'special' | 'unknown'
+export type InputFileKind = 'supported' | 'office' | 'image' | 'special' | 'unknown'
 
 export type OfficeExtractFn = (
   absSourcePath: string,
@@ -54,6 +49,7 @@ export function classifyInputFile(filePath: string): InputFileKind {
   const ext = dot === -1 ? '' : name.slice(dot).toLowerCase()
   if (SUPPORTED_TEXT_EXTENSIONS.has(ext)) return 'supported'
   if (isOfficeExtractExtension(base)) return 'office'
+  if (isImageFile(base)) return 'image'
   if (SPECIAL_FILE_EXTENSIONS.has(ext)) return 'special'
   return 'unknown'
 }
@@ -100,7 +96,7 @@ function storedInputPath(productId: string, relFromInputs: string): string {
 
 /**
  * 按相对 files/ 的路径拷到 inputs/ 下同样的子目录，不平铺、不改文件名。
- * Office（docx/xlsx/pptx）：原件 + 侧车 .txt；Prompt 只列侧车。
+ * Office（docx/xlsx/pptx）：原件 + 侧车 .txt；图片（US-I-12）：原图；Prompt 列侧车与普通文本/原图。
  */
 export async function copyLibrarySourcesToInputs(
   productId: string,
@@ -175,6 +171,15 @@ export async function copyLibrarySourcesToInputs(
       }
 
       if (kind === 'supported') {
+        const { dest, stored } = destUnderInputs(inputsDir, safe)
+        fs.mkdirSync(path.dirname(dest), { recursive: true })
+        fs.copyFileSync(src, dest)
+        inputFiles.push(storedInputPath(productId, stored))
+        sourceInputs.push({ type: 'file', library_path: stored })
+        continue
+      }
+
+      if (kind === 'image') {
         const { dest, stored } = destUnderInputs(inputsDir, safe)
         fs.mkdirSync(path.dirname(dest), { recursive: true })
         fs.copyFileSync(src, dest)

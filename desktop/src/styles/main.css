@@ -1219,10 +1219,22 @@ button:focus-visible {
 
 .main-pane__head {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.main-pane__head-row {
+  display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  flex-shrink: 0;
+}
+
+.library-image-hint {
+  margin: 0;
+  font-size: 11px;
 }
 
 .main-pane__head h1 {
@@ -2551,6 +2563,27 @@ select.text-input {
 .settings-r2-sites__item strong {
   font-weight: 600;
   color: var(--text);
+}
+
+.settings-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-checkbox input {
+  margin: 3px 0 0;
+}
+
+.settings-checkbox .muted {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
 }
 
 .about-row {

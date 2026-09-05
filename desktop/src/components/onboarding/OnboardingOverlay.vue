@@ -84,6 +84,7 @@ const form = reactive({
   tavilyApiKey: '',
   placesApiKey: '',
   searchDailyLimit: 50,
+  customModelSupportsImage: false,
 })
 
 const channels: Array<{ id: ChannelMode; label: string }> = [
@@ -320,6 +321,7 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.tavilyApiKey = data.tavilyApiKeyMasked
   form.placesApiKey = data.placesApiKeyMasked
   form.searchDailyLimit = data.searchDailyLimit
+  form.customModelSupportsImage = data.customModelSupportsImage
   if (data.channelMode === 'custom') {
     form.customModelId = data.model.includes('/')
       ? data.model.split('/').slice(1).join('/')
@@ -422,6 +424,7 @@ async function onSaveKeys(andContinue: boolean): Promise<void> {
       tavilyApiKey: form.tavilyApiKey,
       placesApiKey: form.placesApiKey,
       searchDailyLimit: form.searchDailyLimit,
+      customModelSupportsImage: form.customModelSupportsImage,
     })
     applySnapshot(result.settings)
     keysMessage.value = result.message
@@ -832,6 +835,14 @@ onMounted(() => {
                     />
                   </div>
                 </div>
+
+                <label class="settings-checkbox">
+                  <input v-model="form.customModelSupportsImage" type="checkbox" />
+                  <span>
+                    默认/轻量模型支持读图（多模态）
+                    <span class="muted">勾选后 OpenCode 才允许 Read 图片</span>
+                  </span>
+                </label>
               </template>
             </div>
 

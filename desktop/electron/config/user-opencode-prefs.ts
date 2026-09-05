@@ -1,4 +1,10 @@
 import type { Config } from '@opencode-ai/sdk/v2'
+import {
+  buildOpenCodeModelConfig,
+  CUSTOM_VISION_ENV,
+  isOfficialVisionModel,
+  parseEnvBool,
+} from './model-vision'
 import { getTokenGatewayBaseUrl } from '../gateway/gateway-config'
 
 const CUSTOM_ENV_KEY = 'FTCS_CUSTOM_API_KEY'
@@ -47,8 +53,10 @@ export function applyUserPrefsToOpenCodeConfig(
         apiKey: `{env:${GATEWAY_KEY_ENV}}`,
       },
       models: {
-        [modelId]: { name: modelId },
-        ...(smallId !== modelId ? { [smallId]: { name: smallId } } : {}),
+        [modelId]: buildOpenCodeModelConfig(modelId, isOfficialVisionModel(modelId)),
+        ...(smallId !== modelId
+          ? { [smallId]: buildOpenCodeModelConfig(smallId, isOfficialVisionModel(smallId)) }
+          : {}),
       },
     }
     // OpenCode model id 需带 provider 前缀
@@ -72,6 +80,7 @@ export function applyUserPrefsToOpenCodeConfig(
       ? smallModel.split('/').slice(1).join('/')
       : smallModel || modelId
 
+    const customSupportsImage = parseEnvBool(env[CUSTOM_VISION_ENV])
     providers.custom = {
       npm: '@ai-sdk/openai-compatible',
       name: 'Custom Compatible',
@@ -80,8 +89,10 @@ export function applyUserPrefsToOpenCodeConfig(
         apiKey: `{env:${CUSTOM_ENV_KEY}}`,
       },
       models: {
-        [modelId]: { name: modelId },
-        ...(smallId !== modelId ? { [smallId]: { name: smallId } } : {}),
+        [modelId]: buildOpenCodeModelConfig(modelId, customSupportsImage),
+        ...(smallId !== modelId
+          ? { [smallId]: buildOpenCodeModelConfig(smallId, customSupportsImage) }
+          : {}),
       },
     }
     next.provider = providers as Config['provider']
