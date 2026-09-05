@@ -99,8 +99,9 @@ export const SECTION_META: Record<
 
 export const PIPELINE_TO_SECTION: Partial<Record<PipelineStepId, WorkspaceSection>> = {
   input: 'input',
-  keywords: 'explore',
+  keywords: 'profile',
   explore: 'explore',
   score: 'leads',
-  email: 'email',
+  /** 起草入口在线索页；审阅草稿走顶栏「邮件」 */
+  email: 'leads',
 }
