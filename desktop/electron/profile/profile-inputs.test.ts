@@ -47,7 +47,7 @@ describe('classifyInputFile', () => {
     assert.equal(classifyInputFile('a/说明.docx'), 'office')
     assert.equal(classifyInputFile('a/报价.XLSX'), 'office')
     assert.equal(classifyInputFile('a/deck.pptx'), 'office')
-    assert.equal(classifyInputFile('a/说明.pdf'), 'special')
+    assert.equal(classifyInputFile('a/说明.pdf'), 'pdf')
     assert.equal(classifyInputFile('a/说明.md'), 'supported')
     assert.equal(classifyInputFile('a/样品.jpg'), 'image')
     assert.equal(classifyInputFile('a/宣传.PNG'), 'image')
@@ -112,7 +112,7 @@ describe('copyLibrarySourcesToInputs', () => {
     assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '空夹')), false)
   })
 
-  it('copies images and skips pdf/unknown; keeps text', async () => {
+  it('copies images and skips invalid pdf/unknown; keeps text', async () => {
     const root = makeRoot()
     const filesRoot = path.join(root, 'files')
     const inputsDir = path.join(root, 'inputs')
@@ -145,8 +145,71 @@ describe('copyLibrarySourcesToInputs', () => {
       { type: 'file', library_path: '绿森/说明.md' },
       { type: 'file', library_path: '绿森/图.jpg' },
     ])
-    assert.equal(copied.skipped.includes('绿森/目录.pdf（当前不支持该格式）'), true)
+    assert.equal(
+      copied.skipped.some((s) => s.includes('绿森/目录.pdf') && s.includes('无法解析')),
+      true,
+    )
     assert.equal(copied.skipped.includes('绿森/无扩展名（当前不支持该格式）'), true)
+  })
+
+  it('extracts pdf sidecar when text layer is available (injected)', async () => {
+    const root = makeRoot()
+    const filesRoot = path.join(root, 'files')
+    const inputsDir = path.join(root, 'inputs')
+    writeFile(path.join(filesRoot, '绿森', '目录.pdf'), 'binary-fake')
+    writeFile(path.join(filesRoot, '绿森', 'readme.md'), 'md')
+
+    const copied = await copyLibrarySourcesToInputs(
+      'prod_1',
+      inputsDir,
+      filesRoot,
+      [],
+      ['绿森/目录.pdf', '绿森/readme.md'],
+      {
+        extractPdf: async () => ({
+          ok: true,
+          text: 'GreenWood Product Catalog Specification Model',
+        }),
+      },
+    )
+
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '目录.pdf')), true)
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '目录.pdf.txt')), true)
+    assert.deepEqual(copied.inputFiles, [
+      'data/products/prod_1/inputs/绿森/目录.pdf.txt',
+      'data/products/prod_1/inputs/绿森/readme.md',
+    ])
+    assert.deepEqual(copied.sourceInputs, [
+      { type: 'file', library_path: '绿森/目录.pdf' },
+      { type: 'file', library_path: '绿森/readme.md' },
+    ])
+    assert.deepEqual(copied.skipped, [])
+  })
+
+  it('skips scanned pdf when extract returns scanned (injected)', async () => {
+    const root = makeRoot()
+    const filesRoot = path.join(root, 'files')
+    const inputsDir = path.join(root, 'inputs')
+    writeFile(path.join(filesRoot, '绿森', '扫描.pdf'), 'binary')
+    writeFile(path.join(filesRoot, '绿森', 'ok.md'), 'z')
+
+    const copied = await copyLibrarySourcesToInputs(
+      'prod_1',
+      inputsDir,
+      filesRoot,
+      [],
+      ['绿森/扫描.pdf', '绿森/ok.md'],
+      {
+        extractPdf: async () => ({ ok: false, reason: 'scanned' }),
+      },
+    )
+
+    assert.equal(fs.existsSync(path.join(inputsDir, '绿森', '扫描.pdf')), false)
+    assert.equal(
+      copied.skipped.some((s) => s.includes('扫描.pdf') && s.includes('扫描件暂不支持')),
+      true,
+    )
+    assert.deepEqual(copied.inputFiles, ['data/products/prod_1/inputs/绿森/ok.md'])
   })
 
   it('copies image-only selection', async () => {

@@ -8,7 +8,7 @@ import { getRepoRoot } from './paths'
  * 模板版本：改动标准 workspace 中 skills/mcp/config 结构时递增，
  * 启动时若目标区标记版本落后，会重新同步托管目录。
  */
-export const WORKSPACE_TEMPLATE_VERSION = '2026.09.04-us-i-12-image-input'
+export const WORKSPACE_TEMPLATE_VERSION = '2026.09.05-us-i-13-pdf-sidecar'
 
 /** 始终从模板覆盖同步（用户业务数据不在此列） */
 export const MANAGED_WORKSPACE_DIRS = ['skills', 'mcp-servers', 'config'] as const

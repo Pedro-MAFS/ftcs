@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   classifyInputFile,
   IMAGE_FILE_MESSAGE,
+  PDF_FILE_MESSAGE,
   SPECIAL_FILE_MESSAGE,
   SUPPORTED_TEXT_EXTENSIONS,
 } from "./file-types.js";
@@ -169,7 +170,7 @@ server.tool(
 
 server.tool(
   "file_classify",
-  "Classify an input file as supported text, image (multimodal Read), special (needs parser), or unknown.",
+  "Classify an input file as supported text, image (multimodal Read), pdf sidecar, special (needs parser), or unknown.",
   {
     file_path: z.string().describe("Path to the input file"),
   },
@@ -184,9 +185,11 @@ server.tool(
           ? SPECIAL_FILE_MESSAGE
           : status === "image"
             ? IMAGE_FILE_MESSAGE
-            : status === "unknown"
-              ? "未知文件类型。请优先提供 txt/md/json/csv、图片，或提供公司网站 URL。"
-              : null,
+            : status === "pdf"
+              ? PDF_FILE_MESSAGE
+              : status === "unknown"
+                ? "未知文件类型。请优先提供 txt/md/json/csv、图片、文字型 PDF，或提供公司网站 URL。"
+                : null,
     };
     return {
       content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],

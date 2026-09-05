@@ -15,10 +15,11 @@ test("getFileExtension returns lowercase extension", () => {
   assert.equal(getFileExtension("notes"), "");
 });
 
-test("classifyInputFile handles supported, image, and special files", () => {
+test("classifyInputFile handles supported, image, pdf, and special files", () => {
   assert.equal(classifyInputFile("product.txt"), "supported");
   assert.equal(classifyInputFile("photo.jpg"), "image");
-  assert.equal(classifyInputFile("catalog.pdf"), "special");
+  assert.equal(classifyInputFile("catalog.pdf"), "pdf");
+  assert.equal(classifyInputFile("legacy.doc"), "special");
   assert.equal(classifyInputFile("image.bin"), "unknown");
 });
 

@@ -8,6 +8,12 @@ import {
   officeSidecarRelPath,
   type OfficeExtractResult,
 } from './profile-office-extract'
+import {
+  extractPdfTextToString,
+  pdfSidecarRelPath,
+  pdfSkippedLabel,
+  type PdfExtractResult,
+} from './profile-pdf-extract'
 
 export type SourceInput =
   | { type: 'website'; library_path: string; url: string }
@@ -26,20 +32,17 @@ const SUPPORTED_TEXT_EXTENSIONS = new Set([
   '.htm',
 ])
 
-/** pdf / 老格式等；图片见 US-I-12；docx/xlsx/pptx 见 office */
-const SPECIAL_FILE_EXTENSIONS = new Set([
-  '.pdf',
-  '.xls',
-  '.doc',
-  '.ppt',
-])
+/** 老 Office / 其它；pdf 见 US-I-13；图片见 US-I-12；docx/xlsx/pptx 见 office */
+const SPECIAL_FILE_EXTENSIONS = new Set(['.xls', '.doc', '.ppt'])
 
-export type InputFileKind = 'supported' | 'office' | 'image' | 'special' | 'unknown'
+export type InputFileKind = 'supported' | 'office' | 'image' | 'pdf' | 'special' | 'unknown'
 
 export type OfficeExtractFn = (
   absSourcePath: string,
   cliExe: string,
 ) => Promise<OfficeExtractResult>
+
+export type PdfExtractFn = (absSourcePath: string) => Promise<PdfExtractResult>
 
 export function classifyInputFile(filePath: string): InputFileKind {
   const base = filePath.replace(/\\/g, '/')
@@ -50,6 +53,7 @@ export function classifyInputFile(filePath: string): InputFileKind {
   if (SUPPORTED_TEXT_EXTENSIONS.has(ext)) return 'supported'
   if (isOfficeExtractExtension(base)) return 'office'
   if (isImageFile(base)) return 'image'
+  if (ext === '.pdf') return 'pdf'
   if (SPECIAL_FILE_EXTENSIONS.has(ext)) return 'special'
   return 'unknown'
 }
@@ -64,6 +68,8 @@ export interface CopiedLibrarySources {
 export interface CopyLibrarySourcesOptions {
   /** 单测注入；默认走真 OfficeCLI extract */
   extractOffice?: OfficeExtractFn
+  /** 单测注入；默认走内置 PDF 文本抽取 */
+  extractPdf?: PdfExtractFn
   /**
    * 解析 OfficeCLI。生产由 bootstrap 传入 resolveConfiguredOfficeCli；
    * 未传则视为未安装（避免本模块静态依赖 electron）。
@@ -111,6 +117,7 @@ export async function copyLibrarySourcesToInputs(
   const sourceInputs: SourceInput[] = []
   const skipped: string[] = []
   const extractOffice = options?.extractOffice ?? extractOfficeTextToString
+  const extractPdf = options?.extractPdf ?? extractPdfTextToString
   const resolveCli = options?.resolveCli ?? (() => null)
 
   for (const rel of websitePaths) {
@@ -184,6 +191,26 @@ export async function copyLibrarySourcesToInputs(
         fs.mkdirSync(path.dirname(dest), { recursive: true })
         fs.copyFileSync(src, dest)
         inputFiles.push(storedInputPath(productId, stored))
+        sourceInputs.push({ type: 'file', library_path: stored })
+        continue
+      }
+
+      if (kind === 'pdf') {
+        const extracted = await extractPdf(src)
+        if (!extracted.ok) {
+          skipped.push(`${rel}（${pdfSkippedLabel(extracted.reason)}）`)
+          continue
+        }
+        const { dest, stored } = destUnderInputs(inputsDir, safe)
+        const sidecarRel = pdfSidecarRelPath(stored)
+        const { dest: sidecarDest, stored: sidecarStored } = destUnderInputs(
+          inputsDir,
+          sidecarRel,
+        )
+        fs.mkdirSync(path.dirname(dest), { recursive: true })
+        fs.copyFileSync(src, dest)
+        fs.writeFileSync(sidecarDest, extracted.text, 'utf8')
+        inputFiles.push(storedInputPath(productId, sidecarStored))
         sourceInputs.push({ type: 'file', library_path: stored })
         continue
       }

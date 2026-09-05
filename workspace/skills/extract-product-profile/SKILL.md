@@ -42,11 +42,12 @@ outputs:
 | 公司网站 | `chrome-devtools-mcp`      | 打开首页，按需自由探索站内页面 |
 | 普通文本 | 智能体原生 Read 工具              | 直接读取文本内容      |
 | Office 侧车 | 智能体原生 Read 工具           | 读取桌面端已抽好的 `.docx.txt` 等侧车 |
+| PDF 侧车 | 智能体原生 Read 工具           | 读取桌面端已抽好的 `.pdf.txt` 侧车 |
 | 图片 | 智能体原生 Read（**多模态**）     | 识别画面中的产品名、规格、卖点等，合并进画像 |
-| pdf 等待解析 / 未知 | `lead-store.file_classify` | **跳过该文件**，有其它资料则继续 |
+| 老格式 / 未知 | `lead-store.file_classify` | **跳过该文件**，有其它资料则继续 |
 
 
-**仍跳过的格式**：pdf（待桌面端侧车支持）、老 Office 原件（`.doc`/`.xls`/`.ppt`）等。桌面端生成时已过滤或已抽侧车；若仍碰到 special/unknown，**不要停止整次生成**。
+**仍跳过的格式**：老 Office 原件（`.doc`/`.xls`/`.ppt`）等。桌面端生成时已过滤或已抽侧车；若仍碰到 special/unknown，**不要停止整次生成**。
 
 ## 执行步骤
 
@@ -61,6 +62,7 @@ outputs:
 - 有 `file_paths` → 对每个文件调用 `lead-store.file_classify`（可选；桌面端已过滤）
   - `supported` → 走 **文本文件分支**（Step 2B）
   - **`image`** → **Read 多模态**读取图片，提取产品信息（Step 2C）
+  - **`pdf`** → Read **`{原名}.pdf.txt` 侧车**（Step 2D）；勿 Read 原件
   - Office 已抽成侧车的路径（如 `说明.docx.txt`）→ 按 **文本文件分支** Read
   - `special` / `unknown` → **跳过该文件并继续**，不要停止整次。可在摘要里说明跳过了哪些格式。
 - 两者都有 → 分别执行后 **合并进同一份画像**
@@ -122,6 +124,14 @@ outputs:
   ```json
    { "type": "file", "path": "data/products/{id}/inputs/…/样品图.jpg", "uploaded_at": "..." }
   ```
+
+### Step 2D：PDF 侧车分支（Read 文本）
+
+1. 对每个 `pdf` 分类项，或 Prompt 列表中的 `.pdf.txt` 侧车路径：
+  - 使用 Read 工具读取 **侧车文本**（不要 Read 原件 `.pdf`）
+  - 从文本提取产品名、规格、MOQ、卖点等
+2. 某份 PDF 侧车 Read 失败 → **跳过该份**，继续其它资料
+3. `source_inputs` 的 `path` 指向侧车；`library_path`（由桌面补齐）为原件相对路径
 
 ### Step 3：构建画像对象
 

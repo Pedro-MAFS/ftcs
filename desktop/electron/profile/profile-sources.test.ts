@@ -78,6 +78,23 @@ describe('mergeSourceInputs', () => {
     ])
   })
 
+  it('maps pdf library_path to sidecar .txt path', () => {
+    const pdfManifest: SourcesManifest = {
+      product_id: 'prod_1',
+      created_at: '2026-08-18T00:00:00.000Z',
+      files: ['data/products/prod_1/inputs/绿森/目录.pdf.txt'],
+      source_inputs: [{ type: 'file', library_path: '绿森/目录.pdf' }],
+    }
+    const merged = mergeSourceInputs([], pdfManifest)
+    assert.deepEqual(merged, [
+      {
+        type: 'file',
+        path: 'data/products/prod_1/inputs/绿森/目录.pdf.txt',
+        uploaded_at: '2026-08-18T00:00:00.000Z',
+      },
+    ])
+  })
+
   it('maps image library_path to original image path', () => {
     const imageManifest: SourcesManifest = {
       product_id: 'prod_1',

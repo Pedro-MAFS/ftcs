@@ -2,6 +2,7 @@ import {
   isOfficeExtractExtension,
   officeSidecarRelPath,
 } from './profile-office-extract'
+import { isPdfExtension } from './profile-pdf-extract'
 
 export interface SourcesManifest {
   product_id?: string
@@ -24,13 +25,14 @@ function slashPath(value: unknown): string {
 
 /**
  * 资料库相对路径 → inputs 下 Agent 可读路径。
- * Office：library_path 为原件，映射到侧车 .txt。
+ * Office / PDF：library_path 为原件，映射到侧车 .txt。
  */
 export function inputsPathFor(manifest: SourcesManifest, libraryPath: string): string {
   const lib = slashPath(libraryPath)
-  const candidateLibs = isOfficeExtractExtension(lib)
-    ? [officeSidecarRelPath(lib), lib]
-    : [lib]
+  const candidateLibs =
+    isOfficeExtractExtension(lib) || isPdfExtension(lib)
+      ? [officeSidecarRelPath(lib), lib]
+      : [lib]
 
   for (const candidate of candidateLibs) {
     const listed = (manifest.files ?? []).find((item) => {
