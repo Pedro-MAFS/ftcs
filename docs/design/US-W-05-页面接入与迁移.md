@@ -20,7 +20,7 @@
 
 ## 1.1 线索页 `LeadsView.vue`
 
-- compact 版 `WorkflowPlanControl`，**替换**现网 `ExploreStartControl`。  
+- compact 版 **`WorkflowPlanControl`**（API 见 [US-W-02 §4、§7](US-W-02-方案选择与执行控件.md)），**替换**现网 `ExploreStartControl`。  
 - 副标题 / 空态：「暂无线索 · 选择方案并执行」。  
 - **保留**「评分去重」「批量起草」单步按钮；与「执行中」互斥 disabled。  
 - 需要看探索任务列表时，用户仍通过顶栏 / 流水线进入 **探索页**（现网入口不变）。
