@@ -89,6 +89,8 @@ onMounted(() => {
 defineExpose({
   reloadPlans,
   selectPlanId,
+  getSelectedPlan: () => selectedPlan.value,
+  getPlans: () => plans.value,
 })
 </script>
 

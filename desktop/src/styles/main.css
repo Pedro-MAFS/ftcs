@@ -3937,6 +3937,181 @@ select.text-input {
   font-size: 11px;
 }
 
+.workflow-plan-manage {
+  position: relative;
+  display: inline-flex;
+}
+
+.workflow-plan-manage__trigger {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  height: 30px;
+  padding: 0 8px;
+}
+
+.workflow-plan-manage.is-compact .workflow-plan-manage__trigger {
+  height: 26px;
+  padding: 0 7px;
+}
+
+.workflow-plan-manage__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 40;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+}
+
+.workflow-plan-manage__item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workflow-plan-manage__item:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.workflow-plan-manage__item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.workflow-plan-manage__item.is-danger:not(:disabled) {
+  color: var(--danger);
+}
+
+.workflow-plan-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.workflow-plan-editor__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgb(0 0 0 / 55%);
+  cursor: pointer;
+}
+
+.workflow-plan-editor__panel {
+  position: relative;
+  z-index: 1;
+  width: min(520px, 100%);
+  max-height: min(80vh, 720px);
+  overflow: auto;
+  padding: 18px 20px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 45%);
+}
+
+.workflow-plan-editor__head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.workflow-plan-editor__head p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.workflow-plan-editor__field {
+  display: block;
+  margin-top: 16px;
+}
+
+.workflow-plan-editor__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.workflow-plan-editor__steps {
+  margin-top: 16px;
+}
+
+.workflow-plan-editor__steps-head {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.workflow-plan-editor__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-plan-editor__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.workflow-plan-editor__index {
+  flex: 0 0 20px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: right;
+}
+
+.workflow-plan-editor__node {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  font-size: 12px;
+  background: var(--bg-input);
+  color: var(--text);
+}
+
+.workflow-plan-editor__row-actions {
+  display: inline-flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.workflow-plan-editor__add {
+  margin-top: 4px;
+}
+
+.workflow-plan-editor__error {
+  margin: 12px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.workflow-plan-editor__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .explore-summary {
   display: flex;
   align-items: center;

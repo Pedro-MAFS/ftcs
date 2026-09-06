@@ -6,9 +6,12 @@ import { useWorkspace } from '../composables/useWorkspace'
 import { useWorkflowExecute } from '../composables/useWorkflowExecute'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
+import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import WorkflowPlanControl from '../components/workflow/WorkflowPlanControl.vue'
+import WorkflowPlanManageMenu from '../components/workflow/WorkflowPlanManageMenu.vue'
+import WorkflowPlanEditorDialog from '../components/workflow/WorkflowPlanEditorDialog.vue'
 import LeadDetailDrawer from '../components/shared/LeadDetailDrawer.vue'
-import type { LeadRowDto, LeadsSnapshotDto } from '../types/electron'
+import type { LeadRowDto, LeadsSnapshotDto, WorkflowPlan } from '../types/electron'
 import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonDisplay } from '../utils/leads-export'
 
 const meta = SECTION_META.leads
@@ -328,6 +331,74 @@ async function onWorkflowExecute(planId: string): Promise<void> {
   }
 }
 
+const workflowPlanRef = ref<InstanceType<typeof WorkflowPlanControl> | null>(null)
+const editorOpen = ref(false)
+const editorMode = ref<'create' | 'edit'>('create')
+const deleteConfirmOpen = ref(false)
+const deleteBusy = ref(false)
+
+const selectedWorkflowPlan = computed(() => workflowPlanRef.value?.getSelectedPlan())
+const workflowPlans = computed(() => workflowPlanRef.value?.getPlans() ?? [])
+
+const canManageSelectedPlan = computed(() => {
+  const plan = selectedWorkflowPlan.value
+  return !!plan && !plan.builtin
+})
+
+const workflowMenuDisabled = computed(
+  () => isWorkflowRunning.value || generating.value,
+)
+
+const workflowMenuDisabledReason = computed(() => {
+  if (isWorkflowRunning.value) return '方案执行中'
+  if (generating.value) return '已有任务在运行'
+  return ''
+})
+
+const deletePlanMessage = computed(() => {
+  const plan = selectedWorkflowPlan.value
+  if (!plan) return '确定删除当前方案？此操作不可恢复。'
+  return `确定删除方案「${plan.name}」？此操作不可恢复。`
+})
+
+function openCreateEditor(): void {
+  editorMode.value = 'create'
+  editorOpen.value = true
+}
+
+function openEditEditor(): void {
+  if (!canManageSelectedPlan.value) return
+  editorMode.value = 'edit'
+  editorOpen.value = true
+}
+
+async function onPlanSaved(plan: WorkflowPlan): Promise<void> {
+  editorOpen.value = false
+  await workflowPlanRef.value?.reloadPlans(plan.id)
+  actionMessage.value = `已保存方案「${plan.name}」`
+}
+
+async function onPlanDeleteConfirm(): Promise<void> {
+  const plan = selectedWorkflowPlan.value
+  if (!plan || plan.builtin || !window.ftcs?.deleteWorkflowPlan) return
+
+  deleteBusy.value = true
+  try {
+    const res = await window.ftcs.deleteWorkflowPlan(plan.id)
+    if (!res.ok) {
+      actionMessage.value = res.message ?? '删除失败'
+      return
+    }
+    deleteConfirmOpen.value = false
+    await workflowPlanRef.value?.reloadPlans()
+    actionMessage.value = `已删除方案「${plan.name}」`
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    deleteBusy.value = false
+  }
+}
+
 async function onScoreClick(): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.scoreAndDedupeLeads) return
   if (stats.value.raw <= 0) {
@@ -601,16 +672,50 @@ onUnmounted(() => {
           {{ isScoring ? '评分中…' : '评分去重' }}
         </button>
         <WorkflowPlanControl
+          ref="workflowPlanRef"
           compact
           :disabled="!canRunWorkflow"
           :disabled-reason="workflowDisabledReason"
           :executing="isWorkflowRunning"
           @execute="onWorkflowExecute"
-        />
+        >
+          <template #menu>
+            <WorkflowPlanManageMenu
+              compact
+              :disabled="workflowMenuDisabled"
+              :disabled-reason="workflowMenuDisabledReason"
+              :can-edit="canManageSelectedPlan"
+              :can-delete="canManageSelectedPlan"
+              @create="openCreateEditor"
+              @edit="openEditEditor"
+              @delete="deleteConfirmOpen = true"
+            />
+          </template>
+        </WorkflowPlanControl>
       </div>
     </header>
 
     <p v-if="actionMessage" class="leads-banner">{{ actionMessage }}</p>
+
+    <WorkflowPlanEditorDialog
+      :open="editorOpen"
+      :mode="editorMode"
+      :initial-plan="editorMode === 'edit' ? selectedWorkflowPlan : undefined"
+      :existing-plans="workflowPlans"
+      @close="editorOpen = false"
+      @saved="onPlanSaved"
+    />
+
+    <ConfirmDialog
+      :open="deleteConfirmOpen"
+      title="删除方案"
+      :message="deletePlanMessage"
+      confirm-label="删除"
+      danger
+      :busy="deleteBusy"
+      @confirm="onPlanDeleteConfirm"
+      @cancel="deleteConfirmOpen = false"
+    />
 
     <div class="filter-row">
       <button

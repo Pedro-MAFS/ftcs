@@ -21,3 +21,22 @@ export const WORKFLOW_NODE_PREFLIGHT: Record<WorkflowNodeId, AgentPreflightKind>
 export function workflowNodeLabel(nodeId: WorkflowNodeId): string {
   return WORKFLOW_NODE_LABELS[nodeId] ?? nodeId
 }
+
+/** 弹框节点下拉；顺序与 W-01 catalog / 需求 §4 一致 */
+export const WORKFLOW_NODE_OPTIONS: ReadonlyArray<{
+  id: WorkflowNodeId
+  label: string
+}> = [
+  { id: 'expand-keywords', label: WORKFLOW_NODE_LABELS['expand-keywords'] },
+  { id: 'discover-r1', label: WORKFLOW_NODE_LABELS['discover-r1'] },
+  { id: 'discover-r2', label: WORKFLOW_NODE_LABELS['discover-r2'] },
+  { id: 'discover-r3', label: WORKFLOW_NODE_LABELS['discover-r3'] },
+  { id: 'score-and-dedupe', label: WORKFLOW_NODE_LABELS['score-and-dedupe'] },
+  { id: 'draft-outreach-email', label: WORKFLOW_NODE_LABELS['draft-outreach-email'] },
+]
+
+const WORKFLOW_NODE_ID_SET = new Set(WORKFLOW_NODE_OPTIONS.map((opt) => opt.id))
+
+export function isWorkflowNodeIdValue(value: string): value is WorkflowNodeId {
+  return WORKFLOW_NODE_ID_SET.has(value as WorkflowNodeId)
+}
