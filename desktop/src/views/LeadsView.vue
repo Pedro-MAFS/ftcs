@@ -3,10 +3,10 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
-import { useExploreStart } from '../composables/useExploreStart'
+import { useWorkflowExecute } from '../composables/useWorkflowExecute'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
-import ExploreStartControl from '../components/explore/ExploreStartControl.vue'
+import WorkflowPlanControl from '../components/workflow/WorkflowPlanControl.vue'
 import LeadDetailDrawer from '../components/shared/LeadDetailDrawer.vue'
 import type { LeadRowDto, LeadsSnapshotDto } from '../types/electron'
 import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonDisplay } from '../utils/leads-export'
@@ -66,36 +66,6 @@ const isDrafting = computed(
     (generating.value && agentSkill.value === 'draft-outreach-email'),
 )
 
-const {
-  exploreRound,
-  canStartSelected,
-  startDisabledReason,
-  isStartingExplore,
-  startExplore,
-} = useExploreStart({
-  extraBusy: () => scoring.value || drafting.value,
-})
-
-const canScore = computed(() => {
-  return (
-    !!activeProductId.value &&
-    !isScoring.value &&
-    !isDrafting.value &&
-    !generating.value &&
-    stats.value.raw > 0
-  )
-})
-
-const canBatchDraft = computed(() => {
-  return (
-    !!activeProductId.value &&
-    !isScoring.value &&
-    !isDrafting.value &&
-    !generating.value &&
-    pendingHighIds.value.length > 0
-  )
-})
-
 const runOptions = computed(() => {
   const tasks = (exploreTasks.value?.tasks ?? []).filter(
     (t) => t.status !== 'keywords_ready',
@@ -109,7 +79,7 @@ const runOptions = computed(() => {
 const subtitle = computed(() => {
   if (!activeProductId.value) return '请先在侧栏选择产品'
   const s = stats.value
-  if (s.total === 0) return '暂无线索 · 可在本页或探索页开始探索后回来查看'
+  if (s.total === 0) return '暂无线索 · 选择方案并执行'
   const parts = [`${s.total} 条`, `未评分 ${s.raw}`, `已评分 ${s.scored}`]
   if (s.discarded > 0) parts.push(`淘汰 ${s.discarded}`)
   if (runFilter.value) parts.push(`任务 ${runFilter.value}`)
@@ -299,6 +269,65 @@ async function refreshLeads(): Promise<void> {
   }
 }
 
+const {
+  running: isWorkflowRunning,
+  executePlan,
+} = useWorkflowExecute({
+  onMessage: (message) => {
+    actionMessage.value = message
+  },
+  refreshLeads,
+})
+
+const canRunWorkflow = computed(() => {
+  return (
+    !!activeProductId.value &&
+    !isWorkflowRunning.value &&
+    !isScoring.value &&
+    !isDrafting.value &&
+    !generating.value
+  )
+})
+
+const workflowDisabledReason = computed(() => {
+  if (!activeProductId.value) return '请先在侧栏选择产品'
+  if (isWorkflowRunning.value) return '方案执行中'
+  if (generating.value || isScoring.value || isDrafting.value) {
+    return '已有任务在运行'
+  }
+  return ''
+})
+
+const canScore = computed(() => {
+  return (
+    !!activeProductId.value &&
+    !isScoring.value &&
+    !isDrafting.value &&
+    !isWorkflowRunning.value &&
+    !generating.value &&
+    stats.value.raw > 0
+  )
+})
+
+const canBatchDraft = computed(() => {
+  return (
+    !!activeProductId.value &&
+    !isScoring.value &&
+    !isDrafting.value &&
+    !isWorkflowRunning.value &&
+    !generating.value &&
+    pendingHighIds.value.length > 0
+  )
+})
+
+async function onWorkflowExecute(planId: string): Promise<void> {
+  actionMessage.value = ''
+  const result = await executePlan(planId)
+  if (!result.ok && result.message) {
+    actionMessage.value = result.message
+  }
+}
+
 async function onScoreClick(): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.scoreAndDedupeLeads) return
   if (stats.value.raw <= 0) {
@@ -398,10 +427,6 @@ function goEmailLead(lead: LeadRowDto): void {
   router
     .push({ name: 'email', query: { leadId: lead.id } })
     .catch(() => undefined)
-}
-
-async function onStartExplore(): Promise<void> {
-  actionMessage.value = await startExplore()
 }
 
 async function onExportCsv(): Promise<void> {
@@ -575,14 +600,12 @@ onUnmounted(() => {
         >
           {{ isScoring ? '评分中…' : '评分去重' }}
         </button>
-        <ExploreStartControl
+        <WorkflowPlanControl
           compact
-          :round="exploreRound"
-          :disabled="!canStartSelected"
-          :disabled-reason="startDisabledReason"
-          :busy="isStartingExplore"
-          @update:round="exploreRound = $event"
-          @start="onStartExplore"
+          :disabled="!canRunWorkflow"
+          :disabled-reason="workflowDisabledReason"
+          :executing="isWorkflowRunning"
+          @execute="onWorkflowExecute"
         />
       </div>
     </header>
