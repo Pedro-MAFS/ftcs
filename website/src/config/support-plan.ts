@@ -23,30 +23,6 @@ export const supportPlanPriorityLabels: Record<SupportPlanPriority, string> = {
 /** 按状态、优先级排序：开发中在前，同状态内 P0 → P2 */
 export const supportPlanItems: SupportPlanItem[] = [
   {
-    id: 'workflow-orchestration',
-    title: '任务编排 · 一键跑通',
-    description:
-      '将任意流程节点（如 R1 探索、R2 探索、评分去重等）组合为一个按钮顺序执行。提交后在后台运行，完成后通知用户，无需逐步盯屏等待。',
-    priority: 'P0',
-    status: 'developing',
-  },
-  {
-    id: 'runtime-setup-simplify',
-    title: '简化运行环境安装',
-    description:
-      '减少 Node、OpenCode、Chrome 等前置依赖的手动配置步骤，尽量一键或向导式完成，降低首次启动失败率。',
-    priority: 'P0',
-    status: 'developing',
-  },
-  {
-    id: 'input-images-pdf',
-    title: '产品录入 · 图片与 PDF',
-    description:
-      '资料工程树除现有官网、文本与 Office 外，支持直接纳入图片与 PDF 文件参与画像生成（具体格式与抽取方式待详设）。',
-    priority: 'P0',
-    status: 'developing',
-  },
-  {
     id: 'people-contact-profile',
     title: '人员联系画像',
     description:

@@ -4,10 +4,9 @@ FTCS 是跑在本机的外贸获客智能体。用桌面应用完成一次「产
 
 ## 1. 安装并启动
 
-1. 确认本机已有 **Node.js 22+**、**Google Chrome**（见 [外贸获客系统安装与前置](/docs/install)）。
-2. 在官网 [下载页](/download) 获取 Windows 安装包或便携版。
-3. 本机安装 [OpenCode CLI](https://opencode.ai)（轻量包依赖本机 `opencode`；也可在应用内一键安装）。
-4. 启动「外贸获客」，确认标题栏显示运行时就绪。
+1. 在官网 [下载页](/download) 获取 Windows 安装包或便携版并启动应用。
+2. 按首次引导 **一键准备** Node.js 与 OpenCode（或确认本机已安装合格版本），并安装 **Google Chrome**（见 [安装与前置](/docs/install)）。
+3. 确认标题栏显示运行时就绪。
 
 详细步骤见 [安装与前置](/docs/install)。
 

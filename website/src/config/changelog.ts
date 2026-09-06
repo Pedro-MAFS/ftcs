@@ -13,6 +13,17 @@ export const CHANGELOG_STARTED_AT = '0.5.0'
  */
 export const changelogReleases: ChangelogRelease[] = [
   {
+    version: '0.5.3',
+    releasedAt: '2026-09-06',
+    title: '任务编排与环境一键准备',
+    notes: [
+      '线索页可选任务方案：把探索、评分去重、批量起草等步骤按顺序一键跑通，也可自建与编辑方案',
+      '资料工程树支持图片与文字型 PDF：图片由智能体 Read 读图；PDF 自动抽文本后进画像（扫描件暂不支持）',
+      '首次引导可一键准备 Node.js 24 与 OpenCode 1.18.4 到应用目录，无需 UAC、npm 或装完重启',
+      '若你已在应用内完成准备，环境检测只认应用私有路径，避免与系统旧版本混淆',
+    ],
+  },
+  {
     version: '0.5.2',
     releasedAt: '2026-09-03',
     title: 'R3 地图发现',
