@@ -50,6 +50,9 @@ export const IPC = {
   EMAIL_DRAFT_GENERATE: 'email:draft-generate',
   EMAIL_DRAFT_REJECT: 'email:draft-reject',
   EMAIL_DRAFT_APPROVE: 'email:draft-approve',
+  WORKFLOW_LIST_PLANS: 'workflow:list-plans',
+  WORKFLOW_SAVE_PLAN: 'workflow:save-plan',
+  WORKFLOW_DELETE_PLAN: 'workflow:delete-plan',
   AGENT_EVENT: 'agent:event',
   APP_OPEN_EXTERNAL: 'app:open-external',
   AUTH_GET_SESSION: 'auth:get-session',
@@ -945,3 +948,12 @@ export interface LibraryMutationResult {
   skipped?: string[]
   createdPath?: string
 }
+
+export type {
+  WorkflowPlan,
+  WorkflowPlanStep,
+  WorkflowPlanSaveInput,
+  WorkflowListPlansResult,
+  WorkflowSavePlanResult,
+  WorkflowDeletePlanResult,
+} from '../workflow/workflow-plans-types'

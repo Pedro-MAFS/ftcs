@@ -59,6 +59,10 @@ import type {
   OfficeCliInstallResult,
   OfficeCliReadyResult,
   UpdateCheckResult,
+  WorkflowDeletePlanResult,
+  WorkflowListPlansResult,
+  WorkflowPlanSaveInput,
+  WorkflowSavePlanResult,
 } from './ipc/types'
 
 const api = {
@@ -242,6 +246,12 @@ const api = {
     enabled: boolean,
   ): Promise<{ ok: boolean; sites: ExploreR2SiteDto[]; message?: string }> =>
     ipcRenderer.invoke(IPC.EXPLORATION_SET_R2_SITE_ENABLED, { siteId, enabled }),
+  listWorkflowPlans: (): Promise<WorkflowListPlansResult> =>
+    ipcRenderer.invoke(IPC.WORKFLOW_LIST_PLANS),
+  saveWorkflowPlan: (input: WorkflowPlanSaveInput): Promise<WorkflowSavePlanResult> =>
+    ipcRenderer.invoke(IPC.WORKFLOW_SAVE_PLAN, input),
+  deleteWorkflowPlan: (id: string): Promise<WorkflowDeletePlanResult> =>
+    ipcRenderer.invoke(IPC.WORKFLOW_DELETE_PLAN, id),
   listExploreTasks: (productId: string): Promise<ExploreTasksSnapshotDto> =>
     ipcRenderer.invoke(IPC.EXPLORATION_LIST_TASKS, productId),
   startExploreR1: (input: DiscoverLeadsInput): Promise<DiscoverLeadsResult> =>

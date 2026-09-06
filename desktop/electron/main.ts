@@ -68,6 +68,11 @@ import { createEmptyDraftProfile, saveProductProfile, softDeleteProductProfile }
 import { loadExpansion, saveExpansion } from './keywords/keywords-reader'
 import { listExploreTasks } from './exploration/explore-tasks'
 import { listExploreR2Sites, setExploreR2SiteEnabled } from './exploration/r2-sites'
+import {
+  deleteUserWorkflowPlan,
+  listWorkflowPlans,
+  saveUserWorkflowPlan,
+} from './workflow/workflow-plans'
 import { listLeadsSnapshot } from './leads/leads-reader'
 import { saveRawLead } from './leads/lead-writer'
 import { saveCsvWithDialog } from './leads/export-csv'
@@ -872,6 +877,42 @@ function registerIpcHandlers(): void {
       }
     },
   )
+
+  ipcMain.handle(IPC.WORKFLOW_LIST_PLANS, () => {
+    try {
+      return { ok: true as const, plans: listWorkflowPlans(getWorkspaceRoot()) }
+    } catch (err) {
+      return {
+        ok: false as const,
+        plans: [],
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.WORKFLOW_SAVE_PLAN, (_event, input) => {
+    try {
+      const plan = saveUserWorkflowPlan(getWorkspaceRoot(), input)
+      return { ok: true as const, plan }
+    } catch (err) {
+      return {
+        ok: false as const,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.WORKFLOW_DELETE_PLAN, (_event, id: string) => {
+    try {
+      deleteUserWorkflowPlan(getWorkspaceRoot(), String(id || ''))
+      return { ok: true as const }
+    } catch (err) {
+      return {
+        ok: false as const,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
 
   ipcMain.handle(IPC.EXPLORATION_LIST_TASKS, (_event, productId: string) => {
     try {
