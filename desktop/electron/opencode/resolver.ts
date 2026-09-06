@@ -3,7 +3,10 @@ import fs from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { resolveConfiguredOpenCodeBin } from '../runtime/opencode-paths'
+import {
+  isOpenCodePortableBound,
+  resolveConfiguredOpenCodeBin,
+} from '../runtime/opencode-paths'
 
 const execFileAsync = promisify(execFile)
 
@@ -19,15 +22,15 @@ export async function ensureOpenCodeOnPath(): Promise<string> {
     return configured.exe
   }
 
-  const fromPath = await findOnPath('opencode')
-  if (fromPath) return fromPath
+  if (!isOpenCodePortableBound()) {
+    const fromPath = await findOnPath('opencode')
+    if (fromPath) return fromPath
+  }
 
   throw new Error(
     [
       '未找到 OpenCode CLI。',
-      '当前采用 SDK Server+Client，暂不内嵌二进制，需要本机已安装 opencode。',
-      '可在应用引导中一键安装，或：npm install -g opencode-ai',
-      '或设置环境变量 FTCS_OPENCODE_PATH。',
+      '请在应用引导中一键准备 OpenCode，或设置环境变量 FTCS_OPENCODE_PATH。',
     ].join('\n'),
   )
 }

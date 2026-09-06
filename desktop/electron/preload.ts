@@ -124,8 +124,8 @@ const api = {
     ipcRenderer.invoke(IPC.ONBOARDING_SET_STATE, patch),
   probeEnvironment: (): Promise<EnvProbeResult> =>
     ipcRenderer.invoke(IPC.ONBOARDING_PROBE_ENV),
-  installNode: (): Promise<NodeInstallResult> =>
-    ipcRenderer.invoke(IPC.RUNTIME_INSTALL_NODE),
+  installNode: (options?: { forceReinstall?: boolean }): Promise<NodeInstallResult> =>
+    ipcRenderer.invoke(IPC.RUNTIME_INSTALL_NODE, options),
   onNodeInstallProgress: (
     handler: (progress: NodeInstallProgress) => void,
   ): (() => void) => {
@@ -140,8 +140,10 @@ const api = {
       ipcRenderer.removeListener(IPC.RUNTIME_INSTALL_NODE_PROGRESS, listener)
     }
   },
-  installOpenCode: (): Promise<OpenCodeInstallResult> =>
-    ipcRenderer.invoke(IPC.RUNTIME_INSTALL_OPENCODE),
+  installOpenCode: (
+    options?: { forceReinstall?: boolean },
+  ): Promise<OpenCodeInstallResult> =>
+    ipcRenderer.invoke(IPC.RUNTIME_INSTALL_OPENCODE, options),
   onOpenCodeInstallProgress: (
     handler: (progress: OpenCodeInstallProgress) => void,
   ): (() => void) => {

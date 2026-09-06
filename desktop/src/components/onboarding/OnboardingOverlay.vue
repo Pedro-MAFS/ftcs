@@ -159,18 +159,13 @@ function canOneClickInstallNode(item: EnvProbeItem): boolean {
   )
 }
 
-function canUpgradeNode(item: EnvProbeItem): boolean {
+function canReinstallNode(item: EnvProbeItem): boolean {
   if (item.id !== 'node' || item.status !== 'ok') return false
   if (!window.ftcs?.installNode || window.ftcs?.platform !== 'win32') return false
-  const m = item.detail.match(/v?(\d+)\./)
-  if (!m) return false
-  const major = Number.parseInt(m[1] ?? '', 10)
-  return Number.isFinite(major) && major >= 22 && major < 24
+  return (
+    item.detail.includes('node-runtime') || item.detail.includes('prefs.nodePath')
+  )
 }
-
-const nodeReady = computed(
-  () => probe.value?.items.find((i) => i.id === 'node')?.status === 'ok',
-)
 
 function canOneClickInstallOpenCode(item: EnvProbeItem): boolean {
   return (
@@ -178,6 +173,15 @@ function canOneClickInstallOpenCode(item: EnvProbeItem): boolean {
     item.status !== 'ok' &&
     Boolean(window.ftcs?.installOpenCode) &&
     window.ftcs?.platform === 'win32'
+  )
+}
+
+function canReinstallOpenCode(item: EnvProbeItem): boolean {
+  if (item.id !== 'opencode' || item.status !== 'ok') return false
+  if (!window.ftcs?.installOpenCode || window.ftcs?.platform !== 'win32') return false
+  return (
+    item.detail.includes('opencode-runtime') ||
+    item.detail.includes('prefs.opencodePath')
   )
 }
 
@@ -204,10 +208,10 @@ async function openExternal(url: string): Promise<void> {
   await window.ftcs.openExternal(url)
 }
 
-async function onInstallNode(): Promise<void> {
+async function onInstallNode(forceReinstall = false): Promise<void> {
   if (!window.ftcs?.installNode || anyRuntimeInstalling.value) return
   installingNode.value = true
-  nodeInstallProgress.value = '准备安装…'
+  nodeInstallProgress.value = forceReinstall ? '准备重新安装…' : '准备下载…'
   nodeInstallResult.value = null
   openCodeInstallResult.value = null
   officeCliInstallResult.value = null
@@ -217,13 +221,16 @@ async function onInstallNode(): Promise<void> {
     nodeInstallProgress.value = p.message
   }) ?? null
   try {
-    const result = await window.ftcs.installNode()
+    const result = await window.ftcs.installNode(
+      forceReinstall ? { forceReinstall: true } : undefined,
+    )
     nodeInstallResult.value = result
     if (!result.ok) {
       error.value = result.message
       nodeInstallProgress.value = ''
     } else {
       nodeInstallProgress.value = ''
+      await runProbe()
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -235,15 +242,10 @@ async function onInstallNode(): Promise<void> {
   }
 }
 
-async function onInstallOpenCode(): Promise<void> {
+async function onInstallOpenCode(forceReinstall = false): Promise<void> {
   if (!window.ftcs?.installOpenCode || anyRuntimeInstalling.value) return
-  if (!nodeReady.value) {
-    error.value =
-      'OpenCode 依赖 Node.js。请先完成 Node.js 一键安装（或确保已安装 ≥22），完全退出并重启本应用后，再安装 OpenCode。'
-    return
-  }
   installingOpenCode.value = true
-  openCodeInstallProgress.value = '准备安装…'
+  openCodeInstallProgress.value = forceReinstall ? '准备重新准备…' : '准备下载…'
   openCodeInstallResult.value = null
   nodeInstallResult.value = null
   officeCliInstallResult.value = null
@@ -254,13 +256,16 @@ async function onInstallOpenCode(): Promise<void> {
       openCodeInstallProgress.value = p.message
     }) ?? null
   try {
-    const result = await window.ftcs.installOpenCode()
+    const result = await window.ftcs.installOpenCode(
+      forceReinstall ? { forceReinstall: true } : undefined,
+    )
     openCodeInstallResult.value = result
     if (!result.ok) {
       error.value = result.message
       openCodeInstallProgress.value = ''
     } else {
       openCodeInstallProgress.value = ''
+      await runProbe()
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -538,38 +543,40 @@ onMounted(() => {
                   type="button"
                   class="btn-primary btn-sm"
                   :disabled="anyRuntimeInstalling"
-                  @click="onInstallNode"
+                  @click="onInstallNode(false)"
                 >
-                  {{ installingNode ? '安装中…' : '一键安装 Node.js 24.18.0' }}
+                  {{ installingNode ? '准备中…' : '一键准备 Node.js 24.18.0' }}
                 </button>
                 <button
-                  v-else-if="canUpgradeNode(item)"
+                  v-if="canReinstallNode(item)"
                   type="button"
                   class="btn-secondary btn-sm"
                   :disabled="anyRuntimeInstalling"
-                  @click="onInstallNode"
+                  @click="onInstallNode(true)"
                 >
-                  {{ installingNode ? '安装中…' : '升级到 24.18.0（推荐）' }}
+                  {{ installingNode ? '准备中…' : '重新准备' }}
                 </button>
                 <button
                   v-if="canOneClickInstallOpenCode(item)"
                   type="button"
                   class="btn-primary btn-sm"
-                  :disabled="anyRuntimeInstalling || !nodeReady"
-                  :title="
-                    nodeReady
-                      ? ''
-                      : '需先就绪 Node.js 22+，并建议重启应用后再装 OpenCode'
-                  "
-                  @click="onInstallOpenCode"
+                  :disabled="anyRuntimeInstalling"
+                  @click="onInstallOpenCode(false)"
                 >
                   {{
                     installingOpenCode
-                      ? '安装中…'
-                      : nodeReady
-                        ? '一键安装 OpenCode 1.18.4'
-                        : '需先就绪 Node.js'
+                      ? '准备中…'
+                      : '一键准备 OpenCode 1.18.4'
                   }}
+                </button>
+                <button
+                  v-if="canReinstallOpenCode(item)"
+                  type="button"
+                  class="btn-secondary btn-sm"
+                  :disabled="anyRuntimeInstalling"
+                  @click="onInstallOpenCode(true)"
+                >
+                  {{ installingOpenCode ? '准备中…' : '重新准备' }}
                 </button>
                 <button
                   v-if="canOneClickInstallOfficeCli(item)"
@@ -602,7 +609,7 @@ onMounted(() => {
                 >
                   {{
                     item.id === 'node'
-                      ? '打开 Node 官网'
+                      ? '查看安装说明'
                       : item.id === 'chrome'
                         ? '打开 Chrome 下载'
                         : item.id === 'officecli'
@@ -621,32 +628,18 @@ onMounted(() => {
             <p v-if="officeCliInstallProgress" class="onboarding__muted">
               {{ officeCliInstallProgress }}
             </p>
-            <div
+            <p
               v-if="nodeInstallResult?.ok"
-              class="onboarding__restart"
+              class="onboarding__ok"
             >
-              <p class="onboarding__ok">{{ nodeInstallResult.message }}</p>
-              <button
-                type="button"
-                class="btn-primary btn-sm"
-                @click="onQuitApp"
-              >
-                退出应用
-              </button>
-            </div>
-            <div
+              {{ nodeInstallResult.message }}
+            </p>
+            <p
               v-else-if="openCodeInstallResult?.ok"
-              class="onboarding__restart"
+              class="onboarding__ok"
             >
-              <p class="onboarding__ok">{{ openCodeInstallResult.message }}</p>
-              <button
-                type="button"
-                class="btn-primary btn-sm"
-                @click="onQuitApp"
-              >
-                退出应用
-              </button>
-            </div>
+              {{ openCodeInstallResult.message }}
+            </p>
             <p
               v-else-if="officeCliInstallResult?.ok"
               class="onboarding__ok"
@@ -666,7 +659,7 @@ onMounted(() => {
               class="btn-secondary btn-sm"
               @click="openExternal(nodeInstallResult.manualUrl)"
             >
-              打开 Node 官网手动安装
+              查看安装说明
             </button>
             <button
               v-if="openCodeInstallResult && !openCodeInstallResult.ok && openCodeInstallResult.manualUrl"

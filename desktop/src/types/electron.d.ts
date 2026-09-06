@@ -574,9 +574,11 @@ declare global {
       getOnboardingState: () => Promise<OnboardingState>
       setOnboardingState: (patch: Partial<OnboardingState>) => Promise<OnboardingState>
       probeEnvironment: () => Promise<EnvProbeResult>
-      installNode: () => Promise<NodeInstallResult>
+      installNode: (options?: { forceReinstall?: boolean }) => Promise<NodeInstallResult>
       onNodeInstallProgress: (handler: (progress: NodeInstallProgress) => void) => () => void
-      installOpenCode: () => Promise<OpenCodeInstallResult>
+      installOpenCode: (options?: {
+        forceReinstall?: boolean
+      }) => Promise<OpenCodeInstallResult>
       onOpenCodeInstallProgress: (
         handler: (progress: OpenCodeInstallProgress) => void,
       ) => () => void

@@ -3,6 +3,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { getDocsInstallUrl } from '../config/site-origins'
+import {
+  isNodePortableBound,
+  resolveConfiguredNode,
+} from '../runtime/node-paths'
+import { NODE_PORTABLE_INSTALL } from '../runtime/node-portable-install-types'
+import {
+  isOpenCodePortableBound,
+  resolveConfiguredOpenCodeBin,
+} from '../runtime/opencode-paths'
 
 const execFileAsync = promisify(execFile)
 
@@ -52,8 +61,61 @@ async function findOnPath(command: string): Promise<string | null> {
 }
 
 async function probeNode(): Promise<EnvProbeItem> {
+  const manualUrl = getDocsInstallUrl()
+
+  if (isNodePortableBound()) {
+    const configured = resolveConfiguredNode()
+    if (!configured) {
+      return {
+        id: 'node',
+        label: 'Node.js 22+',
+        status: 'missing',
+        detail:
+          '应用内 Node 未就绪或文件已缺失。请重新一键准备 Node.js（下载到应用目录）。',
+        installUrl: manualUrl,
+      }
+    }
+
+    let version = ''
+    try {
+      const { stdout } = await execFileAsync(configured.exe, ['-v'], {
+        windowsHide: true,
+      })
+      version = stdout.trim()
+    } catch {
+      return {
+        id: 'node',
+        label: 'Node.js 22+',
+        status: 'error',
+        detail: `${configured.exe} 存在但无法运行（可能被杀软隔离）。请重新准备。`,
+        installUrl: manualUrl,
+      }
+    }
+
+    const major = Number.parseInt(version.replace(/^v/, '').split('.')[0] ?? '', 10)
+    if (!Number.isFinite(major) || major < NODE_PORTABLE_INSTALL.minMajorForOk) {
+      return {
+        id: 'node',
+        label: 'Node.js 22+',
+        status: 'outdated',
+        detail: `应用内 Node ${version || '?'}（${configured.exe}），需要 ≥ ${NODE_PORTABLE_INSTALL.minMajorForOk}。`,
+        installUrl: manualUrl,
+      }
+    }
+
+    return {
+      id: 'node',
+      label: 'Node.js 22+',
+      status: 'ok',
+      detail: `${version} · ${configured.exe}（${configured.source}）`,
+      installUrl: manualUrl,
+    }
+  }
+
   const { resolveBestNode } = await import('../runtime/resolve-node')
-  const { bestOk, bestAny, all } = await resolveBestNode({ minMajor: 22 })
+  const { bestOk, bestAny, all } = await resolveBestNode({
+    minMajor: NODE_PORTABLE_INSTALL.minMajorForOk,
+  })
 
   if (!bestAny) {
     return {
@@ -61,8 +123,8 @@ async function probeNode(): Promise<EnvProbeItem> {
       label: 'Node.js 22+',
       status: 'missing',
       detail:
-        '未找到 node（PATH / 注册表 / 常见安装目录均无）。MCP 与 npx 依赖本机 Node。',
-      installUrl: NODE_INSTALL_URL,
+        '未找到 Node.js ≥22。可一键准备到应用目录（无需管理员权限），或自行安装后重新检测。',
+      installUrl: manualUrl,
     }
   }
 
@@ -71,8 +133,8 @@ async function probeNode(): Promise<EnvProbeItem> {
       id: 'node',
       label: 'Node.js 22+',
       status: 'outdated',
-      detail: `当前最高 ${bestAny.version}（${bestAny.exe}），需要 ≥ 22。`,
-      installUrl: NODE_INSTALL_URL,
+      detail: `当前最高 ${bestAny.version}（${bestAny.exe}），需要 ≥ ${NODE_PORTABLE_INSTALL.minMajorForOk}。`,
+      installUrl: manualUrl,
     }
   }
 
@@ -89,13 +151,16 @@ async function probeNode(): Promise<EnvProbeItem> {
     label: 'Node.js 22+',
     status: 'ok',
     detail: `${bestOk.version} · ${bestOk.exe}（${bestOk.source}）${pathHint}`,
+    installUrl: manualUrl,
   }
 }
 
 async function probeOpenCode(): Promise<EnvProbeItem> {
-  const { resolveConfiguredOpenCodeBin } = await import('../runtime/opencode-paths')
-  const configured = resolveConfiguredOpenCodeBin()
-  if (configured) {
+  const manualUrl = getDocsInstallUrl()
+
+  const describeConfigured = async (
+    configured: { exe: string; source: string },
+  ): Promise<EnvProbeItem> => {
     let version = ''
     try {
       const { stdout } = await execFileAsync(configured.exe, ['--version'], {
@@ -103,7 +168,13 @@ async function probeOpenCode(): Promise<EnvProbeItem> {
       })
       version = stdout.trim().split(/\r?\n/)[0] ?? ''
     } catch {
-      // ignore
+      return {
+        id: 'opencode',
+        label: 'OpenCode CLI',
+        status: 'error',
+        detail: `${configured.exe} 存在但无法运行（可能被杀软隔离）。请重新准备。`,
+        installUrl: manualUrl,
+      }
     }
     return {
       id: 'opencode',
@@ -112,7 +183,28 @@ async function probeOpenCode(): Promise<EnvProbeItem> {
       detail: version
         ? `${version} · ${configured.exe}（${configured.source}）`
         : `${configured.exe}（${configured.source}）`,
+      installUrl: manualUrl,
     }
+  }
+
+  if (isOpenCodePortableBound()) {
+    const configured = resolveConfiguredOpenCodeBin()
+    if (!configured) {
+      return {
+        id: 'opencode',
+        label: 'OpenCode CLI',
+        status: 'missing',
+        detail:
+          '应用内 OpenCode 未就绪或文件已缺失。请重新一键准备 OpenCode（下载到应用目录）。',
+        installUrl: manualUrl,
+      }
+    }
+    return describeConfigured(configured)
+  }
+
+  const configured = resolveConfiguredOpenCodeBin()
+  if (configured) {
+    return describeConfigured(configured)
   }
 
   const bin = await findOnPath('opencode')
@@ -122,8 +214,8 @@ async function probeOpenCode(): Promise<EnvProbeItem> {
       label: 'OpenCode CLI',
       status: 'missing',
       detail:
-        '未找到 opencode。可在本引导一键安装到应用目录（需先就绪 Node.js 22+），或手动：npm install -g opencode-ai',
-      installUrl: getDocsInstallUrl(),
+        '未找到 OpenCode CLI。可一键准备到应用目录（无需 npm），或自行安装后重新检测。',
+      installUrl: manualUrl,
     }
   }
 
@@ -142,6 +234,7 @@ async function probeOpenCode(): Promise<EnvProbeItem> {
     label: 'OpenCode CLI',
     status: 'ok',
     detail: version ? `${version} · ${bin}` : bin,
+    installUrl: manualUrl,
   }
 }
 

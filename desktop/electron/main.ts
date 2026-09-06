@@ -102,8 +102,8 @@ import {
   type OnboardingState,
 } from './onboarding/onboarding-service'
 import { probeEnvironment } from './onboarding/env-probe'
-import { installNodeRuntime } from './runtime/install-node-service'
-import { installOpenCodeRuntime } from './runtime/install-opencode-service'
+import { installNodeRuntime } from './runtime/install-node-portable-service'
+import { installOpenCodeRuntime } from './runtime/install-opencode-binary-service'
 import { installOfficeCliRuntime } from './runtime/install-officecli-service'
 import {
   isOfficeCliInstallSupported,
@@ -536,24 +536,32 @@ function registerIpcHandlers(): void {
     (_event, patch: Partial<OnboardingState>) => patchOnboardingState(patch ?? {}),
   )
   ipcMain.handle(IPC.ONBOARDING_PROBE_ENV, () => probeEnvironment())
-  ipcMain.handle(IPC.RUNTIME_INSTALL_NODE, async (event) => {
-    return installNodeRuntime({
-      onProgress: (progress: NodeInstallProgress) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send(IPC.RUNTIME_INSTALL_NODE_PROGRESS, progress)
-        }
-      },
-    })
-  })
-  ipcMain.handle(IPC.RUNTIME_INSTALL_OPENCODE, async (event) => {
-    return installOpenCodeRuntime({
-      onProgress: (progress: OpenCodeInstallProgress) => {
-        if (!event.sender.isDestroyed()) {
-          event.sender.send(IPC.RUNTIME_INSTALL_OPENCODE_PROGRESS, progress)
-        }
-      },
-    })
-  })
+  ipcMain.handle(
+    IPC.RUNTIME_INSTALL_NODE,
+    async (event, options?: { forceReinstall?: boolean }) => {
+      return installNodeRuntime({
+        forceReinstall: options?.forceReinstall,
+        onProgress: (progress: NodeInstallProgress) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(IPC.RUNTIME_INSTALL_NODE_PROGRESS, progress)
+          }
+        },
+      })
+    },
+  )
+  ipcMain.handle(
+    IPC.RUNTIME_INSTALL_OPENCODE,
+    async (event, options?: { forceReinstall?: boolean }) => {
+      return installOpenCodeRuntime({
+        forceReinstall: options?.forceReinstall,
+        onProgress: (progress: OpenCodeInstallProgress) => {
+          if (!event.sender.isDestroyed()) {
+            event.sender.send(IPC.RUNTIME_INSTALL_OPENCODE_PROGRESS, progress)
+          }
+        },
+      })
+    },
+  )
   ipcMain.handle(IPC.RUNTIME_INSTALL_OFFICECLI, async (event) => {
     return installOfficeCliRuntime({
       onProgress: (progress: OfficeCliInstallProgress) => {

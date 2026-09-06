@@ -3,6 +3,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { NODE_INSTALL } from './node-install-types'
+import {
+  isNodePortableBound,
+  resolveConfiguredNode,
+} from './node-paths'
 
 const execFileAsync = promisify(execFile)
 
@@ -165,6 +169,33 @@ export async function resolveBestNode(options?: {
   all: ResolvedNode[]
 }> {
   const minMajor = options?.minMajor ?? NODE_INSTALL.minMajorForOk
+
+  if (isNodePortableBound()) {
+    const configured = resolveConfiguredNode()
+    if (!configured) {
+      return { bestOk: null, bestAny: null, all: [] }
+    }
+    const version = await readNodeVersion(configured.exe)
+    if (!version) {
+      return { bestOk: null, bestAny: null, all: [] }
+    }
+    const major = parseNodeMajor(version)
+    if (major == null) {
+      return { bestOk: null, bestAny: null, all: [] }
+    }
+    const node: ResolvedNode = {
+      exe: configured.exe,
+      version,
+      major,
+      source: configured.source,
+    }
+    return {
+      bestOk: major >= minMajor ? node : null,
+      bestAny: node,
+      all: [node],
+    }
+  }
+
   const candidates = [
     ...listFixedNodeExeCandidates(),
     ...(await listPathNodeExeCandidates()),
@@ -235,8 +266,22 @@ export async function ensurePreferredNodeOnPath(options?: {
   return bestOk
 }
 
-/** 安装验证：只要磁盘上能解析到 ≥minMajor 的 Node 即视为落地成功 */
+/** 安装验证：私有模式下只认 resolveConfiguredNode */
 export async function findAcceptableInstalledNode(): Promise<ResolvedNode | null> {
+  if (isNodePortableBound()) {
+    const configured = resolveConfiguredNode()
+    if (!configured) return null
+    const version = await readNodeVersion(configured.exe)
+    if (!version) return null
+    const major = parseNodeMajor(version)
+    if (major == null || major < NODE_INSTALL.minMajorForOk) return null
+    return {
+      exe: configured.exe,
+      version,
+      major,
+      source: configured.source,
+    }
+  }
   const { bestOk } = await resolveBestNode()
   return bestOk
 }

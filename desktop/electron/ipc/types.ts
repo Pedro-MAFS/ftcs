@@ -129,25 +129,23 @@ export interface EnvProbeResult {
   items: EnvProbeItem[]
 }
 
-export type NodeInstallMethod = 'winget' | 'msi' | 'already-ok'
+export type NodeInstallMethod = 'portable' | 'reinstall' | 'already-ok'
 
 export type NodeInstallErrorCode =
   | 'unsupported-platform'
-  | 'already-ok'
-  | 'winget-missing'
-  | 'winget-failed'
-  | 'download-failed'
-  | 'checksum-failed'
-  | 'msiexec-failed'
-  | 'elevation-denied'
   | 'busy'
-  | 'cancelled'
+  | 'network'
+  | 'checksum'
+  | 'extract-failed'
+  | 'write-failed'
+  | 'verify-failed'
+  | 'already-ok'
   | 'unknown'
 
 export type NodeInstallProgressPhase =
   | 'checking'
-  | 'winget'
   | 'downloading'
+  | 'verifying'
   | 'installing'
   | 'done'
   | 'failed'
@@ -163,7 +161,8 @@ export type NodeInstallResult =
       version: string
       method: NodeInstallMethod
       message: string
-      needsRestart: true
+      needsRestart: false
+      binaryPath: string
       logPath?: string
     }
   | {
@@ -174,21 +173,24 @@ export type NodeInstallResult =
       manualUrl: string
     }
 
-export type OpenCodeInstallMethod = 'npm-prefix' | 'already-ok'
+export type OpenCodeInstallMethod = 'portable' | 'reinstall' | 'already-ok'
 
 export type OpenCodeInstallErrorCode =
   | 'unsupported-platform'
-  | 'need-node'
-  | 'npm-failed'
-  | 'verify-failed'
   | 'busy'
-  | 'cancelled'
+  | 'network'
+  | 'checksum'
+  | 'extract-failed'
+  | 'write-failed'
+  | 'verify-failed'
+  | 'already-ok'
   | 'unknown'
 
 export type OpenCodeInstallProgressPhase =
   | 'checking'
-  | 'installing'
+  | 'downloading'
   | 'verifying'
+  | 'installing'
   | 'done'
   | 'failed'
 
@@ -204,7 +206,7 @@ export type OpenCodeInstallResult =
       method: OpenCodeInstallMethod
       binaryPath: string
       message: string
-      needsRestart: true
+      needsRestart: false
       logPath?: string
     }
   | {
