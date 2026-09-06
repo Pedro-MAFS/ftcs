@@ -168,12 +168,16 @@ export function useExploreStart(options?: {
     return Math.max(1, Math.min(Math.floor(limit), available || Math.floor(limit)))
   }
 
-  async function startR1(): Promise<string> {
-    if (!activeProductId.value || !window.ftcs?.startExploreR1) return ''
-    if (!canStartR1.value) return startR1DisabledReason.value
+  async function startR1(): Promise<{ ok: boolean; message: string }> {
+    if (!activeProductId.value || !window.ftcs?.startExploreR1) {
+      return { ok: false, message: '' }
+    }
+    if (!canStartR1.value) {
+      return { ok: false, message: startR1DisabledReason.value }
+    }
 
     const preflightError = await ensureAgentReady('discover-leads')
-    if (preflightError) return preflightError
+    if (preflightError) return { ok: false, message: preflightError }
 
     startingR1.value = true
     const maxQueries = resolveMaxQueries(r1QueryCount.value)
@@ -190,22 +194,26 @@ export function useExploreStart(options?: {
         agentStatus.value = 'error'
         options?.onFail?.()
       }
-      return res.message
+      return { ok: res.ok, message: res.message }
     } catch (err) {
       agentStatus.value = 'error'
       options?.onFail?.()
-      return err instanceof Error ? err.message : String(err)
+      return { ok: false, message: err instanceof Error ? err.message : String(err) }
     } finally {
       startingR1.value = false
     }
   }
 
-  async function startR2(): Promise<string> {
-    if (!activeProductId.value || !window.ftcs?.startExploreR2) return ''
-    if (!canStartR2.value) return startR2DisabledReason.value
+  async function startR2(): Promise<{ ok: boolean; message: string }> {
+    if (!activeProductId.value || !window.ftcs?.startExploreR2) {
+      return { ok: false, message: '' }
+    }
+    if (!canStartR2.value) {
+      return { ok: false, message: startR2DisabledReason.value }
+    }
 
     const preflightError = await ensureAgentReady('discover-leads-r2')
-    if (preflightError) return preflightError
+    if (preflightError) return { ok: false, message: preflightError }
 
     startingR2.value = true
     const maxQueries = resolveMaxQueries(r2QueryCount.value)
@@ -221,22 +229,26 @@ export function useExploreStart(options?: {
         agentStatus.value = 'error'
         options?.onFail?.()
       }
-      return res.message
+      return { ok: res.ok, message: res.message }
     } catch (err) {
       agentStatus.value = 'error'
       options?.onFail?.()
-      return err instanceof Error ? err.message : String(err)
+      return { ok: false, message: err instanceof Error ? err.message : String(err) }
     } finally {
       startingR2.value = false
     }
   }
 
-  async function startR3(): Promise<string> {
-    if (!activeProductId.value || !window.ftcs?.startExploreR3) return ''
-    if (!canStartR3.value) return startR3DisabledReason.value
+  async function startR3(): Promise<{ ok: boolean; message: string }> {
+    if (!activeProductId.value || !window.ftcs?.startExploreR3) {
+      return { ok: false, message: '' }
+    }
+    if (!canStartR3.value) {
+      return { ok: false, message: startR3DisabledReason.value }
+    }
 
     const preflightError = await ensureAgentReady('discover-leads-r3')
-    if (preflightError) return preflightError
+    if (preflightError) return { ok: false, message: preflightError }
 
     startingR3.value = true
     const maxQueries = resolveMaxQueries(r3QueryCount.value)
@@ -252,20 +264,20 @@ export function useExploreStart(options?: {
         agentStatus.value = 'error'
         options?.onFail?.()
       }
-      return res.message
+      return { ok: res.ok, message: res.message }
     } catch (err) {
       agentStatus.value = 'error'
       options?.onFail?.()
-      return err instanceof Error ? err.message : String(err)
+      return { ok: false, message: err instanceof Error ? err.message : String(err) }
     } finally {
       startingR3.value = false
     }
   }
 
   async function startExplore(): Promise<string> {
-    if (exploreRound.value === 'R3') return startR3()
-    if (exploreRound.value === 'R2') return startR2()
-    return startR1()
+    if (exploreRound.value === 'R3') return (await startR3()).message
+    if (exploreRound.value === 'R2') return (await startR2()).message
+    return (await startR1()).message
   }
 
   return {
@@ -274,9 +286,18 @@ export function useExploreStart(options?: {
     r1QueryCount,
     r2QueryCount,
     r3QueryCount,
+    canStartR1,
+    canStartR2,
+    canStartR3,
+    startR1DisabledReason,
+    startR2DisabledReason,
+    startR3DisabledReason,
     canStartSelected,
     startDisabledReason,
     isStartingExplore,
     startExplore,
+    startR1,
+    startR2,
+    startR3,
   }
 }
