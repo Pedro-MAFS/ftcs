@@ -28,7 +28,7 @@ export const supportPlanItems: SupportPlanItem[] = [
     description:
       '在已有公司线索上，按买家角色补全关键联系人（姓名、职位、来源与匹配理由），供开发信选用收件人。默认人工触发。',
     priority: 'P0',
-    status: 'planned',
+    status: 'developing',
   },
   {
     id: 'r4-directory',
