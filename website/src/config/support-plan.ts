@@ -31,6 +31,22 @@ export const supportPlanItems: SupportPlanItem[] = [
     status: 'developing',
   },
   {
+    id: 'task-done-notification',
+    title: '任务完成 · Windows 通知',
+    description:
+      'Agent 长任务（探索、评分、开发信起草等）完成后弹出 Windows 系统通知。用户反馈：任务耗时长通常不会一直盯着界面，缺少提醒时容易忘记回来查看结果。',
+    priority: 'P1',
+    status: 'planned',
+  },
+  {
+    id: 'email-verification',
+    title: '邮箱有效性验证',
+    description:
+      '对收集到的联系人邮箱做有效性校验（格式、可达性等）。用户反馈：日常多用 Hunter 验证后再发信，产品侧需评估对接 Hunter 或同类验证能力。',
+    priority: 'P1',
+    status: 'planned',
+  },
+  {
     id: 'r4-directory',
     title: 'R4 黄页名录探索',
     description: '按行业黄页 / 名录站点发现公司并核对官网。评审通过后再拆用户故事与详设。',
