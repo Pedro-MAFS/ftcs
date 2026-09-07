@@ -3,8 +3,8 @@ import { shell } from 'electron'
 import { ensureFreshTokens } from '../auth/oauth-service'
 import { readEnvFile, upsertEnvFile, maskSecret } from '../config/env-file'
 import { getWorkspaceRoot } from '../config/paths'
+import { getOfficialModelCatalog } from './official-model-catalog'
 import {
-  getOfficialModelCatalog,
   getSettingsSnapshot,
   type SettingsSnapshot,
 } from '../settings/settings-service'
@@ -14,7 +14,9 @@ import {
   getUsageMe,
   createRechargeTicket,
   type GatewayClientError,
+  type GatewayModel,
 } from './gateway-client'
+import { gatewayModelSupportsImage } from '../config/model-vision'
 import {
   FTCS_GATEWAY_KEY_NAME,
   buildRechargePageUrl,
@@ -79,26 +81,56 @@ function getEnvPath(workspaceRoot: string): string {
   return path.join(workspaceRoot, '.env')
 }
 
-function toOfficialOption(rawId: string): OfficialModelOption {
-  const id = rawId.includes('/') ? rawId : `deepseek/${rawId}`
-  const bare = id.includes('/') ? id.split('/').slice(1).join('/') : id
+function toOfficialOption(source: {
+  id: string
+  ownedBy?: string
+  inputTypes?: string[]
+  outputTypes?: string[]
+  label?: string
+}): OfficialModelOption {
+  const rawId = source.id.includes('/') ? source.id.split('/').slice(1).join('/') : source.id
+  const providerFromId = source.id.includes('/') ? source.id.split('/')[0] : undefined
+  const ownedBy = (source.ownedBy || providerFromId || 'deepseek').trim().toLowerCase()
+  const id = source.id.includes('/') ? source.id : `${ownedBy}/${rawId}`
+  const inputTypes = source.inputTypes && source.inputTypes.length > 0 ? source.inputTypes : ['txt']
+  const outputTypes =
+    source.outputTypes && source.outputTypes.length > 0 ? source.outputTypes : ['txt']
+  const visionSuffix = gatewayModelSupportsImage(inputTypes) ? ' · 读图' : ''
   return {
     id,
-    rawId: bare,
-    label: bare,
+    rawId,
+    ownedBy,
+    inputTypes,
+    outputTypes,
+    label: source.label?.trim() || `${rawId}${visionSuffix}`,
   }
 }
 
 function catalogAsOptions(): OfficialModelOption[] {
-  return getOfficialModelCatalog().models.map((m) => toOfficialOption(m.id))
+  return getOfficialModelCatalog().models.map((m) =>
+    toOfficialOption({
+      id: m.id,
+      ownedBy: m.ownedBy,
+      inputTypes: m.inputTypes,
+      outputTypes: m.outputTypes,
+      label: m.label,
+    }),
+  )
 }
 
 function pickModelsAfterFetch(
-  rawIds: string[],
+  models: GatewayModel[],
   currentModel: string,
   currentSmall: string,
 ): { model: string; smallModel: string; options: OfficialModelOption[] } {
-  const options = rawIds.map((id) => toOfficialOption(id))
+  const options = models.map((model) =>
+    toOfficialOption({
+      id: model.id,
+      ownedBy: model.ownedBy,
+      inputTypes: model.inputTypes,
+      outputTypes: model.outputTypes,
+    }),
+  )
   const ids = new Set(options.map((o) => o.id))
   const bareToFull = new Map(options.map((o) => [o.rawId, o.id]))
 
@@ -190,11 +222,7 @@ export async function provisionOfficialChannel(input?: {
       : '官方通道已开通。'
 
   if (listed.ok) {
-    const picked = pickModelsAfterFetch(
-      listed.models.map((m) => m.id),
-      current.model,
-      current.smallModel,
-    )
+    const picked = pickModelsAfterFetch(listed.models, current.model, current.smallModel)
     envUpdates.FTCS_MODEL = picked.model
     envUpdates.FTCS_SMALL_MODEL = picked.smallModel
     setOfficialModelsCache(picked.options, 'gateway')
@@ -256,11 +284,7 @@ export async function refreshOfficialModels(): Promise<RefreshOfficialModelsResu
   }
 
   const current = getSettingsSnapshot()
-  const picked = pickModelsAfterFetch(
-    listed.models.map((m) => m.id),
-    current.model,
-    current.smallModel,
-  )
+  const picked = pickModelsAfterFetch(listed.models, current.model, current.smallModel)
   setOfficialModelsCache(picked.options, 'gateway')
 
   const envUpdates: Record<string, string> = {

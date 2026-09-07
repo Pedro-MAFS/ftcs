@@ -4,6 +4,15 @@ export interface OfficialModelOption {
   id: string
   label: string
   rawId: string
+  ownedBy?: string
+  inputTypes: string[]
+  outputTypes: string[]
+}
+
+export function findOfficialModelOption(rawId: string): OfficialModelOption | undefined {
+  const target = rawId.trim()
+  if (!target || !modelsCache) return undefined
+  return modelsCache.options.find((option) => option.rawId === target)
 }
 
 export interface ModelsCache {

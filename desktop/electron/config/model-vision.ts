@@ -1,11 +1,9 @@
-/** 官方通道：支持 Read 多模态的模型 rawId 白名单（与网关 models 列表 id 对齐，不含 provider 前缀） */
-export const OFFICIAL_VISION_MODEL_RAW_IDS = ['deepseek-v4-flash-vision-exp'] as const
-
 export const CUSTOM_VISION_ENV = 'FTCS_CUSTOM_MODEL_SUPPORTS_IMAGE'
 
-export const VISION_MODALITIES = {
-  input: ['text', 'image'] as const,
-  output: ['text'] as const,
+const GATEWAY_TYPE_TO_MODALITY: Record<string, string> = {
+  txt: 'text',
+  text: 'text',
+  image: 'image',
 }
 
 export type OpenCodeModelConfig = {
@@ -16,7 +14,7 @@ export type OpenCodeModelConfig = {
   }
 }
 
-/** 去掉 `deepseek/`、`ftcs-gateway/` 等前缀，便于与白名单比对 */
+/** 去掉 `deepseek/`、`ftcs-gateway/` 等前缀，便于与网关 raw id 比对 */
 export function normalizeModelRawId(modelId: string): string {
   const trimmed = modelId.trim()
   if (!trimmed) return ''
@@ -25,9 +23,26 @@ export function normalizeModelRawId(modelId: string): string {
   return trimmed
 }
 
-export function isOfficialVisionModel(modelId: string): boolean {
-  const raw = normalizeModelRawId(modelId)
-  return (OFFICIAL_VISION_MODEL_RAW_IDS as readonly string[]).includes(raw)
+export function mapGatewayTypesToModalities(
+  inputTypes?: string[],
+  outputTypes?: string[],
+): { input: string[]; output: string[] } | undefined {
+  const mapTypes = (values?: string[]) =>
+    (values || [])
+      .map((value) => GATEWAY_TYPE_TO_MODALITY[value.trim().toLowerCase()] ?? value.trim())
+      .filter(Boolean)
+
+  const input = mapTypes(inputTypes)
+  const output = mapTypes(outputTypes)
+  if (input.length === 0 && output.length === 0) return undefined
+  return {
+    input: input.length > 0 ? input : ['text'],
+    output: output.length > 0 ? output : ['text'],
+  }
+}
+
+export function gatewayModelSupportsImage(inputTypes?: string[]): boolean {
+  return (inputTypes || []).some((value) => value.trim().toLowerCase() === 'image')
 }
 
 export function parseEnvBool(raw: string | undefined): boolean {
@@ -40,7 +55,7 @@ export function formatEnvBool(value: boolean): string {
   return value ? 'true' : 'false'
 }
 
-/** OpenCode 自定义 provider 需显式声明 modalities，否则 Read 图片会在客户端被拦 */
+/** 自定义通道：勾选后写入 OpenCode modalities 以支持 Read 图片 */
 export function buildOpenCodeModelConfig(
   name: string,
   supportsImageInput: boolean,
@@ -48,9 +63,22 @@ export function buildOpenCodeModelConfig(
   const entry: OpenCodeModelConfig = { name }
   if (supportsImageInput) {
     entry.modalities = {
-      input: [...VISION_MODALITIES.input],
-      output: [...VISION_MODALITIES.output],
+      input: ['text', 'image'],
+      output: ['text'],
     }
   }
+  return entry
+}
+
+/** 官方通道：按网关 /models 返回的 input_types / output_types 生成 OpenCode 模型配置 */
+export function buildOpenCodeModelConfigFromGateway(
+  name: string,
+  inputTypes?: string[],
+  outputTypes?: string[],
+): OpenCodeModelConfig {
+  const entry: OpenCodeModelConfig = { name }
+  if (!gatewayModelSupportsImage(inputTypes)) return entry
+  const modalities = mapGatewayTypesToModalities(inputTypes, outputTypes)
+  if (modalities) entry.modalities = modalities
   return entry
 }

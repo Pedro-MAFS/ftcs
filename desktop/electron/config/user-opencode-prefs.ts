@@ -1,15 +1,37 @@
 import type { Config } from '@opencode-ai/sdk/v2'
 import {
   buildOpenCodeModelConfig,
+  buildOpenCodeModelConfigFromGateway,
   CUSTOM_VISION_ENV,
-  isOfficialVisionModel,
   parseEnvBool,
 } from './model-vision'
+import { findOfficialModelOption } from '../gateway/official-models-cache'
+import { getOfficialModelCatalog } from '../gateway/official-model-catalog'
 import { getTokenGatewayBaseUrl } from '../gateway/gateway-config'
 
 const CUSTOM_ENV_KEY = 'FTCS_CUSTOM_API_KEY'
 const GATEWAY_KEY_ENV = 'FTCS_GATEWAY_API_KEY'
 const CHANNEL_MODE_ENV = 'FTCS_CHANNEL_MODE'
+
+function resolveOfficialModelMeta(rawId: string) {
+  const cached = findOfficialModelOption(rawId)
+  if (cached) return cached
+  const target = rawId.trim()
+  if (!target) return undefined
+  for (const item of getOfficialModelCatalog().models) {
+    const bare = item.id.includes('/') ? item.id.split('/').slice(1).join('/') : item.id
+    if (bare !== target) continue
+    return {
+      id: item.id,
+      rawId: bare,
+      label: item.label,
+      ownedBy: item.ownedBy,
+      inputTypes: item.inputTypes ?? ['txt'],
+      outputTypes: item.outputTypes ?? ['txt'],
+    }
+  }
+  return undefined
+}
 
 /**
  * 将用户偏好（.env）叠加到托管模板 opencode.json 上。
@@ -45,6 +67,14 @@ export function applyUserPrefsToOpenCodeConfig(
       ? smallModel.split('/').slice(1).join('/')
       : smallModel || modelId
     const gatewayBase = getTokenGatewayBaseUrl(env)
+    const buildOfficialModel = (bareId: string) => {
+      const meta = resolveOfficialModelMeta(bareId)
+      return buildOpenCodeModelConfigFromGateway(
+        bareId,
+        meta?.inputTypes,
+        meta?.outputTypes,
+      )
+    }
     providers['ftcs-gateway'] = {
       npm: '@ai-sdk/openai-compatible',
       name: 'FTCS Official',
@@ -53,10 +83,8 @@ export function applyUserPrefsToOpenCodeConfig(
         apiKey: `{env:${GATEWAY_KEY_ENV}}`,
       },
       models: {
-        [modelId]: buildOpenCodeModelConfig(modelId, isOfficialVisionModel(modelId)),
-        ...(smallId !== modelId
-          ? { [smallId]: buildOpenCodeModelConfig(smallId, isOfficialVisionModel(smallId)) }
-          : {}),
+        [modelId]: buildOfficialModel(modelId),
+        ...(smallId !== modelId ? { [smallId]: buildOfficialModel(smallId) } : {}),
       },
     }
     // OpenCode model id 需带 provider 前缀

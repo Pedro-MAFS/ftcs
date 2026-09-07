@@ -100,16 +100,7 @@ export interface SettingsSaveResult {
   settings: SettingsSnapshot
 }
 
-const OFFICIAL_MODEL_CATALOG = {
-  models: [
-    { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
-    { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-  ],
-  small: [
-    { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-    { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
-  ],
-}
+import { OFFICIAL_MODEL_CATALOG } from '../gateway/official-model-catalog'
 
 const LEGACY_PROVIDER_IDS: LegacyProviderId[] = [
   'deepseek',
@@ -449,6 +440,4 @@ export async function pickWorkspaceDirectory(): Promise<string | null> {
   return result.filePaths[0]
 }
 
-export function getOfficialModelCatalog() {
-  return OFFICIAL_MODEL_CATALOG
-}
+export { getOfficialModelCatalog, OFFICIAL_MODEL_CATALOG } from '../gateway/official-model-catalog'

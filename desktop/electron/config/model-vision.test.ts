@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   buildOpenCodeModelConfig,
-  isOfficialVisionModel,
+  buildOpenCodeModelConfigFromGateway,
+  gatewayModelSupportsImage,
+  mapGatewayTypesToModalities,
   normalizeModelRawId,
   parseEnvBool,
 } from './model-vision'
@@ -10,21 +12,44 @@ import {
 describe('model-vision', () => {
   it('normalizes provider-prefixed model ids', () => {
     assert.equal(normalizeModelRawId('deepseek/deepseek-v4-flash-vision-exp'), 'deepseek-v4-flash-vision-exp')
-    assert.equal(normalizeModelRawId('deepseek-v4-pro'), 'deepseek-v4-pro')
+    assert.equal(normalizeModelRawId('glm/glm-5.3'), 'glm-5.3')
   })
 
-  it('matches official vision whitelist by raw id', () => {
-    assert.equal(isOfficialVisionModel('deepseek-v4-flash-vision-exp'), true)
-    assert.equal(isOfficialVisionModel('deepseek/deepseek-v4-flash-vision-exp'), true)
-    assert.equal(isOfficialVisionModel('deepseek/deepseek-v4-pro'), false)
+  it('maps gateway txt/image types to OpenCode modalities', () => {
+    assert.deepEqual(mapGatewayTypesToModalities(['txt'], ['txt']), {
+      input: ['text'],
+      output: ['text'],
+    })
+    assert.deepEqual(mapGatewayTypesToModalities(['txt', 'image'], ['txt']), {
+      input: ['text', 'image'],
+      output: ['text'],
+    })
   })
 
-  it('builds modalities only when image input is supported', () => {
+  it('detects image support from gateway input_types', () => {
+    assert.equal(gatewayModelSupportsImage(['txt', 'image']), true)
+    assert.equal(gatewayModelSupportsImage(['txt']), false)
+  })
+
+  it('builds custom modalities only when image input is supported', () => {
     assert.deepEqual(buildOpenCodeModelConfig('m', false), { name: 'm' })
     assert.deepEqual(buildOpenCodeModelConfig('m', true), {
       name: 'm',
       modalities: { input: ['text', 'image'], output: ['text'] },
     })
+  })
+
+  it('builds official modalities from gateway types', () => {
+    assert.deepEqual(buildOpenCodeModelConfigFromGateway('glm-5.3', ['txt'], ['txt']), {
+      name: 'glm-5.3',
+    })
+    assert.deepEqual(
+      buildOpenCodeModelConfigFromGateway('glm-5.3', ['txt', 'image'], ['txt']),
+      {
+        name: 'glm-5.3',
+        modalities: { input: ['text', 'image'], output: ['text'] },
+      },
+    )
   })
 
   it('parses env booleans', () => {

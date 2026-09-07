@@ -49,9 +49,42 @@ export interface RotateKeySuccess {
   balanceLi?: number
 }
 
+export interface GatewayModel {
+  id: string
+  ownedBy?: string
+  inputTypes: string[]
+  outputTypes: string[]
+}
+
 export interface ListModelsSuccess {
   ok: true
-  models: Array<{ id: string; ownedBy?: string }>
+  models: GatewayModel[]
+}
+
+function parseGatewayModelTypes(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((item) => String(item || '').trim().toLowerCase())
+    .filter(Boolean)
+}
+
+export function parseGatewayModel(entry: {
+  id?: string
+  owned_by?: string
+  input_types?: unknown
+  output_types?: unknown
+}): GatewayModel | null {
+  const id = String(entry.id || '').trim()
+  if (!id) return null
+  const ownedBy = String(entry.owned_by || '').trim() || undefined
+  const inputTypes = parseGatewayModelTypes(entry.input_types)
+  const outputTypes = parseGatewayModelTypes(entry.output_types)
+  return {
+    id,
+    ownedBy,
+    inputTypes: inputTypes.length > 0 ? inputTypes : ['txt'],
+    outputTypes: outputTypes.length > 0 ? outputTypes : ['txt'],
+  }
 }
 
 export interface UsageMeSuccess {
@@ -257,14 +290,16 @@ export async function listModels(input: {
       }
     }
     const json = (await res.json()) as {
-      data?: Array<{ id?: string; owned_by?: string }>
+      data?: Array<{
+        id?: string
+        owned_by?: string
+        input_types?: unknown
+        output_types?: unknown
+      }>
     }
     const models = (json.data || [])
-      .map((m) => ({
-        id: String(m.id || '').trim(),
-        ownedBy: m.owned_by,
-      }))
-      .filter((m) => Boolean(m.id))
+      .map((m) => parseGatewayModel(m))
+      .filter((m): m is GatewayModel => Boolean(m))
     if (models.length === 0) {
       logWarn('models empty list', { status: res.status })
       return {
