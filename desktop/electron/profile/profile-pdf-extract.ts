@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { PDFParse } from 'pdf-parse'
+import { DocuText } from 'docutext'
 
 export const PDF_EXTRACT_TIMEOUT_MS = 60_000
 export const PDF_MAX_BYTES = 20 * 1024 * 1024
@@ -92,20 +92,15 @@ function mapPdfParseError(err: unknown): PdfExtractFailReason {
   const msg = err instanceof Error ? err.message : String(err)
   if (/timeout|timed out|ETIMEDOUT/i.test(msg)) return 'timeout'
   const lower = msg.toLowerCase()
-  if (/password|encrypt|permission|invalid pdf|bad xref|corrupt|malformed/i.test(lower)) {
+  if (/password|encrypt|permission|invalid pdf|bad xref|corrupt|malformed|could not recover pdf/i.test(lower)) {
     return 'encrypted_or_invalid'
   }
   return 'encrypted_or_invalid'
 }
 
 async function parsePdfBuffer(buffer: Buffer): Promise<string> {
-  const parser = new PDFParse({ data: buffer })
-  try {
-    const result = await parser.getText()
-    return result.text ?? ''
-  } finally {
-    await parser.destroy()
-  }
+  const doc = DocuText.fromBuffer(new Uint8Array(buffer))
+  return doc.text ?? ''
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

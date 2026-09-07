@@ -3,6 +3,11 @@ import type { Config, OpencodeClient } from '@opencode-ai/sdk/v2'
 import fs from 'node:fs'
 import type { OpenCodeRuntimeStatus } from '../ipc/types'
 import { ensureWorkspaceDataDirs, loadWorkspaceEnv } from '../config/env-loader'
+import {
+  buildGoogleProxyEnvVars,
+  GOOGLE_PROXY_RESOLVED_ENV,
+  refreshGoogleProxyResolution,
+} from '../config/google-proxy'
 import { initializeWorkspace, ensureMcpServersReady } from '../config/workspace-init'
 import {
   getDefaultOpenCodePort,
@@ -116,6 +121,19 @@ export class OpenCodeRuntime {
       delete process.env.OPENCODE_SERVER_PASSWORD
       // 强制 MCP 子进程认准纯净工作区（勿落到仓库根）
       process.env.FTCS_WORKSPACE = workspaceRoot
+      const proxyResolution = await refreshGoogleProxyResolution({
+        ...process.env,
+        ...env,
+      })
+      if (proxyResolution.url) {
+        this.appendLog(
+          `Google Places 代理: ${proxyResolution.url}（${proxyResolution.mode === 'system' ? '系统' : '手动'}）`,
+        )
+      } else if (proxyResolution.mode === 'system' && proxyResolution.systemRule) {
+        this.appendLog(
+          `Google Places 代理: 系统规则 ${proxyResolution.systemRule}（未解析到可用代理，将直连）`,
+        )
+      }
       // loadWorkspaceEnv 可能改写 PATH，再次确保合格 Node 在最前
       await ensurePreferredNodeOnPath()
 
@@ -469,6 +487,7 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
     ...(process.env.GOOGLE_PLACES_API_KEY
       ? { GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY }
       : {}),
+    ...buildGoogleProxyEnvVars(process.env[GOOGLE_PROXY_RESOLVED_ENV]),
   }
 
   const nextMcp: Record<string, unknown> = {}

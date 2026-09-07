@@ -5,7 +5,7 @@ import { useAppStatus } from '../composables/useAppStatus'
 import { useAuth } from '../composables/useAuth'
 import { useSettingsNav } from '../composables/useSettingsNav'
 import { SECTION_META } from '../types/workspace'
-import type { ChannelMode, SettingsSnapshot } from '../types/settings'
+import type { ChannelMode, GoogleProxyMode, SettingsSnapshot } from '../types/settings'
 import type { ExploreR2SiteDto } from '../types/electron'
 import { OFFICIAL_MODEL_CATALOG } from '../types/settings'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
@@ -55,6 +55,11 @@ const error = ref('')
 const showApiKey = ref(false)
 const showTavilyKey = ref(false)
 const showPlacesKey = ref(false)
+const detectingProxy = ref(false)
+const testingPlaces = ref(false)
+const proxyDetectMessage = ref('')
+const placesTestMessage = ref('')
+const placesTestOk = ref<boolean | null>(null)
 const snapshot = ref<SettingsSnapshot | null>(null)
 const r2Sites = ref<ExploreR2SiteDto[]>([])
 const r2SitesHint = ref('')
@@ -70,6 +75,8 @@ const form = reactive({
   searchProvider: 'tavily',
   tavilyApiKey: '',
   placesApiKey: '',
+  googleProxyMode: 'system' as GoogleProxyMode,
+  googleProxyManualUrl: 'http://127.0.0.1:7890',
   searchDailyLimit: 50,
   customModelSupportsImage: false,
 })
@@ -191,6 +198,9 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.searchProvider = data.searchProvider
   form.tavilyApiKey = data.tavilyApiKeyMasked
   form.placesApiKey = data.placesApiKeyMasked
+  form.googleProxyMode = data.googleProxyMode
+  form.googleProxyManualUrl =
+    data.googleProxyManualUrl || 'http://127.0.0.1:7890'
   form.searchDailyLimit = data.searchDailyLimit
   form.customModelSupportsImage = data.customModelSupportsImage
   if (data.channelMode === 'custom') {
@@ -392,6 +402,8 @@ async function onSave(): Promise<void> {
       searchProvider: form.searchProvider,
       tavilyApiKey: form.tavilyApiKey,
       placesApiKey: form.placesApiKey,
+      googleProxyMode: form.googleProxyMode,
+      googleProxyManualUrl: form.googleProxyManualUrl,
       searchDailyLimit: form.searchDailyLimit,
       customModelSupportsImage: form.customModelSupportsImage,
     })
@@ -406,6 +418,52 @@ async function onSave(): Promise<void> {
 }
 
 async function onReset(): Promise<void> {
+  await loadSettings()
+}
+
+async function onDetectGoogleProxy(): Promise<void> {
+  if (!window.ftcs?.detectGoogleProxy) return
+  detectingProxy.value = true
+  proxyDetectMessage.value = ''
+  try {
+    const result = await window.ftcs.detectGoogleProxy()
+    proxyDetectMessage.value = result.message
+    if (result.url && form.googleProxyMode === 'system') {
+      form.googleProxyManualUrl = result.url
+    }
+  } catch (err) {
+    proxyDetectMessage.value =
+      err instanceof Error ? err.message : String(err)
+  } finally {
+    detectingProxy.value = false
+  }
+}
+
+async function onTestGooglePlaces(): Promise<void> {
+  if (!window.ftcs?.testGooglePlaces) return
+  testingPlaces.value = true
+  placesTestMessage.value = ''
+  placesTestOk.value = null
+  try {
+    const result = await window.ftcs.testGooglePlaces({
+      mode: form.googleProxyMode,
+      manualProxyUrl:
+        form.googleProxyMode === 'manual'
+          ? form.googleProxyManualUrl
+          : undefined,
+    })
+    placesTestOk.value = result.ok
+    placesTestMessage.value = result.message
+  } catch (err) {
+    placesTestOk.value = false
+    placesTestMessage.value =
+      err instanceof Error ? err.message : String(err)
+  } finally {
+    testingPlaces.value = false
+  }
+}
+
+async function onResetSettings(): Promise<void> {
   await loadSettings()
   message.value = '已从磁盘重新加载配置'
 }
@@ -1049,6 +1107,79 @@ async function onCheckUpdate(): Promise<void> {
             </div>
             <p class="hint-line muted">
               与模型 / Tavily 搜索通道独立；保存后请重启 OpenCode 使 MCP 生效。
+            </p>
+
+            <label class="field-label">Google 出站代理（R3 专用）</label>
+            <p class="hint-line">
+              使用 Clash 等<strong>系统代理</strong>但未开 TUN 时，选「跟随系统代理」；也可手动填
+              <code>http://127.0.0.1:7890</code> 或 SOCKS5 地址。仅影响 Places 请求，不改 Tavily。
+            </p>
+            <div class="provider-row">
+              <button
+                type="button"
+                class="provider-chip"
+                :class="{ 'is-active': form.googleProxyMode === 'system' }"
+                @click="form.googleProxyMode = 'system'"
+              >
+                跟随系统代理
+              </button>
+              <button
+                type="button"
+                class="provider-chip"
+                :class="{ 'is-active': form.googleProxyMode === 'manual' }"
+                @click="form.googleProxyMode = 'manual'"
+              >
+                手动指定
+              </button>
+              <button
+                type="button"
+                class="provider-chip"
+                :class="{ 'is-active': form.googleProxyMode === 'off' }"
+                @click="form.googleProxyMode = 'off'"
+              >
+                直连
+              </button>
+            </div>
+            <div v-if="form.googleProxyMode === 'manual'" class="input-row">
+              <input
+                v-model="form.googleProxyManualUrl"
+                class="text-input"
+                type="text"
+                autocomplete="off"
+                placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:7891"
+              />
+            </div>
+            <p
+              v-if="snapshot?.googleProxyEffectiveUrl"
+              class="hint-line muted"
+            >
+              当前生效代理：{{ snapshot.googleProxyEffectiveUrl }}
+            </p>
+            <div class="settings-actions-row">
+              <button
+                type="button"
+                class="btn-secondary btn-sm"
+                :disabled="detectingProxy || saving"
+                @click="onDetectGoogleProxy"
+              >
+                {{ detectingProxy ? '检测中…' : '检测系统代理' }}
+              </button>
+              <button
+                type="button"
+                class="btn-secondary btn-sm"
+                :disabled="testingPlaces || saving"
+                @click="onTestGooglePlaces"
+              >
+                {{ testingPlaces ? '测试中…' : '测试 Google 连接' }}
+              </button>
+            </div>
+            <p v-if="proxyDetectMessage" class="hint-line">{{ proxyDetectMessage }}</p>
+            <p
+              v-if="placesTestMessage"
+              class="hint-line"
+              :class="placesTestOk ? 'is-ok' : 'is-error'"
+            >
+              {{ placesTestMessage }}
             </p>
           </div>
         </section>

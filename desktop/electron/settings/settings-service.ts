@@ -21,6 +21,13 @@ import {
 import { getOfficialModelsCache } from '../gateway/official-models-cache'
 import { getOfficialUsageCache } from '../gateway/official-usage-cache'
 import type { OfficialUsageSnapshot } from '../gateway/official-usage-cache'
+import {
+  GOOGLE_PROXY_MODE_ENV,
+  GOOGLE_PROXY_RESOLVED_ENV,
+  GOOGLE_PROXY_URL_ENV,
+  type GoogleProxyMode,
+  parseGoogleProxyMode,
+} from '../config/google-proxy'
 
 export type ChannelMode = 'official' | 'custom'
 export type OfficialModelsSource = 'gateway' | 'fallback' | 'none'
@@ -54,6 +61,12 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: PlacesProvider
+  /** Google Places 出站代理：off | system | manual */
+  googleProxyMode: GoogleProxyMode
+  /** 手动代理 URL（如 http://127.0.0.1:7890） */
+  googleProxyManualUrl: string
+  /** 上次启动解析到的有效代理（只读展示） */
+  googleProxyEffectiveUrl: string
   searchDailyLimit: number
   searchUsedToday: number
   modelOptions: Array<{ id: string; label: string }>
@@ -74,6 +87,8 @@ export interface SettingsSaveInput {
   tavilyApiKey: string
   /** 省略则不修改；空字符串且非掩码则清除 */
   placesApiKey?: string
+  googleProxyMode?: GoogleProxyMode
+  googleProxyManualUrl?: string
   searchDailyLimit: number
   /** 自定义通道：勾选后写入 OpenCode modalities 以支持 Read 图片 */
   customModelSupportsImage?: boolean
@@ -308,6 +323,9 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     placesApiKeyMasked: maskSecret(placesKey),
     placesApiKeySet: Boolean(placesKey),
     placesProvider,
+    googleProxyMode: parseGoogleProxyMode(env[GOOGLE_PROXY_MODE_ENV]),
+    googleProxyManualUrl: env[GOOGLE_PROXY_URL_ENV] || '',
+    googleProxyEffectiveUrl: process.env[GOOGLE_PROXY_RESOLVED_ENV] || '',
     searchDailyLimit:
       channelMode === 'official'
         ? 999999
@@ -392,6 +410,20 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
     envUpdates[PLACES_KEY_ENV] = input.placesApiKey.trim()
   }
   envUpdates[PLACES_PROVIDER_ENV] = 'custom'
+
+  if (input.googleProxyMode !== undefined) {
+    envUpdates[GOOGLE_PROXY_MODE_ENV] = parseGoogleProxyMode(input.googleProxyMode)
+  } else if (env[GOOGLE_PROXY_MODE_ENV]) {
+    envUpdates[GOOGLE_PROXY_MODE_ENV] = env[GOOGLE_PROXY_MODE_ENV]
+  } else {
+    envUpdates[GOOGLE_PROXY_MODE_ENV] = 'system'
+  }
+
+  if (input.googleProxyManualUrl !== undefined) {
+    envUpdates[GOOGLE_PROXY_URL_ENV] = input.googleProxyManualUrl.trim()
+  } else if (env[GOOGLE_PROXY_URL_ENV]) {
+    envUpdates[GOOGLE_PROXY_URL_ENV] = env[GOOGLE_PROXY_URL_ENV]
+  }
 
   upsertEnvFile(envPath, envUpdates)
   if (clearPlacesKey) {

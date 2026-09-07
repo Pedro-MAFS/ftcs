@@ -9,6 +9,8 @@ export const IPC = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_SAVE: 'settings:save',
   SETTINGS_PICK_WORKSPACE: 'settings:pick-workspace',
+  SETTINGS_DETECT_GOOGLE_PROXY: 'settings:detect-google-proxy',
+  SETTINGS_TEST_GOOGLE_PLACES: 'settings:test-google-places',
   GATEWAY_PROVISION_OFFICIAL: 'gateway:provision-official',
   GATEWAY_REFRESH_OFFICIAL_MODELS: 'gateway:refresh-official-models',
   GATEWAY_REFRESH_OFFICIAL_USAGE: 'gateway:refresh-official-usage',
@@ -825,6 +827,8 @@ export interface OfficialUsageSnapshot {
   error?: string
 }
 
+export type GoogleProxyMode = 'off' | 'system' | 'manual'
+
 export interface SettingsSnapshot {
   workspaceRoot: string
   channelMode: ChannelMode
@@ -845,6 +849,9 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: 'custom' | 'gateway'
+  googleProxyMode: GoogleProxyMode
+  googleProxyManualUrl: string
+  googleProxyEffectiveUrl: string
   searchDailyLimit: number
   searchUsedToday: number
   modelOptions: Array<{ id: string; label: string }>
@@ -863,6 +870,8 @@ export interface SettingsSaveInput {
   searchProvider: string
   tavilyApiKey: string
   placesApiKey?: string
+  googleProxyMode?: GoogleProxyMode
+  googleProxyManualUrl?: string
   searchDailyLimit: number
   customModelSupportsImage?: boolean
 }
@@ -901,6 +910,21 @@ export interface OpenOfficialRechargeResult {
 }
 
 export type OpenOfficialPortalResult = OpenOfficialRechargeResult
+
+export interface GoogleProxyDetectResult {
+  ok: boolean
+  rule: string
+  url: string | null
+  message: string
+}
+
+export interface GooglePlacesTestResult {
+  ok: boolean
+  message: string
+  proxyUrl?: string | null
+  systemRule?: string
+  httpStatus?: number
+}
 
 export interface WebsiteItem {
   id: string

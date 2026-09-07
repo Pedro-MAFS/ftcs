@@ -106,6 +106,13 @@ const api = {
     }
   },
   getSettings: (): Promise<SettingsSnapshot> => ipcRenderer.invoke(IPC.SETTINGS_GET),
+  detectGoogleProxy: (): Promise<import('./ipc/types').GoogleProxyDetectResult> =>
+    ipcRenderer.invoke(IPC.SETTINGS_DETECT_GOOGLE_PROXY),
+  testGooglePlaces: (input?: {
+    mode?: 'off' | 'system' | 'manual'
+    manualProxyUrl?: string
+  }): Promise<import('./ipc/types').GooglePlacesTestResult> =>
+    ipcRenderer.invoke(IPC.SETTINGS_TEST_GOOGLE_PLACES, input),
   provisionOfficialChannel: (input?: {
     reset?: boolean
   }): Promise<ProvisionOfficialResult & { status?: AppStatus }> =>

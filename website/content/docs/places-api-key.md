@@ -16,7 +16,11 @@ Places 请求由 **本机 OpenCode** 直连 Google 服务（`places.googleapis.c
 - [Google Maps Platform 服务条款](https://cloud.google.com/maps-platform/terms)  
 - [Places API 使用政策](https://developers.google.com/maps/documentation/places/web-service/policies)
 
-若连接超时或无法访问 Google 服务，请先检查网络与 Console 中的 API 启用状态，再重试。FTCS **不提供** Google API 代调服务。
+若连接超时或无法访问 Google 服务，请先检查网络与 Console 中的 API 启用状态，再重试。
+
+**使用 Clash 等代理但未开 TUN**：在 **设置 → 探索 → Google 出站代理** 中选择 **跟随系统代理**，或手动填写 `http://127.0.0.1:7890`（端口以你的代理软件为准），保存后点击 **测试 Google 连接** 确认可达。
+
+FTCS **不提供** Google API 代调服务。
 
 ## 申请步骤
 

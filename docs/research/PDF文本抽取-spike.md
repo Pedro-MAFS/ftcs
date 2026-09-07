@@ -8,8 +8,8 @@
 
 | 项 | 决定 |
 |----|------|
-| **选用库** | **`pdf-parse@2.4.5`**（v2 `PDFParse` API） |
-| **不选** | `pdf-parse@1.1.x`（内置旧 pdf.js，无法解析 pdf-lib / 现代 PDF 1.7） |
+| **选用库** | **`docutext@1.2.1`**（零依赖纯 TS 解析，安装包远小于 pdf-parse） |
+| **曾用** | `pdf-parse@2.4.5`（v2 `PDFParse` API；依赖 pdfjs-dist + @napi-rs/canvas，安装包 +~20MB） |
 | **不选** | poppler / 外部 exe |
 | **Electron** | 主进程 `externalizeDepsPlugin` 外置依赖；`new PDFParse({ data })` + `getText()` + `destroy()` |
 | **内嵌图** | **不 OCR**；仅文本层进侧车；写入前去掉 `\0` 等 C0 控制符（OpenCode Read 遇空字节即拒读） |
@@ -30,13 +30,8 @@
 ## API 示例（量产）
 
 ```ts
-import { PDFParse } from 'pdf-parse'
+import { DocuText } from 'docutext'
 
-const parser = new PDFParse({ data: buffer })
-try {
-  const result = await parser.getText()
-  return result.text ?? ''
-} finally {
-  await parser.destroy()
-}
+const doc = DocuText.fromBuffer(new Uint8Array(buffer))
+return doc.text ?? ''
 ```

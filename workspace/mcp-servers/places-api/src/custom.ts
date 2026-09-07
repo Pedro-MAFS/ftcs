@@ -1,4 +1,5 @@
 import { PLACE_DETAILS_FIELD_MASK, TEXT_SEARCH_FIELD_MASK } from "./field-masks.js";
+import { getPlacesFetch } from "./fetch.js";
 import type { PlaceDetailsResponse, PlaceSummary } from "./types.js";
 
 const TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText";
@@ -129,7 +130,7 @@ export async function textSearchCustom(
   languageCode: string,
   regionCode: string | undefined,
   pageSize: number,
-  fetchFn: FetchFn = fetch,
+  fetchFn: FetchFn = getPlacesFetch(),
 ): Promise<PlaceSummary[]> {
   const body: Record<string, unknown> = {
     textQuery,
@@ -178,7 +179,7 @@ export async function placeDetailsCustom(
   apiKey: string,
   placeId: string,
   languageCode: string,
-  fetchFn: FetchFn = fetch,
+  fetchFn: FetchFn = getPlacesFetch(),
 ): Promise<PlaceDetailsResponse> {
   const url = buildPlaceDetailsUrl(placeId);
   const response = await fetchFn(url, {

@@ -23,6 +23,8 @@ export interface OfficialUsageSnapshot {
   error?: string
 }
 
+export type GoogleProxyMode = 'off' | 'system' | 'manual'
+
 export interface SettingsSnapshot {
   workspaceRoot: string
   channelMode: ChannelMode
@@ -44,6 +46,9 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: 'custom' | 'gateway'
+  googleProxyMode: GoogleProxyMode
+  googleProxyManualUrl: string
+  googleProxyEffectiveUrl: string
   searchDailyLimit: number
   searchUsedToday: number
   modelOptions: Array<{ id: string; label: string }>
@@ -63,6 +68,8 @@ export interface SettingsSaveInput {
   searchProvider: string
   tavilyApiKey: string
   placesApiKey?: string
+  googleProxyMode?: GoogleProxyMode
+  googleProxyManualUrl?: string
   searchDailyLimit: number
   customModelSupportsImage?: boolean
 }

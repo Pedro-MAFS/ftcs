@@ -5,6 +5,7 @@
  * 排除：node_modules、.env、业务 data（保留 _example）、日志与 IDE 缓存。
  * 要求：lead-store / search-api 已存在 dist/mcp.js。
  */
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,6 +15,7 @@ const desktopRoot = path.resolve(__dirname, '..')
 const repoRoot = path.resolve(desktopRoot, '..')
 const sourceRoot = path.join(repoRoot, 'workspace')
 const destRoot = path.join(desktopRoot, 'resources', 'workspace-template')
+const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
 const REQUIRED_MCP = ['lead-store', 'search-api', 'places-api']
 
@@ -142,6 +144,18 @@ function main() {
   }
 
   console.log(`[prepare-template] 完成 → ${destRoot}`)
+
+  const placesApiDest = path.join(destRoot, 'mcp-servers', 'places-api')
+  if (fs.existsSync(path.join(placesApiDest, 'package.json'))) {
+    console.log('[prepare-template] places-api: npm install --omit=dev（undici 运行时依赖）')
+    execFileSync(npmCmd, ['install', '--omit=dev'], {
+      cwd: placesApiDest,
+      stdio: 'inherit',
+      env: process.env,
+      windowsHide: true,
+      shell: process.platform === 'win32',
+    })
+  }
 }
 
 main()

@@ -595,6 +595,22 @@ declare global {
       saveSettings: (
         input: SettingsSaveInput,
       ) => Promise<SettingsSaveResult & { status: AppStatus }>
+      detectGoogleProxy: () => Promise<{
+        ok: boolean
+        rule: string
+        url: string | null
+        message: string
+      }>
+      testGooglePlaces: (input?: {
+        mode?: 'off' | 'system' | 'manual'
+        manualProxyUrl?: string
+      }) => Promise<{
+        ok: boolean
+        message: string
+        proxyUrl?: string | null
+        systemRule?: string
+        httpStatus?: number
+      }>
       pickWorkspace: () => Promise<{
         path: string | null
         restarted?: boolean

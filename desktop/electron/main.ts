@@ -20,6 +20,10 @@ import {
   type SettingsSaveInput,
 } from './settings/settings-service'
 import {
+  detectSystemGoogleProxy,
+  testGooglePlacesConnectivity,
+} from './settings/places-connectivity'
+import {
   provisionOfficialChannel,
   refreshOfficialModels,
   refreshOfficialUsage,
@@ -530,6 +534,17 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettingsSnapshot())
+  ipcMain.handle(IPC.SETTINGS_DETECT_GOOGLE_PROXY, () => detectSystemGoogleProxy())
+  ipcMain.handle(
+    IPC.SETTINGS_TEST_GOOGLE_PLACES,
+    async (
+      _event,
+      input?: {
+        mode?: 'off' | 'system' | 'manual'
+        manualProxyUrl?: string
+      },
+    ) => testGooglePlacesConnectivity(input),
+  )
   ipcMain.handle(IPC.ONBOARDING_GET_STATE, () => getOnboardingState())
   ipcMain.handle(
     IPC.ONBOARDING_SET_STATE,

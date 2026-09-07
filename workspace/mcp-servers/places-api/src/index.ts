@@ -15,6 +15,7 @@ import {
   getPlacesProvider,
   isGatewayProvider,
 } from "./provider.js";
+import { initPlacesFetch } from "./fetch.js";
 import {
   PlaceDetailsResponseSchema,
   TextSearchResponseSchema,
@@ -224,6 +225,7 @@ server.tool(
 );
 
 async function main(): Promise<void> {
+  await initPlacesFetch();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

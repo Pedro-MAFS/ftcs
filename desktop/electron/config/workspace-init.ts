@@ -8,7 +8,7 @@ import { getRepoRoot } from './paths'
  * 模板版本：改动标准 workspace 中 skills/mcp/config 结构时递增，
  * 启动时若目标区标记版本落后，会重新同步托管目录。
  */
-export const WORKSPACE_TEMPLATE_VERSION = '2026.09.05-us-i-13-pdf-sidecar'
+export const WORKSPACE_TEMPLATE_VERSION = '2026.09.07-places-proxy-undici-v2'
 
 /** 始终从模板覆盖同步（用户业务数据不在此列） */
 export const MANAGED_WORKSPACE_DIRS = ['skills', 'mcp-servers', 'config'] as const
@@ -448,6 +448,25 @@ function copyMcpBundleFromTemplate(
   return true
 }
 
+/** places-api 等 MCP 将 undici 标为 external，运行时需要 node_modules。 */
+const MCP_PACKAGES_NEEDING_PROD_INSTALL = new Set(['places-api'])
+
+function mcpProductionDepsReady(pkgDir: string): boolean {
+  const nodeModules = path.join(pkgDir, 'node_modules', 'undici', 'package.json')
+  return fs.existsSync(nodeModules)
+}
+
+async function ensureMcpProductionDeps(
+  name: string,
+  pkgDir: string,
+  log?: (line: string) => void,
+): Promise<void> {
+  if (!MCP_PACKAGES_NEEDING_PROD_INSTALL.has(name)) return
+  if (mcpProductionDepsReady(pkgDir)) return
+  log?.(`MCP ${name}: 安装生产依赖（undici 等）…`)
+  await runNpm(pkgDir, ['install', '--omit=dev'])
+}
+
 /**
  * 确保用户工作区具备预打包 MCP 入口（dist/mcp.js）。
  * - 已有且与模板同版本：跳过
@@ -479,6 +498,11 @@ export async function ensureMcpServersReady(
     const needsSync = mcpBundleNeedsSync(pkgDir, templatePkg)
 
     if (fs.existsSync(entry) && !needsSync) {
+      try {
+        await ensureMcpProductionDeps(name, pkgDir, log)
+      } catch (err) {
+        errors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`)
+      }
       skipped.push(name)
       continue
     }
@@ -487,6 +511,7 @@ export async function ensureMcpServersReady(
     if (fs.existsSync(templateEntry)) {
       try {
         copyMcpBundleFromTemplate(templatePkg, pkgDir)
+        await ensureMcpProductionDeps(name, pkgDir, log)
         if (fs.existsSync(entry)) {
           built.push(name)
           log?.(`MCP ${name}: 已从模板同步 dist/mcp.js`)
@@ -521,6 +546,7 @@ export async function ensureMcpServersReady(
         continue
       }
       copyMcpBundleFromTemplate(templatePkg, pkgDir)
+      await ensureMcpProductionDeps(name, pkgDir, log)
       if (fs.existsSync(entry)) {
         built.push(name)
         log?.(`MCP ${name}: 已构建并同步 dist/mcp.js`)
