@@ -147,7 +147,7 @@ function main() {
 
   const placesApiDest = path.join(destRoot, 'mcp-servers', 'places-api')
   if (fs.existsSync(path.join(placesApiDest, 'package.json'))) {
-    console.log('[prepare-template] places-api: npm install --omit=dev（undici 运行时依赖）')
+    console.log('[prepare-template] places-api: npm install --omit=dev（打入 node_modules，用户机不再 install）')
     execFileSync(npmCmd, ['install', '--omit=dev'], {
       cwd: placesApiDest,
       stdio: 'inherit',
@@ -155,6 +155,14 @@ function main() {
       windowsHide: true,
       shell: process.platform === 'win32',
     })
+    for (const dep of ['undici', 'socks-proxy-agent']) {
+      const pkg = path.join(placesApiDest, 'node_modules', dep, 'package.json')
+      if (!fs.existsSync(pkg)) {
+        console.error(`[prepare-template] places-api 缺少 node_modules/${dep}，请检查 npm install`)
+        process.exit(1)
+      }
+    }
+    console.log('[prepare-template] places-api: node_modules 已就绪')
   }
 }
 

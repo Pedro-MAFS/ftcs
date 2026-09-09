@@ -154,5 +154,5 @@ npx electron-builder --win # 产出 release/
 ## 工作流维护约定
 
 - **只改** 仓库 `workspace/skills/`、`workspace/mcp-servers/`、`workspace/config/`（模板源）
-- MCP 发布入口为自包含 `dist/mcp.js`（esbuild），运行时工作区不依赖 `node_modules`
+- MCP 发布入口为自包含 `dist/mcp.js`（esbuild）；`places-api` 另将 `undici` 等生产依赖打入安装包模板 `node_modules`，同步到用户工作区，**用户机不再 npm install**
 - 运行时工作区由应用同步生成，业务数据写在运行时 `data/`，不要提交用户 `userData`

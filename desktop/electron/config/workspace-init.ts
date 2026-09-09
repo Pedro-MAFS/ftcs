@@ -8,7 +8,7 @@ import { getRepoRoot } from './paths'
  * 模板版本：改动标准 workspace 中 skills/mcp/config 结构时递增，
  * 启动时若目标区标记版本落后，会重新同步托管目录。
  */
-export const WORKSPACE_TEMPLATE_VERSION = '2026.09.07-places-proxy-undici-v2'
+export const WORKSPACE_TEMPLATE_VERSION = '2026.09.09-places-api-bundled-deps'
 
 /** 始终从模板覆盖同步（用户业务数据不在此列） */
 export const MANAGED_WORKSPACE_DIRS = ['skills', 'mcp-servers', 'config'] as const
@@ -287,6 +287,12 @@ function needsManagedSync(workspaceRoot: string, force: boolean): boolean {
       const pkgJson = path.join(mcpRoot, name, 'package.json')
       if (!fs.existsSync(pkgJson)) continue
       if (!fs.existsSync(path.join(mcpRoot, name, 'dist', 'mcp.js'))) return true
+      if (
+        MCP_PACKAGES_WITH_BUNDLED_NODE_MODULES.has(name) &&
+        !mcpProductionDepsReady(path.join(mcpRoot, name))
+      ) {
+        return true
+      }
     }
   }
   return false
@@ -448,23 +454,69 @@ function copyMcpBundleFromTemplate(
   return true
 }
 
-/** places-api 等 MCP 将 undici 标为 external，运行时需要 node_modules。 */
-const MCP_PACKAGES_NEEDING_PROD_INSTALL = new Set(['places-api'])
+/**
+ * places-api 将 undici / socks-proxy-agent 标为 external；
+ * 安装包模板内已 npm install，同步时整包拷贝 node_modules，用户机不再 install。
+ */
+const MCP_PACKAGES_WITH_BUNDLED_NODE_MODULES = new Set(['places-api'])
 
 function mcpProductionDepsReady(pkgDir: string): boolean {
-  const nodeModules = path.join(pkgDir, 'node_modules', 'undici', 'package.json')
-  return fs.existsSync(nodeModules)
+  const undici = path.join(pkgDir, 'node_modules', 'undici', 'package.json')
+  const socks = path.join(pkgDir, 'node_modules', 'socks-proxy-agent', 'package.json')
+  return fs.existsSync(undici) && fs.existsSync(socks)
 }
 
-async function ensureMcpProductionDeps(
+function copyTreeRecursive(src: string, dest: string): void {
+  fs.mkdirSync(dest, { recursive: true })
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const from = path.join(src, entry.name)
+    const to = path.join(dest, entry.name)
+    if (entry.isDirectory()) {
+      copyTreeRecursive(from, to)
+    } else if (entry.isFile()) {
+      fs.copyFileSync(from, to)
+    }
+  }
+}
+
+function copyMcpNodeModulesFromTemplate(
+  templatePkgDir: string,
+  workspacePkgDir: string,
+): boolean {
+  const from = path.join(templatePkgDir, 'node_modules')
+  if (!fs.existsSync(from)) return false
+  const to = path.join(workspacePkgDir, 'node_modules')
+  if (fs.existsSync(to)) {
+    fs.rmSync(to, { recursive: true, force: true })
+  }
+  copyTreeRecursive(from, to)
+  return true
+}
+
+function syncMcpProductionDepsFromTemplate(
   name: string,
-  pkgDir: string,
+  templatePkgDir: string,
+  workspacePkgDir: string,
   log?: (line: string) => void,
-): Promise<void> {
-  if (!MCP_PACKAGES_NEEDING_PROD_INSTALL.has(name)) return
-  if (mcpProductionDepsReady(pkgDir)) return
-  log?.(`MCP ${name}: 安装生产依赖（undici 等）…`)
-  await runNpm(pkgDir, ['install', '--omit=dev'])
+  options?: { force?: boolean },
+): void {
+  if (!MCP_PACKAGES_WITH_BUNDLED_NODE_MODULES.has(name)) return
+  if (!options?.force && mcpProductionDepsReady(workspacePkgDir)) return
+
+  const templateUndici = path.join(templatePkgDir, 'node_modules', 'undici', 'package.json')
+  if (!fs.existsSync(templateUndici)) {
+    if (app.isPackaged) {
+      throw new Error(`${name}: 安装包模板缺少 node_modules（请重新构建 workspace-template）`)
+    }
+    throw new Error(
+      `${name}: 模板缺少 node_modules/undici（开发态请先在 workspace/mcp-servers/places-api 执行 npm install --omit=dev）`,
+    )
+  }
+
+  if (!copyMcpNodeModulesFromTemplate(templatePkgDir, workspacePkgDir)) {
+    throw new Error(`${name}: 从模板同步 node_modules 失败`)
+  }
+  log?.(`MCP ${name}: 已从模板同步 node_modules（undici 等）`)
 }
 
 /**
@@ -499,7 +551,7 @@ export async function ensureMcpServersReady(
 
     if (fs.existsSync(entry) && !needsSync) {
       try {
-        await ensureMcpProductionDeps(name, pkgDir, log)
+        syncMcpProductionDepsFromTemplate(name, templatePkg, pkgDir, log)
       } catch (err) {
         errors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`)
       }
@@ -511,7 +563,7 @@ export async function ensureMcpServersReady(
     if (fs.existsSync(templateEntry)) {
       try {
         copyMcpBundleFromTemplate(templatePkg, pkgDir)
-        await ensureMcpProductionDeps(name, pkgDir, log)
+        syncMcpProductionDepsFromTemplate(name, templatePkg, pkgDir, log, { force: true })
         if (fs.existsSync(entry)) {
           built.push(name)
           log?.(`MCP ${name}: 已从模板同步 dist/mcp.js`)
@@ -546,7 +598,7 @@ export async function ensureMcpServersReady(
         continue
       }
       copyMcpBundleFromTemplate(templatePkg, pkgDir)
-      await ensureMcpProductionDeps(name, pkgDir, log)
+      syncMcpProductionDepsFromTemplate(name, templatePkg, pkgDir, log, { force: true })
       if (fs.existsSync(entry)) {
         built.push(name)
         log?.(`MCP ${name}: 已构建并同步 dist/mcp.js`)
