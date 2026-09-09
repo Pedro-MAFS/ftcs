@@ -710,7 +710,7 @@ onMounted(() => {
 
               <template v-if="isOfficial">
                 <p class="hint-line">
-                  经公司 Token 网关调用 DeepSeek，费用从账户余额扣除；无需自备上游 API Key。
+                  经公司 Token 网关调用官方模型（DeepSeek / GLM / Qwen 等，以网关列表为准），费用从账户余额扣除；无需自备上游 API Key。
                 </p>
                 <div class="active-banner">
                   <Icon name="info" :size="14" />

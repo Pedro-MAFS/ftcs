@@ -13,6 +13,18 @@ export const CHANGELOG_STARTED_AT = '0.5.0'
  */
 export const changelogReleases: ChangelogRelease[] = [
   {
+    version: '0.5.4',
+    releasedAt: '2026-09-09',
+    title: '官方通道新模型与透明计价',
+    notes: [
+      '官方通道模型列表随网关同步更新，新增 GLM 5.3 Flash、Qwen 3.8 Flash 等读图模型；资料树勾图时请选带「读图」的模型',
+      '读图能力由网关返回的模型类型决定，官方通道可随网关上新模型，无需等待桌面发版',
+      '配合网关新版计价策略，可在充值页与用户面板查看各模型价格与消费明细；设置页可刷新余额与今日 Token',
+      'R3 地图发现：设置 → 探索 可配置 Google 出站代理（系统/手动/直连）并测试连接；修复 places-api 在部分环境无法启动的问题',
+      '文字型 PDF 侧车抽取改用更轻量的 docutext，安装包体积略减',
+    ],
+  },
+  {
     version: '0.5.3',
     releasedAt: '2026-09-06',
     title: '任务编排与环境一键准备',

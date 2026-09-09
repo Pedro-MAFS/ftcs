@@ -56,7 +56,7 @@ export const siteConfig: SiteConfig = {
   productFullName: '外贸获客系统',
   agentName: '外贸获客智能体',
   tagline: '把产品信息变成可行动的外贸线索与开发信草稿',
-  version: '0.5.3',
+  version: '0.5.4',
   siteUrl: 'https://ftcs.ai-utills.com',
   brandSiteUrl: 'https://ai-utills.com',
   brandSiteName: 'AI-Utills',
@@ -78,7 +78,7 @@ export const siteConfig: SiteConfig = {
     {
       id: 'setup',
       label: 'Windows 安装包',
-      filename: '外贸获客-Setup-0.5.3.exe',
+      filename: '外贸获客-Setup-0.5.4.exe',
       note: 'NSIS 安装程序',
       mirrors: [
         {
@@ -86,19 +86,19 @@ export const siteConfig: SiteConfig = {
           label: 'Gitee 下载',
           badge: '国内更快',
           primary: true,
-          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.3/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Setup-0.5.3.exe',
+          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.4/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Setup-0.5.4.exe',
         },
         {
           id: 'github',
           label: 'GitHub 下载',
-          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.3/foreign-trade-Setup-0.5.3.exe',
+          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.4/foreign-trade-Setup-0.5.4.exe',
         },
       ],
     },
     {
       id: 'portable',
       label: 'Windows 便携版',
-      filename: '外贸获客-Portable-0.5.3.exe',
+      filename: '外贸获客-Portable-0.5.4.exe',
       note: '解压即用，无需安装',
       mirrors: [
         {
@@ -106,12 +106,12 @@ export const siteConfig: SiteConfig = {
           label: 'Gitee 下载',
           badge: '国内更快',
           primary: true,
-          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.3/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Portable-0.5.3.exe',
+          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.4/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Portable-0.5.4.exe',
         },
         {
           id: 'github',
           label: 'GitHub 下载',
-          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.3/foreign-trade-Portable-0.5.3.exe',
+          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.4/foreign-trade-Portable-0.5.4.exe',
         },
       ],
     },
