@@ -14,6 +14,8 @@ export interface DownloadItem {
   label: string
   filename: string
   note?: string
+  /** 为 true 时不展示在下载页（保留配置便于发版或恢复） */
+  hidden?: boolean
   mirrors: DownloadMirror[]
 }
 
@@ -100,6 +102,7 @@ export const siteConfig: SiteConfig = {
       label: 'Windows 便携版',
       filename: '外贸获客-Portable-0.5.4.exe',
       note: '解压即用，无需安装',
+      hidden: true,
       mirrors: [
         {
           id: 'gitee',
@@ -129,7 +132,7 @@ export const seoCopy = {
   download: {
     title: '下载外贸获客系统 | FTCS Windows 桌面智能体',
     description:
-      '下载 FTCS 外贸获客系统 Windows 安装包或便携版。本机 AI 智能体：产品画像、公开网页与社媒公开摘要探索、开发信草稿。国内建议 Gitee，海外可用 GitHub。',
+      '下载 FTCS 外贸获客系统 Windows 安装包。本机 AI 智能体：产品画像、公开网页与社媒公开摘要探索、开发信草稿。国内建议 Gitee，海外可用 GitHub。',
     path: '/download',
   },
   docs: {

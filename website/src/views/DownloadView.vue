@@ -1,6 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { siteConfig, seoCopy, type DownloadMirror } from '../config/site'
 import { usePageSeo } from '../composables/usePageSeo'
+
+const visibleDownloads = computed(() =>
+  siteConfig.downloads.filter((item) => !item.hidden),
+)
 
 usePageSeo({
   title: seoCopy.download.title,
@@ -24,7 +29,7 @@ function hasAnyMirror(mirrors: DownloadMirror[]): boolean {
       <div class="container">
         <h1>下载外贸获客桌面智能体</h1>
         <p>
-          FTCS 是跑在本机的外贸获客系统。下载 Windows 安装包或便携版，即可用 AI
+          FTCS 是跑在本机的外贸获客系统。下载 Windows 安装包，即可用 AI
           完成产品画像、线索探索与开发信草稿。
         </p>
         <p>
@@ -46,7 +51,7 @@ function hasAnyMirror(mirrors: DownloadMirror[]): boolean {
 
       <div class="download-list">
         <article
-          v-for="item in siteConfig.downloads"
+          v-for="item in visibleDownloads"
           :key="item.id"
           class="download-card"
         >
