@@ -26,7 +26,15 @@ export const supportPlanItems: SupportPlanItem[] = [
     id: 'people-contact-profile',
     title: '人员联系画像',
     description:
-      '在已有公司线索上，按买家角色补全关键联系人（姓名、职位、来源与匹配理由），供开发信选用收件人。默认人工触发。',
+      '在已有公司线索上，按买家角色补全关键联系人（姓名、职位、来源与匹配理由），供开发信选用收件人。Hunter BYOK 集成（domain-search 等），默认人工触发；与「邮箱有效性验证」同一期交付。',
+    priority: 'P0',
+    status: 'developing',
+  },
+  {
+    id: 'email-verification',
+    title: '邮箱有效性验证',
+    description:
+      '对补全或收集到的联系人邮箱做有效性校验（Hunter BYOK email-verifier：valid / accept_all 等）。与「人员联系画像」同一期开发交付，不单独排期。',
     priority: 'P0',
     status: 'developing',
   },
@@ -34,15 +42,23 @@ export const supportPlanItems: SupportPlanItem[] = [
     id: 'task-done-notification',
     title: '任务完成 · Windows 通知',
     description:
-      'Agent 长任务（探索、评分、开发信起草等）完成后弹出 Windows 系统通知。用户反馈：任务耗时长通常不会一直盯着界面，缺少提醒时容易忘记回来查看结果。',
-    priority: 'P1',
+      'Agent 长任务（探索、评分、开发信起草等）完成后弹出 Windows 系统通知。用户反馈：任务耗时长通常不会一直盯着界面，缺少提醒时容易忘记回来查看结果。计划下一版交付。',
+    priority: 'P0',
     status: 'planned',
   },
   {
-    id: 'email-verification',
-    title: '邮箱有效性验证',
+    id: 'explore-intensity',
+    title: '探索强度 · 高 / 中 / 低',
     description:
-      '对收集到的联系人邮箱做有效性校验（格式、可达性等）。用户反馈：日常多用 Hunter 验证后再发信，产品侧需评估对接 Hunter 或同类验证能力。',
+      '支持配置探索强度三档。用户反馈：单次探索收获的线索偏少。不同档位在扩展关键词数量、搜索引擎（R1/R2）单次结果条数、Google Maps（R3）结果集上限等方面分级，在耗时与覆盖面之间权衡。计划下一版交付。',
+    priority: 'P0',
+    status: 'planned',
+  },
+  {
+    id: 'library-pdf-scanned',
+    title: '资料库 · 非文字型 PDF',
+    description:
+      '当前仅支持文字型 PDF 自动抽文本进画像；扫描件 / 图片型 PDF 暂不支持。用户反馈需纳入说明书、画册等扫描 PDF，需评估 OCR 或多模态读图方案后再拆详设。',
     priority: 'P1',
     status: 'planned',
   },
@@ -81,8 +97,8 @@ export const supportPlanItems: SupportPlanItem[] = [
     id: 'email-draft-styles',
     title: '开发信 · 多风格与中英对照',
     description:
-      '起草开发信时可选多种行文风格（如正式、简洁、友好等），并支持中英文对照展示，便于审阅与修改后再发出。',
-    priority: 'P1',
+      '起草开发信时可选多种行文风格（如正式、简洁、友好等），并支持中英文对照展示，便于审阅与修改后再发出。计划下一版交付。',
+    priority: 'P0',
     status: 'planned',
   },
   {
