@@ -74,7 +74,7 @@ flowchart TB
 | **C0** | **非核心**：未配置 Hunter Key **不影响**画像/探索/评分/开发信；仅「补全联系人」不可用。 |
 | **C1** | 输入：scored 线索 + `company.website` 可解析域名；无域名 **拦截本扩展**（非全局 Preflight）。 |
 | **C2** | 触发：**人工**「补全联系人」；探索 / 任务编排 **不**自动跑 Hunter。 |
-| **C3** | 编排：**100% Agent 本地**；**不**新增 FTCS 服务端；Hunter Key 存 userData，MCP **直连** `api.hunter.io`。 |
+| **C3** | 编排：**100% Agent 本地**；**不**新增 FTCS 服务端；Hunter Key 存 userData，MCP **直连** `api.hunter.io`。支持**多 Key**（`HUNTER_API_KEYS` 逗号分隔）：按序 failover，429/401 自动切下一个（详见 [US-C-02 详设](design/US-C-02-hunter-api-MCP.md) §3.0）。注意：Hunter 额度为**账号级**，同账号多 Key 共享额度。 |
 | **C4** | **MVP 主数据源**：Hunter **`domain-search`**（按线索域名）；**可选** **`email-verifier`** 对选中邮箱再验（默认关闭，用户按需开启）。 |
 | **C5** | **禁止** Agent 自行 pattern 猜邮箱；Hunter 返回外 **不** 编造地址。 |
 | **C6** | **验邮**：以 Hunter 返回的 `verification.status` 为准（`valid` / `invalid` / `accept_all` 等）；映射到统一 `email_status`。验证为可选步骤，默认跳过。 |
@@ -286,7 +286,7 @@ flowchart LR
 ### US-C-03 · Skill 与桌面
 
 - Skill `enrich-lead-contacts`：**仅** Hunter 路径；**参数** `verify_emails: boolean`（默认 `false`）。  
-- 设置页：**集成 → Hunter API Key**（UI 对齐 Places BYOK，**独立**于官方模型/搜索通道）。  
+- 设置页：**集成 → Hunter API Key**（UI 对齐 Places BYOK，**独立**于官方模型/搜索通道）；支持**多个 Key**（每行一个或逗号分隔），展示各 Key 余额与状态（调 `account_info`）。  
 - UI：线索页「补全联系人」按钮 + **「验证邮箱」复选框**（默认不勾选，提示「验证将消耗 0.5 credit/邮箱」）。  
 - Preflight：**仅 enrich 任务**检查 Hunter Key；lead-store、profile ready。  
 - 无 Key：线索页按钮置灰，文案链 Hunter 注册 + 设置页，**不**阻断探索/开发信。
@@ -354,6 +354,8 @@ flowchart LR
 | 文档 | 关系 |
 |------|------|
 | [US-C-决策-Hunter-MVP.md](research/US-C-决策-Hunter-MVP.md) | 决策依据 |
+| [US-C-01 详设：people Schema 与 leads_patch_scored](design/US-C-01-people-schema与leads-patch-scored.md) | 数据层（已实现，lead-store 0.5.0） |
+| [US-C-02 详设：hunter-api MCP](design/US-C-02-hunter-api-MCP.md) | API 封装层 |
 | [联系人Enrichment-spike-简明-Decodeck.md](research/联系人Enrichment-spike-简明-Decodeck.md) | builtin 难例（归档） |
 | [06-MCP工具规范.md](06-MCP工具规范.md) | hunter-api 登记 |
 
@@ -367,3 +369,4 @@ flowchart LR
 | 2026-09-08 | **修订**：MVP 改为 Hunter BYOK；builtin 延后；Spike 改为 Hunter domain-search |
 | 2026-09-08 | **定位**：Hunter **集成扩展**、非核心；不做官方代调；无 Key 不阻断主路径 |
 | 2026-09-14 | **实测修订**：基于 Hunter MCP 实测（pantron.com 样本）——①验证设为可选（默认关闭，节省 credit）；②排序规则改为综合邮箱质量（类型/置信度/姓名/职位），不依赖 `position`（实测 70% 为 null）；③`email_status` 增加 `hunter_unverified` 状态；④Spike 留到开发阶段执行 |
+| 2026-09-14 | **多 Key**：C3 支持 `HUNTER_API_KEYS` 多 Key 池 + failover；设置页（US-C-03）支持配置多个 Key 并展示余额 |

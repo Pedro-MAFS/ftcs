@@ -490,6 +490,16 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
     ...buildGoogleProxyEnvVars(process.env[GOOGLE_PROXY_RESOLVED_ENV]),
   }
 
+  const hunterEnv = {
+    FTCS_WORKSPACE: workspaceRoot,
+    ...(process.env.HUNTER_API_KEYS
+      ? { HUNTER_API_KEYS: process.env.HUNTER_API_KEYS }
+      : {}),
+    ...(process.env.HUNTER_API_KEY
+      ? { HUNTER_API_KEY: process.env.HUNTER_API_KEY }
+      : {}),
+  }
+
   const nextMcp: Record<string, unknown> = {}
   for (const [name, server] of Object.entries(mcp)) {
     if (!server || typeof server !== 'object') {
@@ -501,7 +511,9 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
         ? searchEnv
         : name === 'places-api'
           ? placesEnv
-          : { FTCS_WORKSPACE: workspaceRoot }
+          : name === 'hunter-api'
+            ? hunterEnv
+            : { FTCS_WORKSPACE: workspaceRoot }
     nextMcp[name] = {
       ...server,
       environment: {

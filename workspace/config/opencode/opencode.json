@@ -38,6 +38,14 @@
         "PLACES_PROVIDER": "custom"
       }
     },
+    "hunter-api": {
+      "type": "local",
+      "command": ["node", "mcp-servers/hunter-api/dist/mcp.js"],
+      "enabled": true,
+      "environment": {
+        "FTCS_WORKSPACE": "."
+      }
+    },
     "chrome-devtools": {
       "type": "local",
       "command": [

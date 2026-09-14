@@ -17,7 +17,7 @@ const sourceRoot = path.join(repoRoot, 'workspace')
 const destRoot = path.join(desktopRoot, 'resources', 'workspace-template')
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
-const REQUIRED_MCP = ['lead-store', 'search-api', 'places-api']
+const REQUIRED_MCP = ['lead-store', 'search-api', 'places-api', 'hunter-api']
 
 const SKIP_DIR_NAMES = new Set([
   'node_modules',
