@@ -14,7 +14,6 @@ const props = defineProps<{
   enriching?: boolean
   canEnrich?: boolean
   enrichTitle?: string
-  verifyEmails?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -22,7 +21,6 @@ const emit = defineEmits<{
   saved: [lead: LeadRowDto]
   draft: [lead: LeadRowDto]
   enrich: [lead: LeadRowDto]
-  'update:verifyEmails': [value: boolean]
   openEmail: [lead: LeadRowDto]
 }>()
 
@@ -736,19 +734,6 @@ onUnmounted(() => {
               编辑
             </button>
             <template v-else-if="lead.phase === 'scored'">
-              <label class="lead-drawer__verify">
-                <input
-                  type="checkbox"
-                  :checked="verifyEmails"
-                  @change="
-                    emit(
-                      'update:verifyEmails',
-                      ($event.target as HTMLInputElement).checked,
-                    )
-                  "
-                />
-                验证邮箱
-              </label>
               <button
                 type="button"
                 class="btn-secondary"

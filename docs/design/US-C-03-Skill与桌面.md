@@ -14,7 +14,7 @@
 |------|------------------|
 | `people[]` + `leads_patch_scored` 可写回 | Skill 编排 Domain Search → 排序 → patch |
 | `hunter-api` MCP + `runtime.ts` / opencode 已接线 | 设置页写入 `.env` `HUNTER_API_KEYS`；Preflight 探测 Key + MCP |
-| 线索页仅有「开发信」 | 增加「补全联系人」+「验证邮箱」复选框 |
+| 线索页仅有「开发信」 | 增加「补全联系人」；验邮走设置「集成」全局开关 |
 | 无「集成」设置导航 | 新增侧栏「集成」区块（Hunter BYOK，独立于官方通道） |
 | 模板版本未含 enrich Skill / 老用户区可能无 hunter-api 目录 | bump `WORKSPACE_TEMPLATE_VERSION` 触发 managed 同步 |
 
@@ -26,7 +26,7 @@
 
 1. 用户可在设置中配置 **一个或多个** Hunter API Key；保存后 OpenCode 重启/重连即可注入 MCP。
 2. 已评分线索上，人工触发「补全联系人」→ Agent 跑 Skill → `people[]` 非空（有公开邮箱时）。
-3. 验证默认关闭；勾选后对本线索 **全部** 候选人调用 `email_verifier`（约 0.5 credit/封）。
+3. 验邮由设置全局开关控制（**默认开启**）；开启后对本线索 **全部** 候选人调用 `email_verifier`（约 0.5 credit/封）。
 4. 无 Key / 无域名 / Agent 忙：按钮置灰或 Preflight 拦截，**不**影响探索与开发信。
 
 ### 1.2 非目标（归 US-C-04 或延后）
@@ -49,7 +49,7 @@
 | 项 | 决定 |
 |----|------|
 | **Q1 Skill 名** | `enrich-lead-contacts` |
-| **Q2 入参** | `product_id`（必填）、`lead_id`（必填，**单条**）、`verify_emails`（boolean，默认 `false`） |
+| **Q2 入参** | `product_id`（必填）、`lead_id`（必填，**单条**）、`verify_emails`（boolean；桌面从全局设置注入，默认 `true`；Skill 对话未说明时按 `false`） |
 | **Q3 写回** | `leads_patch_scored`；**全量** emails → people（§C13 无上限）；开启验证时对 **全部** 候选人调 `email_verifier` |
 | **Q4 域名** | UI：无 `company.website` 可解析域名则按钮禁用（§C1）；Skill 内再解析 eTLD+1，失败则停止并说明 |
 | **Q5 设置导航** | **新增**侧栏「集成」；Hunter **独立于**官方模型 / 搜索 / 探索 Places |
@@ -57,7 +57,7 @@
 | **Q7 掩码** | `hunterApiKeysMasked` + `hunterApiKeySet`；掩码回写不覆盖；清空=清除 `HUNTER_API_KEYS` 与 `HUNTER_API_KEY` |
 | **Q8 连通性** | 新 `hunter-connectivity.ts`：直调 `GET /v2/account`（不启 MCP）；多 Key 逐条报告；设置页「测试连接」 |
 | **Q9 Preflight** | kind `enrich-lead-contacts`；`needsHunter` → Key 已配置 + `mcpOk('hunter-api')` + 公共 `lead-store` / agent-idle / model；**不**查 Places / search / chrome |
-| **Q10 IPC** | `leads:enrich-contacts`；入参 `{ productId, leadId, verifyEmails }`；渲染 `ensureAgentReady` + 主进程 `gateAgentStart` 双检 |
+| **Q10 IPC** | `leads:enrich-contacts`；入参 `{ productId, leadId }`；主进程按 `HUNTER_VERIFY_EMAILS` 注入 `verifyEmails`；渲染 `ensureAgentReady` + 主进程 `gateAgentStart` 双检 |
 | **Q11 按钮位置** | 对齐开发信：`LeadsView` 行操作 + `LeadDetailDrawer` 操作区；仅 **scored** 相位可点 |
 | **Q12 无 Key** | 按钮 disabled + tooltip：「请先在设置 → 集成中配置 Hunter API Key」；外链 Hunter 注册；**不**阻断探索/开发信 |
 | **Q13 模板版本** | **bump** `WORKSPACE_TEMPLATE_VERSION`（同步 `skills/` + 用户区首次出现 `mcp-servers/hunter-api`） |
@@ -286,7 +286,7 @@ leads_patch_scored({
 - 可选扩展；未配置不影响探索与开发信。  
 - 支持多个 Key（每行一个）；系统按顺序使用，额度用尽或无效时自动切换。  
 - **Hunter 额度为账号级**：同一账号下多个 Key **共享**额度；请仅配置合法持有的 Key。  
-- Domain Search 约 1 credit/次；验邮约 0.5 credit/封（默认不验证）。
+- Domain Search 约 1 credit/次；验邮约 0.5 credit/封。**全局勾选「补全联系人时验证邮箱」**（`HUNTER_VERIFY_EMAILS`，默认开启）；线索页不再提供勾选。
 
 ### 6.3 `settings-service`
 
@@ -298,7 +298,8 @@ leads_patch_scored({
 - Snapshot：  
   - `hunterApiKeySet: boolean`  
   - `hunterApiKeysMasked: string` — 多 Key 时用换行拼接各 Key 的 `maskSecret`；0 Key 为空串  
-  - 可选 `hunterApiKeyCount: number`（便于 UI 显示「已配置 N 个」）
+  - 可选 `hunterApiKeyCount: number`（便于 UI 显示「已配置 N 个」）  
+  - `hunterVerifyEmails: boolean` — 读 `HUNTER_VERIFY_EMAILS`，缺省 `true`
 
 **写 `saveSettings`**
 
@@ -451,7 +452,7 @@ async enrichLeadContacts(options: {
 | 项 | 值 |
 |----|-----|
 | Channel | `leads:enrich-contacts`（常量进 `IPC` 表） |
-| 入参 | `{ productId: string, leadId: string, verifyEmails?: boolean }` |
+| 入参 | `{ productId: string, leadId: string }`；主进程按设置注入 `verifyEmails` |
 | 主进程 | `gateAgentStart('enrich-lead-contacts')` → `runner.enrichLeadContacts(...)` |
 | preload | `enrichLeadContacts(input)` |
 
@@ -472,16 +473,16 @@ async enrichLeadContacts(options: {
 
 ### 9.2 验证开关
 
-- 复选框「验证邮箱」默认 **不勾选**。  
-- 旁注：「验证约消耗 0.5 credit/邮箱」。  
-- 状态可放 `LeadsView` 本地 `ref`（不必持久化）；抽屉与列表共用同一状态（provide/inject 或提升到 view）。
+- **不在**线索页/抽屉提供勾选；改由「设置 → 集成」全局开关「补全联系人时验证邮箱」。  
+- 写入 `.env` `HUNTER_VERIFY_EMAILS`（默认 `true`）；主进程 `leads:enrich-contacts` 读取后注入 Skill。  
+- 旁注放在设置页：「验邮约 0.5 credit/封」。
 
 ### 9.3 交互位置
 
 | 位置 | 行为 |
 |------|------|
-| `LeadsView` 行操作 | 图标/按钮，与「开发信」并列 |
-| `LeadDetailDrawer` | 操作区增加按钮 + 复选框；`emit('enrich', lead)` |
+| `LeadsView` 行操作 | 「补全联系人」按钮 |
+| `LeadDetailDrawer` | 操作区「补全联系人」；`emit('enrich', lead)` |
 
 进行中：`enriching` 状态禁用重复点击（对齐 `drafting`）。
 
@@ -593,3 +594,4 @@ C-02 已登记 `build-mcp` / `prepare-template`；本故事发版前跑 `npm run
 |------|------|
 | 2026-09-14 | 初稿：Skill + 设置集成多 Key + Preflight + 线索按钮；C7 经 `sync_valid_to_contacts`；抽屉/开发信选人归 C-04 |
 | 2026-09-14 | **修订**：取消验邮「最多 3 封」；开启后对全部候选人验邮 |
+| 2026-09-14 | **修订**：验邮改为设置「集成」全局开关（默认开启）；线索页不再勾选 |

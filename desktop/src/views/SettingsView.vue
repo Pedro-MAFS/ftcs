@@ -56,6 +56,8 @@ const showApiKey = ref(false)
 const showTavilyKey = ref(false)
 const showPlacesKey = ref(false)
 const showHunterKeys = ref(false)
+const hunterKeySlots = ref<string[]>([''])
+const HUNTER_KEYS_MAX = 5
 const placesTestMessage = ref('')
 const placesTestOk = ref<boolean | null>(null)
 const hunterTestMessage = ref('')
@@ -79,7 +81,7 @@ const form = reactive({
   searchProvider: 'tavily',
   tavilyApiKey: '',
   placesApiKey: '',
-  hunterApiKeys: '',
+  hunterVerifyEmails: true,
   googleProxyMode: 'system' as GoogleProxyMode,
   googleProxyManualUrl: 'http://127.0.0.1:7890',
   searchDailyLimit: 50,
@@ -204,7 +206,13 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.searchProvider = data.searchProvider
   form.tavilyApiKey = data.tavilyApiKeyMasked
   form.placesApiKey = data.placesApiKeyMasked
-  form.hunterApiKeys = data.hunterApiKeysMasked
+  const maskedSlots = data.hunterApiKeysMasked
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, HUNTER_KEYS_MAX)
+  hunterKeySlots.value = maskedSlots.length > 0 ? maskedSlots : ['']
+  form.hunterVerifyEmails = data.hunterVerifyEmails
   form.googleProxyMode = data.googleProxyMode
   form.googleProxyManualUrl =
     data.googleProxyManualUrl || 'http://127.0.0.1:7890'
@@ -409,7 +417,8 @@ async function onSave(): Promise<void> {
       searchProvider: form.searchProvider,
       tavilyApiKey: form.tavilyApiKey,
       placesApiKey: form.placesApiKey,
-      hunterApiKeys: form.hunterApiKeys,
+      hunterApiKeys: hunterKeySlots.value.map((key) => String(key)),
+      hunterVerifyEmails: form.hunterVerifyEmails,
       googleProxyMode: form.googleProxyMode,
       googleProxyManualUrl: form.googleProxyManualUrl,
       searchDailyLimit: form.searchDailyLimit,
@@ -469,6 +478,16 @@ async function onTestGooglePlaces(): Promise<void> {
   } finally {
     testingPlaces.value = false
   }
+}
+
+function addHunterKeySlot(): void {
+  if (hunterKeySlots.value.length >= HUNTER_KEYS_MAX) return
+  hunterKeySlots.value = [...hunterKeySlots.value, '']
+}
+
+function removeHunterKeySlot(index: number): void {
+  const next = hunterKeySlots.value.filter((_, i) => i !== index)
+  hunterKeySlots.value = next.length > 0 ? next : ['']
 }
 
 async function onTestHunter(): Promise<void> {
@@ -1221,7 +1240,7 @@ async function onCheckUpdate(): Promise<void> {
         <section id="settings-integrations" class="settings-block">
           <div class="settings-block__head">
             <h3>集成</h3>
-            <span class="muted mono">HUNTER_API_KEYS</span>
+            <span class="muted mono">HUNTER_API_KEYS / HUNTER_VERIFY_EMAILS</span>
           </div>
           <div class="settings-block__sub">
             <h4>Hunter · 补全联系人</h4>
@@ -1238,7 +1257,7 @@ async function onCheckUpdate(): Promise<void> {
               创建；费用计入你的 Hunter 账号。
             </p>
             <p class="hint-line">
-              支持<strong>多个 Key</strong>（每行一个）。系统按顺序使用；额度用尽或无效时自动切换下一个。
+              最多 <strong>{{ HUNTER_KEYS_MAX }}</strong> 个 Key，每格一个；可单独删除。系统按顺序使用，额度用尽或无效时自动切换下一个。
               <strong>Hunter 额度为账号级</strong>：同一账号下多个 Key 共享额度。请仅配置本人/团队合法持有的 Key。
             </p>
             <label class="field-label">
@@ -1246,25 +1265,61 @@ async function onCheckUpdate(): Promise<void> {
               <span v-if="snapshot?.hunterApiKeyCount" class="muted">
                 （已配置 {{ snapshot.hunterApiKeyCount }} 个）
               </span>
-            </label>
-            <div class="input-row">
-              <textarea
-                v-model="form.hunterApiKeys"
-                class="text-input"
-                rows="3"
-                autocomplete="off"
-                :placeholder="
-                  snapshot?.hunterApiKeySet
-                    ? '已配置（修改则覆盖；清空并保存可清除）'
-                    : '每行一个 Key'
-                "
-              />
-              <button type="button" class="icon-btn" @click="showHunterKeys = !showHunterKeys">
+              <button
+                type="button"
+                class="icon-btn"
+                style="margin-left: 4px; vertical-align: middle"
+                :title="showHunterKeys ? '隐藏' : '显示'"
+                @click="showHunterKeys = !showHunterKeys"
+              >
                 <Icon :name="showHunterKeys ? 'eye' : 'eye-off'" :size="14" />
               </button>
+            </label>
+            <div class="settings-hunter-keys">
+              <div
+                v-for="(_, index) in hunterKeySlots"
+                :key="index"
+                class="input-row settings-hunter-keys__row"
+              >
+                <input
+                  v-model="hunterKeySlots[index]"
+                  class="text-input"
+                  :type="showHunterKeys ? 'text' : 'password'"
+                  autocomplete="off"
+                  :placeholder="`Key ${index + 1}`"
+                  :aria-label="`Hunter API Key ${index + 1}`"
+                />
+                <button
+                  type="button"
+                  class="icon-btn"
+                  title="删除此 Key"
+                  :disabled="hunterKeySlots.length === 1 && !hunterKeySlots[0]"
+                  @click="removeHunterKeySlot(index)"
+                >
+                  <Icon name="trash" :size="14" />
+                </button>
+              </div>
+              <button
+                v-if="hunterKeySlots.length < HUNTER_KEYS_MAX"
+                type="button"
+                class="btn-secondary btn-sm"
+                @click="addHunterKeySlot"
+              >
+                <Icon name="plus" :size="12" />
+                添加 Key
+              </button>
             </div>
+            <label class="settings-checkbox">
+              <input v-model="form.hunterVerifyEmails" type="checkbox" />
+              <span>
+                补全联系人时验证邮箱
+                <span class="muted">
+                  Domain Search 约 1 credit/次；验邮约 0.5 credit/封。默认开启，一次配置全局生效。
+                </span>
+              </span>
+            </label>
             <p class="hint-line muted">
-              Domain Search 约 1 credit/次；验邮约 0.5 credit/封（默认不验证）。保存后请重启 OpenCode 使 MCP 生效。
+              保存后请重启 OpenCode 使 MCP 生效。
               尚未注册？
               <button
                 type="button"

@@ -17,7 +17,7 @@
 - **Hunter 集成扩展**：对齐业务员已有 Hunter 习惯，**不是** FTCS 核心卖点，**不是** Hunter 竞品或替代品。  
 - **主路径不依赖 Hunter**：画像 → 探索 → 线索 → 开发信 **无 Key 仍可跑通**（`Dear Team` + 现有 `contacts`）。  
 - **合规**：用户自备 Key（BYOK），数据请求 **用户账号 → Hunter**；**不做**官方网关代调 Hunter。
-- **成本可控**：邮箱验证为 **可选步骤**，默认关闭，由用户按需开启，避免无谓 credit 消耗。
+- **成本可控**：邮箱验证为 **可选步骤**，由「设置 → 集成」全局开关控制（**默认开启**），可按需关闭以避免 credit 消耗。
 
 ---
 
@@ -75,15 +75,15 @@ flowchart TB
 | **C1** | 输入：scored 线索 + `company.website` 可解析域名；无域名 **拦截本扩展**（非全局 Preflight）。 |
 | **C2** | 触发：**人工**「补全联系人」；探索 / 任务编排 **不**自动跑 Hunter。 |
 | **C3** | 编排：**100% Agent 本地**；**不**新增 FTCS 服务端；Hunter Key 存 userData，MCP **直连** `api.hunter.io`。支持**多 Key**（`HUNTER_API_KEYS` 逗号分隔）：按序 failover，429/401 自动切下一个（详见 [US-C-02 详设](design/US-C-02-hunter-api-MCP.md) §3.0）。注意：Hunter 额度为**账号级**，同账号多 Key 共享额度。 |
-| **C4** | **MVP 主数据源**：Hunter **`domain-search`**（按线索域名）；**可选** **`email-verifier`** 对选中邮箱再验（默认关闭，用户按需开启）。 |
+| **C4** | **MVP 主数据源**：Hunter **`domain-search`**（按线索域名）；**可选** **`email-verifier`** 对选中邮箱再验（全局设置，默认开启，可关闭）。 |
 | **C5** | **禁止** Agent 自行 pattern 猜邮箱；Hunter 返回外 **不** 编造地址。 |
-| **C6** | **验邮**：以 Hunter 返回的 `verification.status` 为准（`valid` / `invalid` / `accept_all` 等）；映射到统一 `email_status`。验证为可选步骤，默认跳过。 |
+| **C6** | **验邮**：以 Hunter 返回的 `verification.status` 为准（`valid` / `invalid` / `accept_all` 等）；映射到统一 `email_status`。验证为可选步骤（全局开关）。 |
 | **C7** | 写入 `people[]`；若开启验证且 `valid` 且 confidence 达阈值的个人邮箱 **同步** `contacts`；保留原公司级联系方式。 |
 | **C8** | 开发信：优先 `email_status` 为 **`hunter_valid`** 的 people；若未验证或结果为空，则按邮箱质量排序（见 §6.3）选择，问候语 `Dear {FirstName}` 或 `Dear Team`。 |
 | **C9** | 合规：遵守 [Hunter ToS](https://hunter.io/terms-of-service)；不存整页简历；用户可删单条 person。 |
 | **C10** | `leads_score_and_dedupe` **保留** 已有 `people[]`。 |
-| **C11** | 单线索：Domain Search **1 次**（MCP 有缓存则可命中不扣费）；**可选** Verifier：开启后对本线索 **全部** 候选人验邮（约 0.5 credit/封）；默认关闭。 |
-| **C12** | **验证开关**：Skill 提供 `verify_emails: boolean` 参数，默认 `false`；UI 提供「验证邮箱」复选框，默认不勾选。 |
+| **C11** | 单线索：Domain Search **1 次**（MCP 有缓存则可命中不扣费）；**可选** Verifier：开启后对本线索 **全部** 候选人验邮（约 0.5 credit/封）；**默认开启**（全局设置）。 |
+| **C12** | **验证开关**：全局配置（设置 → 集成，与 Hunter Key 同级，写入 `HUNTER_VERIFY_EMAILS`，默认 `true`）。Skill 仍接收 `verify_emails`；桌面补全时由主进程按该设置注入，线索页不再提供勾选。 |
 | **C13** | `people[]` **无条数上限**；查出来全部存，按 §6.3 排序规则降序排列（最高优先级在前），用户自行挑选。 |
 
 ---
@@ -167,7 +167,7 @@ flowchart TB
 | 工具 | 端点 | 用途 |
 |------|------|------|
 | `domain_search` | `GET /v2/domain-search?domain={eTLD+1}` | 按线索域名拉取 emails + 姓名 + 职位 + sources |
-| `email_verifier` | `GET /v2/email-verifier?email=` | **可选**，对候选人再验（耗 0.5 credit/封，默认关闭） |
+| `email_verifier` | `GET /v2/email-verifier?email=` | **可选**，对候选人再验（耗 0.5 credit/封；全局设置默认开启） |
 | `email_finder` | `GET /v2/email-finder` | **MVP 不做**（需已有姓名；Domain Search 已含） |
 
 - 认证：`X-API-Key` 或 query `api_key`（MCP 内封装，**不出**现在 Skill 明文）。  
@@ -285,7 +285,7 @@ flowchart LR
 
 ### US-C-03 · Skill 与桌面
 
-- Skill `enrich-lead-contacts`：**仅** Hunter 路径；**参数** `verify_emails: boolean`（默认 `false`）。  
+- Skill `enrich-lead-contacts`：**仅** Hunter 路径；**参数** `verify_emails: boolean`（桌面由全局设置注入，默认开启）。  
 - 设置页：**集成 → Hunter API Key**（UI 对齐 Places BYOK，**独立**于官方模型/搜索通道）；支持**多个 Key**（每行一个或逗号分隔），展示各 Key 余额与状态（调 `account_info`）。  
 - UI：线索页「补全联系人」按钮 + **「验证邮箱」复选框**（默认不勾选，提示「验证将消耗 0.5 credit/邮箱」）。  
 - Preflight：**仅 enrich 任务**检查 Hunter Key；lead-store、profile ready。  
@@ -345,7 +345,7 @@ flowchart LR
 | `position` 为 null（实测约 70%） | §6.3 综合排序：邮箱类型 + 置信度 + 姓名完整性，不依赖职位 |
 | `verification.status` 为 null（实测约 85%） | 验证设为可选；未验证邮箱按排序参与候选，UI 提供手动验证按钮 |
 | accept_all 域 | `hunter_accept_all` 黄标，不默认发信 |
-| API 配额 | Domain Search 有 24h 缓存；验邮按候选人逐条计费（默认关闭） |
+| API 配额 | Domain Search 有 24h 缓存；验邮按候选人逐条计费（全局设置默认开启，可关闭） |
 
 ---
 
@@ -373,3 +373,4 @@ flowchart LR
 | 2026-09-14 | **多 Key**：C3 支持 `HUNTER_API_KEYS` 多 Key 池 + failover；设置页（US-C-03）支持配置多个 Key 并展示余额 |
 | 2026-09-14 | **US-C-03 详设**：Skill `enrich-lead-contacts`、设置「集成」、Preflight、线索页按钮；C7 经 `sync_valid_to_contacts`；抽屉/开发信选人归 C-04 |
 | 2026-09-14 | **验邮**：取消「最多 3 封」限制；开启验证后对本线索全部候选人验邮 |
+| 2026-09-14 | **C12**：验邮改为设置「集成」全局开关（`HUNTER_VERIFY_EMAILS`，默认开启）；线索页/抽屉不再勾选 |

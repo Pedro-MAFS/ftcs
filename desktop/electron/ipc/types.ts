@@ -855,6 +855,7 @@ export interface SettingsSnapshot {
   hunterApiKeySet: boolean
   hunterApiKeysMasked: string
   hunterApiKeyCount: number
+  hunterVerifyEmails: boolean
   googleProxyMode: GoogleProxyMode
   googleProxyManualUrl: string
   googleProxyEffectiveUrl: string
@@ -876,7 +877,8 @@ export interface SettingsSaveInput {
   searchProvider: string
   tavilyApiKey: string
   placesApiKey?: string
-  hunterApiKeys?: string
+  hunterApiKeys?: string[]
+  hunterVerifyEmails?: boolean
   googleProxyMode?: GoogleProxyMode
   googleProxyManualUrl?: string
   searchDailyLimit: number

@@ -1483,22 +1483,6 @@ button:focus-visible {
   padding-top: 0;
 }
 
-.leads-verify-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.lead-drawer__verify {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-right: 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
-
 .leads-table__header,
 .leads-table__row {
   display: grid;
@@ -1538,6 +1522,26 @@ button:focus-visible {
 
 .leads-table__row.is-selected {
   background: var(--accent-muted);
+}
+
+.leads-table__company-btn {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.leads-table__company-btn:hover {
+  text-decoration: underline;
 }
 
 .leads-table__company,
@@ -1640,6 +1644,18 @@ button:focus-visible {
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
+}
+
+.lead-lifecycle--link {
+  border: none;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lead-lifecycle--link:hover {
+  text-decoration: underline;
 }
 
 .lead-lifecycle.is-mailed {
@@ -2596,6 +2612,23 @@ select.text-input {
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
+}
+
+.settings-hunter-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-hunter-keys__row {
+  align-items: center;
+}
+
+.settings-hunter-keys .btn-sm {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .settings-checkbox input {

@@ -41,7 +41,7 @@ const exporting = ref(false)
 const scoring = ref(false)
 const drafting = ref(false)
 const enriching = ref(false)
-const verifyEmails = ref(false)
+const hunterVerifyEmails = ref(true)
 const hunterKeySet = ref(false)
 const pendingHighIds = ref<string[]>([])
 const actionMessage = ref('')
@@ -509,7 +509,7 @@ function enrichTitle(lead: LeadRowDto): string {
   if (!hunterKeySet.value) {
     return '请先在设置 → 集成中配置 Hunter API Key'
   }
-  return verifyEmails.value
+  return hunterVerifyEmails.value
     ? '补全联系人并验证邮箱（约 0.5 credit/封）'
     : '补全联系人（Domain Search，约 1 credit）'
 }
@@ -541,13 +541,13 @@ async function startEnrichContacts(lead: LeadRowDto): Promise<void> {
 
   enriching.value = true
   actionMessage.value = ''
-  resetAgentForEnrichContacts(lead.id, verifyEmails.value)
+  resetAgentForEnrichContacts(lead.id, hunterVerifyEmails.value)
 
   try {
     const res = await window.ftcs.enrichLeadContacts({
       productId: activeProductId.value,
       leadId: lead.id,
-      verifyEmails: verifyEmails.value,
+      verifyEmails: hunterVerifyEmails.value,
     })
     if (!res.ok) {
       actionMessage.value = res.message
@@ -699,6 +699,7 @@ onMounted(() => {
   void refreshLeads()
   void window.ftcs?.getSettings?.().then((s) => {
     hunterKeySet.value = Boolean(s.hunterApiKeySet)
+    hunterVerifyEmails.value = s.hunterVerifyEmails !== false
   })
   pollTimer = setInterval(() => {
     if (document.visibilityState === 'visible') void refreshLeads()
@@ -782,14 +783,8 @@ onUnmounted(() => {
     </header>
 
     <p v-if="actionMessage" class="leads-banner">{{ actionMessage }}</p>
-    <p class="leads-banner leads-banner--hint">
-      <label class="leads-verify-toggle">
-        <input v-model="verifyEmails" type="checkbox" />
-        验证邮箱（约 0.5 credit/封；默认关闭）
-      </label>
-      <span v-if="!hunterKeySet" class="muted">
-        · 补全联系人需 Hunter Key（设置 → 集成）
-      </span>
+    <p v-if="!hunterKeySet" class="leads-banner leads-banner--hint">
+      <span class="muted">补全联系人需 Hunter Key（设置 → 集成）</span>
     </p>
 
     <WorkflowPlanEditorDialog
@@ -889,15 +884,32 @@ onUnmounted(() => {
           :class="{ 'is-selected': selectedId === row.id }"
           @click="selectRow(row)"
         >
-          <span class="table-cell leads-table__company" :title="row.companyName">
-            {{ row.companyName }}
+          <span class="table-cell leads-table__company">
+            <button
+              type="button"
+              class="leads-table__company-btn"
+              :title="`查看 ${row.companyName}`"
+              @click.stop="openDrawer(row)"
+            >
+              {{ row.companyName }}
+            </button>
           </span>
           <span class="table-cell leads-table__status">
             <span class="lead-phase" :class="phaseClass(row.phase)">
               {{ phaseLabel(row.phase) }}
             </span>
+            <button
+              v-if="hasDrafted(row) && lifecycleLabel(row.status)"
+              type="button"
+              class="lead-lifecycle lead-lifecycle--link"
+              :class="lifecycleClass(row.status)"
+              title="跳转到该线索的开发信"
+              @click.stop="goEmailLead(row)"
+            >
+              {{ lifecycleLabel(row.status) }}
+            </button>
             <span
-              v-if="lifecycleLabel(row.status)"
+              v-else-if="lifecycleLabel(row.status)"
               class="lead-lifecycle"
               :class="lifecycleClass(row.status)"
             >
@@ -946,22 +958,6 @@ onUnmounted(() => {
           </span>
           <span class="table-cell leads-table__actions">
             <button
-              type="button"
-              class="leads-table__action"
-              @click.stop="openDrawer(row)"
-            >
-              查看
-            </button>
-            <button
-              v-if="hasDrafted(row)"
-              type="button"
-              class="leads-table__action"
-              title="跳转到该线索的开发信"
-              @click.stop="goEmailLead(row)"
-            >
-              邮件
-            </button>
-            <button
               v-if="row.phase === 'scored'"
               type="button"
               class="leads-table__action"
@@ -993,12 +989,10 @@ onUnmounted(() => {
       :enriching="isEnriching"
       :can-enrich="detailLead ? canEnrichLead(detailLead) : false"
       :enrich-title="detailLead ? enrichTitle(detailLead) : ''"
-      :verify-emails="verifyEmails"
       @close="closeDrawer"
       @saved="onLeadSaved"
       @draft="onDraftLead"
       @enrich="onEnrichLead"
-      @update:verify-emails="(v: boolean) => (verifyEmails = v)"
       @open-email="goEmailLead"
     />
   </section>

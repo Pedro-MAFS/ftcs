@@ -23,9 +23,10 @@ import { getOfficialUsageCache } from '../gateway/official-usage-cache'
 import type { OfficialUsageSnapshot } from '../gateway/official-usage-cache'
 import {
   formatHunterKeysEnv,
-  isHunterKeysMaskedInput,
-  parseHunterApiKeysText,
+  parseHunterVerifyEmails,
   readHunterKeysFromEnv,
+  resolveHunterApiKeysSlots,
+  HUNTER_API_KEYS_MAX,
 } from './hunter-keys'
 import {
   GOOGLE_PROXY_MODE_ENV,
@@ -72,6 +73,8 @@ export interface SettingsSnapshot {
   /** 各 Key 掩码后换行拼接，供 textarea 回显 */
   hunterApiKeysMasked: string
   hunterApiKeyCount: number
+  /** 补全联系人时是否验邮；未配置默认 true */
+  hunterVerifyEmails: boolean
   /** Google Places 出站代理：off | system | manual */
   googleProxyMode: GoogleProxyMode
   /** 手动代理 URL（如 http://127.0.0.1:7890） */
@@ -98,8 +101,10 @@ export interface SettingsSaveInput {
   tavilyApiKey: string
   /** 省略则不修改；空字符串且非掩码则清除 */
   placesApiKey?: string
-  /** 省略则不修改；空/仅空白则清除 HUNTER_API_KEYS 与 HUNTER_API_KEY */
-  hunterApiKeys?: string
+  /** 省略则不修改；空数组则清除；各槽位可为掩码（保留对应原 Key）或明文 */
+  hunterApiKeys?: string[]
+  /** 补全联系人是否验邮；写入 HUNTER_VERIFY_EMAILS */
+  hunterVerifyEmails?: boolean
   googleProxyMode?: GoogleProxyMode
   googleProxyManualUrl?: string
   searchDailyLimit: number
@@ -137,6 +142,7 @@ const PLACES_KEY_ENV = 'GOOGLE_PLACES_API_KEY'
 const PLACES_PROVIDER_ENV = 'PLACES_PROVIDER'
 const HUNTER_KEYS_ENV = 'HUNTER_API_KEYS'
 const HUNTER_KEY_ENV = 'HUNTER_API_KEY'
+const HUNTER_VERIFY_EMAILS_ENV = 'HUNTER_VERIFY_EMAILS'
 const DEEPSEEK_DEFAULT_BASE = 'https://api.deepseek.com/v1'
 
 function getEnvPath(workspaceRoot: string): string {
@@ -333,6 +339,7 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     hunterApiKeySet: hunterKeys.length > 0,
     hunterApiKeysMasked: hunterKeys.map((key) => maskSecret(key)).join('\n'),
     hunterApiKeyCount: hunterKeys.length,
+    hunterVerifyEmails: parseHunterVerifyEmails(env[HUNTER_VERIFY_EMAILS_ENV]),
     googleProxyMode: parseGoogleProxyMode(env[GOOGLE_PROXY_MODE_ENV]),
     googleProxyManualUrl: env[GOOGLE_PROXY_URL_ENV] || '',
     googleProxyEffectiveUrl: process.env[GOOGLE_PROXY_RESOLVED_ENV] || '',
@@ -427,17 +434,24 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
     if (prevHunterKeys.length > 0) {
       envUpdates[HUNTER_KEYS_ENV] = formatHunterKeysEnv(prevHunterKeys)
     }
-  } else if (isHunterKeysMaskedInput(input.hunterApiKeys)) {
-    if (prevHunterKeys.length > 0) {
-      envUpdates[HUNTER_KEYS_ENV] = formatHunterKeysEnv(prevHunterKeys)
-    }
   } else {
-    const nextKeys = parseHunterApiKeysText(input.hunterApiKeys)
+    const nextKeys = resolveHunterApiKeysSlots(
+      input.hunterApiKeys,
+      prevHunterKeys,
+    ).slice(0, HUNTER_API_KEYS_MAX)
     if (nextKeys.length === 0) {
       clearHunterKeys = true
     } else {
       envUpdates[HUNTER_KEYS_ENV] = formatHunterKeysEnv(nextKeys)
     }
+  }
+
+  if (input.hunterVerifyEmails !== undefined) {
+    envUpdates[HUNTER_VERIFY_EMAILS_ENV] = formatEnvBool(input.hunterVerifyEmails)
+  } else if (env[HUNTER_VERIFY_EMAILS_ENV]) {
+    envUpdates[HUNTER_VERIFY_EMAILS_ENV] = env[HUNTER_VERIFY_EMAILS_ENV]
+  } else {
+    envUpdates[HUNTER_VERIFY_EMAILS_ENV] = formatEnvBool(true)
   }
 
   if (input.googleProxyMode !== undefined) {

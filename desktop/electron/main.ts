@@ -1108,7 +1108,7 @@ function registerIpcHandlers(): void {
           return { ok: false, message: preflight.message }
         }
 
-        const verifyEmails = Boolean(input.verifyEmails)
+        const verifyEmails = getSettingsSnapshot().hunterVerifyEmails
         const sender = event.sender
         void getAgentRunner()
           .enrichLeadContacts(

@@ -49,6 +49,8 @@ export interface SettingsSnapshot {
   hunterApiKeySet: boolean
   hunterApiKeysMasked: string
   hunterApiKeyCount: number
+  /** 补全联系人时是否验邮；未配置默认 true */
+  hunterVerifyEmails: boolean
   googleProxyMode: GoogleProxyMode
   googleProxyManualUrl: string
   googleProxyEffectiveUrl: string
@@ -71,7 +73,8 @@ export interface SettingsSaveInput {
   searchProvider: string
   tavilyApiKey: string
   placesApiKey?: string
-  hunterApiKeys?: string
+  hunterApiKeys?: string[]
+  hunterVerifyEmails?: boolean
   googleProxyMode?: GoogleProxyMode
   googleProxyManualUrl?: string
   searchDailyLimit: number
