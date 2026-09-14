@@ -47,6 +47,14 @@ export const supportPlanItems: SupportPlanItem[] = [
     status: 'planned',
   },
   {
+    id: 'desktop-silent-update',
+    title: '桌面端 · 后台检测与下载更新',
+    description:
+      '当前新版本需用户自行打开官网下载安装包并重新安装；应用内「检查更新」仅提示版本并跳转下载页。用户反馈希望自动监测新版本、在后台下载安装包，下载完成后提醒用户安装或重启以完成更新，减少手工升级步骤。',
+    priority: 'P1',
+    status: 'planned',
+  },
+  {
     id: 'explore-intensity',
     title: '探索强度 · 高 / 中 / 低',
     description:
