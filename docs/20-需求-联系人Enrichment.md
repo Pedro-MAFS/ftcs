@@ -355,7 +355,8 @@ flowchart LR
 |------|------|
 | [US-C-决策-Hunter-MVP.md](research/US-C-决策-Hunter-MVP.md) | 决策依据 |
 | [US-C-01 详设：people Schema 与 leads_patch_scored](design/US-C-01-people-schema与leads-patch-scored.md) | 数据层（已实现，lead-store 0.5.0） |
-| [US-C-02 详设：hunter-api MCP](design/US-C-02-hunter-api-MCP.md) | API 封装层 |
+| [US-C-02 详设：hunter-api MCP](design/US-C-02-hunter-api-MCP.md) | API 封装层（已实现，hunter-api 0.1.0） |
+| [US-C-03 详设：Skill 与桌面](design/US-C-03-Skill与桌面.md) | Skill + 设置多 Key + Preflight + 线索页按钮 |
 | [联系人Enrichment-spike-简明-Decodeck.md](research/联系人Enrichment-spike-简明-Decodeck.md) | builtin 难例（归档） |
 | [06-MCP工具规范.md](06-MCP工具规范.md) | hunter-api 登记 |
 
@@ -370,3 +371,4 @@ flowchart LR
 | 2026-09-08 | **定位**：Hunter **集成扩展**、非核心；不做官方代调；无 Key 不阻断主路径 |
 | 2026-09-14 | **实测修订**：基于 Hunter MCP 实测（pantron.com 样本）——①验证设为可选（默认关闭，节省 credit）；②排序规则改为综合邮箱质量（类型/置信度/姓名/职位），不依赖 `position`（实测 70% 为 null）；③`email_status` 增加 `hunter_unverified` 状态；④Spike 留到开发阶段执行 |
 | 2026-09-14 | **多 Key**：C3 支持 `HUNTER_API_KEYS` 多 Key 池 + failover；设置页（US-C-03）支持配置多个 Key 并展示余额 |
+| 2026-09-14 | **US-C-03 详设**：Skill `enrich-lead-contacts`、设置「集成」、Preflight、线索页按钮；C7 经 `sync_valid_to_contacts`；抽屉/开发信选人归 C-04 |

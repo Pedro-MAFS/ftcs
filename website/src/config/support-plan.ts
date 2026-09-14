@@ -55,6 +55,14 @@ export const supportPlanItems: SupportPlanItem[] = [
     status: 'planned',
   },
   {
+    id: 'lead-company-intelligence',
+    title: '线索 · 目标公司深度画像',
+    description:
+      '在线索页为每条公司线索生成结构化「企业画像」：商业模式与体量、主营产品与品牌、目标市场与客户、供应链与采购倾向、行业地位与优势、合作机会与跟进建议，并附可改稿的破冰话术。用户反馈：拿到线索后仍要自行调研才能判断值不值得跟；希望打开线索即可一眼看懂目标公司并着手联系，减少重复检索。',
+    priority: 'P1',
+    status: 'planned',
+  },
+  {
     id: 'explore-intensity',
     title: '探索强度 · 高 / 中 / 低',
     description:
