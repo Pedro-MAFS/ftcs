@@ -14,16 +14,37 @@ function parseSeq(id: string, prefix: string): number {
   return Number.parseInt(suffix, 10);
 }
 
+/** 递归收集任意嵌套对象上匹配 prefix 的 id（scored.json 的 people[] 等） */
+function collectMatchingIds(value: unknown, prefix: string, out: number[]): void {
+  if (value == null) return;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectMatchingIds(item, prefix, out);
+    }
+    return;
+  }
+  if (typeof value !== "object") return;
+
+  const record = value as Record<string, unknown>;
+  const id = record.id;
+  if (typeof id === "string" && id.startsWith(prefix)) {
+    const seq = parseSeq(id, prefix);
+    if (Number.isFinite(seq)) {
+      out.push(seq);
+    }
+  }
+  for (const child of Object.values(record)) {
+    collectMatchingIds(child, prefix, out);
+  }
+}
+
 function extractIdsFromFile(filePath: string, prefix: string): number[] {
   if (filePath.endsWith(".jsonl")) {
     const ids: number[] = [];
     const lines = readFileSync(filePath, "utf8").split("\n").filter(Boolean);
     for (const line of lines) {
       try {
-        const parsed = JSON.parse(line) as { id?: string };
-        if (parsed.id?.startsWith(prefix)) {
-          ids.push(parseSeq(parsed.id, prefix));
-        }
+        collectMatchingIds(JSON.parse(line), prefix, ids);
       } catch {
         // ignore malformed lines
       }
@@ -33,10 +54,9 @@ function extractIdsFromFile(filePath: string, prefix: string): number[] {
 
   if (filePath.endsWith(".json")) {
     try {
-      const parsed = JSON.parse(readFileSync(filePath, "utf8")) as { id?: string };
-      if (parsed.id?.startsWith(prefix)) {
-        return [parseSeq(parsed.id, prefix)];
-      }
+      const ids: number[] = [];
+      collectMatchingIds(JSON.parse(readFileSync(filePath, "utf8")), prefix, ids);
+      return ids;
     } catch {
       return [];
     }
@@ -73,10 +93,22 @@ function collectIds(root: string, prefix: string): number[] {
   return ids.filter((value) => Number.isFinite(value));
 }
 
-export function generatePersonId(root: string, date = new Date()): string {
+/**
+ * 同一次批量写入复用：先读盘拿到 max seq，再内存递增。
+ * 避免 patch 循环内反复读未落盘文件导致全员 person_…_0001。
+ */
+export function createPersonIdAllocator(root: string, date = new Date()): () => string {
   const datePart = formatDate(date);
   const prefix = `person_${datePart}_`;
   const seqNumbers = collectIds(root, prefix);
-  const nextSeq = (seqNumbers.length > 0 ? Math.max(...seqNumbers) : 0) + 1;
-  return `${prefix}${String(nextSeq).padStart(4, "0")}`;
+  let nextSeq = (seqNumbers.length > 0 ? Math.max(...seqNumbers) : 0) + 1;
+  return () => {
+    const id = `${prefix}${String(nextSeq).padStart(4, "0")}`;
+    nextSeq += 1;
+    return id;
+  };
+}
+
+export function generatePersonId(root: string, date = new Date()): string {
+  return createPersonIdAllocator(root, date)();
 }

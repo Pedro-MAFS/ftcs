@@ -169,6 +169,32 @@ function buildDraftOutreachPrompt(
   ].join('\n')
 }
 
+function buildEnrichLeadContactsPrompt(
+  productId: string,
+  leadId: string,
+  verifyEmails: boolean,
+): string {
+  return [
+    '请严格按 skill `enrich-lead-contacts` 执行，为指定已评分线索补全联系人。',
+    '',
+    `产品 ID：${productId}`,
+    `线索 ID：${leadId}`,
+    `verify_emails：${verifyEmails ? 'true' : 'false'}`,
+    '',
+    '执行要求：',
+    '1. 调用 lead-store.leads_get_scored 定位该线索；从 company.website 解析域名，失败则停止。',
+    '2. 调用 hunter-api.domain_search（limit=10）；禁止猜邮或编造邮箱。',
+    '3. 按邮箱质量排序后，用 lead-store.leads_patch_scored 写入全部 people（sync_valid_to_contacts=false）。',
+    verifyEmails
+      ? '4. verify_emails=true：对 people 中每一条调用 hunter-api.email_verifier，再 patch 更新 email_status，且 sync_valid_to_contacts=true。'
+      : '4. verify_emails=false：禁止调用 email_verifier。',
+    '5. 配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。',
+    '6. 用简短中文汇报：域名、people 条数、是否验证、关键邮箱摘要。',
+    '',
+    `输出：data/leads/${productId}/scored.json 中该 lead 的 people[]`,
+  ].join('\n')
+}
+
 function buildDiscoverLeadsR3Prompt(
   productId: string,
   maxQueries: number,
@@ -1125,6 +1151,181 @@ export class AgentRunController {
         productId,
         message,
       })
+      return { ok: false, message }
+    } finally {
+      stopEvents?.()
+      this.running = false
+      this.abort = null
+    }
+  }
+
+  async enrichLeadContacts(
+    options: { productId: string; leadId: string; verifyEmails?: boolean },
+    emit: AgentEventSink,
+  ): Promise<{ ok: boolean; message: string }> {
+    if (this.running) {
+      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+    }
+
+    const client = this.getClient()
+    if (!client) {
+      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+    }
+
+    const productId = options.productId.trim()
+    const leadId = options.leadId.trim()
+    const verifyEmails = Boolean(options.verifyEmails)
+    if (!productId || !leadId) {
+      throw new Error('缺少 productId 或 leadId')
+    }
+
+    this.running = true
+    this.abort = new AbortController()
+    const signal = this.abort.signal
+    const startedAt = Date.now()
+    const timeline = new TimelineBuilder()
+
+    const flushTimeline = () => {
+      const items = timeline.emitIfChanged()
+      if (items) emit({ type: 'timeline', items })
+    }
+
+    const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
+      const elapsedSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+      const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0')
+      const ss = String(elapsedSec % 60).padStart(2, '0')
+      let readiness = '补全中'
+      let tone = 'accent'
+      if (status === 'done') {
+        readiness = '已完成'
+        tone = 'success'
+      } else if (status === 'error') {
+        readiness = '失败'
+        tone = 'warning'
+      }
+      emit({
+        type: 'state',
+        skill: 'enrich-lead-contacts',
+        status,
+        productId,
+        meta: [
+          { label: '状态', value: readiness, tone },
+          { label: '线索', value: leadId.slice(0, 18) },
+          { label: '验邮', value: verifyEmails ? '是' : '否' },
+          { label: '耗时', value: `${mm}:${ss}` },
+        ],
+      })
+    }
+
+    const promptText = buildEnrichLeadContactsPrompt(productId, leadId, verifyEmails)
+    this.attachTimeline(timeline)
+    timeline.reset()
+    timeline.addPrefix({
+      id: 'sys-prepare',
+      kind: 'system',
+      time: nowTime(),
+      title: '系统',
+      body: `准备为 ${leadId} 补全联系人${verifyEmails ? '（含验邮）' : ''}`,
+    })
+    timeline.addPrefix({
+      id: 'user-enrich',
+      kind: 'user',
+      time: nowTime(),
+      title: '你的指令 · 补全联系人',
+      body: promptText,
+      collapsed: true,
+    })
+    pushState('running')
+    flushTimeline()
+
+    let stopEvents: (() => void) | null = null
+
+    try {
+      const created = await client.session.create({
+        title: `enrich-lead-contacts · ${productId} · ${leadId}`,
+      })
+      if (created.error || !created.data?.id) {
+        throw new Error(
+          typeof created.error === 'object' && created.error && 'message' in created.error
+            ? String((created.error as { message?: string }).message)
+            : '创建 OpenCode 会话失败',
+        )
+      }
+      this.sessionId = created.data.id
+      timeline.addPrefix({
+        id: 'sys-session',
+        kind: 'system',
+        time: nowTime(),
+        title: '会话',
+        body: `已创建 OpenCode session\n${this.sessionId}`,
+      })
+      flushTimeline()
+
+      const bridge = this.startEventBridge(
+        client,
+        this.sessionId,
+        timeline,
+        flushTimeline,
+        promptText,
+      )
+      stopEvents = bridge.stop
+
+      const promptPromise = client.session.promptAsync({
+        sessionID: this.sessionId,
+        parts: [{ type: 'text', text: promptText }],
+      })
+      void promptPromise
+
+      const idleResult = await this.waitForSessionIdle(
+        client,
+        this.sessionId,
+        signal,
+        15 * 60_000,
+      )
+
+      if (idleResult === 'abort') {
+        const abortMessage = this.autoAbortReason ?? '用户中止了补全联系人'
+        pushState('error')
+        timeline.addSuffix({
+          id: 'sys-abort',
+          kind: 'error',
+          time: nowTime(),
+          title: this.autoAbortReason ? '失败' : '已中止',
+          body: abortMessage,
+        })
+        flushTimeline()
+        emit({ type: 'done', ok: false, productId, message: abortMessage })
+        return { ok: false, message: abortMessage }
+      }
+
+      if (idleResult === 'timeout') {
+        throw new Error('等待 OpenCode 会话 idle 超时')
+      }
+
+      const message = `补全联系人完成：${leadId}`
+      timeline.addSuffix({
+        id: 'sys-done',
+        kind: 'system',
+        time: nowTime(),
+        title: '完成',
+        body: message,
+      })
+      flushTimeline()
+      pushState('done')
+      emit({ type: 'done', ok: true, productId, message })
+      return { ok: true, message }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      timeline.addSuffix({
+        id: 'sys-error',
+        kind: 'error',
+        time: nowTime(),
+        title: '错误',
+        body: message,
+      })
+      flushTimeline()
+      pushState('error')
+      emit({ type: 'done', ok: false, productId, message })
       return { ok: false, message }
     } finally {
       stopEvents?.()

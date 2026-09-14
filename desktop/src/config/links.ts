@@ -32,6 +32,10 @@ export const PRODUCT_LINKS = {
   deepseek: 'https://platform.deepseek.com/',
   /** Tavily 官网（注册与 API Key） */
   tavily: 'https://tavily.com/',
+  /** Hunter 官网（注册） */
+  hunter: 'https://hunter.io/',
+  /** Hunter API Keys 管理页 */
+  hunterApiKeys: 'https://hunter.io/api-keys',
 } as const
 
 export type ProductLinkId = keyof typeof PRODUCT_LINKS

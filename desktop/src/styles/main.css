@@ -1477,6 +1477,28 @@ button:focus-visible {
   line-height: 1.45;
 }
 
+.leads-banner--hint {
+  background: transparent;
+  color: var(--muted);
+  padding-top: 0;
+}
+
+.leads-verify-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.lead-drawer__verify {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .leads-table__header,
 .leads-table__row {
   display: grid;

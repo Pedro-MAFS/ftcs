@@ -734,16 +734,22 @@ server.tool(
 
 server.tool(
   "leads_patch_scored",
-  "Patch a scored lead's people[] with enriched contacts (e.g. from Hunter). Does NOT overwrite existing contacts[].",
+  "Patch a scored lead's people[] with enriched contacts (e.g. from Hunter). Does NOT overwrite existing contacts[]. Optional sync_valid_to_contacts appends hunter_valid personal emails to contacts[].",
   {
     product_id: z.string().describe("Product ID, e.g. prod_20260712_001"),
     lead_id: z.string().describe("Lead ID to patch, e.g. lead_20260709_0001"),
     people: z.array(PersonInputSchema).describe("Enriched contacts to add (no limit, sorted by priority)"),
+    sync_valid_to_contacts: z
+      .boolean()
+      .default(false)
+      .describe("When true, append hunter_valid personal emails (confidence>=70) to contacts[]"),
   },
-  async ({ product_id, lead_id, people }) => {
+  async ({ product_id, lead_id, people, sync_valid_to_contacts }) => {
     const root = getProjectRoot();
     try {
-      const result = patchScoredLead(root, product_id, lead_id, people);
+      const result = patchScoredLead(root, product_id, lead_id, people, {
+        sync_valid_to_contacts,
+      });
       return {
         content: [
           {
@@ -756,6 +762,7 @@ server.tool(
                 people_added: result.people_added,
                 people_updated: result.people_updated,
                 people_total: result.people_total,
+                contacts_appended: result.contacts_appended,
               },
               null,
               2

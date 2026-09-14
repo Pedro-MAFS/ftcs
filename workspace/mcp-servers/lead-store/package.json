@@ -1,6 +1,6 @@
 {
   "name": "@ftcs/lead-store",
-  "version": "0.5.0",
+  "version": "0.5.2",
   "private": true,
   "type": "module",
   "description": "MCP server for product profiles and lead data storage",
@@ -12,7 +12,7 @@
     "build:tsc": "tsc",
     "start": "node dist/mcp.js",
     "dev": "npm run build && node dist/mcp.js",
-    "test": "npm run build:tsc && node --test dist/readiness.test.js dist/storage.test.js dist/lead-storage.test.js dist/lead-scorer.test.js dist/email-drafter.test.js dist/keyword-types.test.js"
+    "test": "npm run build:tsc && node --test dist/readiness.test.js dist/storage.test.js dist/lead-storage.test.js dist/lead-scorer.test.js dist/email-drafter.test.js dist/keyword-types.test.js dist/person-id.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

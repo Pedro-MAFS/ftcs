@@ -75,10 +75,14 @@ const GENERIC_PREFIXES = new Set([
   "accountsreceivable",
 ]);
 
-function isPersonalEmail(email: string): boolean {
+/** 导出供 C7 contacts 同步与排序共用（US-C-03） */
+export function isPersonalEmail(email: string): boolean {
   const prefix = email.split("@")[0]?.toLowerCase() ?? "";
   return !GENERIC_PREFIXES.has(prefix) && !prefix.includes("noreply") && !prefix.includes("no-reply");
 }
+
+/** C7：同步 contacts 的最低 confidence */
+export const SYNC_CONFIDENCE_MIN = 70;
 
 export function comparePersons(a: PersonInput, b: PersonInput): number {
   // 1. 邮箱类型：personal > generic

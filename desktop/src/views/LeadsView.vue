@@ -13,6 +13,7 @@ import WorkflowPlanEditorDialog from '../components/workflow/WorkflowPlanEditorD
 import LeadDetailDrawer from '../components/shared/LeadDetailDrawer.vue'
 import type { LeadRowDto, LeadsSnapshotDto, WorkflowPlan } from '../types/electron'
 import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonDisplay } from '../utils/leads-export'
+import { parseCompanyDomain } from '../utils/parse-company-domain'
 
 const meta = SECTION_META.leads
 const route = useRoute()
@@ -26,6 +27,7 @@ const {
   refreshExploreTasks,
   resetAgentForScoreAndDedupe,
   resetAgentForDraftEmail,
+  resetAgentForEnrichContacts,
 } = useWorkspace()
 
 type FilterId = 'all' | 'raw' | 'scored' | 'discarded' | 'a' | 'b' | 'c' | 'mail'
@@ -38,6 +40,9 @@ const loading = ref(false)
 const exporting = ref(false)
 const scoring = ref(false)
 const drafting = ref(false)
+const enriching = ref(false)
+const verifyEmails = ref(false)
+const hunterKeySet = ref(false)
 const pendingHighIds = ref<string[]>([])
 const actionMessage = ref('')
 const snapshot = ref<LeadsSnapshotDto | null>(null)
@@ -67,6 +72,12 @@ const isDrafting = computed(
   () =>
     drafting.value ||
     (generating.value && agentSkill.value === 'draft-outreach-email'),
+)
+
+const isEnriching = computed(
+  () =>
+    enriching.value ||
+    (generating.value && agentSkill.value === 'enrich-lead-contacts'),
 )
 
 const runOptions = computed(() => {
@@ -490,6 +501,72 @@ function onDraftLead(lead: LeadRowDto): void {
   void startDraftEmails([lead.id])
 }
 
+function enrichTitle(lead: LeadRowDto): string {
+  if (lead.phase !== 'scored') return '仅已评分线索可补全联系人'
+  if (!parseCompanyDomain(lead.company.website || lead.domain)) {
+    return '请先填写有效官网域名'
+  }
+  if (!hunterKeySet.value) {
+    return '请先在设置 → 集成中配置 Hunter API Key'
+  }
+  return verifyEmails.value
+    ? '补全联系人并验证邮箱（约 0.5 credit/封）'
+    : '补全联系人（Domain Search，约 1 credit）'
+}
+
+function canEnrichLead(lead: LeadRowDto): boolean {
+  return (
+    lead.phase === 'scored' &&
+    Boolean(parseCompanyDomain(lead.company.website || lead.domain)) &&
+    hunterKeySet.value
+  )
+}
+
+async function startEnrichContacts(lead: LeadRowDto): Promise<void> {
+  if (!activeProductId.value || !window.ftcs?.enrichLeadContacts) return
+  if (generating.value || isDrafting.value || isEnriching.value) {
+    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    return
+  }
+  if (!canEnrichLead(lead)) {
+    actionMessage.value = enrichTitle(lead)
+    return
+  }
+
+  const preflightError = await ensureAgentReady('enrich-lead-contacts')
+  if (preflightError) {
+    actionMessage.value = preflightError
+    return
+  }
+
+  enriching.value = true
+  actionMessage.value = ''
+  resetAgentForEnrichContacts(lead.id, verifyEmails.value)
+
+  try {
+    const res = await window.ftcs.enrichLeadContacts({
+      productId: activeProductId.value,
+      leadId: lead.id,
+      verifyEmails: verifyEmails.value,
+    })
+    if (!res.ok) {
+      actionMessage.value = res.message
+      agentStatus.value = 'error'
+      return
+    }
+    actionMessage.value = res.message
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+    agentStatus.value = 'error'
+  } finally {
+    enriching.value = false
+  }
+}
+
+function onEnrichLead(lead: LeadRowDto): void {
+  void startEnrichContacts(lead)
+}
+
 function goEmail(): void {
   router.push({ name: 'email' }).catch(() => undefined)
 }
@@ -607,6 +684,12 @@ watch(agentStatus, (status) => {
       if (status === 'done') goEmail()
     })
   }
+  if (
+    (status === 'done' || status === 'error') &&
+    agentSkill.value === 'enrich-lead-contacts'
+  ) {
+    void refreshLeads()
+  }
 })
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -614,6 +697,9 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
   applyRunQueryFromRoute()
   void refreshLeads()
+  void window.ftcs?.getSettings?.().then((s) => {
+    hunterKeySet.value = Boolean(s.hunterApiKeySet)
+  })
   pollTimer = setInterval(() => {
     if (document.visibilityState === 'visible') void refreshLeads()
   }, 8000)
@@ -696,6 +782,15 @@ onUnmounted(() => {
     </header>
 
     <p v-if="actionMessage" class="leads-banner">{{ actionMessage }}</p>
+    <p class="leads-banner leads-banner--hint">
+      <label class="leads-verify-toggle">
+        <input v-model="verifyEmails" type="checkbox" />
+        验证邮箱（约 0.5 credit/封；默认关闭）
+      </label>
+      <span v-if="!hunterKeySet" class="muted">
+        · 补全联系人需 Hunter Key（设置 → 集成）
+      </span>
+    </p>
 
     <WorkflowPlanEditorDialog
       :open="editorOpen"
@@ -870,7 +965,17 @@ onUnmounted(() => {
               v-if="row.phase === 'scored'"
               type="button"
               class="leads-table__action"
-              :disabled="isDrafting || generating"
+              :disabled="isDrafting || isEnriching || generating || !canEnrichLead(row)"
+              :title="enrichTitle(row)"
+              @click.stop="onEnrichLead(row)"
+            >
+              {{ isEnriching ? '补全中…' : '补全联系人' }}
+            </button>
+            <button
+              v-if="row.phase === 'scored'"
+              type="button"
+              class="leads-table__action"
+              :disabled="isDrafting || generating || isEnriching"
               :title="hasDrafted(row) ? '重新生成开发信草稿' : '生成开发信草稿'"
               @click.stop="onDraftLead(row)"
             >
@@ -885,9 +990,15 @@ onUnmounted(() => {
       :open="drawerOpen"
       :lead="detailLead"
       :drafting="isDrafting || generating"
+      :enriching="isEnriching"
+      :can-enrich="detailLead ? canEnrichLead(detailLead) : false"
+      :enrich-title="detailLead ? enrichTitle(detailLead) : ''"
+      :verify-emails="verifyEmails"
       @close="closeDrawer"
       @saved="onLeadSaved"
       @draft="onDraftLead"
+      @enrich="onEnrichLead"
+      @update:verify-emails="(v: boolean) => (verifyEmails = v)"
       @open-email="goEmailLead"
     />
   </section>

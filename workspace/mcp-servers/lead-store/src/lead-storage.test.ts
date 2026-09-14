@@ -177,6 +177,8 @@ test("patchScoredLead adds and updates people, preserves on re-score", () => {
     assert.equal(lead.people[0]!.email, "steve@pantron.com");
     assert.equal(lead.people[0]!.email_status, "hunter_valid");
     assert.ok(lead.people[0]!.id.startsWith("person_"));
+    assert.ok(lead.people[1]!.id.startsWith("person_"));
+    assert.notEqual(lead.people[0]!.id, lead.people[1]!.id);
 
     // patch 重复 email → 更新而非新增
     const result2 = patchScoredLead(root, productId, leadId, [
@@ -201,6 +203,43 @@ test("patchScoredLead adds and updates people, preserves on re-score", () => {
 
     // 不存在的 lead 报错
     assert.throws(() => patchScoredLead(root, productId, "lead_nonexistent", people), /not found/);
+
+    // C7：sync_valid_to_contacts 追加 hunter_valid personal；generic 不追加；去重
+    const withSales: PersonInput = {
+      name: "sales",
+      first_name: null,
+      last_name: null,
+      title: null,
+      role_match: null,
+      match_reason: "generic",
+      email: "sales@pantron.com",
+      email_status: "hunter_valid",
+      confidence: 90,
+      sources: [{ domain: "pantron.com", uri: "https://pantron.com", extracted_on: "2026-08-18", last_seen_on: "2026-09-04", still_on_page: true }],
+      provider: "hunter",
+    };
+    const syncResult = patchScoredLead(
+      root,
+      productId,
+      leadId,
+      [
+        { ...people[0]!, email_status: "hunter_valid", confidence: 84 },
+        withSales,
+      ],
+      { sync_valid_to_contacts: true }
+    );
+    assert.equal(syncResult.contacts_appended, 1);
+    const afterSync = loadScoredLeads(root, productId);
+    const leadSync = afterSync!.leads.find((l) => l.id === leadId)!;
+    const emails = leadSync.contacts.filter((c) => c.type === "email").map((c) => c.value.toLowerCase());
+    assert.ok(emails.includes("steve@pantron.com"));
+    assert.ok(!emails.includes("sales@pantron.com"));
+
+    // 再次 sync 不重复追加
+    const syncAgain = patchScoredLead(root, productId, leadId, [people[0]!], {
+      sync_valid_to_contacts: true,
+    });
+    assert.equal(syncAgain.contacts_appended, 0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

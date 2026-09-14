@@ -398,6 +398,19 @@ export function useWorkspace() {
     updatePipelineFromProfile()
   }
 
+  function resetAgentForEnrichContacts(leadId: string, verifyEmails: boolean): void {
+    agentSkill.value = 'enrich-lead-contacts'
+    agentStatus.value = 'running'
+    resetTimelineView()
+    agentMeta.value = [
+      { label: '状态', value: '补全中', tone: 'accent' },
+      { label: '线索', value: leadId.slice(0, 18) || '—' },
+      { label: '验邮', value: verifyEmails ? '是' : '否' },
+      { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
+    ]
+    updatePipelineFromProfile()
+  }
+
   function toggleTimelineExpand(id: string): void {
     agentExpanded.value = {
       ...agentExpanded.value,
@@ -438,6 +451,7 @@ export function useWorkspace() {
     resetAgentForDiscoverLeads,
     resetAgentForScoreAndDedupe,
     resetAgentForDraftEmail,
+    resetAgentForEnrichContacts,
     toggleTimelineExpand,
     isTimelineExpanded,
     refreshProducts,

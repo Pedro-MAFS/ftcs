@@ -113,6 +113,8 @@ const api = {
     manualProxyUrl?: string
   }): Promise<import('./ipc/types').GooglePlacesTestResult> =>
     ipcRenderer.invoke(IPC.SETTINGS_TEST_GOOGLE_PLACES, input),
+  testHunter: (): Promise<import('./ipc/types').HunterTestResult> =>
+    ipcRenderer.invoke(IPC.SETTINGS_TEST_HUNTER),
   provisionOfficialChannel: (input?: {
     reset?: boolean
   }): Promise<ProvisionOfficialResult & { status?: AppStatus }> =>
@@ -281,6 +283,10 @@ const api = {
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_LIST, productId),
   draftEmails: (input: DraftEmailsInput): Promise<DraftEmailsResult> =>
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_GENERATE, input),
+  enrichLeadContacts: (
+    input: import('./ipc/types').EnrichLeadContactsInput,
+  ): Promise<import('./ipc/types').EnrichLeadContactsResult> =>
+    ipcRenderer.invoke(IPC.LEADS_ENRICH_CONTACTS, input),
   rejectEmailDraft: (input: RejectEmailDraftInput): Promise<RejectEmailDraftResult> =>
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_REJECT, input),
   approveEmailDraft: (input: ApproveEmailDraftInput): Promise<ApproveEmailDraftResult> =>

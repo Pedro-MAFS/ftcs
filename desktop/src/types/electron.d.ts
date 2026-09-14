@@ -472,6 +472,7 @@ export type AgentPreflightKind =
   | 'discover-leads-r3'
   | 'score-and-dedupe'
   | 'draft-email'
+  | 'enrich-lead-contacts'
 
 export interface AgentPreflightCheck {
   id: string
@@ -611,6 +612,18 @@ declare global {
         systemRule?: string
         httpStatus?: number
       }>
+      testHunter: () => Promise<{
+        ok: boolean
+        message: string
+        keys: Array<{
+          tail: string
+          ok: boolean
+          message: string
+          remaining?: number | null
+          resetDate?: string | null
+          planName?: string | null
+        }>
+      }>
       pickWorkspace: () => Promise<{
         path: string | null
         restarted?: boolean
@@ -662,6 +675,16 @@ declare global {
       scoreAndDedupeLeads: (productId: string) => Promise<ScoreAndDedupeResult>
       listEmailDrafts: (productId: string) => Promise<EmailDraftsSnapshotDto>
       draftEmails: (input: DraftEmailsInput) => Promise<DraftEmailsResult>
+      enrichLeadContacts: (input: {
+        productId: string
+        leadId: string
+        verifyEmails?: boolean
+      }) => Promise<{
+        ok: boolean
+        message: string
+        productId?: string
+        leadId?: string
+      }>
       rejectEmailDraft: (input: RejectEmailDraftInput) => Promise<RejectEmailDraftResult>
       approveEmailDraft: (input: ApproveEmailDraftInput) => Promise<ApproveEmailDraftResult>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void

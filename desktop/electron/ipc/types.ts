@@ -11,6 +11,7 @@ export const IPC = {
   SETTINGS_PICK_WORKSPACE: 'settings:pick-workspace',
   SETTINGS_DETECT_GOOGLE_PROXY: 'settings:detect-google-proxy',
   SETTINGS_TEST_GOOGLE_PLACES: 'settings:test-google-places',
+  SETTINGS_TEST_HUNTER: 'settings:test-hunter',
   GATEWAY_PROVISION_OFFICIAL: 'gateway:provision-official',
   GATEWAY_REFRESH_OFFICIAL_MODELS: 'gateway:refresh-official-models',
   GATEWAY_REFRESH_OFFICIAL_USAGE: 'gateway:refresh-official-usage',
@@ -48,6 +49,7 @@ export const IPC = {
   LEADS_SAVE_RAW: 'leads:save-raw',
   LEADS_EXPORT_CSV: 'leads:export-csv',
   LEADS_SCORE_AND_DEDUPE: 'leads:score-and-dedupe',
+  LEADS_ENRICH_CONTACTS: 'leads:enrich-contacts',
   EMAIL_DRAFT_LIST: 'email:draft-list',
   EMAIL_DRAFT_GENERATE: 'email:draft-generate',
   EMAIL_DRAFT_REJECT: 'email:draft-reject',
@@ -797,6 +799,7 @@ export type AgentPreflightKind =
   | 'discover-leads-r3'
   | 'score-and-dedupe'
   | 'draft-email'
+  | 'enrich-lead-contacts'
 
 export interface AgentPreflightCheck {
   id: string
@@ -849,6 +852,9 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: 'custom' | 'gateway'
+  hunterApiKeySet: boolean
+  hunterApiKeysMasked: string
+  hunterApiKeyCount: number
   googleProxyMode: GoogleProxyMode
   googleProxyManualUrl: string
   googleProxyEffectiveUrl: string
@@ -870,6 +876,7 @@ export interface SettingsSaveInput {
   searchProvider: string
   tavilyApiKey: string
   placesApiKey?: string
+  hunterApiKeys?: string
   googleProxyMode?: GoogleProxyMode
   googleProxyManualUrl?: string
   searchDailyLimit: number
@@ -924,6 +931,34 @@ export interface GooglePlacesTestResult {
   proxyUrl?: string | null
   systemRule?: string
   httpStatus?: number
+}
+
+export interface HunterKeyTestItem {
+  tail: string
+  ok: boolean
+  message: string
+  remaining?: number | null
+  resetDate?: string | null
+  planName?: string | null
+}
+
+export interface HunterTestResult {
+  ok: boolean
+  message: string
+  keys: HunterKeyTestItem[]
+}
+
+export interface EnrichLeadContactsInput {
+  productId: string
+  leadId: string
+  verifyEmails?: boolean
+}
+
+export interface EnrichLeadContactsResult {
+  ok: boolean
+  message: string
+  productId?: string
+  leadId?: string
 }
 
 export interface WebsiteItem {

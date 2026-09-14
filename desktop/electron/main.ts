@@ -23,6 +23,7 @@ import {
   detectSystemGoogleProxy,
   testGooglePlacesConnectivity,
 } from './settings/places-connectivity'
+import { testHunterConnectivity } from './settings/hunter-connectivity'
 import {
   provisionOfficialChannel,
   refreshOfficialModels,
@@ -545,6 +546,7 @@ function registerIpcHandlers(): void {
       },
     ) => testGooglePlacesConnectivity(input),
   )
+  ipcMain.handle(IPC.SETTINGS_TEST_HUNTER, async () => testHunterConnectivity())
   ipcMain.handle(IPC.ONBOARDING_GET_STATE, () => getOnboardingState())
   ipcMain.handle(
     IPC.ONBOARDING_SET_STATE,
@@ -1085,6 +1087,57 @@ function registerIpcHandlers(): void {
       }
     }
   })
+
+  ipcMain.handle(
+    IPC.LEADS_ENRICH_CONTACTS,
+    async (
+      event,
+      input: { productId?: string; leadId?: string; verifyEmails?: boolean },
+    ) => {
+      try {
+        const productId = input?.productId
+        const leadId = input?.leadId
+        if (!productId || typeof productId !== 'string') {
+          return { ok: false, message: '缺少 productId' }
+        }
+        if (!leadId || typeof leadId !== 'string') {
+          return { ok: false, message: '缺少 leadId' }
+        }
+        const preflight = await gateAgentStart('enrich-lead-contacts')
+        if (!preflight.ok) {
+          return { ok: false, message: preflight.message }
+        }
+
+        const verifyEmails = Boolean(input.verifyEmails)
+        const sender = event.sender
+        void getAgentRunner()
+          .enrichLeadContacts(
+            { productId, leadId, verifyEmails },
+            (payload) => emitAgentEvent(sender, payload),
+          )
+          .catch((err) => {
+            emitAgentEvent(sender, {
+              type: 'done',
+              ok: false,
+              productId,
+              message: err instanceof Error ? err.message : String(err),
+            })
+          })
+
+        return {
+          ok: true,
+          message: `正在为 ${leadId} 补全联系人${verifyEmails ? '（含验邮）' : ''}…`,
+          productId,
+          leadId,
+        }
+      } catch (err) {
+        return {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        }
+      }
+    },
+  )
 
   ipcMain.handle(IPC.EMAIL_DRAFT_LIST, (_event, productId: string) => {
     try {

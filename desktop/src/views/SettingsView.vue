@@ -55,11 +55,15 @@ const error = ref('')
 const showApiKey = ref(false)
 const showTavilyKey = ref(false)
 const showPlacesKey = ref(false)
+const showHunterKeys = ref(false)
+const placesTestMessage = ref('')
+const placesTestOk = ref<boolean | null>(null)
+const hunterTestMessage = ref('')
+const hunterTestOk = ref<boolean | null>(null)
+const testingHunter = ref(false)
 const detectingProxy = ref(false)
 const testingPlaces = ref(false)
 const proxyDetectMessage = ref('')
-const placesTestMessage = ref('')
-const placesTestOk = ref<boolean | null>(null)
 const snapshot = ref<SettingsSnapshot | null>(null)
 const r2Sites = ref<ExploreR2SiteDto[]>([])
 const r2SitesHint = ref('')
@@ -75,6 +79,7 @@ const form = reactive({
   searchProvider: 'tavily',
   tavilyApiKey: '',
   placesApiKey: '',
+  hunterApiKeys: '',
   googleProxyMode: 'system' as GoogleProxyMode,
   googleProxyManualUrl: 'http://127.0.0.1:7890',
   searchDailyLimit: 50,
@@ -91,6 +96,7 @@ const categories: Array<{ id: typeof activeCategory.value; label: string }> = [
   { id: 'model', label: '模型通道' },
   { id: 'search', label: '搜索服务' },
   { id: 'explore', label: '探索' },
+  { id: 'integrations', label: '集成' },
   { id: 'workspace', label: '工作区' },
   { id: 'opencode', label: 'OpenCode 运行时' },
   { id: 'about', label: '关于与隐私' },
@@ -198,6 +204,7 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.searchProvider = data.searchProvider
   form.tavilyApiKey = data.tavilyApiKeyMasked
   form.placesApiKey = data.placesApiKeyMasked
+  form.hunterApiKeys = data.hunterApiKeysMasked
   form.googleProxyMode = data.googleProxyMode
   form.googleProxyManualUrl =
     data.googleProxyManualUrl || 'http://127.0.0.1:7890'
@@ -402,6 +409,7 @@ async function onSave(): Promise<void> {
       searchProvider: form.searchProvider,
       tavilyApiKey: form.tavilyApiKey,
       placesApiKey: form.placesApiKey,
+      hunterApiKeys: form.hunterApiKeys,
       googleProxyMode: form.googleProxyMode,
       googleProxyManualUrl: form.googleProxyManualUrl,
       searchDailyLimit: form.searchDailyLimit,
@@ -460,6 +468,29 @@ async function onTestGooglePlaces(): Promise<void> {
       err instanceof Error ? err.message : String(err)
   } finally {
     testingPlaces.value = false
+  }
+}
+
+async function onTestHunter(): Promise<void> {
+  if (!window.ftcs?.testHunter) return
+  testingHunter.value = true
+  hunterTestMessage.value = ''
+  hunterTestOk.value = null
+  try {
+    const result = await window.ftcs.testHunter()
+    hunterTestOk.value = result.ok
+    const lines = result.keys.map(
+      (k) =>
+        `…${k.tail}: ${k.ok ? k.message : k.message}${
+          k.resetDate ? `（重置 ${k.resetDate}）` : ''
+        }`,
+    )
+    hunterTestMessage.value = [result.message, ...lines].filter(Boolean).join(' · ')
+  } catch (err) {
+    hunterTestOk.value = false
+    hunterTestMessage.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    testingHunter.value = false
   }
 }
 
@@ -1180,6 +1211,85 @@ async function onCheckUpdate(): Promise<void> {
               :class="placesTestOk ? 'is-ok' : 'is-error'"
             >
               {{ placesTestMessage }}
+            </p>
+          </div>
+        </section>
+
+        <hr class="settings-divider" />
+
+        <!-- 集成 -->
+        <section id="settings-integrations" class="settings-block">
+          <div class="settings-block__head">
+            <h3>集成</h3>
+            <span class="muted mono">HUNTER_API_KEYS</span>
+          </div>
+          <div class="settings-block__sub">
+            <h4>Hunter · 补全联系人</h4>
+            <p class="hint-line">
+              <Icon name="info" :size="12" />
+              可选扩展：仅「补全联系人」需要；未配置不影响探索与开发信。Key 在
+              <button
+                type="button"
+                class="text-link-btn"
+                @click="openProductLink(PRODUCT_LINKS.hunterApiKeys)"
+              >
+                Hunter API Keys
+              </button>
+              创建；费用计入你的 Hunter 账号。
+            </p>
+            <p class="hint-line">
+              支持<strong>多个 Key</strong>（每行一个）。系统按顺序使用；额度用尽或无效时自动切换下一个。
+              <strong>Hunter 额度为账号级</strong>：同一账号下多个 Key 共享额度。请仅配置本人/团队合法持有的 Key。
+            </p>
+            <label class="field-label">
+              Hunter API Key
+              <span v-if="snapshot?.hunterApiKeyCount" class="muted">
+                （已配置 {{ snapshot.hunterApiKeyCount }} 个）
+              </span>
+            </label>
+            <div class="input-row">
+              <textarea
+                v-model="form.hunterApiKeys"
+                class="text-input"
+                rows="3"
+                autocomplete="off"
+                :placeholder="
+                  snapshot?.hunterApiKeySet
+                    ? '已配置（修改则覆盖；清空并保存可清除）'
+                    : '每行一个 Key'
+                "
+              />
+              <button type="button" class="icon-btn" @click="showHunterKeys = !showHunterKeys">
+                <Icon :name="showHunterKeys ? 'eye' : 'eye-off'" :size="14" />
+              </button>
+            </div>
+            <p class="hint-line muted">
+              Domain Search 约 1 credit/次；验邮约 0.5 credit/封（默认不验证）。保存后请重启 OpenCode 使 MCP 生效。
+              尚未注册？
+              <button
+                type="button"
+                class="text-link-btn"
+                @click="openProductLink(PRODUCT_LINKS.hunter)"
+              >
+                打开 Hunter
+              </button>
+            </p>
+            <div class="input-row" style="margin-top: 0.5rem">
+              <button
+                type="button"
+                class="btn-secondary"
+                :disabled="testingHunter || saving"
+                @click="onTestHunter"
+              >
+                {{ testingHunter ? '测试中…' : '测试连接' }}
+              </button>
+            </div>
+            <p
+              v-if="hunterTestMessage"
+              class="hint-line"
+              :class="hunterTestOk ? 'is-ok' : 'is-error'"
+            >
+              {{ hunterTestMessage }}
             </p>
           </div>
         </section>

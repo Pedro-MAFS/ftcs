@@ -82,7 +82,7 @@ flowchart TB
 | **C8** | 开发信：优先 `email_status` 为 **`hunter_valid`** 的 people；若未验证或结果为空，则按邮箱质量排序（见 §6.3）选择，问候语 `Dear {FirstName}` 或 `Dear Team`。 |
 | **C9** | 合规：遵守 [Hunter ToS](https://hunter.io/terms-of-service)；不存整页简历；用户可删单条 person。 |
 | **C10** | `leads_score_and_dedupe` **保留** 已有 `people[]`。 |
-| **C11** | 单线索配额：Domain Search **1 次**；**可选** Verifier **≤3 次**（与验证开关一致）；超配额 Skill 拒绝。 |
+| **C11** | 单线索：Domain Search **1 次**（MCP 有缓存则可命中不扣费）；**可选** Verifier：开启后对本线索 **全部** 候选人验邮（约 0.5 credit/封）；默认关闭。 |
 | **C12** | **验证开关**：Skill 提供 `verify_emails: boolean` 参数，默认 `false`；UI 提供「验证邮箱」复选框，默认不勾选。 |
 | **C13** | `people[]` **无条数上限**；查出来全部存，按 §6.3 排序规则降序排列（最高优先级在前），用户自行挑选。 |
 
@@ -96,9 +96,9 @@ flowchart TB
   PF --> AR[AgentRunner · enrich-lead-contacts]
   AR --> P[读 buyer_personas]
   P --> DS[hunter-api.domain_search]
-  DS --> R[AI 按邮箱质量排序 · top 3]
+  DS --> R[AI 按邮箱质量排序 · 全量]
   R --> V{可选 email_verifier?}
-  V -->|是| V1[email_verifier top3]
+  V -->|是| V1[email_verifier 全部候选人]
   V -->|否| LS
   V1 --> LS[lead-store.leads_patch_scored]
   LS --> SC[scored.json · people]
@@ -167,7 +167,7 @@ flowchart TB
 | 工具 | 端点 | 用途 |
 |------|------|------|
 | `domain_search` | `GET /v2/domain-search?domain={eTLD+1}` | 按线索域名拉取 emails + 姓名 + 职位 + sources |
-| `email_verifier` | `GET /v2/email-verifier?email=` | **可选**，对 top 候选再验（耗 0.5 credit，默认关闭） |
+| `email_verifier` | `GET /v2/email-verifier?email=` | **可选**，对候选人再验（耗 0.5 credit/封，默认关闭） |
 | `email_finder` | `GET /v2/email-finder` | **MVP 不做**（需已有姓名；Domain Search 已含） |
 
 - 认证：`X-API-Key` 或 query `api_key`（MCP 内封装，**不出**现在 Skill 明文）。  
@@ -199,7 +199,7 @@ flowchart TB
 1. 先按 **邮箱类型** 分组（personal 在前）。
 2. 组内按 **置信度** 降序。
 3. 同置信度按 **职位匹配度** 加权（有 position 且匹配 buyer_personas 的优先）。
-4. 取综合得分最高 **≤3** 人；每人须有 Hunter `sources`。
+4. **全量**保留并按上述规则降序排列（§C13）；每人须有 Hunter `sources`。
 5. `match_reason` 必填（说明排序依据，如「personal 邮箱 + confidence 84 + 含 first_name」）。
 
 **示例**（基于实测 pantron.com）：
@@ -345,7 +345,7 @@ flowchart LR
 | `position` 为 null（实测约 70%） | §6.3 综合排序：邮箱类型 + 置信度 + 姓名完整性，不依赖职位 |
 | `verification.status` 为 null（实测约 85%） | 验证设为可选；未验证邮箱按排序参与候选，UI 提供手动验证按钮 |
 | accept_all 域 | `hunter_accept_all` 黄标，不默认发信 |
-| API 配额 | 单线索 1× search + **可选** ≤3 verify；默认不验证 |
+| API 配额 | Domain Search 有 24h 缓存；验邮按候选人逐条计费（默认关闭） |
 
 ---
 
@@ -372,3 +372,4 @@ flowchart LR
 | 2026-09-14 | **实测修订**：基于 Hunter MCP 实测（pantron.com 样本）——①验证设为可选（默认关闭，节省 credit）；②排序规则改为综合邮箱质量（类型/置信度/姓名/职位），不依赖 `position`（实测 70% 为 null）；③`email_status` 增加 `hunter_unverified` 状态；④Spike 留到开发阶段执行 |
 | 2026-09-14 | **多 Key**：C3 支持 `HUNTER_API_KEYS` 多 Key 池 + failover；设置页（US-C-03）支持配置多个 Key 并展示余额 |
 | 2026-09-14 | **US-C-03 详设**：Skill `enrich-lead-contacts`、设置「集成」、Preflight、线索页按钮；C7 经 `sync_valid_to_contacts`；抽屉/开发信选人归 C-04 |
+| 2026-09-14 | **验邮**：取消「最多 3 封」限制；开启验证后对本线索全部候选人验邮 |

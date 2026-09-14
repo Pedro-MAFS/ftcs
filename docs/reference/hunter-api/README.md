@@ -16,7 +16,7 @@ Hunter 提供 JSON REST API，用于按域名/公司查找邮箱、验证可达�
 | 优先级 | 端点 | FTCS MCP 工具 | 说明 |
 |--------|------|---------------|------|
 | **MVP** | `GET /v2/domain-search` | `domain_search` | 按线索域名拉取邮箱 + 姓名 + 职位 + sources |
-| **MVP 可选** | `GET /v2/email-verifier` | `email_verifier` | 对选中候选邮箱再验（每条线索 ≤3 次） |
+| **MVP 可选** | `GET /v2/email-verifier` | `email_verifier` | 对候选人再验（开启后逐条） |
 | **MVP 可选** | `GET /v2/account` | `account_info` | 余额/配额提示（免费，不扣 credit） |
 | **不做** | `GET /v2/email-finder` | — | 需已有姓名；Domain Search 已覆盖 |
 | **不做** | Discover / Multi-Domain Search / Enrichment / Sequences / Leads CRUD | — | 非 Enrichment MVP 范围 |
@@ -81,7 +81,7 @@ Hunter 提供 JSON REST API，用于按域名/公司查找邮箱、验证可达�
 **FTCS 单线索预算（冻结）**：
 
 - `domain_search`：**1 次**
-- `email_verifier`：**≤3 次**（仅对 top 候选）
+- `email_verifier`：开启后对本线索 **全部** 候选人逐条验证
 
 **配额查询**：`GET /v2/account` 或 `GET /v2/usage` — `requests.credits.remaining` 或分类型 `searches` / `verifications` 的 `remaining`（视计划结构而定）。
 

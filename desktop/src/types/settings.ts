@@ -46,6 +46,9 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: 'custom' | 'gateway'
+  hunterApiKeySet: boolean
+  hunterApiKeysMasked: string
+  hunterApiKeyCount: number
   googleProxyMode: GoogleProxyMode
   googleProxyManualUrl: string
   googleProxyEffectiveUrl: string
@@ -68,6 +71,7 @@ export interface SettingsSaveInput {
   searchProvider: string
   tavilyApiKey: string
   placesApiKey?: string
+  hunterApiKeys?: string
   googleProxyMode?: GoogleProxyMode
   googleProxyManualUrl?: string
   searchDailyLimit: number
@@ -114,6 +118,7 @@ export type SettingsCategory =
   | 'model'
   | 'search'
   | 'explore'
+  | 'integrations'
   | 'workspace'
   | 'opencode'
   | 'about'

@@ -26,7 +26,7 @@
 
 1. 用户可在设置中配置 **一个或多个** Hunter API Key；保存后 OpenCode 重启/重连即可注入 MCP。
 2. 已评分线索上，人工触发「补全联系人」→ Agent 跑 Skill → `people[]` 非空（有公开邮箱时）。
-3. 验证默认关闭；勾选后对本线索排序后 **top3** 调用 `email_verifier`（≤3 credit×0.5）。
+3. 验证默认关闭；勾选后对本线索 **全部** 候选人调用 `email_verifier`（约 0.5 credit/封）。
 4. 无 Key / 无域名 / Agent 忙：按钮置灰或 Preflight 拦截，**不**影响探索与开发信。
 
 ### 1.2 非目标（归 US-C-04 或延后）
@@ -50,7 +50,7 @@
 |----|------|
 | **Q1 Skill 名** | `enrich-lead-contacts` |
 | **Q2 入参** | `product_id`（必填）、`lead_id`（必填，**单条**）、`verify_emails`（boolean，默认 `false`） |
-| **Q3 写回** | `leads_patch_scored`；**全量** emails → people（§C13 无上限）；开启验证时仅对排序后 **top3** 调 `email_verifier`（§C11） |
+| **Q3 写回** | `leads_patch_scored`；**全量** emails → people（§C13 无上限）；开启验证时对 **全部** 候选人调 `email_verifier` |
 | **Q4 域名** | UI：无 `company.website` 可解析域名则按钮禁用（§C1）；Skill 内再解析 eTLD+1，失败则停止并说明 |
 | **Q5 设置导航** | **新增**侧栏「集成」；Hunter **独立于**官方模型 / 搜索 / 探索 Places |
 | **Q6 多 Key UI** | textarea，**每行一个 Key**；保存规范化为 `HUNTER_API_KEYS`（逗号分隔）；读侧兼容旧 `HUNTER_API_KEY` |
@@ -84,7 +84,7 @@ flowchart TB
   Map --> Patch1["leads_patch_scored 全量 people"]
   Patch1 --> V{verify_emails?}
   V -->|否| Done["汇报 people 条数"]
-  V -->|是| EV["email_verifier top3"]
+  V -->|是| EV["email_verifier 全部"]
   EV --> Patch2["patch 更新 status + sync_valid_to_contacts"]
   Patch2 --> Done
 ```
@@ -137,7 +137,6 @@ outputs:
 | 常量 | 值 | 说明 |
 |------|-----|------|
 | `DOMAIN_SEARCH_LIMIT` | **10** | 对齐免费档上限；禁止更大以免 `pagination_error` |
-| `MAX_VERIFY` | **3** | 仅排序后前 3 人；与 §C11 一致 |
 | `SYNC_CONFIDENCE_MIN` | **70** | C7 同步 contacts 阈值 |
 
 ### 4.5 步骤
@@ -200,12 +199,11 @@ outputs:
 
 仅当 `verify_emails === true`：
 
-1. 取排序后前 `MAX_VERIFY` 人。  
-2. 逐个 `hunter-api.email_verifier({ email })`。  
+1. 对 people 中 **每一条** 调用 `hunter-api.email_verifier({ email })`。  
    - `pending: true` → 保留/写 `hunter_unknown`，继续下一条  
    - `HUNTER_CLAIMED_EMAIL` → 该邮箱标 `hunter_invalid` 或跳过，**不** failover 重试同邮箱  
    - 配额类错误 → **停止**剩余验证，已有结果仍 patch  
-3. 将更新后的 top3（含新 `email_status`）再次 `leads_patch_scored`，且 **`sync_valid_to_contacts: true`**（§5.4）。
+2. 将更新后的 people（含新 `email_status`）再次 `leads_patch_scored`，且 **`sync_valid_to_contacts: true`**（§5.4）。
 
 **Step 7 — 汇报**
 
@@ -216,7 +214,6 @@ outputs:
 - **禁止** Agent 按 pattern 猜邮或编造邮箱。  
 - **禁止** 对同一线索多次 `domain_search`（缓存命中除外，由 MCP 处理）。  
 - **禁止** `verify_emails=false` 时调用 `email_verifier`。  
-- **禁止** 验证超过 3 个邮箱。  
 - **禁止** 配额错误后自动换线索批量烧 credit。  
 - **禁止** 覆盖已有 `contacts` 中的 form/phone；仅按 §5.4 **追加**邮箱。
 
@@ -476,7 +473,7 @@ async enrichLeadContacts(options: {
 ### 9.2 验证开关
 
 - 复选框「验证邮箱」默认 **不勾选**。  
-- 旁注：「验证约消耗 0.5 credit/邮箱，最多 3 个」。  
+- 旁注：「验证约消耗 0.5 credit/邮箱」。  
 - 状态可放 `LeadsView` 本地 `ref`（不必持久化）；抽屉与列表共用同一状态（provide/inject 或提升到 view）。
 
 ### 9.3 交互位置
@@ -546,7 +543,7 @@ C-02 已登记 `build-mcp` / `prepare-template`；本故事发版前跑 `npm run
 | P1 | 无 Key 打开线索页 | 「补全联系人」禁用；开发信仍可用 |
 | P2 | 设置 → 集成填入真实 Key，测试连接 | 显示 remaining；保存后 `hunterApiKeySet` |
 | P3 | 有官网的 scored 线索，不勾验证，补全 | Agent 跑通；`people[]` 非空；未调 verifier（account 验邮额度不变或仅 search +1） |
-| P4 | 勾选验证再补全 | ≤3 次 verifier；符合条件的 email 进入 `contacts` |
+| P4 | 勾选验证再补全 | 对候选人逐条 verifier；符合条件的 email 进入 `contacts` |
 | P5 | 无 website 线索 | 按钮禁用 |
 | P6 | 故意耗尽 / 无效 Key | Preflight 或 Skill 明确错误，无 silent fail |
 | P7 | 升级后老工作区 | 模板 bump 后出现 Skill + hunter-api |
@@ -583,7 +580,7 @@ C-02 已登记 `build-mcp` / `prepare-template`；本故事发版前跑 `npm run
 - [ ] 无 Hunter Key 时探索 / 开发信可用；补全按钮禁用并有引导。  
 - [ ] 配置 Key 后，1 条有域名的 scored 线索「补全联系人」→ `people[]` 非空（有公开邮箱时）。  
 - [ ] ≥1 人含 `match_reason` + `sources`；排序符合 §6.3。  
-- [ ] 默认不验证；勾选后 top3 验证且 C7 同步 contacts（阈值内）。  
+- [ ] 默认不验证；勾选后对全部候选人验证且 C7 同步 contacts（阈值内）。  
 - [ ] 无 Key / 配额用尽 → 明确错误。  
 - [ ] 多 Key 可保存；测试连接逐条报告；failover 由 MCP（C-02）承担。  
 - [ ] 模板版本已 bump；Skill 随工作区同步。
@@ -595,3 +592,4 @@ C-02 已登记 `build-mcp` / `prepare-template`；本故事发版前跑 `npm run
 | 日期 | 说明 |
 |------|------|
 | 2026-09-14 | 初稿：Skill + 设置集成多 Key + Preflight + 线索按钮；C7 经 `sync_valid_to_contacts`；抽屉/开发信选人归 C-04 |
+| 2026-09-14 | **修订**：取消验邮「最多 3 封」；开启后对全部候选人验邮 |

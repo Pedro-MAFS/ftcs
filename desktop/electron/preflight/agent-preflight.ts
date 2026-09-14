@@ -6,9 +6,11 @@ import {
   type PlacesStartProvider,
   type PlacesStartResolution,
 } from './places-start'
+import { resolveHunterStart } from './hunter-start'
 
 export type { PlacesStartProvider, PlacesStartResolution }
 export { isPlacesGatewayReady, resolvePlacesStart }
+export { resolveHunterStart }
 
 export type AgentPreflightKind =
   | 'extract-profile'
@@ -18,6 +20,7 @@ export type AgentPreflightKind =
   | 'discover-leads-r3'
   | 'score-and-dedupe'
   | 'draft-email'
+  | 'enrich-lead-contacts'
 
 export interface AgentPreflightCheck {
   id: string
@@ -56,6 +59,10 @@ function needsChrome(kind: AgentPreflightKind): boolean {
 
 function needsPlaces(kind: AgentPreflightKind): boolean {
   return kind === 'discover-leads-r3'
+}
+
+function needsHunter(kind: AgentPreflightKind): boolean {
+  return kind === 'enrich-lead-contacts'
 }
 
 function mcpOk(
@@ -221,6 +228,23 @@ export async function runAgentPreflight(
       label: 'MCP places-api',
       ok: placesApi.ok,
       detail: placesApi.detail,
+    })
+  }
+
+  if (needsHunter(kind)) {
+    const hunter = resolveHunterStart(settings)
+    checks.push({
+      id: 'hunter',
+      label: 'Hunter API Key',
+      ok: hunter.ok,
+      detail: hunter.detail,
+    })
+    const hunterApi = mcpOk(mcpServers, 'hunter-api')
+    checks.push({
+      id: 'mcp-hunter-api',
+      label: 'MCP hunter-api',
+      ok: hunterApi.ok,
+      detail: hunterApi.detail,
     })
   }
 

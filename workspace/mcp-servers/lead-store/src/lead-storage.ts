@@ -16,8 +16,8 @@ import {
   ScoredLeadsFileSchema,
 } from "./lead-types.js";
 import { generateLeadId, generateRunId, normalizeDomain } from "./lead-id.js";
-import { generatePersonId } from "./person-id.js";
-import { comparePersons, type PersonInput } from "./person-types.js";
+import { createPersonIdAllocator } from "./person-id.js";
+import { comparePersons, isPersonalEmail, SYNC_CONFIDENCE_MIN, type PersonInput } from "./person-types.js";
 import {
   getDiscardedLeadsPath,
   getExplorationRunPath,
@@ -328,8 +328,16 @@ export function patchScoredLead(
   root: string,
   productId: string,
   leadId: string,
-  people: PersonInput[]
-): { success: true; lead_id: string; people_added: number; people_updated: number; people_total: number } {
+  people: PersonInput[],
+  options?: { sync_valid_to_contacts?: boolean }
+): {
+  success: true;
+  lead_id: string;
+  people_added: number;
+  people_updated: number;
+  people_total: number;
+  contacts_appended: number;
+} {
   const scored = loadScoredLeads(root, productId);
   if (!scored) {
     throw new Error(`Scored leads not found for product: ${productId}`);
@@ -347,6 +355,7 @@ export function patchScoredLead(
   let added = 0;
   let updated = 0;
   const now = new Date().toISOString();
+  const nextPersonId = createPersonIdAllocator(root);
 
   for (const input of people) {
     const emailKey = input.email.toLowerCase();
@@ -365,7 +374,7 @@ export function patchScoredLead(
       // 新增条目
       const newPerson = {
         ...input,
-        id: generatePersonId(root),
+        id: nextPersonId(),
         enriched_at: now,
       };
       existingByEmail.set(emailKey, newPerson);
@@ -378,6 +387,34 @@ export function patchScoredLead(
 
   // 更新 lead
   lead.people = sortedPeople;
+
+  let contactsAppended = 0;
+  if (options?.sync_valid_to_contacts) {
+    const existingContactEmails = new Set(
+      lead.contacts
+        .filter((c) => c.type === "email")
+        .map((c) => c.value.toLowerCase())
+    );
+    for (const person of sortedPeople) {
+      if (
+        person.email_status === "hunter_valid" &&
+        person.confidence >= SYNC_CONFIDENCE_MIN &&
+        isPersonalEmail(person.email)
+      ) {
+        const key = person.email.toLowerCase();
+        if (!existingContactEmails.has(key)) {
+          lead.contacts.push({
+            type: "email",
+            value: person.email,
+            confidence: "high",
+          });
+          existingContactEmails.add(key);
+          contactsAppended += 1;
+        }
+      }
+    }
+  }
+
   scored.updated_at = now;
 
   saveScoredLeads(root, scored);
@@ -388,5 +425,6 @@ export function patchScoredLead(
     people_added: added,
     people_updated: updated,
     people_total: sortedPeople.length,
+    contacts_appended: contactsAppended,
   };
 }
