@@ -298,6 +298,16 @@ export interface LeadContactDto {
   confidence?: string
 }
 
+export interface LeadPersonDto {
+  id: string
+  name: string
+  title: string
+  email: string
+  emailStatus: string
+  confidence: number | null
+  roleMatch: string
+}
+
 export interface LeadCompanyDetailDto {
   name: string
   website: string
@@ -347,6 +357,8 @@ export interface LeadRowDto {
   scoreBreakdown: LeadScoreBreakdownDto | null
   contacts: LeadContactDto[]
   contactLabel: string
+  people: LeadPersonDto[]
+  peopleLabel: string
   record: Record<string, unknown>
 }
 

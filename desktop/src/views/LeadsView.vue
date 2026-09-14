@@ -195,6 +195,12 @@ function matchesSearch(row: LeadRowDto, q: string): boolean {
     row.country.toLowerCase().includes(q) ||
     row.matchReason.toLowerCase().includes(q) ||
     row.contactLabel.toLowerCase().includes(q) ||
+    (row.peopleLabel || '').toLowerCase().includes(q) ||
+    (row.people || []).some(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.email.toLowerCase().includes(q),
+    ) ||
     row.runId.toLowerCase().includes(q)
   ) {
     return true
@@ -216,6 +222,29 @@ function applyRunQueryFromRoute(): void {
 function contactTitle(row: LeadRowDto): string {
   if (row.contacts.length === 0) return ''
   return row.contacts.map((c) => `${c.type}: ${c.value}`).join('\n')
+}
+
+function peoplePrimary(row: LeadRowDto): string {
+  const first = row.people?.[0]
+  if (!first) return ''
+  return first.name || first.email
+}
+
+function peopleExtraCount(row: LeadRowDto): number {
+  return Math.max(0, (row.people?.length ?? 0) - 1)
+}
+
+function peoplePrimaryTitle(row: LeadRowDto): string {
+  const first = row.people?.[0]
+  if (!first) return ''
+  return [first.name, first.title, first.email].filter(Boolean).join(' · ')
+}
+
+function peopleAllTitle(row: LeadRowDto): string {
+  if (!row.people?.length) return ''
+  return row.people
+    .map((p) => [p.name, p.title, p.email].filter(Boolean).join(' · '))
+    .join('\n')
 }
 
 function websiteUrl(row: LeadRowDto): string {
@@ -845,18 +874,6 @@ onUnmounted(() => {
     </div>
 
     <div class="table-shell leads-table">
-      <div class="leads-table__header">
-        <span class="table-cell">公司</span>
-        <span class="table-cell">状态</span>
-        <span class="table-cell">域名</span>
-        <span class="table-cell">国家</span>
-        <span class="table-cell">联系方式</span>
-        <span class="table-cell">Tier</span>
-        <span class="table-cell">评分</span>
-        <span class="table-cell">匹配理由</span>
-        <span class="table-cell">操作</span>
-      </div>
-
       <div v-if="loading && !snapshot" class="table-empty">
         <p>加载线索中…</p>
       </div>
@@ -876,108 +893,151 @@ onUnmounted(() => {
           }}
         </p>
       </div>
-      <div v-else class="leads-table__body">
-        <div
-          v-for="row in filteredRows"
-          :key="row.id"
-          class="leads-table__row"
-          :class="{ 'is-selected': selectedId === row.id }"
-          @click="selectRow(row)"
-        >
-          <span class="table-cell leads-table__company">
-            <button
-              type="button"
-              class="leads-table__company-btn"
-              :title="`查看 ${row.companyName}`"
-              @click.stop="openDrawer(row)"
-            >
-              {{ row.companyName }}
-            </button>
-          </span>
-          <span class="table-cell leads-table__status">
-            <span class="lead-phase" :class="phaseClass(row.phase)">
-              {{ phaseLabel(row.phase) }}
-            </span>
-            <button
-              v-if="hasDrafted(row) && lifecycleLabel(row.status)"
-              type="button"
-              class="lead-lifecycle lead-lifecycle--link"
-              :class="lifecycleClass(row.status)"
-              title="跳转到该线索的开发信"
-              @click.stop="goEmailLead(row)"
-            >
-              {{ lifecycleLabel(row.status) }}
-            </button>
-            <span
-              v-else-if="lifecycleLabel(row.status)"
-              class="lead-lifecycle"
-              :class="lifecycleClass(row.status)"
-            >
-              {{ lifecycleLabel(row.status) }}
-            </span>
-          </span>
-          <span class="table-cell leads-table__mono">
-            <a
-              v-if="websiteUrl(row)"
-              class="lead-link"
-              :href="websiteUrl(row)"
-              target="_blank"
-              rel="noopener noreferrer"
-              :title="websiteUrl(row)"
-              @click.stop
-            >
-              {{ row.domain || websiteUrl(row) }}
-            </a>
-            <span v-else>—</span>
-          </span>
-          <span class="table-cell leads-table__mono">{{ row.country || '—' }}</span>
-          <span
-            class="table-cell leads-table__contact"
-            :title="contactTitle(row)"
+      <div v-else class="leads-table__scroll">
+        <div class="leads-table__header">
+          <span class="table-cell">公司</span>
+          <span class="table-cell">状态</span>
+          <span class="table-cell">域名</span>
+          <span class="table-cell">国家</span>
+          <span class="table-cell">联系方式</span>
+          <span class="table-cell">关键联系人</span>
+          <span class="table-cell">Tier</span>
+          <span class="table-cell">评分</span>
+          <span class="table-cell">匹配理由</span>
+          <span class="table-cell leads-table__actions">操作</span>
+        </div>
+        <div class="leads-table__body">
+          <div
+            v-for="row in filteredRows"
+            :key="row.id"
+            class="leads-table__row"
+            :class="{ 'is-selected': selectedId === row.id }"
+            @click="selectRow(row)"
           >
-            {{ row.contactLabel || '—' }}
-          </span>
-          <span class="table-cell">
-            <span
-              v-if="row.tierLabel"
-              class="lead-tier"
-              :class="`is-${row.tier}`"
-            >
-              {{ row.tierLabel }}
+            <span class="table-cell leads-table__company">
+              <button
+                type="button"
+                class="leads-table__company-btn"
+                :title="`查看 ${row.companyName}`"
+                @click.stop="openDrawer(row)"
+              >
+                {{ row.companyName }}
+              </button>
             </span>
-            <span v-else class="leads-table__dash">—</span>
-          </span>
-          <span class="table-cell leads-table__score">
-            {{ row.score != null ? row.score : '—' }}
-          </span>
-          <span
-            class="table-cell leads-table__reason"
-            :title="matchReasonDisplay(row) || row.matchReason"
-          >
-            {{ matchReasonDisplay(row) || '—' }}
-          </span>
-          <span class="table-cell leads-table__actions">
-            <button
-              v-if="row.phase === 'scored'"
-              type="button"
-              class="leads-table__action"
-              :disabled="isDrafting || isEnriching || generating || !canEnrichLead(row)"
-              :title="enrichTitle(row)"
-              @click.stop="onEnrichLead(row)"
+            <span class="table-cell leads-table__status">
+              <span class="lead-phase" :class="phaseClass(row.phase)">
+                {{ phaseLabel(row.phase) }}
+              </span>
+              <button
+                v-if="hasDrafted(row) && lifecycleLabel(row.status)"
+                type="button"
+                class="lead-lifecycle lead-lifecycle--link"
+                :class="lifecycleClass(row.status)"
+                title="跳转到该线索的开发信"
+                @click.stop="goEmailLead(row)"
+              >
+                {{ lifecycleLabel(row.status) }}
+              </button>
+              <span
+                v-else-if="lifecycleLabel(row.status)"
+                class="lead-lifecycle"
+                :class="lifecycleClass(row.status)"
+              >
+                {{ lifecycleLabel(row.status) }}
+              </span>
+            </span>
+            <span class="table-cell leads-table__mono">
+              <a
+                v-if="websiteUrl(row)"
+                class="lead-link"
+                :href="websiteUrl(row)"
+                target="_blank"
+                rel="noopener noreferrer"
+                :title="websiteUrl(row)"
+                @click.stop
+              >
+                {{ row.domain || websiteUrl(row) }}
+              </a>
+              <span v-else>—</span>
+            </span>
+            <span class="table-cell leads-table__mono">{{ row.country || '—' }}</span>
+            <span
+              class="table-cell leads-table__contact"
+              :title="contactTitle(row)"
             >
-              {{ isEnriching ? '补全中…' : '补全联系人' }}
-            </button>
-            <button
-              v-if="row.phase === 'scored'"
-              type="button"
-              class="leads-table__action"
-              :disabled="isDrafting || generating || isEnriching"
-              :title="hasDrafted(row) ? '重新生成开发信草稿' : '生成开发信草稿'"
-              @click.stop="onDraftLead(row)"
+              {{ row.contactLabel || '—' }}
+            </span>
+            <span class="table-cell leads-table__people">
+              <template v-if="row.people?.length">
+                <span
+                  class="leads-table__people-primary"
+                  :title="peoplePrimaryTitle(row)"
+                >
+                  {{ peoplePrimary(row) }}
+                </span>
+                <span
+                  v-if="peopleExtraCount(row) > 0"
+                  class="leads-table__people-more"
+                  :title="peopleAllTitle(row)"
+                >
+                  +{{ peopleExtraCount(row) }}
+                  <span class="leads-table__people-pop" role="tooltip">
+                    <span
+                      v-for="(p, i) in row.people"
+                      :key="p.id || `${p.email}-${i}`"
+                      class="leads-table__people-pop-item"
+                    >
+                      <strong>{{ p.name || '—' }}</strong>
+                      <span v-if="p.title" class="muted">{{ p.title }}</span>
+                      <span class="mono">{{ p.email }}</span>
+                    </span>
+                  </span>
+                </span>
+              </template>
+              <span v-else class="leads-table__dash">—</span>
+            </span>
+            <span class="table-cell">
+              <span
+                v-if="row.tierLabel"
+                class="lead-tier"
+                :class="`is-${row.tier}`"
+              >
+                {{ row.tierLabel }}
+              </span>
+              <span v-else class="leads-table__dash">—</span>
+            </span>
+            <span class="table-cell leads-table__score">
+              {{ row.score != null ? row.score : '—' }}
+            </span>
+            <span
+              class="table-cell leads-table__reason"
+              :title="matchReasonDisplay(row) || row.matchReason"
             >
-              {{ hasDrafted(row) ? '重写邮件' : '写邮件' }}
-            </button>
-          </span>
+              {{ matchReasonDisplay(row) || '—' }}
+            </span>
+            <span class="table-cell leads-table__actions">
+              <button
+                v-if="row.phase === 'scored'"
+                type="button"
+                class="leads-table__action"
+                :disabled="isDrafting || isEnriching || generating || !canEnrichLead(row)"
+                :title="enrichTitle(row)"
+                @click.stop="onEnrichLead(row)"
+              >
+                {{ isEnriching ? '补全中…' : '补全联系人' }}
+              </button>
+              <button
+                v-if="row.phase === 'scored'"
+                type="button"
+                class="leads-table__action"
+                :disabled="isDrafting || generating || isEnriching"
+                :title="hasDrafted(row) ? '重新生成开发信草稿' : '生成开发信草稿'"
+                @click.stop="onDraftLead(row)"
+              >
+                {{ hasDrafted(row) ? '重写邮件' : '写邮件' }}
+              </button>
+            </span>
+          </div>
         </div>
       </div>
     </div>

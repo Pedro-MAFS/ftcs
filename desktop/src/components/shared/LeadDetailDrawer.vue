@@ -630,6 +630,36 @@ onUnmounted(() => {
             </section>
 
             <section class="lead-drawer__section">
+              <h4>关键联系人 people</h4>
+              <ul v-if="lead.people?.length" class="lead-drawer__contacts">
+                <li
+                  v-for="(p, i) in lead.people"
+                  :key="p.id || `${p.email}-${i}`"
+                >
+                  <div class="lead-drawer__contact-meta">
+                    <span class="lead-drawer__person-name">{{ p.name || '—' }}</span>
+                    <span
+                      v-if="p.emailStatus"
+                      class="lead-drawer__person-status"
+                      :class="`is-${p.emailStatus}`"
+                    >
+                      {{ p.emailStatus }}
+                    </span>
+                    <span v-if="p.confidence != null" class="lead-drawer__contact-conf">
+                      confidence: {{ p.confidence }}
+                    </span>
+                  </div>
+                  <span v-if="p.title" class="lead-drawer__person-title">{{ p.title }}</span>
+                  <span class="lead-drawer__contact-value">{{ p.email || '—' }}</span>
+                  <span v-if="p.roleMatch" class="lead-drawer__person-role">
+                    {{ p.roleMatch }}
+                  </span>
+                </li>
+              </ul>
+              <p v-else class="lead-drawer__empty">[]（尚未补全联系人）</p>
+            </section>
+
+            <section class="lead-drawer__section">
               <h4>匹配与评分</h4>
               <dl class="lead-drawer__fields">
                 <div class="lead-drawer__field lead-drawer__field--block">

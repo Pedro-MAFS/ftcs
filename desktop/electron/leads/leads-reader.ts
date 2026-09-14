@@ -21,6 +21,17 @@ export interface LeadContact {
   confidence?: string
 }
 
+/** Hunter 补全后的关键联系人（people[] 精简投影） */
+export interface LeadPerson {
+  id: string
+  name: string
+  title: string
+  email: string
+  emailStatus: string
+  confidence: number | null
+  roleMatch: string
+}
+
 export interface LeadCompanyDetail {
   name: string
   website: string
@@ -73,6 +84,10 @@ export interface LeadRow {
   contacts: LeadContact[]
   /** 表格主展示：优先邮箱，多条时带 · +N */
   contactLabel: string
+  /** Hunter people[]；未补全时为空 */
+  people: LeadPerson[]
+  /** 表格主展示：首个姓名，多条时带 · +N */
+  peopleLabel: string
   /** 落盘原始对象，供抽屉完整展示 */
   record: Record<string, unknown>
 }
@@ -169,6 +184,35 @@ function formatContactLabel(contacts: LeadContact[]): string {
   if (contacts.length === 0) return ''
   const primary = contacts[0]!.value
   const extra = contacts.length - 1
+  return extra > 0 ? `${primary} · +${extra}` : primary
+}
+
+function parsePeople(value: unknown): LeadPerson[] {
+  if (!Array.isArray(value)) return []
+  const out: LeadPerson[] = []
+  for (const item of value) {
+    const row = asRecord(item)
+    if (!row) continue
+    const email = asString(row.email).trim()
+    const name = asString(row.name).trim()
+    if (!email && !name) continue
+    out.push({
+      id: asString(row.id),
+      name: name || email.split('@')[0] || '—',
+      title: asString(row.title),
+      email,
+      emailStatus: asString(row.email_status),
+      confidence: asNumber(row.confidence),
+      roleMatch: asString(row.role_match),
+    })
+  }
+  return out
+}
+
+function formatPeopleLabel(people: LeadPerson[]): string {
+  if (people.length === 0) return ''
+  const primary = people[0]!.name || people[0]!.email
+  const extra = people.length - 1
   return extra > 0 ? `${primary} · +${extra}` : primary
 }
 
@@ -302,6 +346,8 @@ function loadRawLeads(
           scoreBreakdown: null,
           contacts,
           contactLabel: formatContactLabel(contacts),
+          people: [],
+          peopleLabel: '',
           record: cloneRecord(raw),
         })
       } catch {
@@ -368,6 +414,8 @@ function loadDiscardedLeads(
         scoreBreakdown: null,
         contacts,
         contactLabel: formatContactLabel(contacts),
+        people: [],
+        peopleLabel: '',
         record: cloneRecord(raw),
       })
     }
@@ -403,6 +451,7 @@ function loadScoredLeads(
       const tier = parseTier(raw.tier)
       const score = asNumber(raw.score)
       const contacts = parseContacts(raw.contacts)
+      const people = parsePeople(raw.people)
       rows.push({
         id: asString(raw.id) || `scored_${rows.length + 1}`,
         productId: asString(raw.product_id) || productId,
@@ -429,6 +478,8 @@ function loadScoredLeads(
         scoreBreakdown: parseScoreBreakdown(raw.score_breakdown),
         contacts,
         contactLabel: formatContactLabel(contacts),
+        people,
+        peopleLabel: formatPeopleLabel(people),
         record: cloneRecord(raw),
       })
     }

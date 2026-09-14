@@ -1483,29 +1483,46 @@ button:focus-visible {
   padding-top: 0;
 }
 
+.leads-table__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .leads-table__header,
 .leads-table__row {
   display: grid;
-  grid-template-columns: 1.2fr 0.65fr 0.95fr 0.4fr 1.15fr 0.4fr 0.4fr 1.2fr 0.5fr;
+  grid-template-columns:
+    minmax(140px, 1.2fr)
+    minmax(110px, 0.75fr)
+    minmax(120px, 0.95fr)
+    minmax(56px, 0.4fr)
+    minmax(140px, 1fr)
+    minmax(150px, 1.1fr)
+    minmax(48px, 0.35fr)
+    minmax(52px, 0.35fr)
+    minmax(160px, 1.15fr)
+    148px;
+  min-width: 1240px;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 0 0 12px;
   column-gap: 4px;
 }
 
 .leads-table__header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   height: 34px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
-  flex-shrink: 0;
 }
 
 .leads-table__body {
-  flex: 1;
   min-height: 0;
-  overflow: auto;
 }
 
 .leads-table__row {
@@ -1546,7 +1563,8 @@ button:focus-visible {
 
 .leads-table__company,
 .leads-table__reason,
-.leads-table__contact {
+.leads-table__contact,
+.leads-table__people {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1555,6 +1573,74 @@ button:focus-visible {
 .leads-table__contact {
   font-family: var(--font-mono);
   font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.leads-table__people {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.leads-table__people-primary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.leads-table__people-more {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--neutral-bg, color-mix(in srgb, var(--text-muted) 14%, transparent));
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: default;
+}
+
+.leads-table__people-pop {
+  display: none;
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 20;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  white-space: normal;
+}
+
+.leads-table__people-more:hover .leads-table__people-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.leads-table__people-pop-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.leads-table__people-pop-item .mono {
+  font-family: var(--font-mono);
   color: var(--text-secondary);
 }
 
@@ -1578,9 +1664,36 @@ button:focus-visible {
 }
 
 .leads-table__actions {
+  position: sticky;
+  right: 0;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  align-self: stretch;
+  height: 100%;
+  padding: 0 12px 0 10px;
+  /* 必须用不透明底，否则横向滚动时下层列会透出来 */
+  background: var(--bg-elevated);
+  box-shadow: -8px 0 12px -10px rgba(0, 0, 0, 0.55);
+}
+
+.leads-table__header .leads-table__actions {
+  z-index: 4;
+  background: var(--bg-panel);
+}
+
+.leads-table__row:hover .leads-table__actions {
+  background: var(--bg-hover);
+}
+
+.leads-table__row.is-selected .leads-table__actions {
+  /* accent-muted 是半透明，粘性列改用不透明混色 */
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elevated));
+}
+
+.leads-table__row.is-selected:hover .leads-table__actions {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-hover));
 }
 
 .leads-table__action {
@@ -1930,6 +2043,48 @@ button:focus-visible {
   font-family: var(--font-mono);
   color: var(--text);
   word-break: break-all;
+}
+
+.lead-drawer__person-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.lead-drawer__person-title {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.lead-drawer__person-role {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.lead-drawer__person-status {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+.lead-drawer__person-status.is-hunter_valid {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.lead-drawer__person-status.is-hunter_accept_all {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.lead-drawer__person-status.is-hunter_invalid {
+  color: var(--danger);
+  background: var(--danger-bg);
 }
 
 .lead-drawer__empty {
