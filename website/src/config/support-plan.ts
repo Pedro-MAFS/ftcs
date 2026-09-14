@@ -24,7 +24,7 @@ export const supportPlanPriorityLabels: Record<SupportPlanPriority, string> = {
 export const supportPlanItems: SupportPlanItem[] = [
   {
     id: 'people-contact-profile',
-    title: '人员联系画像',
+    title: 'Hunter 集成 · 补全联系人',
     description:
       '在已有公司线索上，按买家角色补全关键联系人（姓名、职位、来源与匹配理由），供开发信选用收件人。Hunter BYOK 集成（domain-search 等），默认人工触发；与「邮箱有效性验证」同一期交付。',
     priority: 'P0',

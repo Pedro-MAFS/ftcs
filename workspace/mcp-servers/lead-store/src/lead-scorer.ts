@@ -404,6 +404,7 @@ export function rawLeadToScoredLead(
     source_url: lead.source.url,
     match_reason: lead.match_reason,
     contacts: lead.contacts,
+    people: [],
     round: lead.round,
     query_id: lead.query_id,
     run_id: lead.run_id,

@@ -8,9 +8,13 @@ import {
   createExplorationRun,
   listRawLeads,
   loadExplorationRun,
+  patchScoredLead,
+  scoreAndDedupeLeads,
+  loadScoredLeads,
   updateExplorationRun,
 } from "./lead-storage.js";
 import { saveProfile } from "./storage.js";
+import type { PersonInput } from "./person-types.js";
 
 function createTempProject(): string {
   const dir = mkdtempSync(join(tmpdir(), "ftcs-lead-storage-"));
@@ -98,6 +102,105 @@ test("appendRawLead writes jsonl and exploration run tracks progress", () => {
     const loaded = loadExplorationRun(root, productId, run.id);
     assert.equal(loaded?.queries_executed, 1);
     assert.equal(loaded?.api_usage.search_calls, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("patchScoredLead adds and updates people, preserves on re-score", () => {
+  const root = createTempProject();
+  const productId = "prod_patch_test";
+
+  try {
+    saveProfile(
+      root,
+      {
+        company: { name: "Test Co", website: "https://test.test" },
+        products: [{ name: "Widget", name_en: "Widget", use_cases: ["industrial"] }],
+        buyer_personas: [{ company_types: ["distributor"] }],
+        target_markets: { regions: ["EU"] },
+      },
+      productId
+    );
+
+    // 先造一条 scored lead
+    appendRawLead(root, productId, "R1", {
+      product_id: productId,
+      round: "R1",
+      query_id: "q_001",
+      company: { name: "Pantron", website: "https://pantron.com", country: "US" },
+      source: { url: "https://pantron.com", type: "manual" },
+      match_reason: "测试线索",
+      contacts: [],
+    });
+    scoreAndDedupeLeads(root, productId);
+    const scored = loadScoredLeads(root, productId);
+    const leadId = scored!.leads[0]!.id;
+
+    const people: PersonInput[] = [
+      {
+        name: "Steve",
+        first_name: "Steve",
+        last_name: null,
+        title: null,
+        role_match: null,
+        match_reason: "personal 邮箱 + confidence 84",
+        email: "steve@pantron.com",
+        email_status: "hunter_valid",
+        confidence: 84,
+        sources: [{ domain: "kfia.org", uri: "https://kfia.org/page", extracted_on: "2026-05-19", last_seen_on: "2026-08-07", still_on_page: true }],
+        provider: "hunter",
+      },
+      {
+        name: "info",
+        first_name: null,
+        last_name: null,
+        title: null,
+        role_match: null,
+        match_reason: "generic 邮箱 + confidence 81",
+        email: "info@pantron.com",
+        email_status: "hunter_unverified",
+        confidence: 81,
+        sources: [{ domain: "pantron.com", uri: "https://pantron.com", extracted_on: "2026-08-18", last_seen_on: "2026-09-04", still_on_page: true }],
+        provider: "hunter",
+      },
+    ];
+
+    const result = patchScoredLead(root, productId, leadId, people);
+    assert.equal(result.people_added, 2);
+    assert.equal(result.people_total, 2);
+
+    // 验证排序：personal (steve) 应在 generic (info) 前
+    const after = loadScoredLeads(root, productId);
+    const lead = after!.leads.find((l) => l.id === leadId)!;
+    assert.equal(lead.people.length, 2);
+    assert.equal(lead.people[0]!.email, "steve@pantron.com");
+    assert.equal(lead.people[0]!.email_status, "hunter_valid");
+    assert.ok(lead.people[0]!.id.startsWith("person_"));
+
+    // patch 重复 email → 更新而非新增
+    const result2 = patchScoredLead(root, productId, leadId, [
+      { ...people[0]!, match_reason: "更新后的理由", confidence: 90 },
+    ]);
+    assert.equal(result2.people_updated, 1);
+    assert.equal(result2.people_added, 0);
+    assert.equal(result2.people_total, 2);
+
+    const after2 = loadScoredLeads(root, productId);
+    const lead2 = after2!.leads.find((l) => l.id === leadId)!;
+    assert.equal(lead2.people.length, 2);
+    assert.equal(lead2.people[0]!.match_reason, "更新后的理由");
+    assert.equal(lead2.people[0]!.confidence, 90);
+
+    // 重新评分后 people 保留
+    scoreAndDedupeLeads(root, productId);
+    const after3 = loadScoredLeads(root, productId);
+    const lead3 = after3!.leads.find((l) => l.dedupe_key === "pantron.com")!;
+    assert.equal(lead3.people.length, 2);
+    assert.equal(lead3.people[0]!.email, "steve@pantron.com");
+
+    // 不存在的 lead 报错
+    assert.throws(() => patchScoredLead(root, productId, "lead_nonexistent", people), /not found/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

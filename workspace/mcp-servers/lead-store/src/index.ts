@@ -23,6 +23,7 @@ import {
 } from "./storage.js";
 import { KeywordExpansionInputSchema } from "./keyword-types.js";
 import { RawLeadInputSchema } from "./lead-types.js";
+import { PersonInputSchema } from "./person-types.js";
 import {
   appendRawLead,
   countUniqueLeadDomains,
@@ -31,6 +32,7 @@ import {
   listRawLeads,
   loadExplorationRun,
   loadScoredLeads,
+  patchScoredLead,
   scoreAndDedupeLeads,
   updateExplorationRun,
 } from "./lead-storage.js";
@@ -727,6 +729,53 @@ server.tool(
     return {
       content: [{ type: "text", text: JSON.stringify(scored, null, 2) }],
     };
+  }
+);
+
+server.tool(
+  "leads_patch_scored",
+  "Patch a scored lead's people[] with enriched contacts (e.g. from Hunter). Does NOT overwrite existing contacts[].",
+  {
+    product_id: z.string().describe("Product ID, e.g. prod_20260712_001"),
+    lead_id: z.string().describe("Lead ID to patch, e.g. lead_20260709_0001"),
+    people: z.array(PersonInputSchema).describe("Enriched contacts to add (no limit, sorted by priority)"),
+  },
+  async ({ product_id, lead_id, people }) => {
+    const root = getProjectRoot();
+    try {
+      const result = patchScoredLead(root, product_id, lead_id, people);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                success: true,
+                product_id,
+                lead_id: result.lead_id,
+                people_added: result.people_added,
+                people_updated: result.people_updated,
+                people_total: result.people_total,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const code = message.includes("not found") ? "NOT_FOUND" : "PATCH_FAILED";
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ error: true, code, message }),
+          },
+        ],
+      };
+    }
   }
 );
 

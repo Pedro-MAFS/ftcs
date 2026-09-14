@@ -50,6 +50,7 @@ function sampleScoredLead(): ScoredLead {
     match_reason:
       "美国建材批发商，网站提供 Wood Composite WPC Decking for Wholesale，明确批发定位。",
     contacts: [{ type: "email", value: "info@covingtonsupplyco.com", confidence: "high" }],
+    people: [],
     round: "R1",
     query_id: "q_016",
     discovered_at: "2026-07-12T11:23:34.186Z",

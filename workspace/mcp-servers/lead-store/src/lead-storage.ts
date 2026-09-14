@@ -16,6 +16,8 @@ import {
   ScoredLeadsFileSchema,
 } from "./lead-types.js";
 import { generateLeadId, generateRunId, normalizeDomain } from "./lead-id.js";
+import { generatePersonId } from "./person-id.js";
+import { comparePersons, type PersonInput } from "./person-types.js";
 import {
   getDiscardedLeadsPath,
   getExplorationRunPath,
@@ -273,9 +275,13 @@ export function scoreAndDedupeLeads(root: string, productId: string): {
 
   const preservedStatusByKey = new Map<string, ScoredLead["status"]>();
   const preservedStatusById = new Map<string, ScoredLead["status"]>();
+  const preservedPeopleByKey = new Map<string, ScoredLead["people"]>();
   for (const lead of existing?.leads ?? []) {
     preservedStatusByKey.set(lead.dedupe_key, lead.status);
     preservedStatusById.set(lead.id, lead.status);
+    if (lead.people && lead.people.length > 0) {
+      preservedPeopleByKey.set(lead.dedupe_key, lead.people);
+    }
   }
 
   const scoredLeads = sortScoredLeads(
@@ -284,7 +290,9 @@ export function scoreAndDedupeLeads(root: string, productId: string): {
       const preserved =
         preservedStatusById.get(lead.id) ??
         preservedStatusByKey.get(dedupeKey);
-      return rawLeadToScoredLead(profile, lead, config, preserved);
+      const scored = rawLeadToScoredLead(profile, lead, config, preserved);
+      scored.people = preservedPeopleByKey.get(dedupeKey) ?? [];
+      return scored;
     })
   );
 
@@ -313,5 +321,72 @@ export function scoreAndDedupeLeads(root: string, productId: string): {
     raw_total: rawLeads.length,
     deduped_total: deduped.length,
     discarded_total: discardedLeads.length,
+  };
+}
+
+export function patchScoredLead(
+  root: string,
+  productId: string,
+  leadId: string,
+  people: PersonInput[]
+): { success: true; lead_id: string; people_added: number; people_updated: number; people_total: number } {
+  const scored = loadScoredLeads(root, productId);
+  if (!scored) {
+    throw new Error(`Scored leads not found for product: ${productId}`);
+  }
+
+  const leadIndex = scored.leads.findIndex((lead) => lead.id === leadId);
+  if (leadIndex === -1) {
+    throw new Error(`Lead not found: ${leadId}`);
+  }
+
+  const lead = scored.leads[leadIndex];
+  const existingPeople = lead.people ?? [];
+  const existingByEmail = new Map(existingPeople.map((person) => [person.email.toLowerCase(), person]));
+
+  let added = 0;
+  let updated = 0;
+  const now = new Date().toISOString();
+
+  for (const input of people) {
+    const emailKey = input.email.toLowerCase();
+    const existing = existingByEmail.get(emailKey);
+
+    if (existing) {
+      // 更新已有条目（保留 id 和 enriched_at）
+      const updatedPerson = {
+        ...input,
+        id: existing.id,
+        enriched_at: existing.enriched_at,
+      };
+      existingByEmail.set(emailKey, updatedPerson);
+      updated += 1;
+    } else {
+      // 新增条目
+      const newPerson = {
+        ...input,
+        id: generatePersonId(root),
+        enriched_at: now,
+      };
+      existingByEmail.set(emailKey, newPerson);
+      added += 1;
+    }
+  }
+
+  // 按邮箱质量排序（§6.3）
+  const sortedPeople = [...existingByEmail.values()].sort(comparePersons);
+
+  // 更新 lead
+  lead.people = sortedPeople;
+  scored.updated_at = now;
+
+  saveScoredLeads(root, scored);
+
+  return {
+    success: true,
+    lead_id: leadId,
+    people_added: added,
+    people_updated: updated,
+    people_total: sortedPeople.length,
   };
 }

@@ -4,6 +4,7 @@
 
 | 子目录 / 文档 | 内容 | 在线原文 |
 | --- | --- | --- |
+| [hunter-api/](./hunter-api/README.md) | **Hunter API v2** 摘要：认证、Domain Search / Email Verifier（MVP）、credit、错误码、FTCS 字段映射 | [hunter.io/api-documentation/v2](https://hunter.io/api-documentation/v2) |
 | [opencode-events/](./opencode-events/README.md) | **OpenCode Event** 四种信封分册（Legacy / V2 / Global / Sync）+ 嵌套类型 + 触发说明 | [opencode.ai/docs/server](https://opencode.ai/docs/server/) |
 | [google-maps-platform-pricing/](google-maps-platform-pricing/) | Google Maps Platform **核心服务定价列表**（简体中文） | [developers.google.com/maps/billing-and-pricing/pricing?hl=zh-cn](https://developers.google.com/maps/billing-and-pricing/pricing?hl=zh-cn) |
 

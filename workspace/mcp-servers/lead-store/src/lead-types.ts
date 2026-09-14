@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PersonSchema } from "./person-types.js";
 
 export const LeadCompanySchema = z.object({
   name: z.string().optional(),
@@ -113,6 +114,7 @@ export const ScoredLeadSchema = z.object({
   source_url: z.string(),
   match_reason: z.string(),
   contacts: z.array(LeadContactSchema).default([]),
+  people: z.array(PersonSchema).default([]),
   round: z.enum(["R1", "R2", "R3", "R4"]).optional(),
   query_id: z.string().optional(),
   run_id: z.string().optional(),
