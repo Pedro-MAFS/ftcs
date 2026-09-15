@@ -4,7 +4,8 @@ import {
   WORKFLOW_NODE_PREFLIGHT,
   workflowNodeLabel,
 } from '../constants/workflow-node-labels'
-import type { WorkflowNodeId, WorkflowPlan } from '../types/electron'
+import type { LeadRowDto, WorkflowNodeId, WorkflowPlan } from '../types/electron'
+import { parseCompanyDomain } from '../utils/parse-company-domain'
 import { ensureAgentReady } from './useAgentPreflight'
 import { useExploreStart } from './useExploreStart'
 import { useWorkspace } from './useWorkspace'
@@ -37,6 +38,16 @@ export async function runWorkflowPreflight(plan: WorkflowPlan): Promise<string |
     if (err) return err
   }
   return null
+}
+
+function countPendingEnrich(rows: LeadRowDto[] | undefined): number {
+  if (!rows?.length) return 0
+  return rows.filter(
+    (row) =>
+      row.phase === 'scored' &&
+      Boolean(parseCompanyDomain(row.company?.website || row.domain)) &&
+      (!row.people || row.people.length === 0),
+  ).length
 }
 
 function isAbortError(err: unknown): boolean {
@@ -78,6 +89,7 @@ export function useWorkflowExecute(options?: {
     resetAgentForExpandKeywords,
     resetAgentForScoreAndDedupe,
     resetAgentForDraftEmail,
+    resetAgentForEnrichContacts,
     refreshPipelineArtifacts,
   } = useWorkspace()
 
@@ -110,6 +122,13 @@ export function useWorkflowExecute(options?: {
       case 'draft-outreach-email': {
         const pending = emailDraftsSnapshot.value?.pendingHighLeadIds.length ?? 0
         if (pending <= 0) return '暂无待起草的已评分线索'
+        return null
+      }
+      case 'enrich-lead-contacts': {
+        const pending = countPendingEnrich(leadsSnapshot.value?.rows)
+        if (pending <= 0) {
+          return '暂无待补全线索（需已评分、有官网域名、且尚未有关键联系人）'
+        }
         return null
       }
       default:
@@ -197,6 +216,41 @@ export function useWorkflowExecute(options?: {
         const donePromise = waitForAgentDone(productId, { signal })
         try {
           const res = await window.ftcs.draftEmails({ productId })
+          if (!res.ok) {
+            agentStatus.value = 'error'
+            return { ipcOk: false, message: res.message }
+          }
+          const done = await donePromise
+          return { ipcOk: done.ok, message: done.message }
+        } catch (err) {
+          if (isAbortError(err)) throw err
+          agentStatus.value = 'error'
+          return {
+            ipcOk: false,
+            message: err instanceof Error ? err.message : String(err),
+          }
+        }
+      }
+      case 'enrich-lead-contacts': {
+        if (!window.ftcs?.enrichLeadContacts) {
+          return { ipcOk: false, message: '批量补全接口不可用' }
+        }
+        const pendingIds = (leadsSnapshot.value?.rows ?? [])
+          .filter(
+            (row) =>
+              row.phase === 'scored' &&
+              Boolean(parseCompanyDomain(row.company?.website || row.domain)) &&
+              (!row.people || row.people.length === 0),
+          )
+          .map((row) => row.id)
+        const settings = window.ftcs.getSettings
+          ? await window.ftcs.getSettings()
+          : null
+        const verifyEmails = settings?.hunterVerifyEmails !== false
+        resetAgentForEnrichContacts(pendingIds, verifyEmails)
+        const donePromise = waitForAgentDone(productId, { signal })
+        try {
+          const res = await window.ftcs.enrichLeadContacts({ productId })
           if (!res.ok) {
             agentStatus.value = 'error'
             return { ipcOk: false, message: res.message }

@@ -199,7 +199,7 @@ test('user plans are sorted by zh-CN name after builtin plans', () => {
 })
 
 test('WORKFLOW_NODE_CATALOG covers all WorkflowNodeId values', () => {
-  assert.equal(WORKFLOW_NODE_CATALOG.length, 6)
+    assert.equal(WORKFLOW_NODE_CATALOG.length, 7)
   assert.equal(WORKFLOW_NODE_CATALOG[0].id, 'expand-keywords')
   for (const node of WORKFLOW_NODE_CATALOG) {
     assert.equal(isWorkflowNodeId(node.id), true)

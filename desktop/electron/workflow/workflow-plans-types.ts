@@ -4,6 +4,7 @@ export type WorkflowNodeId =
   | 'discover-r2'
   | 'discover-r3'
   | 'score-and-dedupe'
+  | 'enrich-lead-contacts'
   | 'draft-outreach-email'
 
 export interface WorkflowPlanStep {

@@ -6,6 +6,7 @@ export const WORKFLOW_NODE_LABELS: Record<WorkflowNodeId, string> = {
   'discover-r2': 'R2 社媒发现',
   'discover-r3': 'R3 地图发现',
   'score-and-dedupe': '评分去重',
+  'enrich-lead-contacts': '批量补全联系人',
   'draft-outreach-email': '批量起草开发信',
 }
 
@@ -15,6 +16,7 @@ export const WORKFLOW_NODE_PREFLIGHT: Record<WorkflowNodeId, AgentPreflightKind>
   'discover-r2': 'discover-leads-r2',
   'discover-r3': 'discover-leads-r3',
   'score-and-dedupe': 'score-and-dedupe',
+  'enrich-lead-contacts': 'enrich-lead-contacts',
   'draft-outreach-email': 'draft-email',
 }
 
@@ -22,7 +24,7 @@ export function workflowNodeLabel(nodeId: WorkflowNodeId): string {
   return WORKFLOW_NODE_LABELS[nodeId] ?? nodeId
 }
 
-/** 弹框节点下拉；顺序与 W-01 catalog / 需求 §4 一致 */
+/** 弹框节点下拉；顺序与 W-01 catalog 一致 */
 export const WORKFLOW_NODE_OPTIONS: ReadonlyArray<{
   id: WorkflowNodeId
   label: string
@@ -32,6 +34,7 @@ export const WORKFLOW_NODE_OPTIONS: ReadonlyArray<{
   { id: 'discover-r2', label: WORKFLOW_NODE_LABELS['discover-r2'] },
   { id: 'discover-r3', label: WORKFLOW_NODE_LABELS['discover-r3'] },
   { id: 'score-and-dedupe', label: WORKFLOW_NODE_LABELS['score-and-dedupe'] },
+  { id: 'enrich-lead-contacts', label: WORKFLOW_NODE_LABELS['enrich-lead-contacts'] },
   { id: 'draft-outreach-email', label: WORKFLOW_NODE_LABELS['draft-outreach-email'] },
 ]
 

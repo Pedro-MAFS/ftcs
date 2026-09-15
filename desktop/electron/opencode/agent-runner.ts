@@ -22,6 +22,7 @@ import {
 import { failLatestRunningExploration } from '../exploration/exploration-writer'
 import {
   countRawLeads,
+  listScoredLeadsNeedingEnrich,
   loadScoredArtifact,
   type ScoredLeadsArtifact,
 } from '../leads/leads-reader'
@@ -1202,10 +1203,34 @@ export class AgentRunController {
     const productId = options.productId.trim()
     const fromList = (options.leadIds ?? []).map((id) => id.trim()).filter(Boolean)
     const single = options.leadId?.trim() || ''
-    const leadIds = fromList.length > 0 ? fromList : single ? [single] : []
+    const explicit = fromList.length > 0 || Boolean(single)
+    const leadIds =
+      fromList.length > 0
+        ? fromList
+        : single
+          ? [single]
+          : listScoredLeadsNeedingEnrich(productId)
     const verifyEmails = Boolean(options.verifyEmails)
-    if (!productId || leadIds.length === 0) {
-      throw new Error('缺少 productId 或 leadId(s)')
+    if (!productId) {
+      throw new Error('缺少 productId')
+    }
+    if (leadIds.length === 0) {
+      const message = explicit
+        ? '未指定有效线索 ID'
+        : '暂无待补全的已评分线索（需有官网域名且尚未有关键联系人）'
+      emit({
+        type: 'state',
+        skill: 'enrich-lead-contacts',
+        status: 'done',
+        productId,
+        meta: [
+          { label: '状态', value: '无需补全', tone: 'success' },
+          { label: '线索', value: '0' },
+          { label: '验邮', value: verifyEmails ? '是' : '否' },
+        ],
+      })
+      emit({ type: 'done', ok: true, productId, message })
+      return { ok: true, message }
     }
     if (leadIds.length > 50) {
       throw new Error(`一次最多补全 50 条，当前 ${leadIds.length} 条，请缩小范围`)

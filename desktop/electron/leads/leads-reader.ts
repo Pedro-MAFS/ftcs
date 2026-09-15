@@ -639,3 +639,37 @@ export function listLeadsSnapshot(
     },
   }
 }
+
+/** 官网可解析域名且尚无 people 的 scored 线索（按分数高→低；批量补全 / 编排用） */
+export function listScoredLeadsNeedingEnrich(
+  productId: string,
+  workspaceRoot = getWorkspaceRoot(),
+): string[] {
+  const { rows } = loadScoredLeads(productId, workspaceRoot)
+  return rows
+    .filter((row) => {
+      if (row.people.length > 0) return false
+      const website = row.company.website || row.domain
+      return Boolean(parseEnrichDomain(website))
+    })
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+    .map((row) => row.id)
+}
+
+/** 与渲染进程 parseCompanyDomain 对齐的宽松域名校验 */
+function parseEnrichDomain(website: string | null | undefined): string | null {
+  const raw = (website ?? '').trim()
+  if (!raw) return null
+  let host = ''
+  try {
+    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`
+    host = new URL(withScheme).hostname.toLowerCase()
+  } catch {
+    const stripped = raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split(/[/?#]/)[0] ?? ''
+    host = stripped.split(':')[0]?.toLowerCase() ?? ''
+  }
+  if (!host || host.includes(' ') || !host.includes('.')) return null
+  if (host.startsWith('www.')) host = host.slice(4)
+  if (!/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(host)) return null
+  return host
+}

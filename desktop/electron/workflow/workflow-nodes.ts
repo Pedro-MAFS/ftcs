@@ -8,6 +8,7 @@ export type WorkflowExecuteVia =
   | 'startExploreR2'
   | 'startExploreR3'
   | 'scoreAndDedupeLeads'
+  | 'enrichLeadContacts'
   | 'draftEmails'
 
 export interface WorkflowNodeDef {
@@ -59,6 +60,14 @@ export const WORKFLOW_NODE_CATALOG: readonly WorkflowNodeDef[] = [
     preflightSkill: 'score-and-dedupe',
     executeVia: 'scoreAndDedupeLeads',
     ipcChannel: 'LEADS_SCORE_AND_DEDUPE',
+  },
+  {
+    id: 'enrich-lead-contacts',
+    label: '批量补全联系人',
+    skill: 'enrich-lead-contacts',
+    preflightSkill: 'enrich-lead-contacts',
+    executeVia: 'enrichLeadContacts',
+    ipcChannel: 'LEADS_ENRICH_CONTACTS',
   },
   {
     id: 'draft-outreach-email',

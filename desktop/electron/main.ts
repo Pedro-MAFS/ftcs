@@ -1135,9 +1135,6 @@ function registerIpcHandlers(): void {
           typeof input?.leadId === 'string' && input.leadId.trim()
             ? input.leadId.trim()
             : ''
-        if (leadIds.length === 0 && !leadId) {
-          return { ok: false, message: '缺少 leadId 或 leadIds' }
-        }
         const preflight = await gateAgentStart('enrich-lead-contacts')
         if (!preflight.ok) {
           return { ok: false, message: preflight.message }
@@ -1145,10 +1142,14 @@ function registerIpcHandlers(): void {
 
         const verifyEmails = getSettingsSnapshot().hunterVerifyEmails
         const sender = event.sender
-        const targets = leadIds.length > 0 ? leadIds : [leadId]
+        const targets = leadIds.length > 0 ? leadIds : leadId ? [leadId] : undefined
         void getAgentRunner()
           .enrichLeadContacts(
-            { productId, leadIds: targets, verifyEmails },
+            {
+              productId,
+              leadIds: targets,
+              verifyEmails,
+            },
             (payload) => emitAgentEvent(sender, payload),
           )
           .catch((err) => {
@@ -1161,14 +1162,16 @@ function registerIpcHandlers(): void {
           })
 
         const scope =
-          targets.length === 1
+          targets && targets.length === 1
             ? targets[0]
-            : `${targets.length} 条线索`
+            : targets && targets.length > 1
+              ? `${targets.length} 条线索`
+              : '全部待补全线索'
         return {
           ok: true,
           message: `正在为 ${scope} 补全联系人${verifyEmails ? '（含验邮）' : ''}…`,
           productId,
-          leadId: targets.length === 1 ? targets[0] : undefined,
+          leadId: targets?.length === 1 ? targets[0] : undefined,
           leadIds: targets,
         }
       } catch (err) {
