@@ -1116,16 +1116,27 @@ function registerIpcHandlers(): void {
     IPC.LEADS_ENRICH_CONTACTS,
     async (
       event,
-      input: { productId?: string; leadId?: string; verifyEmails?: boolean },
+      input: {
+        productId?: string
+        leadId?: string
+        leadIds?: string[]
+        verifyEmails?: boolean
+      },
     ) => {
       try {
         const productId = input?.productId
-        const leadId = input?.leadId
         if (!productId || typeof productId !== 'string') {
           return { ok: false, message: '缺少 productId' }
         }
-        if (!leadId || typeof leadId !== 'string') {
-          return { ok: false, message: '缺少 leadId' }
+        const leadIds = Array.isArray(input?.leadIds)
+          ? input.leadIds.filter((id) => typeof id === 'string' && id.trim())
+          : []
+        const leadId =
+          typeof input?.leadId === 'string' && input.leadId.trim()
+            ? input.leadId.trim()
+            : ''
+        if (leadIds.length === 0 && !leadId) {
+          return { ok: false, message: '缺少 leadId 或 leadIds' }
         }
         const preflight = await gateAgentStart('enrich-lead-contacts')
         if (!preflight.ok) {
@@ -1134,9 +1145,10 @@ function registerIpcHandlers(): void {
 
         const verifyEmails = getSettingsSnapshot().hunterVerifyEmails
         const sender = event.sender
+        const targets = leadIds.length > 0 ? leadIds : [leadId]
         void getAgentRunner()
           .enrichLeadContacts(
-            { productId, leadId, verifyEmails },
+            { productId, leadIds: targets, verifyEmails },
             (payload) => emitAgentEvent(sender, payload),
           )
           .catch((err) => {
@@ -1148,11 +1160,16 @@ function registerIpcHandlers(): void {
             })
           })
 
+        const scope =
+          targets.length === 1
+            ? targets[0]
+            : `${targets.length} 条线索`
         return {
           ok: true,
-          message: `正在为 ${leadId} 补全联系人${verifyEmails ? '（含验邮）' : ''}…`,
+          message: `正在为 ${scope} 补全联系人${verifyEmails ? '（含验邮）' : ''}…`,
           productId,
-          leadId,
+          leadId: targets.length === 1 ? targets[0] : undefined,
+          leadIds: targets,
         }
       } catch (err) {
         return {
@@ -1241,7 +1258,7 @@ function registerIpcHandlers(): void {
       const scope =
         leadIds && leadIds.length > 0
           ? `${leadIds.length} 条指定线索`
-          : '全部待起草 high 线索'
+          : '全部待起草已评分线索'
       return {
         ok: true,
         message: `正在为 ${productId} 起草开发信（${scope}）…`,

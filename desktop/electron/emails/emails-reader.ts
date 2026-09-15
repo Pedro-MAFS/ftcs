@@ -131,17 +131,20 @@ function draftExists(leadId: string, workspaceRoot = getWorkspaceRoot()): boolea
   return fs.existsSync(getDraftPath(leadId, workspaceRoot))
 }
 
-/** high 且尚无 draft.json 的线索 id（按分数高→低） */
-export function listHighLeadsNeedingDraft(
+/** 已评分且尚无 draft.json 的线索 id（按分数高→低；不限 tier） */
+export function listLeadsNeedingDraft(
   productId: string,
   workspaceRoot = getWorkspaceRoot(),
 ): string[] {
   const scored = [...loadScoredLeadMap(productId, workspaceRoot).values()]
   return scored
-    .filter((lead) => lead.tier === 'high' && !draftExists(lead.id, workspaceRoot))
+    .filter((lead) => !draftExists(lead.id, workspaceRoot))
     .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
     .map((lead) => lead.id)
 }
+
+/** @deprecated 使用 listLeadsNeedingDraft；保留别名避免外部引用断裂 */
+export const listHighLeadsNeedingDraft = listLeadsNeedingDraft
 
 function parseDraftFile(
   filePath: string,
@@ -211,7 +214,7 @@ export function listEmailDraftsSnapshot(
   workspaceRoot = getWorkspaceRoot(),
 ): EmailDraftsSnapshot {
   const scored = loadScoredLeadMap(productId, workspaceRoot)
-  const pendingHighLeadIds = listHighLeadsNeedingDraft(productId, workspaceRoot)
+  const pendingHighLeadIds = listLeadsNeedingDraft(productId, workspaceRoot)
   const emailsDir = getEmailsDir(workspaceRoot)
   const drafts: EmailDraftRow[] = []
 

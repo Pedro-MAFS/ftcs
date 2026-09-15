@@ -788,7 +788,7 @@ server.tool(
 
 server.tool(
   "email_draft_generate",
-  "Generate outreach email drafts for high-tier leads (default top 5). Saves draft.json, draft.md, and updates lead status to email_drafted.",
+  "Generate outreach email drafts for scored leads (default top 5 by score among status=new). Saves draft.json, draft.md, and updates lead status to email_drafted.",
   {
     product_id: z.string(),
     lead_ids: z.array(z.string()).optional(),

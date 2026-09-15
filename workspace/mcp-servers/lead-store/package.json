@@ -1,6 +1,6 @@
 {
   "name": "@ftcs/lead-store",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "type": "module",
   "description": "MCP server for product profiles and lead data storage",

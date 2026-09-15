@@ -8,6 +8,7 @@ import {
   generateEmailDraftsForProduct,
   loadEmailDraft,
   saveEmailDraft,
+  selectLeadsForEmailDraft,
 } from "./email-storage.js";
 import { saveProfile } from "./storage.js";
 import { saveScoredLeads } from "./lead-storage.js";
@@ -130,6 +131,29 @@ test("generateEmailDraftsForProduct writes draft files and updates lead status",
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("selectLeadsForEmailDraft defaults to status=new by score, any tier", () => {
+  const high = { ...sampleScoredLead(), id: "lead_h", tier: "high" as const, score: 80 };
+  const medium = {
+    ...sampleScoredLead(),
+    id: "lead_m",
+    tier: "medium" as const,
+    score: 90,
+    status: "new" as const,
+  };
+  const drafted = {
+    ...sampleScoredLead(),
+    id: "lead_d",
+    tier: "high" as const,
+    score: 99,
+    status: "email_drafted" as const,
+  };
+  const picked = selectLeadsForEmailDraft([high, medium, drafted], undefined, 5);
+  assert.deepEqual(
+    picked.map((l) => l.id),
+    ["lead_m", "lead_h"],
+  );
 });
 
 test("saveEmailDraft persists markdown review file", () => {

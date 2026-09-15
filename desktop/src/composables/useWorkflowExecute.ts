@@ -109,7 +109,7 @@ export function useWorkflowExecute(options?: {
       }
       case 'draft-outreach-email': {
         const pending = emailDraftsSnapshot.value?.pendingHighLeadIds.length ?? 0
-        if (pending <= 0) return '暂无待起草的 high 线索'
+        if (pending <= 0) return '暂无待起草的已评分线索'
         return null
       }
       default:

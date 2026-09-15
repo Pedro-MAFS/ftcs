@@ -72,7 +72,7 @@ export function selectLeadsForEmailDraft(
   }
 
   return leads
-    .filter((lead) => lead.tier === "high" && lead.status === "new")
+    .filter((lead) => lead.status === "new")
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }

@@ -667,7 +667,7 @@ export interface EmailDraftsSummaryDto {
 
 export interface DraftEmailsInput {
   productId: string
-  /** 指定线索；不传则批量 high 待起草 */
+  /** 指定线索；不传则批量待起草的已评分线索（不限 tier） */
   leadIds?: string[]
 }
 
@@ -1021,7 +1021,10 @@ export interface HunterTestResult {
 
 export interface EnrichLeadContactsInput {
   productId: string
-  leadId: string
+  /** 单条；与 leadIds 二选一，leadIds 优先 */
+  leadId?: string
+  /** 批量；最多 50 */
+  leadIds?: string[]
   verifyEmails?: boolean
 }
 
@@ -1030,6 +1033,7 @@ export interface EnrichLeadContactsResult {
   message: string
   productId?: string
   leadId?: string
+  leadIds?: string[]
 }
 
 export interface WebsiteItem {

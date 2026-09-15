@@ -398,13 +398,19 @@ export function useWorkspace() {
     updatePipelineFromProfile()
   }
 
-  function resetAgentForEnrichContacts(leadId: string, verifyEmails: boolean): void {
+  function resetAgentForEnrichContacts(
+    leadIds: string | string[],
+    verifyEmails: boolean,
+  ): void {
+    const ids = Array.isArray(leadIds) ? leadIds : [leadIds]
+    const label =
+      ids.length === 1 ? ids[0].slice(0, 18) || '—' : `${ids.length} 条`
     agentSkill.value = 'enrich-lead-contacts'
     agentStatus.value = 'running'
     resetTimelineView()
     agentMeta.value = [
       { label: '状态', value: '补全中', tone: 'accent' },
-      { label: '线索', value: leadId.slice(0, 18) || '—' },
+      { label: '线索', value: label },
       { label: '验邮', value: verifyEmails ? '是' : '否' },
       { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
     ]

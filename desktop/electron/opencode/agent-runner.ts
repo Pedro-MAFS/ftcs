@@ -26,7 +26,7 @@ import {
   type ScoredLeadsArtifact,
 } from '../leads/leads-reader'
 import {
-  listHighLeadsNeedingDraft,
+  listLeadsNeedingDraft,
   loadEmailDraftsArtifact,
   type EmailDraftsArtifact,
 } from '../emails/emails-reader'
@@ -171,14 +171,36 @@ function buildDraftOutreachPrompt(
 
 function buildEnrichLeadContactsPrompt(
   productId: string,
-  leadId: string,
+  leadIds: string[],
   verifyEmails: boolean,
 ): string {
+  const idsJson = JSON.stringify(leadIds)
+  const multi = leadIds.length > 1
+  if (multi) {
+    return [
+      '请严格按 skill `enrich-lead-contacts` 执行，为下列已评分线索逐条补全联系人。',
+      '',
+      `产品 ID：${productId}`,
+      `线索 ID 列表 lead_ids：${idsJson}`,
+      `verify_emails：${verifyEmails ? 'true' : 'false'}`,
+      '',
+      '执行要求：',
+      '1. 对 lead_ids 中每一条依次处理；某条无域名/无结果则记录后继续下一条；配额耗尽则停止剩余。',
+      '2. 每条：leads_get_scored 定位 → 解析域名 → hunter-api.domain_search（limit=10）→ 排序后 leads_patch_scored 全量写入 people（sync_valid_to_contacts=false）。禁止猜邮。',
+      verifyEmails
+        ? '3. verify_emails=true：对当前 lead 的 people 每条调用 hunter-api.email_verifier，再 patch，且 sync_valid_to_contacts=true。'
+        : '3. verify_emails=false：禁止调用 email_verifier。',
+      '4. 配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。',
+      '5. 用简短中文汇报：处理条数、成功/跳过、代表邮箱摘要；若有配额错误一并说明。',
+      '',
+      `输出：data/leads/${productId}/scored.json 中目标 lead 的 people[]`,
+    ].join('\n')
+  }
   return [
     '请严格按 skill `enrich-lead-contacts` 执行，为指定已评分线索补全联系人。',
     '',
     `产品 ID：${productId}`,
-    `线索 ID：${leadId}`,
+    `线索 ID：${leadIds[0]}`,
     `verify_emails：${verifyEmails ? 'true' : 'false'}`,
     '',
     '执行要求：',
@@ -944,13 +966,13 @@ export class AgentRunController {
     const leadIds =
       explicitIds.length > 0
         ? explicitIds
-        : listHighLeadsNeedingDraft(productId)
+        : listLeadsNeedingDraft(productId)
 
     if (leadIds.length === 0) {
       const message =
         explicitIds.length > 0
           ? '未指定有效线索 ID'
-          : '暂无待起草的 high 线索（可能已全部生成草稿）'
+          : '暂无待起草的已评分线索（可能已全部生成草稿）'
       emit({
         type: 'state',
         skill: 'draft-outreach-email',
@@ -976,7 +998,7 @@ export class AgentRunController {
     const startedAt = Date.now()
     const afterIso = new Date().toISOString()
     const timeline = new TimelineBuilder()
-    const modeLabel = explicitIds.length > 0 ? `指定 ${leadIds.length} 条` : `high ${leadIds.length} 条`
+    const modeLabel = explicitIds.length > 0 ? `指定 ${leadIds.length} 条` : `待起草 ${leadIds.length} 条`
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
@@ -1160,7 +1182,12 @@ export class AgentRunController {
   }
 
   async enrichLeadContacts(
-    options: { productId: string; leadId: string; verifyEmails?: boolean },
+    options: {
+      productId: string
+      leadId?: string
+      leadIds?: string[]
+      verifyEmails?: boolean
+    },
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string }> {
     if (this.running) {
@@ -1173,10 +1200,15 @@ export class AgentRunController {
     }
 
     const productId = options.productId.trim()
-    const leadId = options.leadId.trim()
+    const fromList = (options.leadIds ?? []).map((id) => id.trim()).filter(Boolean)
+    const single = options.leadId?.trim() || ''
+    const leadIds = fromList.length > 0 ? fromList : single ? [single] : []
     const verifyEmails = Boolean(options.verifyEmails)
-    if (!productId || !leadId) {
-      throw new Error('缺少 productId 或 leadId')
+    if (!productId || leadIds.length === 0) {
+      throw new Error('缺少 productId 或 leadId(s)')
+    }
+    if (leadIds.length > 50) {
+      throw new Error(`一次最多补全 50 条，当前 ${leadIds.length} 条，请缩小范围`)
     }
 
     this.running = true
@@ -1184,6 +1216,8 @@ export class AgentRunController {
     const signal = this.abort.signal
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
+    const targetLabel =
+      leadIds.length === 1 ? leadIds[0].slice(0, 18) : `${leadIds.length} 条`
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()
@@ -1210,14 +1244,14 @@ export class AgentRunController {
         productId,
         meta: [
           { label: '状态', value: readiness, tone },
-          { label: '线索', value: leadId.slice(0, 18) },
+          { label: '线索', value: targetLabel },
           { label: '验邮', value: verifyEmails ? '是' : '否' },
           { label: '耗时', value: `${mm}:${ss}` },
         ],
       })
     }
 
-    const promptText = buildEnrichLeadContactsPrompt(productId, leadId, verifyEmails)
+    const promptText = buildEnrichLeadContactsPrompt(productId, leadIds, verifyEmails)
     this.attachTimeline(timeline)
     timeline.reset()
     timeline.addPrefix({
@@ -1225,7 +1259,10 @@ export class AgentRunController {
       kind: 'system',
       time: nowTime(),
       title: '系统',
-      body: `准备为 ${leadId} 补全联系人${verifyEmails ? '（含验邮）' : ''}`,
+      body:
+        leadIds.length === 1
+          ? `准备为 ${leadIds[0]} 补全联系人${verifyEmails ? '（含验邮）' : ''}`
+          : `准备批量补全 ${leadIds.length} 条线索${verifyEmails ? '（含验邮）' : ''}`,
     })
     timeline.addPrefix({
       id: 'user-enrich',
@@ -1242,7 +1279,10 @@ export class AgentRunController {
 
     try {
       const created = await client.session.create({
-        title: `enrich-lead-contacts · ${productId} · ${leadId}`,
+        title:
+          leadIds.length === 1
+            ? `enrich-lead-contacts · ${productId} · ${leadIds[0]}`
+            : `enrich-lead-contacts · ${productId} · ${leadIds.length}`,
       })
       if (created.error || !created.data?.id) {
         throw new Error(
@@ -1280,7 +1320,7 @@ export class AgentRunController {
         client,
         this.sessionId,
         signal,
-        15 * 60_000,
+        15 * 60_000 * Math.min(Math.max(leadIds.length, 1), 10),
       )
 
       if (idleResult === 'abort') {
@@ -1302,7 +1342,10 @@ export class AgentRunController {
         throw new Error('等待 OpenCode 会话 idle 超时')
       }
 
-      const message = `补全联系人完成：${leadId}`
+      const message =
+        leadIds.length === 1
+          ? `补全联系人完成：${leadIds[0]}`
+          : `批量补全联系人完成：${leadIds.length} 条`
       timeline.addSuffix({
         id: 'sys-done',
         kind: 'system',

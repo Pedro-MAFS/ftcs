@@ -94,10 +94,10 @@ const subtitle = computed(() => {
   const s = stats.value
   if (s.total === 0) {
     return pendingHigh.value.length > 0
-      ? `暂无草稿 · ${pendingHigh.value.length} 条 high 线索可批量起草`
-      : '暂无草稿 · 请先在线索页完成评分，再为 high 线索起草'
+      ? `暂无草稿 · ${pendingHigh.value.length} 条已评分线索可批量起草`
+      : '暂无草稿 · 请先在线索页完成评分，再批量起草开发信'
   }
-  return `${s.total} 封草稿 · 待审 ${s.pendingReview} · 待起草 high ${s.pendingHigh}`
+  return `${s.total} 封草稿 · 待审 ${s.pendingReview} · 待起草 ${s.pendingHigh}`
 })
 
 const editSubject = computed({
@@ -218,7 +218,7 @@ async function onBatchDraft(): Promise<void> {
     return
   }
   if (pendingHigh.value.length <= 0) {
-    actionMessage.value = '暂无待起草的 high 线索'
+    actionMessage.value = '暂无待起草的已评分线索'
     return
   }
 
@@ -391,8 +391,8 @@ onUnmounted(() => {
           :disabled="!canBatchDraft"
           :title="
             pendingHigh.length > 0
-              ? `为 ${pendingHigh.length} 条 high 线索批量起草`
-              : '暂无待起草的 high 线索'
+              ? `为 ${pendingHigh.length} 条已评分线索批量起草`
+              : '暂无待起草的已评分线索'
           "
           @click="onBatchDraft"
         >

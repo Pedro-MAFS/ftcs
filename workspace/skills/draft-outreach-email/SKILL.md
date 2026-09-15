@@ -1,6 +1,6 @@
 ---
 name: draft-outreach-email
-description: 为高意向线索生成个性化意向邮件草稿（short/professional），保存 draft.json 与 draft.md。用户说写开发信、生成邮件、触达客户时使用。
+description: 为已评分线索生成个性化意向邮件草稿（short/professional），保存 draft.json 与 draft.md。用户说写开发信、生成邮件、触达客户时使用。
 phase: 1
 inputs:
   - name: product_id
@@ -21,26 +21,26 @@ outputs:
 
 # draft-outreach-email
 
-为评分后的**高意向线索**生成开发信草稿，保存至 `data/emails/{lead_id}/`，并将线索状态更新为 `email_drafted`。
+为评分后的线索生成开发信草稿（**不限 tier**；默认取 `status=new` 按分数优先），保存至 `data/emails/{lead_id}/`，并将线索状态更新为 `email_drafted`。
 
 ## 何时使用
 
-- `score-and-dedupe` 完成后，需要为 high tier 线索撰写开发信
-- 用户说「生成邮件」「写开发信」「为 Top 客户准备触达邮件」
+- `score-and-dedupe` 完成后，需要为已评分线索撰写开发信
+- 用户说「生成邮件」「写开发信」「为客户准备触达邮件」
 - Phase 1 最后一环，完成后进入人工审核（Phase 2 发送）
 
 ## 前置条件
 
 - MCP `lead-store` 已配置
 - 存在 `data/leads/{product_id}/scored.json`
-- 目标线索 `tier == "high"` 且 `status == "new"`（或用户指定 lead_ids）
+- 目标线索通常为 `status == "new"`（或用户指定 lead_ids；指定时不限 status/tier）
 
 ## 输入参数
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
 | `product_id` | 必填 | 产品 ID |
-| `lead_ids` | 无 | 指定线索 ID 列表；不填则取 Top high tier |
+| `lead_ids` | 无 | 指定线索 ID 列表；不填则取 `status=new` 按分数 Top |
 | `limit` | `5` | 最多生成几封（工具上限 50；桌面批量会显式传入 lead_ids） |
 
 ## 执行步骤
@@ -49,7 +49,7 @@ outputs:
 
 1. 调用 `lead-store.leads_get_scored`，传入 `product_id`
 2. 若无 scored 文件 → 停止，提示先运行 `score-and-dedupe`
-3. 确认存在 `tier == "high"` 且 `status == "new"` 的线索
+3. 若未指定 `lead_ids`，确认存在 `status == "new"` 的线索
 
 ### Step 2：生成邮件草稿
 

@@ -747,13 +747,15 @@ declare global {
       draftEmails: (input: DraftEmailsInput) => Promise<DraftEmailsResult>
       enrichLeadContacts: (input: {
         productId: string
-        leadId: string
+        leadId?: string
+        leadIds?: string[]
         verifyEmails?: boolean
       }) => Promise<{
         ok: boolean
         message: string
         productId?: string
         leadId?: string
+        leadIds?: string[]
       }>
       rejectEmailDraft: (input: RejectEmailDraftInput) => Promise<RejectEmailDraftResult>
       approveEmailDraft: (input: ApproveEmailDraftInput) => Promise<ApproveEmailDraftResult>

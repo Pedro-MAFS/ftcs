@@ -346,6 +346,7 @@ const canScore = computed(() => {
     !!activeProductId.value &&
     !isScoring.value &&
     !isDrafting.value &&
+    !isEnriching.value &&
     !isWorkflowRunning.value &&
     !generating.value &&
     stats.value.raw > 0
@@ -357,9 +358,33 @@ const canBatchDraft = computed(() => {
     !!activeProductId.value &&
     !isScoring.value &&
     !isDrafting.value &&
+    !isEnriching.value &&
     !isWorkflowRunning.value &&
     !generating.value &&
     pendingHighIds.value.length > 0
+  )
+})
+
+const pendingEnrichIds = computed(() => {
+  return rows.value
+    .filter(
+      (row) =>
+        canEnrichLead(row) && (!row.people || row.people.length === 0),
+    )
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
+    .map((row) => row.id)
+})
+
+const canBatchEnrich = computed(() => {
+  return (
+    !!activeProductId.value &&
+    hunterKeySet.value &&
+    !isScoring.value &&
+    !isDrafting.value &&
+    !isEnriching.value &&
+    !isWorkflowRunning.value &&
+    !generating.value &&
+    pendingEnrichIds.value.length > 0
   )
 })
 
@@ -485,7 +510,7 @@ async function startDraftEmails(leadIds?: string[]): Promise<void> {
 
   const targetCount = leadIds?.length ?? pendingHighIds.value.length
   if (!leadIds && targetCount <= 0) {
-    actionMessage.value = '暂无待起草的 high 线索'
+    actionMessage.value = '暂无待起草的已评分线索'
     return
   }
 
@@ -551,14 +576,23 @@ function canEnrichLead(lead: LeadRowDto): boolean {
   )
 }
 
-async function startEnrichContacts(lead: LeadRowDto): Promise<void> {
+async function startEnrichContacts(leadIds: string[]): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.enrichLeadContacts) return
   if (generating.value || isDrafting.value || isEnriching.value) {
     actionMessage.value = '已有 Agent 任务在运行，请稍候'
     return
   }
-  if (!canEnrichLead(lead)) {
-    actionMessage.value = enrichTitle(lead)
+  const targets = leadIds.map((id) => id.trim()).filter(Boolean)
+  if (targets.length === 0) {
+    actionMessage.value = '暂无待补全的已评分线索'
+    return
+  }
+  if (targets.length > 50) {
+    actionMessage.value = `一次最多补全 50 条，当前 ${targets.length} 条，请缩小范围`
+    return
+  }
+  if (!hunterKeySet.value) {
+    actionMessage.value = '请先在设置 → 集成中配置 Hunter API Key'
     return
   }
 
@@ -570,12 +604,12 @@ async function startEnrichContacts(lead: LeadRowDto): Promise<void> {
 
   enriching.value = true
   actionMessage.value = ''
-  resetAgentForEnrichContacts(lead.id, hunterVerifyEmails.value)
+  resetAgentForEnrichContacts(targets, hunterVerifyEmails.value)
 
   try {
     const res = await window.ftcs.enrichLeadContacts({
       productId: activeProductId.value,
-      leadId: lead.id,
+      leadIds: targets,
       verifyEmails: hunterVerifyEmails.value,
     })
     if (!res.ok) {
@@ -592,8 +626,16 @@ async function startEnrichContacts(lead: LeadRowDto): Promise<void> {
   }
 }
 
+function onBatchEnrichClick(): void {
+  void startEnrichContacts(pendingEnrichIds.value)
+}
+
 function onEnrichLead(lead: LeadRowDto): void {
-  void startEnrichContacts(lead)
+  if (!canEnrichLead(lead)) {
+    actionMessage.value = enrichTitle(lead)
+    return
+  }
+  void startEnrichContacts([lead.id])
 }
 
 function goEmail(): void {
@@ -764,11 +806,30 @@ onUnmounted(() => {
         <button
           type="button"
           class="btn-secondary"
+          :disabled="!canBatchEnrich"
+          :title="
+            !hunterKeySet
+              ? '请先在设置 → 集成配置 Hunter API Key'
+              : pendingEnrichIds.length > 0
+                ? `为 ${pendingEnrichIds.length} 条尚无 people 的已评分线索批量补全`
+                : '暂无待补全线索（需已评分、有官网域名、且尚未有关键联系人）'
+          "
+          @click="onBatchEnrichClick"
+        >
+          {{
+            isEnriching
+              ? '补全中…'
+              : `批量补全${pendingEnrichIds.length ? ` ${pendingEnrichIds.length}` : ''}`
+          }}
+        </button>
+        <button
+          type="button"
+          class="btn-secondary"
           :disabled="!canBatchDraft"
           :title="
             pendingHighIds.length > 0
-              ? `为 ${pendingHighIds.length} 条 high 线索批量起草`
-              : '暂无待起草的 high 线索'
+              ? `为 ${pendingHighIds.length} 条已评分线索批量起草`
+              : '暂无待起草的已评分线索'
           "
           @click="onBatchDraftClick"
         >
