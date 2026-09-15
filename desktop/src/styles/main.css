@@ -2216,11 +2216,28 @@ button:focus-visible {
 
 .lead-drawer__person-edit-grid input,
 .lead-drawer__person-edit-grid select {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 34px;
+  font: inherit;
   font-size: 12px;
-  padding: 6px 8px;
+  font-family: inherit;
+  padding: 6px 10px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg);
+  background: var(--bg-input);
+  color: var(--text);
+  color-scheme: dark;
+}
+
+.lead-drawer__person-edit-grid input:focus,
+.lead-drawer__person-edit-grid select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.lead-drawer__person-edit-grid select option {
+  background: var(--bg-elevated);
   color: var(--text);
 }
 
