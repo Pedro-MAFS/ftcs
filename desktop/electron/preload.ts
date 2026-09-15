@@ -275,6 +275,14 @@ const api = {
     ipcRenderer.invoke(IPC.LEADS_LIST, productId),
   saveRawLead: (input: RawLeadSaveInput): Promise<RawLeadSaveResult> =>
     ipcRenderer.invoke(IPC.LEADS_SAVE_RAW, input),
+  saveScoredPeople: (
+    input: import('./ipc/types').SaveScoredPeopleInput,
+  ): Promise<import('./ipc/types').SaveScoredPeopleResult> =>
+    ipcRenderer.invoke(IPC.LEADS_SAVE_PEOPLE, input),
+  verifyPersonEmail: (
+    input: import('./ipc/types').VerifyPersonEmailInput,
+  ): Promise<import('./ipc/types').VerifyPersonEmailResult> =>
+    ipcRenderer.invoke(IPC.LEADS_VERIFY_PERSON_EMAIL, input),
   exportLeadsCsv: (input: ExportLeadsCsvInput): Promise<ExportLeadsCsvResult> =>
     ipcRenderer.invoke(IPC.LEADS_EXPORT_CSV, input),
   scoreAndDedupeLeads: (productId: string): Promise<ScoreAndDedupeResult> =>

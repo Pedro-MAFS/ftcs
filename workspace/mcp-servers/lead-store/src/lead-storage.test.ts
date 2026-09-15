@@ -240,6 +240,36 @@ test("patchScoredLead adds and updates people, preserves on re-score", () => {
       sync_valid_to_contacts: true,
     });
     assert.equal(syncAgain.contacts_appended, 0);
+
+    // US-C-04：patch 未包含的 manual people 必须保留
+    const manualPerson: PersonInput = {
+      name: "Alice",
+      first_name: "Alice",
+      last_name: null,
+      title: null,
+      role_match: null,
+      match_reason: "用户手工录入",
+      email: "alice.manual@pantron.com",
+      email_status: "hunter_unverified",
+      confidence: 0,
+      sources: [
+        {
+          domain: "manual",
+          uri: "urn:ftcs:manual",
+          extracted_on: "2026-09-15",
+          last_seen_on: "2026-09-15",
+          still_on_page: true,
+        },
+      ],
+      provider: "manual",
+    };
+    patchScoredLead(root, productId, leadId, [manualPerson]);
+    patchScoredLead(root, productId, leadId, [people[0]!]);
+    const afterManual = loadScoredLeads(root, productId);
+    const leadManual = afterManual!.leads.find((l) => l.id === leadId)!;
+    assert.ok(
+      leadManual.people.some((p) => p.email === "alice.manual@pantron.com" && p.provider === "manual"),
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

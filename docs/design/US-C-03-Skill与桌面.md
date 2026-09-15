@@ -33,8 +33,8 @@
 
 | 不做 | 归属 |
 |------|------|
-| people 抽屉徽章、sources 列表、单条「验证」按钮 | US-C-04 |
-| `pickPrimaryRecipient` / 开发信优先 `hunter_valid` + `Dear FirstName` | US-C-04 |
+| people 抽屉徽章、sources 列表、单条「验证」按钮、scored people 手工维护 | US-C-04 |
+| `pickPrimaryRecipient` / 开发信优先 `hunter_valid` + `Dear FirstName` | **另立故事**（对接支持计划「开发信 · 多风格与中英对照」；原曾挂 C-04） |
 | 任务编排节点 / 批量补全 | C2 / US-C-06～08 |
 | Hunter 官方代调网关 | 永不做（C3） |
 | builtin 补邮箱 | US-C-05 |
@@ -571,7 +571,7 @@ C-02 已登记 `build-mcp` / `prepare-template`；本故事发版前跑 `npm run
 | 老用户区无 hunter-api 目录 | 本故事 **必须** bump 模板版本（C-02 已记录依赖） |
 | 设置「集成」与「探索」Places 并存造成困惑 | 文案强调 Hunter 仅「补全联系人」；Places 仅 R3 |
 | 多 Key 被误解为叠加额度 | 设置页醒目说明账号级配额 |
-| C-04 前用户看不见 people | Agent 汇报 + 验收读 JSON；UI 展示归 C-04 |
+| C-04 前用户看不见完整徽章/sources | Agent 汇报 + 列表 people 列；完整抽屉见 US-C-04 |
 | Domain Search 空结果 | 诚实文案；保留原 contacts |
 
 ---
@@ -595,3 +595,4 @@ C-02 已登记 `build-mcp` / `prepare-template`；本故事发版前跑 `npm run
 | 2026-09-14 | 初稿：Skill + 设置集成多 Key + Preflight + 线索按钮；C7 经 `sync_valid_to_contacts`；抽屉/开发信选人归 C-04 |
 | 2026-09-14 | **修订**：取消验邮「最多 3 封」；开启后对全部候选人验邮 |
 | 2026-09-14 | **修订**：验邮改为设置「集成」全局开关（默认开启）；线索页不再勾选 |
+| 2026-09-15 | **交叉引用**：抽屉徽章/单条验证/people 手工维护见 US-C-04；`pickPrimary` / Dear FirstName 改挂开发信重构故事 |

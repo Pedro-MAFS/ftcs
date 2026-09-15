@@ -301,11 +301,25 @@ export interface LeadContactDto {
 export interface LeadPersonDto {
   id: string
   name: string
+  firstName: string | null
+  lastName: string | null
   title: string
   email: string
   emailStatus: string
   confidence: number | null
   roleMatch: string
+  matchReason: string
+  provider: 'hunter' | 'manual'
+  sources: LeadPersonSourceDto[]
+  enrichedAt: string
+}
+
+export interface LeadPersonSourceDto {
+  domain: string
+  uri: string
+  extractedOn: string
+  lastSeenOn: string
+  stillOnPage: boolean
 }
 
 export interface LeadCompanyDetailDto {
@@ -530,6 +544,46 @@ export interface RawLeadSaveResult {
   lead?: LeadRowDto
 }
 
+export interface SaveScoredPeoplePersonInput {
+  id?: string
+  name: string
+  firstName?: string | null
+  lastName?: string | null
+  title?: string | null
+  roleMatch?: string | null
+  matchReason?: string
+  email: string
+  emailStatus?: string
+  confidence?: number
+  provider?: 'hunter' | 'manual'
+  sources?: LeadPersonSourceDto[]
+  enrichedAt?: string
+}
+
+export interface SaveScoredPeopleInput {
+  productId: string
+  leadId: string
+  people: SaveScoredPeoplePersonInput[]
+}
+
+export interface SaveScoredPeopleResult {
+  ok: boolean
+  message: string
+  lead?: LeadRowDto
+}
+
+export interface VerifyPersonEmailInput {
+  productId: string
+  leadId: string
+  personId: string
+}
+
+export interface VerifyPersonEmailResult {
+  ok: boolean
+  message: string
+  lead?: LeadRowDto
+}
+
 export interface ExportLeadsCsvInput {
   content: string
   defaultFileName: string
@@ -683,6 +737,10 @@ declare global {
       startExploreR3: (input: DiscoverLeadsInput) => Promise<DiscoverLeadsResult>
       listLeads: (productId: string) => Promise<LeadsSnapshotDto>
       saveRawLead: (input: RawLeadSaveInput) => Promise<RawLeadSaveResult>
+      saveScoredPeople: (input: SaveScoredPeopleInput) => Promise<SaveScoredPeopleResult>
+      verifyPersonEmail: (
+        input: VerifyPersonEmailInput,
+      ) => Promise<VerifyPersonEmailResult>
       exportLeadsCsv: (input: ExportLeadsCsvInput) => Promise<ExportLeadsCsvResult>
       scoreAndDedupeLeads: (productId: string) => Promise<ScoreAndDedupeResult>
       listEmailDrafts: (productId: string) => Promise<EmailDraftsSnapshotDto>

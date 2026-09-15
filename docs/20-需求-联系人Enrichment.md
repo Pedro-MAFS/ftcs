@@ -217,7 +217,7 @@ flowchart TB
 | 无 `people[]` | US-C-01 |
 | 无 hunter-api MCP | US-C-02 |
 | 无 Skill / Preflight / 按钮 | US-C-03 |
-| 开发信只认 contacts | US-C-04 |
+| 开发信只认 contacts | 开发信重构故事（另立；C-04 前靠 C7 sync） |
 
 ---
 
@@ -229,7 +229,7 @@ flowchart LR
   C01[US-C-01 Schema写回]
   C02[US-C-02 hunter-api MCP]
   C03[US-C-03 Skill+桌面]
-  C04[US-C-04 UI+开发信]
+  C04[US-C-04 抽屉people]
   C05[US-C-05 builtin 延后]
 
   C00 --> C01
@@ -248,7 +248,7 @@ flowchart LR
 | **US-C-01** | `people[]` + `leads_patch_scored` | ✅ |
 | **US-C-02** | `hunter-api` MCP | ✅ |
 | **US-C-03** | Skill + Preflight + 设置页 Key | ✅ |
-| **US-C-04** | UI + 开发信收件人 | ✅ |
+| **US-C-04** | 抽屉 people 增强 + 手工维护 + 单条验证 | ✅ |
 | **US-C-05** | builtin 官网补邮箱（可选） | ❌ |
 | **US-C-06～08** | 批量 / 编排节点等 | ❌ |
 
@@ -286,17 +286,17 @@ flowchart LR
 ### US-C-03 · Skill 与桌面
 
 - Skill `enrich-lead-contacts`：**仅** Hunter 路径；**参数** `verify_emails: boolean`（桌面由全局设置注入，默认开启）。  
-- 设置页：**集成 → Hunter API Key**（UI 对齐 Places BYOK，**独立**于官方模型/搜索通道）；支持**多个 Key**（每行一个或逗号分隔），展示各 Key 余额与状态（调 `account_info`）。  
-- UI：线索页「补全联系人」按钮 + **「验证邮箱」复选框**（默认不勾选，提示「验证将消耗 0.5 credit/邮箱」）。  
+- 设置页：**集成 → Hunter API Key**（UI 对齐 Places BYOK，**独立**于官方模型/搜索通道）；支持**多个 Key**（独立输入框，最多 5 个），展示各 Key 余额与状态（调 `account_info`）。  
+- UI：线索页「补全联系人」按钮；验邮为设置「集成」全局开关（`HUNTER_VERIFY_EMAILS`，默认开启），线索页不再勾选。  
 - Preflight：**仅 enrich 任务**检查 Hunter Key；lead-store、profile ready。  
 - 无 Key：线索页按钮置灰，文案链 Hunter 注册 + 设置页，**不**阻断探索/开发信。
 
-### US-C-04 · UI 与开发信
+### US-C-04 · 抽屉 people 与手工维护
 
-- 抽屉展示 Hunter sources、confidence、验邮徽章（`hunter_valid` ✅ / `hunter_accept_all` ⚠️ / `hunter_unverified` 灰标）。  
-- **验证按钮**：对 `hunter_unverified` 的邮箱提供「验证」按钮，点击后调用 `email_verifier` 并更新 `email_status`。  
-- `pickPrimaryRecipient`：优先 `hunter_valid`；若无，则按 §6.3 排序取第 1 位。  
-- 无 Key 时按钮灰显 + 原因。
+- 抽屉展示 sources、confidence、验邮徽章（`hunter_valid` ✅ / `hunter_accept_all` ⚠️ / `hunter_unverified` 灰标等）。  
+- **单条验证**：对 `hunter_unverified` / `hunter_unknown` 提供行尾「验证」；**主进程**直调 Hunter verifier 写回 status（不启 Agent）；达标则按 C7 追加 `contacts`。  
+- scored 抽屉「编辑联系人」：people **增删改**（全量写回）；支持 `provider: manual`。  
+- **不包含**开发信收件人选人 / `Dear FirstName`（另立故事，对接支持计划「开发信 · 多风格与中英对照」）。
 
 ### US-C-05 · builtin（延后）
 
@@ -310,9 +310,10 @@ flowchart LR
 - [ ] **无 Hunter Key** 时核心主路径（探索 → 开发信）仍可用。  
 - [ ] 配置 Hunter Key 后，1 条 high 线索「补全联系人」→ `people[]` 非空。  
 - [ ] ≥1 人：姓名（或邮箱前缀）+ 排序依据 `match_reason` + Hunter sources。  
-- [ ] **未验证** 的邮箱可按 §6.3 排序作为收件人；**可选** 验证后 `hunter_valid` 的邮箱优先作为收件人 + `Dear {FirstName}`。  
+- [ ] **未验证** 的邮箱可在抽屉单条验证；验证后 `hunter_valid` 且达标则进入 `contacts`（C7）。  
 - [ ] 无 Key / 配额用尽 → 明确错误，不 silent fail。  
-- [ ] 用户可删除误识别 person。
+- [ ] 用户可在抽屉删除 / 新增 / 修改误识别或遗漏的 person。  
+- [ ] （另立故事）开发信优先 `hunter_valid` 收件人 + `Dear {FirstName}`；多风格与中英对照。
 
 ---
 
@@ -335,7 +336,7 @@ flowchart LR
 | C-01 Schema + patch | | 1～1.5 |
 | C-02 hunter-api MCP | | 1～1.5 |
 | C-03 Skill + 设置 Key | | 1 |
-| C-04 UI + 开发信 | | 0.5～1 |
+| C-04 抽屉 people + 单条验证 + 手工维护 | | 0.5～1 |
 | **MVP 合计** | | **4～5.5** |
 
 | 风险 | 缓解 |
@@ -357,6 +358,7 @@ flowchart LR
 | [US-C-01 详设：people Schema 与 leads_patch_scored](design/US-C-01-people-schema与leads-patch-scored.md) | 数据层（已实现，lead-store 0.5.0） |
 | [US-C-02 详设：hunter-api MCP](design/US-C-02-hunter-api-MCP.md) | API 封装层（已实现，hunter-api 0.1.0） |
 | [US-C-03 详设：Skill 与桌面](design/US-C-03-Skill与桌面.md) | Skill + 设置多 Key + Preflight + 线索页按钮 |
+| [US-C-04 详设：抽屉 people 与手工维护](design/US-C-04-抽屉people与手工维护.md) | 徽章/sources/主进程单条验证；scored people 增删改；开发信选人另立 |
 | [联系人Enrichment-spike-简明-Decodeck.md](research/联系人Enrichment-spike-简明-Decodeck.md) | builtin 难例（归档） |
 | [06-MCP工具规范.md](06-MCP工具规范.md) | hunter-api 登记 |
 
@@ -371,6 +373,7 @@ flowchart LR
 | 2026-09-08 | **定位**：Hunter **集成扩展**、非核心；不做官方代调；无 Key 不阻断主路径 |
 | 2026-09-14 | **实测修订**：基于 Hunter MCP 实测（pantron.com 样本）——①验证设为可选（默认关闭，节省 credit）；②排序规则改为综合邮箱质量（类型/置信度/姓名/职位），不依赖 `position`（实测 70% 为 null）；③`email_status` 增加 `hunter_unverified` 状态；④Spike 留到开发阶段执行 |
 | 2026-09-14 | **多 Key**：C3 支持 `HUNTER_API_KEYS` 多 Key 池 + failover；设置页（US-C-03）支持配置多个 Key 并展示余额 |
-| 2026-09-14 | **US-C-03 详设**：Skill `enrich-lead-contacts`、设置「集成」、Preflight、线索页按钮；C7 经 `sync_valid_to_contacts`；抽屉/开发信选人归 C-04 |
+| 2026-09-14 | **US-C-03 详设**：Skill `enrich-lead-contacts`、设置「集成」、Preflight、线索页按钮；C7 经 `sync_valid_to_contacts`；抽屉增强归 C-04；开发信选人另立 |
 | 2026-09-14 | **验邮**：取消「最多 3 封」限制；开启验证后对本线索全部候选人验邮 |
 | 2026-09-14 | **C12**：验邮改为设置「集成」全局开关（`HUNTER_VERIFY_EMAILS`，默认开启）；线索页/抽屉不再勾选 |
+| 2026-09-15 | **US-C-04 详设**：抽屉徽章/sources/主进程单条验证 + scored people 手工维护；开发信选人/称呼划出另立故事（对接「多风格与中英对照」） |

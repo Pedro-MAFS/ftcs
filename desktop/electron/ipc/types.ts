@@ -47,6 +47,8 @@ export const IPC = {
   EXPLORATION_SET_R2_SITE_ENABLED: 'exploration:set-r2-site-enabled',
   LEADS_LIST: 'leads:list',
   LEADS_SAVE_RAW: 'leads:save-raw',
+  LEADS_SAVE_PEOPLE: 'leads:save-people',
+  LEADS_VERIFY_PERSON_EMAIL: 'leads:verify-person-email',
   LEADS_EXPORT_CSV: 'leads:export-csv',
   LEADS_SCORE_AND_DEDUPE: 'leads:score-and-dedupe',
   LEADS_ENRICH_CONTACTS: 'leads:enrich-contacts',
@@ -505,11 +507,25 @@ export interface LeadContactDto {
 export interface LeadPersonDto {
   id: string
   name: string
+  firstName: string | null
+  lastName: string | null
   title: string
   email: string
   emailStatus: string
   confidence: number | null
   roleMatch: string
+  matchReason: string
+  provider: 'hunter' | 'manual'
+  sources: LeadPersonSourceDto[]
+  enrichedAt: string
+}
+
+export interface LeadPersonSourceDto {
+  domain: string
+  uri: string
+  extractedOn: string
+  lastSeenOn: string
+  stillOnPage: boolean
 }
 
 export interface LeadCompanyDetailDto {
@@ -720,6 +736,47 @@ export interface RawLeadSaveInput {
 }
 
 export interface RawLeadSaveResult {
+  ok: boolean
+  message: string
+  lead?: LeadRowDto
+}
+
+/** US-C-04：scored people 全量保存 */
+export interface SaveScoredPeoplePersonInput {
+  id?: string
+  name: string
+  firstName?: string | null
+  lastName?: string | null
+  title?: string | null
+  roleMatch?: string | null
+  matchReason?: string
+  email: string
+  emailStatus?: string
+  confidence?: number
+  provider?: 'hunter' | 'manual'
+  sources?: LeadPersonSourceDto[]
+  enrichedAt?: string
+}
+
+export interface SaveScoredPeopleInput {
+  productId: string
+  leadId: string
+  people: SaveScoredPeoplePersonInput[]
+}
+
+export interface SaveScoredPeopleResult {
+  ok: boolean
+  message: string
+  lead?: LeadRowDto
+}
+
+export interface VerifyPersonEmailInput {
+  productId: string
+  leadId: string
+  personId: string
+}
+
+export interface VerifyPersonEmailResult {
   ok: boolean
   message: string
   lead?: LeadRowDto

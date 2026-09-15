@@ -21,15 +21,29 @@ export interface LeadContact {
   confidence?: string
 }
 
-/** Hunter 补全后的关键联系人（people[] 精简投影） */
+/** Hunter / 手工关键联系人（people[] 投影） */
+export interface LeadPersonSource {
+  domain: string
+  uri: string
+  extractedOn: string
+  lastSeenOn: string
+  stillOnPage: boolean
+}
+
 export interface LeadPerson {
   id: string
   name: string
+  firstName: string | null
+  lastName: string | null
   title: string
   email: string
   emailStatus: string
   confidence: number | null
   roleMatch: string
+  matchReason: string
+  provider: 'hunter' | 'manual'
+  sources: LeadPersonSource[]
+  enrichedAt: string
 }
 
 export interface LeadCompanyDetail {
@@ -196,14 +210,38 @@ function parsePeople(value: unknown): LeadPerson[] {
     const email = asString(row.email).trim()
     const name = asString(row.name).trim()
     if (!email && !name) continue
+    const sourcesRaw = Array.isArray(row.sources) ? row.sources : []
+    const sources: LeadPersonSource[] = []
+    for (const src of sourcesRaw) {
+      const s = asRecord(src)
+      if (!s) continue
+      const uri = asString(s.uri).trim()
+      if (!uri) continue
+      sources.push({
+        domain: asString(s.domain),
+        uri,
+        extractedOn: asString(s.extracted_on),
+        lastSeenOn: asString(s.last_seen_on),
+        stillOnPage: Boolean(s.still_on_page),
+      })
+    }
+    const providerRaw = asString(row.provider)
+    const provider: 'hunter' | 'manual' =
+      providerRaw === 'manual' ? 'manual' : 'hunter'
     out.push({
       id: asString(row.id),
       name: name || email.split('@')[0] || '—',
+      firstName: row.first_name == null ? null : asString(row.first_name) || null,
+      lastName: row.last_name == null ? null : asString(row.last_name) || null,
       title: asString(row.title),
       email,
       emailStatus: asString(row.email_status),
       confidence: asNumber(row.confidence),
       roleMatch: asString(row.role_match),
+      matchReason: asString(row.match_reason),
+      provider,
+      sources,
+      enrichedAt: asString(row.enriched_at),
     })
   }
   return out

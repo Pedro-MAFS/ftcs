@@ -350,7 +350,10 @@ export function patchScoredLead(
 
   const lead = scored.leads[leadIndex];
   const existingPeople = lead.people ?? [];
-  const existingByEmail = new Map(existingPeople.map((person) => [person.email.toLowerCase(), person]));
+  const existingByEmail = new Map(
+    existingPeople.map((person) => [person.email.toLowerCase(), person]),
+  );
+  const patchEmails = new Set(people.map((p) => p.email.toLowerCase()));
 
   let added = 0;
   let updated = 0;
@@ -379,6 +382,15 @@ export function patchScoredLead(
       };
       existingByEmail.set(emailKey, newPerson);
       added += 1;
+    }
+  }
+
+  // US-C-04：未出现在本次入参中的 provider=manual 必须保留（增量 merge 本已保留全部，
+  // 此处显式保证 manual 不被后续「仅保留 patch 集」类改动误伤；并便于单测锁定语义）
+  for (const person of existingPeople) {
+    const key = person.email.toLowerCase();
+    if (person.provider === "manual" && !patchEmails.has(key)) {
+      existingByEmail.set(key, person);
     }
   }
 

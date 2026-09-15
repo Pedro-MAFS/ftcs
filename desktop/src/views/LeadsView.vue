@@ -1049,6 +1049,7 @@ onUnmounted(() => {
       :enriching="isEnriching"
       :can-enrich="detailLead ? canEnrichLead(detailLead) : false"
       :enrich-title="detailLead ? enrichTitle(detailLead) : ''"
+      :hunter-key-set="hunterKeySet"
       @close="closeDrawer"
       @saved="onLeadSaved"
       @draft="onDraftLead"

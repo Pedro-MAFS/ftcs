@@ -7,7 +7,23 @@ import { z } from "zod";
 
 export const PersonSourceSchema = z.object({
   domain: z.string(),
-  uri: z.string().url(),
+  /** http(s) 或 urn:ftcs:manual 等 */
+  uri: z
+    .string()
+    .min(1)
+    .refine(
+      (value) => {
+        if (value.startsWith("urn:")) return true;
+        try {
+          // eslint-disable-next-line no-new
+          new URL(value);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { message: "Invalid uri" },
+    ),
   extracted_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   last_seen_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   still_on_page: z.boolean(),
@@ -25,6 +41,10 @@ export const EmailStatusSchema = z.enum([
 
 export type EmailStatus = z.infer<typeof EmailStatusSchema>;
 
+export const PersonProviderSchema = z.enum(["hunter", "manual"]);
+
+export type PersonProvider = z.infer<typeof PersonProviderSchema>;
+
 export const PersonSchema = z.object({
   id: z.string().regex(/^person_\d{8}_\d{4}$/),
   name: z.string().min(1),
@@ -37,7 +57,7 @@ export const PersonSchema = z.object({
   email_status: EmailStatusSchema,
   confidence: z.number().int().min(0).max(100),
   sources: z.array(PersonSourceSchema).min(1),
-  provider: z.literal("hunter"),
+  provider: PersonProviderSchema,
   enriched_at: z.string().datetime(),
 });
 
