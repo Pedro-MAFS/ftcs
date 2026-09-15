@@ -20,16 +20,30 @@ function plansFile(root: string): string {
   return path.join(root, 'data', 'prefs', 'workflow-plans.json')
 }
 
-test('T1 listWorkflowPlans on empty workspace returns builtin-standard only', () => {
+test('T1 listWorkflowPlans on empty workspace returns builtin plans', () => {
   const root = tempRoot()
   const plans = listWorkflowPlans(root)
-  assert.equal(plans.length, 1)
+  assert.equal(plans.length, 2)
   assert.equal(plans[0].id, 'builtin-standard')
   assert.equal(plans[0].name, '标准获客')
   assert.equal(plans[0].builtin, true)
   assert.deepEqual(
     plans[0].steps.map((step) => step.nodeId),
     ['discover-r1', 'discover-r2', 'score-and-dedupe', 'draft-outreach-email'],
+  )
+  assert.equal(plans[1].id, 'builtin-advanced')
+  assert.equal(plans[1].name, '高级获客')
+  assert.equal(plans[1].builtin, true)
+  assert.deepEqual(
+    plans[1].steps.map((step) => step.nodeId),
+    [
+      'discover-r1',
+      'discover-r2',
+      'discover-r3',
+      'score-and-dedupe',
+      'enrich-lead-contacts',
+      'draft-outreach-email',
+    ],
   )
 })
 
@@ -137,14 +151,15 @@ test('T7 delete removes user plan from disk and list', () => {
   })
 
   deleteUserWorkflowPlan(root, saved.id)
-  assert.equal(listWorkflowPlans(root).length, 1)
+  assert.equal(listWorkflowPlans(root).length, 2)
   assert.equal(loadUserWorkflowPlans(root).length, 0)
 })
 
 test('T8 delete rejects builtin-standard', () => {
   const root = tempRoot()
   assert.throws(() => deleteUserWorkflowPlan(root, 'builtin-standard'), /内置方案不可删除/)
-  assert.equal(listWorkflowPlans(root).length, 1)
+  assert.throws(() => deleteUserWorkflowPlan(root, 'builtin-advanced'), /内置方案不可删除/)
+  assert.equal(listWorkflowPlans(root).length, 2)
 })
 
 test('T9 loadUserWorkflowPlans drops forged builtin records from file', () => {
@@ -174,9 +189,10 @@ test('T9 loadUserWorkflowPlans drops forged builtin records from file', () => {
   )
 
   const plans = listWorkflowPlans(root)
-  assert.equal(plans.length, 2)
+  assert.equal(plans.length, 3)
   assert.equal(plans[0].id, 'builtin-standard')
-  assert.equal(plans[1].id, 'user_deadbeef')
+  assert.equal(plans[1].id, 'builtin-advanced')
+  assert.equal(plans[2].id, 'user_deadbeef')
 })
 
 test('T10 corrupt json keeps builtin plans available', () => {
@@ -185,8 +201,9 @@ test('T10 corrupt json keeps builtin plans available', () => {
   fs.writeFileSync(plansFile(root), '{not json', 'utf8')
 
   const plans = listWorkflowPlans(root)
-  assert.equal(plans.length, 1)
+  assert.equal(plans.length, 2)
   assert.equal(plans[0].id, 'builtin-standard')
+  assert.equal(plans[1].id, 'builtin-advanced')
 })
 
 test('user plans are sorted by zh-CN name after builtin plans', () => {
@@ -195,20 +212,21 @@ test('user plans are sorted by zh-CN name after builtin plans', () => {
   saveUserWorkflowPlan(root, { name: '甲方案', steps: [{ nodeId: 'discover-r2' }] })
 
   const names = listWorkflowPlans(root).map((plan) => plan.name)
-  assert.deepEqual(names, ['标准获客', '甲方案', '乙方案'])
+  assert.deepEqual(names, ['标准获客', '高级获客', '甲方案', '乙方案'])
 })
 
 test('WORKFLOW_NODE_CATALOG covers all WorkflowNodeId values', () => {
-    assert.equal(WORKFLOW_NODE_CATALOG.length, 7)
+  assert.equal(WORKFLOW_NODE_CATALOG.length, 7)
   assert.equal(WORKFLOW_NODE_CATALOG[0].id, 'expand-keywords')
   for (const node of WORKFLOW_NODE_CATALOG) {
     assert.equal(isWorkflowNodeId(node.id), true)
   }
 })
 
-test('builtin-standard steps reference valid workflow nodes', () => {
-  const builtin = BUILTIN_WORKFLOW_PLANS[0]
-  for (const step of builtin.steps) {
-    assert.equal(isWorkflowNodeId(step.nodeId), true)
+test('builtin plans steps reference valid workflow nodes', () => {
+  for (const builtin of BUILTIN_WORKFLOW_PLANS) {
+    for (const step of builtin.steps) {
+      assert.equal(isWorkflowNodeId(step.nodeId), true)
+    }
   }
 })
