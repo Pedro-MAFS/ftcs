@@ -5,6 +5,7 @@ import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import { useExploreStart } from '../composables/useExploreStart'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
+import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
 import ExploreStartControl from '../components/explore/ExploreStartControl.vue'
 import KeywordEditorDialog from '../components/shared/KeywordEditorDialog.vue'
@@ -33,6 +34,13 @@ const {
 const expandedId = ref('')
 const actionMessage = ref('')
 const loading = ref(false)
+
+watch(actionMessage, (msg) => {
+  const text = msg.trim()
+  if (!text) return
+  showToast(text)
+  actionMessage.value = ''
+})
 const editorOpen = ref(false)
 const scoringLeads = ref(false)
 const previewRound = ref('R1')
@@ -448,7 +456,6 @@ onUnmounted(() => {
       </span>
     </div>
 
-    <p v-if="actionMessage" class="explore-action-msg">{{ actionMessage }}</p>
     <p
       v-if="hasKeywordsReady && !canStartSelected && !generating && startDisabledReason"
       class="explore-action-msg"

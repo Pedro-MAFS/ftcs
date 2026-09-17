@@ -43,6 +43,8 @@ export interface EmailDraftRow {
   hasCompanyDraft: boolean
   personDraftCount: number
   draftCount: number
+  approvedCount: number
+  pendingSlotCount: number
   subjectZh: string | null
   bodyZh: string | null
   stylePrompt: string | null
@@ -598,6 +600,8 @@ function buildLeadRow(
     hasCompanyDraft: slots.some((s) => s.slotKind === 'company'),
     personDraftCount: slots.filter((s) => s.slotKind === 'person').length,
     draftCount: slots.length,
+    approvedCount: slots.filter((s) => s.status === 'approved').length,
+    pendingSlotCount: slots.filter((s) => s.status === 'pending_review').length,
     subjectZh: asString(representativeRaw.subject_zh) || null,
     bodyZh: asString(representativeRaw.body_zh) || null,
     stylePrompt: asString(representativeRaw.style_prompt) || null,
@@ -640,6 +644,8 @@ export function buildEmailLeadStub(
     hasCompanyDraft: false,
     personDraftCount: 0,
     draftCount: 0,
+    approvedCount: 0,
+    pendingSlotCount: 0,
     subjectZh: null,
     bodyZh: null,
     stylePrompt: null,

@@ -5,6 +5,7 @@ import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import { useWorkflowExecute } from '../composables/useWorkflowExecute'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
+import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import WorkflowPlanControl from '../components/workflow/WorkflowPlanControl.vue'
@@ -45,6 +46,14 @@ const hunterVerifyEmails = ref(true)
 const hunterKeySet = ref(false)
 const pendingHighIds = ref<string[]>([])
 const actionMessage = ref('')
+
+watch(actionMessage, (msg) => {
+  const text = msg.trim()
+  if (!text) return
+  showToast(text)
+  actionMessage.value = ''
+})
+
 const snapshot = ref<LeadsSnapshotDto | null>(null)
 const selectedId = ref('')
 const drawerOpen = ref(false)
@@ -219,6 +228,35 @@ function applyRunQueryFromRoute(): void {
   runFilter.value = value
 }
 
+function routeLeadId(): string {
+  const raw = route.query.leadId
+  if (typeof raw === 'string') return raw.trim()
+  if (Array.isArray(raw) && typeof raw[0] === 'string') return raw[0].trim()
+  return ''
+}
+
+/** 邮件页「查看线索」：选中行并打开抽屉；同 leadId 轮询不重复强开 */
+const appliedLeadQuery = ref('')
+
+function applyLeadQueryFromRoute(): void {
+  const leadId = routeLeadId()
+  if (!leadId) {
+    appliedLeadQuery.value = ''
+    return
+  }
+  if (!snapshot.value) return
+  if (appliedLeadQuery.value === leadId) return
+
+  const row = rows.value.find((r) => r.id === leadId)
+  if (row) {
+    openDrawer(row)
+    appliedLeadQuery.value = leadId
+    return
+  }
+  actionMessage.value = `未找到线索 ${leadId}`
+  appliedLeadQuery.value = leadId
+}
+
 function contactTitle(row: LeadRowDto): string {
   if (row.contacts.length === 0) return ''
   return row.contacts.map((c) => `${c.type}: ${c.value}`).join('\n')
@@ -304,6 +342,7 @@ async function refreshLeads(): Promise<void> {
       const latest = snapshot.value.rows.find((r) => r.id === detailLead.value?.id)
       if (latest) detailLead.value = latest
     }
+    applyLeadQueryFromRoute()
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
     snapshot.value = null
@@ -714,8 +753,9 @@ watch(activeProductId, () => {
   runFilter.value = ''
   searchQuery.value = ''
   actionMessage.value = ''
+  appliedLeadQuery.value = ''
   closeDrawer()
-  if (route.query.runId) {
+  if (route.query.runId || route.query.leadId) {
     router.replace({ name: 'leads', query: {} }).catch(() => undefined)
   }
   void refreshLeads()
@@ -725,6 +765,14 @@ watch(
   () => route.query.runId,
   () => {
     applyRunQueryFromRoute()
+  },
+)
+
+watch(
+  () => route.query.leadId,
+  () => {
+    appliedLeadQuery.value = ''
+    applyLeadQueryFromRoute()
   },
 )
 
@@ -872,7 +920,6 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <p v-if="actionMessage" class="leads-banner">{{ actionMessage }}</p>
     <p v-if="!hunterKeySet" class="leads-banner leads-banner--hint">
       <span class="muted">补全联系人需 Hunter Key（设置 → 集成）</span>
     </p>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
+import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import type {
@@ -15,6 +16,7 @@ import type {
 
 const meta = SECTION_META.email
 const route = useRoute()
+const router = useRouter()
 const {
   activeProductId,
   generating,
@@ -30,10 +32,19 @@ const saving = ref(false)
 const rejecting = ref(false)
 const approving = ref(false)
 const rejectConfirmOpen = ref(false)
+const rejectAllConfirmOpen = ref(false)
 const rewriteConfirmOpen = ref(false)
 const discardConfirmOpen = ref(false)
 const pendingRecipientKey = ref('')
 const actionMessage = ref('')
+
+watch(actionMessage, (msg) => {
+  const text = msg.trim()
+  if (!text) return
+  showToast(text)
+  actionMessage.value = ''
+})
+
 const snapshot = ref<EmailDraftsSnapshotDto | null>(null)
 const selectedId = ref('')
 const selectedRecipientKey = ref('company')
@@ -98,7 +109,7 @@ const canReject = computed(
   () =>
     !!activeProductId.value &&
     !!selected.value &&
-    selected.value.draftCount > 0 &&
+    hasSlotDraft.value &&
     !isBusy.value,
 )
 
@@ -109,6 +120,8 @@ const canApprove = computed(
     hasSlotDraft.value &&
     !isBusy.value,
 )
+
+const canViewLead = computed(() => !!selected.value?.leadId)
 
 const canSave = computed(
   () =>
@@ -133,6 +146,14 @@ const slotActionLabel = computed(() => {
 })
 
 const rejectConfirmMessage = computed(() => {
+  const name =
+    activePoolItem.value?.displayName?.trim() ||
+    activePoolItem.value?.email?.trim() ||
+    '当前收件人'
+  return `将删除「${name}」的开发信，其它收件人草稿保留。`
+})
+
+const rejectAllConfirmMessage = computed(() => {
   const draft = selected.value
   if (!draft) return ''
   return `确定驳回「${draft.companyName}」整条线索的全部开发信吗？将删除 data/emails 下该线索目录，并把线索状态回退为 new。`
@@ -530,6 +551,36 @@ function statusLabel(status: string): string {
   return status || '—'
 }
 
+function completionLabel(row: EmailDraftRowDto): string {
+  const draftCount = row.draftCount ?? 0
+  if (draftCount <= 0) return '无稿'
+  const approved = row.approvedCount ?? 0
+  return `${approved}/${draftCount} 已通过`
+}
+
+/** 左栏审核进度色：未审 / 部分 / 全部 */
+function reviewProgressTone(
+  row: EmailDraftRowDto,
+): 'none' | 'partial' | 'complete' | '' {
+  const draftCount = row.draftCount ?? 0
+  if (draftCount <= 0) return ''
+  const approved = row.approvedCount ?? 0
+  if (approved <= 0) return 'none'
+  if (approved >= draftCount) return 'complete'
+  return 'partial'
+}
+
+/** 收件人芯片圆点：灰无稿 / 红待审 / 黄其它 / 绿已通过 */
+function chipDraftTone(
+  item: EmailRecipientPoolItemDto,
+): 'empty' | 'pending' | 'other' | 'approved' {
+  if (!item.hasDraft) return 'empty'
+  const status = (item.draftStatus || '').trim()
+  if (status === 'approved') return 'approved'
+  if (status === 'pending_review' || !status) return 'pending'
+  return 'other'
+}
+
 function chipSecondary(item: EmailRecipientPoolItemDto): string {
   if (item.kind === 'company') {
     const list = item.emails?.length ? item.emails : item.email ? [item.email] : []
@@ -588,6 +639,7 @@ const toEmailsMoreCount = computed(() => {
 
 function openRejectConfirm(): void {
   if (!canReject.value) return
+  rejectAllConfirmOpen.value = false
   rejectConfirmOpen.value = true
 }
 
@@ -596,30 +648,69 @@ function closeRejectConfirm(): void {
   rejectConfirmOpen.value = false
 }
 
-async function confirmReject(): Promise<void> {
+function closeRejectAllConfirm(): void {
+  if (rejecting.value) return
+  rejectAllConfirmOpen.value = false
+}
+
+function openRejectAllConfirm(): void {
+  if (rejecting.value) return
+  rejectConfirmOpen.value = false
+  rejectAllConfirmOpen.value = true
+}
+
+function goToLead(): void {
+  if (!selected.value?.leadId) return
+  router
+    .push({ name: 'leads', query: { leadId: selected.value.leadId } })
+    .catch(() => undefined)
+}
+
+async function runReject(scope: 'slot' | 'lead'): Promise<void> {
   if (!activeProductId.value || !selected.value || !window.ftcs?.rejectEmailDraft) {
     return
   }
   rejecting.value = true
   actionMessage.value = ''
+  const leadId = selected.value.leadId
   try {
     const res = await window.ftcs.rejectEmailDraft({
       productId: activeProductId.value,
-      leadId: selected.value.leadId,
+      leadId,
+      scope,
+      recipientKey: scope === 'slot' ? selectedRecipientKey.value : undefined,
     })
     actionMessage.value = res.message
-    if (res.ok) {
-      rejectConfirmOpen.value = false
+    if (!res.ok) return
+
+    rejectConfirmOpen.value = false
+    rejectAllConfirmOpen.value = false
+    const remaining = res.remainingDraftCount ?? 0
+    if (scope === 'lead' || remaining <= 0) {
       selectedId.value = ''
+      selectedRecipientKey.value = 'company'
       recipientPool.value = []
       clearEdits()
       await refreshDrafts({ forceHydrate: true })
+      return
     }
+    // 删当前槽后按默认规则重选收件人
+    selectedRecipientKey.value = ''
+    clearEdits()
+    await refreshDrafts({ forceHydrate: true })
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
   } finally {
     rejecting.value = false
   }
+}
+
+async function confirmReject(): Promise<void> {
+  await runReject('slot')
+}
+
+async function confirmRejectAll(): Promise<void> {
+  await runReject('lead')
 }
 
 async function onApprove(): Promise<void> {
@@ -729,6 +820,15 @@ onUnmounted(() => {
         <button
           type="button"
           class="btn-secondary"
+          :disabled="!canViewLead"
+          title="在线索页打开当前公司"
+          @click="goToLead"
+        >
+          查看线索
+        </button>
+        <button
+          type="button"
+          class="btn-secondary"
           :disabled="!canSave"
           title="保存当前收件人编辑（不改审批状态）"
           @click="onSave"
@@ -739,7 +839,7 @@ onUnmounted(() => {
           type="button"
           class="btn-secondary"
           :disabled="!canReject"
-          title="驳回整条线索的全部开发信"
+          title="驳回当前收件人的开发信"
           @click="openRejectConfirm"
         >
           {{ rejecting ? '驳回中…' : '驳回' }}
@@ -756,8 +856,6 @@ onUnmounted(() => {
         </button>
       </div>
     </header>
-
-    <p v-if="actionMessage" class="leads-banner">{{ actionMessage }}</p>
 
     <div class="email-layout">
       <aside class="draft-list">
@@ -778,7 +876,12 @@ onUnmounted(() => {
           :key="row.leadId"
           type="button"
           class="draft-list__item"
-          :class="{ 'is-active': selected?.leadId === row.leadId }"
+          :class="{
+            'is-active': selected?.leadId === row.leadId,
+            'is-review-none': reviewProgressTone(row) === 'none',
+            'is-review-partial': reviewProgressTone(row) === 'partial',
+            'is-review-complete': reviewProgressTone(row) === 'complete',
+          }"
           @click="selectDraft(row)"
         >
           <span class="draft-list__company">{{ row.companyName }}</span>
@@ -786,8 +889,8 @@ onUnmounted(() => {
             {{ row.subject || (row.draftCount ? '（无主题）' : '尚未起草') }}
           </span>
           <span class="draft-list__meta">
-            {{ row.draftCount ? statusLabel(row.status) : '无稿' }}
-            <template v-if="row.draftCount"> · {{ row.draftCount }} 封</template>
+            {{ completionLabel(row) }}
+            <template v-if="row.draftCount"> · {{ statusLabel(row.status) }}</template>
             <template v-if="row.tier"> · {{ row.tier }}</template>
           </span>
         </button>
@@ -809,7 +912,10 @@ onUnmounted(() => {
             :aria-selected="item.recipientKey === selectedRecipientKey"
             @click="requestRecipientSwitch(item.recipientKey)"
           >
-            <span class="recipient-chip__dot" :class="{ 'has-draft': item.hasDraft }" />
+            <span
+              class="recipient-chip__dot"
+              :class="`is-${chipDraftTone(item)}`"
+            />
             <span class="recipient-chip__text">
               <span class="recipient-chip__name">{{ item.displayName }}</span>
               <span class="recipient-chip__sub muted">{{ chipSecondary(item) }}</span>
@@ -823,22 +929,29 @@ onUnmounted(() => {
 
         <template v-if="hasSlotDraft">
           <dl class="email-preview__fields">
-            <div class="email-preview__field email-preview__field--full">
-              <dt>To</dt>
-              <dd
-                class="email-preview__to"
-                :class="{ 'has-more': toEmailsMoreCount > 0 }"
-                :title="toEmailsTitle || undefined"
-              >
-                <span>{{ toEmailsSummary }}</span>
-                <span v-if="toEmailsMoreCount > 0" class="email-preview__to-more">
-                  +{{ toEmailsMoreCount }}
-                </span>
-              </dd>
-            </div>
-            <div class="email-preview__field">
-              <dt>Company</dt>
-              <dd>{{ selected.companyName }}</dd>
+            <div class="email-preview__field email-preview__field--to-company">
+              <div class="email-preview__meta-block email-preview__meta-block--to">
+                <dt>To</dt>
+                <dd
+                  class="email-preview__to"
+                  :class="{ 'has-more': toEmailsMoreCount > 0 }"
+                  :title="toEmailsTitle || toEmailsSummary || undefined"
+                >
+                  <span class="email-preview__to-text">{{ toEmailsSummary }}</span>
+                  <span v-if="toEmailsMoreCount > 0" class="email-preview__to-more">
+                    +{{ toEmailsMoreCount }}
+                  </span>
+                </dd>
+              </div>
+              <div class="email-preview__meta-block email-preview__meta-block--company">
+                <dt>Company</dt>
+                <dd
+                  class="email-preview__company"
+                  :title="selected.companyName || undefined"
+                >
+                  {{ selected.companyName }}
+                </dd>
+              </div>
             </div>
             <div class="email-preview__field email-preview__field--full">
               <dt>Subject</dt>
@@ -851,14 +964,6 @@ onUnmounted(() => {
                   placeholder="邮件主题"
                 />
               </dd>
-            </div>
-            <div class="email-preview__field">
-              <dt>Status</dt>
-              <dd>{{ statusLabel(slotDetail?.status || '') }}</dd>
-            </div>
-            <div class="email-preview__field">
-              <dt>Path</dt>
-              <dd class="muted">{{ slotDetail?.draftPath || '—' }}</dd>
             </div>
           </dl>
 
@@ -915,14 +1020,27 @@ onUnmounted(() => {
 
     <ConfirmDialog
       :open="rejectConfirmOpen"
-      title="驳回整条线索开发信"
+      title="驳回当前收件人"
       :message="rejectConfirmMessage"
       confirm-label="确认驳回"
       cancel-label="取消"
+      secondary-label="驳回本线索全部开发信…"
       danger
       :busy="rejecting"
       @confirm="confirmReject"
+      @secondary="openRejectAllConfirm"
       @cancel="closeRejectConfirm"
+    />
+    <ConfirmDialog
+      :open="rejectAllConfirmOpen"
+      title="驳回本线索全部开发信"
+      :message="rejectAllConfirmMessage"
+      confirm-label="确认全部驳回"
+      cancel-label="取消"
+      danger
+      :busy="rejecting"
+      @confirm="confirmRejectAll"
+      @cancel="closeRejectAllConfirm"
     />
     <ConfirmDialog
       :open="rewriteConfirmOpen"

@@ -1242,7 +1242,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.EMAIL_DRAFT_SAVE, (_event, input: SaveEmailDraftSlotInput) => {
     try {
-      return saveEmailDraftSlot(input)
+      return saveEmailDraftSlot(input, getWorkspaceRoot())
     } catch (err) {
       return {
         ok: false,
@@ -1272,7 +1272,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.EMAIL_DRAFT_REJECT, (_event, input: RejectEmailDraftInput) => {
     try {
-      return rejectEmailDraft(input)
+      return rejectEmailDraft(input, getWorkspaceRoot())
     } catch (err) {
       return {
         ok: false,
@@ -1283,7 +1283,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.EMAIL_DRAFT_APPROVE, (_event, input: ApproveEmailDraftInput) => {
     try {
-      return approveEmailDraft(input)
+      return approveEmailDraft(input, getWorkspaceRoot())
     } catch (err) {
       return {
         ok: false,

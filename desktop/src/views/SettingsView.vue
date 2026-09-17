@@ -13,6 +13,7 @@ import { PRODUCT_LINKS } from '../config/links'
 import { shareAppDownload } from '../composables/useShareApp'
 import { useOnboarding } from '../composables/useOnboarding'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
+import { showToast } from '../composables/useToast'
 
 const meta = SECTION_META.settings
 const { status, runtimeHealthy, runtimeLabel, loading, restartOpenCode, refresh } =
@@ -52,6 +53,20 @@ const openingRecharge = ref(false)
 const openingPortal = ref(false)
 const message = ref('')
 const error = ref('')
+
+watch(message, (msg) => {
+  const text = msg.trim()
+  if (!text) return
+  showToast(text, { tone: 'success' })
+  message.value = ''
+})
+
+watch(error, (msg) => {
+  const text = msg.trim()
+  if (!text) return
+  showToast(text, { tone: 'error' })
+  error.value = ''
+})
 const showApiKey = ref(false)
 const showTavilyKey = ref(false)
 const showPlacesKey = ref(false)
@@ -622,9 +637,6 @@ async function onCheckUpdate(): Promise<void> {
         </button>
       </div>
     </header>
-
-    <p v-if="message" class="settings-banner is-ok">{{ message }}</p>
-    <p v-if="error" class="settings-banner is-err">{{ error }}</p>
 
     <div class="settings-layout">
       <nav class="settings-nav" aria-label="设置分类">

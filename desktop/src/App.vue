@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { RouterView } from 'vue-router'
 import OnboardingOverlay from './components/onboarding/OnboardingOverlay.vue'
 import InboxToast from './components/inbox/InboxToast.vue'
+import AppToast from './components/shared/AppToast.vue'
 import ConfirmDialog from './components/shared/ConfirmDialog.vue'
 import { useAuth } from './composables/useAuth'
 import { useInbox } from './composables/useInbox'
@@ -27,6 +28,7 @@ onMounted(() => {
   <div class="app-root" :data-platform="platform">
     <RouterView />
     <OnboardingOverlay />
+    <AppToast />
     <InboxToast />
     <ConfirmDialog
       :open="gatewayResetPromptOpen"

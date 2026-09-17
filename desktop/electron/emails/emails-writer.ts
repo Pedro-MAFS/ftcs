@@ -1,14 +1,33 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getWorkspaceRoot } from '../config/paths'
-import {
-  resolveSlotDraftAbsPath,
-  resolveSlotDraftRelPath,
-} from './emails-reader'
+
+const COMPANY_KEY = 'company'
+
+function resolveSlotDraftAbsPath(
+  leadId: string,
+  recipientKey: string,
+  workspaceRoot: string,
+): string {
+  const key = recipientKey.trim() || COMPANY_KEY
+  if (key === COMPANY_KEY) {
+    return path.join(workspaceRoot, 'data', 'emails', leadId, 'draft.json')
+  }
+  return path.join(workspaceRoot, 'data', 'emails', leadId, key, 'draft.json')
+}
+
+function resolveSlotDraftRelPath(leadId: string, recipientKey: string): string {
+  const key = recipientKey.trim() || COMPANY_KEY
+  if (key === COMPANY_KEY) return `data/emails/${leadId}/draft.json`
+  return `data/emails/${leadId}/${key}/draft.json`
+}
 
 export interface RejectEmailDraftInput {
   productId: string
   leadId: string
+  /** 默认 slot：仅删当前收件人；lead：删整线索全部开发信 */
+  scope?: 'slot' | 'lead'
+  /** scope=slot 时必填 */
+  recipientKey?: string
 }
 
 export interface RejectEmailDraftResult {
@@ -16,6 +35,10 @@ export interface RejectEmailDraftResult {
   message: string
   productId?: string
   leadId?: string
+  recipientKey?: string
+  scope?: 'slot' | 'lead'
+  leadStatus?: string
+  remainingDraftCount?: number
 }
 
 export interface EmailVariantEdit {
@@ -44,6 +67,8 @@ export interface ApproveEmailDraftResult {
   productId?: string
   leadId?: string
   recipientKey?: string
+  leadStatus?: string
+  remainingDraftCount?: number
 }
 
 export interface SaveEmailDraftSlotInput {
@@ -269,49 +294,212 @@ function removeEmailDocuments(
   return { removed: true, path: dir }
 }
 
+function readDraftStatus(filePath: string): string | null {
+  try {
+    const parsed = asRecord(JSON.parse(fs.readFileSync(filePath, 'utf8')))
+    if (!parsed) return null
+    return cleanString(parsed.status) || 'pending_review'
+  } catch {
+    return null
+  }
+}
+
+/** 枚举该 lead 下全部 draft.json 的 status */
+export function listLeadDraftStatuses(
+  leadId: string,
+  workspaceRoot: string,
+): string[] {
+  const dir = getEmailLeadDir(leadId, workspaceRoot)
+  if (!fs.existsSync(dir)) return []
+  const statuses: string[] = []
+  const companyPath = path.join(dir, 'draft.json')
+  if (fs.existsSync(companyPath)) {
+    const s = readDraftStatus(companyPath)
+    if (s) statuses.push(s)
+  }
+  for (const child of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!child.isDirectory()) continue
+    const personPath = path.join(dir, child.name, 'draft.json')
+    if (!fs.existsSync(personPath)) continue
+    const s = readDraftStatus(personPath)
+    if (s) statuses.push(s)
+  }
+  return statuses
+}
+
+export function countLeadDraftFiles(
+  leadId: string,
+  workspaceRoot: string,
+): number {
+  return listLeadDraftStatuses(leadId, workspaceRoot).length
+}
+
 /**
- * 驳回邮件草稿：线索 status → new，并删除 data/emails/{lead_id}/ 下全部文件。
- * 与画像修改一致：桌面主进程直接写盘，不经 MCP。
+ * 按磁盘槽位重算 scored lead.status：
+ * 无稿 → new；任一 approved → email_approved；否则 email_drafted
+ */
+export function recomputeLeadEmailStatus(
+  productId: string,
+  leadId: string,
+  workspaceRoot: string,
+): { ok: boolean; message: string; leadStatus: string; remainingDraftCount: number } {
+  const statuses = listLeadDraftStatuses(leadId, workspaceRoot)
+  const remainingDraftCount = statuses.length
+  let leadStatus = 'email_drafted'
+  if (remainingDraftCount === 0) leadStatus = 'new'
+  else if (statuses.includes('approved')) leadStatus = 'email_approved'
+
+  const statusResult = updateLeadStatus(productId, leadId, leadStatus, workspaceRoot)
+  return {
+    ok: statusResult.ok,
+    message: statusResult.message,
+    leadStatus,
+    remainingDraftCount,
+  }
+}
+
+function deleteEmailDraftSlotFiles(
+  leadId: string,
+  recipientKey: string,
+  workspaceRoot: string,
+): { removed: boolean; draftPath: string } {
+  const key = recipientKey.trim() || 'company'
+  const draftPath = resolveSlotDraftAbsPath(leadId, key, workspaceRoot)
+  const mdPath = getMarkdownPath(leadId, key, workspaceRoot)
+  let removed = false
+  if (fs.existsSync(draftPath)) {
+    fs.rmSync(draftPath, { force: true })
+    removed = true
+  }
+  if (fs.existsSync(mdPath)) {
+    fs.rmSync(mdPath, { force: true })
+    removed = true
+  }
+  if (key !== 'company') {
+    const personDir = path.dirname(draftPath)
+    if (fs.existsSync(personDir)) {
+      const left = fs.readdirSync(personDir)
+      if (left.length === 0) {
+        fs.rmSync(personDir, { recursive: true, force: true })
+      }
+    }
+  }
+  // 无任何 draft.json 则删空 lead 目录
+  if (countLeadDraftFiles(leadId, workspaceRoot) === 0) {
+    const dir = getEmailLeadDir(leadId, workspaceRoot)
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  }
+  return { removed, draftPath: resolveSlotDraftRelPath(leadId, key) }
+}
+
+/**
+ * 驳回邮件草稿。
+ * - scope=slot（默认）：仅删当前收件人槽，其它槽保留；重算 lead status
+ * - scope=lead：删整目录 + lead → new
  */
 export function rejectEmailDraft(
   input: RejectEmailDraftInput,
-  workspaceRoot = getWorkspaceRoot(),
+  workspaceRoot: string,
 ): RejectEmailDraftResult {
   const productId = cleanString(input.productId)
   const leadId = cleanString(input.leadId)
+  const scope = input.scope === 'lead' ? 'lead' : 'slot'
+  const recipientKey = cleanString(input.recipientKey) || 'company'
   if (!productId) return { ok: false, message: '缺少 productId' }
   if (!leadId) return { ok: false, message: '缺少 leadId' }
 
-  const emailDir = getEmailLeadDir(leadId, workspaceRoot)
-  const hasEmailDir = fs.existsSync(emailDir)
+  if (scope === 'lead') {
+    const emailDir = getEmailLeadDir(leadId, workspaceRoot)
+    const hasEmailDir = fs.existsSync(emailDir)
 
-  const statusResult = updateLeadStatus(productId, leadId, 'new', workspaceRoot)
-  if (!statusResult.ok) {
-    if (hasEmailDir) {
-      removeEmailDocuments(leadId, workspaceRoot)
-      return {
-        ok: false,
-        message: `${statusResult.message}；已尝试删除邮件目录`,
-        productId,
-        leadId,
+    const statusResult = updateLeadStatus(productId, leadId, 'new', workspaceRoot)
+    if (!statusResult.ok) {
+      if (hasEmailDir) {
+        removeEmailDocuments(leadId, workspaceRoot)
+        return {
+          ok: false,
+          message: `${statusResult.message}；已尝试删除邮件目录`,
+          productId,
+          leadId,
+          scope,
+          leadStatus: 'new',
+          remainingDraftCount: 0,
+        }
       }
+      return { ok: false, message: statusResult.message, productId, leadId, scope }
     }
-    return { ok: false, message: statusResult.message, productId, leadId }
+
+    const removed = removeEmailDocuments(leadId, workspaceRoot)
+    const parts = ['已驳回本线索全部开发信：线索状态回退为 new']
+    if (removed.removed) {
+      parts.push(`已删除 data/emails/${leadId}/`)
+    } else if (!hasEmailDir) {
+      parts.push('未找到邮件目录（可能已删除）')
+    }
+
+    return {
+      ok: true,
+      message: parts.join('；'),
+      productId,
+      leadId,
+      scope,
+      leadStatus: 'new',
+      remainingDraftCount: 0,
+    }
   }
 
-  const removed = removeEmailDocuments(leadId, workspaceRoot)
-  const parts = ['已驳回：线索状态回退为 new']
-  if (removed.removed) {
-    parts.push(`已删除 data/emails/${leadId}/（整条线索全部开发信）`)
-  } else if (!hasEmailDir) {
-    parts.push('未找到邮件目录（可能已删除）')
+  const draftPath = resolveSlotDraftAbsPath(leadId, recipientKey, workspaceRoot)
+  if (!fs.existsSync(draftPath)) {
+    return {
+      ok: false,
+      message: `未找到草稿：${resolveSlotDraftRelPath(leadId, recipientKey)}`,
+      productId,
+      leadId,
+      recipientKey,
+      scope,
+    }
+  }
+
+  const deleted = deleteEmailDraftSlotFiles(leadId, recipientKey, workspaceRoot)
+  if (!deleted.removed) {
+    return {
+      ok: false,
+      message: '删除草稿失败',
+      productId,
+      leadId,
+      recipientKey,
+      scope,
+    }
+  }
+
+  const recomputed = recomputeLeadEmailStatus(productId, leadId, workspaceRoot)
+  if (!recomputed.ok) {
+    return {
+      ok: false,
+      message: `已删除当前收件人草稿，但线索状态更新失败：${recomputed.message}`,
+      productId,
+      leadId,
+      recipientKey,
+      scope,
+      leadStatus: recomputed.leadStatus,
+      remainingDraftCount: recomputed.remainingDraftCount,
+    }
   }
 
   return {
     ok: true,
-    message: parts.join('；'),
+    message:
+      recomputed.remainingDraftCount === 0
+        ? '已驳回当前收件人开发信；本线索已无剩余草稿，状态回退为 new'
+        : `已驳回当前收件人开发信；仍保留 ${recomputed.remainingDraftCount} 封`,
     productId,
     leadId,
+    recipientKey,
+    scope,
+    leadStatus: recomputed.leadStatus,
+    remainingDraftCount: recomputed.remainingDraftCount,
   }
 }
 
@@ -320,7 +508,7 @@ export function rejectEmailDraft(
  */
 export function saveEmailDraftSlot(
   input: SaveEmailDraftSlotInput,
-  workspaceRoot = getWorkspaceRoot(),
+  workspaceRoot: string,
 ): SaveEmailDraftSlotResult {
   const productId = cleanString(input.productId)
   const leadId = cleanString(input.leadId)
@@ -400,7 +588,7 @@ export function saveEmailDraftSlot(
  */
 export function approveEmailDraft(
   input: ApproveEmailDraftInput,
-  workspaceRoot = getWorkspaceRoot(),
+  workspaceRoot: string,
 ): ApproveEmailDraftResult {
   const productId = cleanString(input.productId)
   const leadId = cleanString(input.leadId)
@@ -528,27 +716,26 @@ export function approveEmailDraft(
   fs.writeFileSync(draftPath, `${JSON.stringify(nextDraft, null, 2)}\n`, 'utf8')
   syncApprovedMarkdown(nextDraft, leadId, recipientKey, workspaceRoot)
 
-  const statusResult = updateLeadStatus(
-    productId,
-    leadId,
-    'email_approved',
-    workspaceRoot,
-  )
-  if (!statusResult.ok) {
+  const recomputed = recomputeLeadEmailStatus(productId, leadId, workspaceRoot)
+  if (!recomputed.ok) {
     return {
       ok: false,
-      message: `草稿已标记 approved，但线索状态更新失败：${statusResult.message}`,
+      message: `草稿已标记 approved，但线索状态更新失败：${recomputed.message}`,
       productId,
       leadId,
       recipientKey,
+      leadStatus: recomputed.leadStatus,
+      remainingDraftCount: recomputed.remainingDraftCount,
     }
   }
 
   return {
     ok: true,
-    message: '已通过并保存当前收件人草稿，线索状态 → email_approved',
+    message: `已通过并保存当前收件人草稿，线索状态 → ${recomputed.leadStatus}`,
     productId,
     leadId,
     recipientKey,
+    leadStatus: recomputed.leadStatus,
+    remainingDraftCount: recomputed.remainingDraftCount,
   }
 }

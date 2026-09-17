@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import type {
   LeadPersonDto,
   LeadRowDto,
@@ -8,6 +8,7 @@ import type {
   SaveScoredPeoplePersonInput,
 } from '../../types/electron'
 import Icon from './Icon.vue'
+import { showToast } from '../../composables/useToast'
 
 const props = defineProps<{
   open: boolean
@@ -78,6 +79,16 @@ const verifyingPersonId = ref('')
 const expandedSources = ref<Record<string, boolean>>({})
 const saveMessage = ref('')
 const saveError = ref(false)
+
+watch(saveMessage, async (msg) => {
+  const text = msg.trim()
+  if (!text) return
+  await nextTick()
+  showToast(text, { tone: saveError.value ? 'error' : 'info' })
+  saveMessage.value = ''
+  saveError.value = false
+})
+
 const peopleDraft = ref<PersonDraft[]>([])
 const draft = reactive<EditDraft>({
   companyName: '',
@@ -596,14 +607,6 @@ onUnmounted(() => {
               raw_score {{ lead.rawScore }}
             </span>
           </div>
-
-          <p
-            v-if="saveMessage"
-            class="lead-drawer__banner"
-            :class="{ 'is-error': saveError }"
-          >
-            {{ saveMessage }}
-          </p>
 
           <template v-if="editingPeople">
             <section class="lead-drawer__section">

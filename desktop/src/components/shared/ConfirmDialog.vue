@@ -8,12 +8,14 @@ const props = withDefaults(
     message: string
     confirmLabel?: string
     cancelLabel?: string
+    secondaryLabel?: string
     danger?: boolean
     busy?: boolean
   }>(),
   {
     confirmLabel: '确定',
     cancelLabel: '取消',
+    secondaryLabel: '',
     danger: false,
     busy: false,
   },
@@ -22,6 +24,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   confirm: []
   cancel: []
+  secondary: []
 }>()
 
 function onKeydown(event: KeyboardEvent): void {
@@ -68,6 +71,15 @@ onUnmounted(() => {
       <div class="confirm-dialog__panel">
         <h3 class="confirm-dialog__title">{{ title }}</h3>
         <p class="confirm-dialog__message">{{ message }}</p>
+        <button
+          v-if="secondaryLabel"
+          type="button"
+          class="confirm-dialog__link"
+          :disabled="busy"
+          @click="emit('secondary')"
+        >
+          {{ secondaryLabel }}
+        </button>
         <div class="confirm-dialog__actions">
           <button
             type="button"

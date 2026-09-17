@@ -5,6 +5,7 @@ import { SECTION_META } from '../types/workspace'
 import type { LibrarySnapshot, LibraryTreeNode } from '../types/library'
 import { useWorkspace } from '../composables/useWorkspace'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
+import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
 import LibraryTree from '../components/library/LibraryTree.vue'
 import LibraryContextMenu from '../components/library/LibraryContextMenu.vue'
@@ -47,6 +48,20 @@ const selectedIds = ref<Set<string>>(new Set())
 const busy = ref(false)
 const message = ref('')
 const error = ref('')
+
+watch(message, (msg) => {
+  const text = msg.trim()
+  if (!text) return
+  showToast(text, { tone: 'success' })
+  message.value = ''
+})
+
+watch(error, (msg) => {
+  const text = msg.trim()
+  if (!text) return
+  showToast(text, { tone: 'error' })
+  error.value = ''
+})
 const dragOver = ref(false)
 const dropImportDir = ref<string | null>(null)
 const dragDepth = ref(0)
@@ -1136,9 +1151,6 @@ onUnmounted(() => {
         <Icon name="info" :size="14" />
         资料保存在 data/library/。Ctrl 点选、Shift 范围选；F2 或右键可重命名；拖到另一夹移动。勾选文件夹后生成时纳入该夹下全部文件与网站。双击书签用浏览器打开。Ctrl+V 粘贴到焦点目录。生成画像时再分配产品 ID。
       </p>
-
-      <p v-if="message" class="library-feedback ok">{{ message }}</p>
-      <p v-if="error" class="library-feedback err">{{ error }}</p>
     </div>
 
     <ConfirmDialog

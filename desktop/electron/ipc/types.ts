@@ -649,6 +649,8 @@ export interface EmailDraftRowDto {
   hasCompanyDraft?: boolean
   personDraftCount?: number
   draftCount?: number
+  approvedCount?: number
+  pendingSlotCount?: number
   subjectZh?: string | null
   bodyZh?: string | null
   stylePrompt?: string | null
@@ -707,6 +709,8 @@ export interface DraftEmailsResult {
 export interface RejectEmailDraftInput {
   productId: string
   leadId: string
+  scope?: 'slot' | 'lead'
+  recipientKey?: string
 }
 
 export interface RejectEmailDraftResult {
@@ -714,6 +718,10 @@ export interface RejectEmailDraftResult {
   message: string
   productId?: string
   leadId?: string
+  recipientKey?: string
+  scope?: 'slot' | 'lead'
+  leadStatus?: string
+  remainingDraftCount?: number
 }
 
 export interface EmailVariantEditDto {
@@ -738,6 +746,8 @@ export interface ApproveEmailDraftResult {
   productId?: string
   leadId?: string
   recipientKey?: string
+  leadStatus?: string
+  remainingDraftCount?: number
 }
 
 export interface GetEmailDraftSlotInput {

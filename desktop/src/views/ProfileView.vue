@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
+import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
 import type { ProfileDetail, ProfileSaveInput } from '../types/electron'
 
@@ -48,6 +49,15 @@ const baseline = ref('')
 const saving = ref(false)
 const saveMessage = ref('')
 const saveError = ref(false)
+
+watch(saveMessage, async (msg) => {
+  const text = msg.trim()
+  if (!text) return
+  await nextTick()
+  showToast(text, { tone: saveError.value ? 'error' : 'success' })
+  saveMessage.value = ''
+  saveError.value = false
+})
 const expandError = ref('')
 
 const ROLE_LABELS: Record<string, string> = {
@@ -402,9 +412,6 @@ async function createExploreTask(): Promise<void> {
         <span v-if="activeProductId" class="mono muted">{{ activeProductId }}</span>
       </div>
 
-      <p v-if="saveMessage" class="library-feedback" :class="saveError ? 'err' : 'ok'">
-        {{ saveMessage }}
-      </p>
       <p v-if="generating" class="library-feedback ok">
         Agent 正在执行 extract-product-profile，请查看右侧日志。完成后将自动刷新本页。
       </p>
