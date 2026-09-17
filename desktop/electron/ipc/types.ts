@@ -55,6 +55,7 @@ export const IPC = {
   EMAIL_DRAFT_LIST: 'email:draft-list',
   EMAIL_DRAFT_GENERATE: 'email:draft-generate',
   EMAIL_DRAFT_GENERATE_SLOT: 'email:draft-generate-slot',
+  EMAIL_DRAFT_GENERATE_ZH: 'email:draft-generate-zh',
   EMAIL_DRAFT_GET: 'email:draft-get',
   EMAIL_DRAFT_SAVE: 'email:draft-save',
   EMAIL_RECIPIENT_POOL: 'email:recipient-pool',
@@ -773,6 +774,7 @@ export interface EmailDraftSlotDetailDto {
   body: string
   subjectZh: string | null
   bodyZh: string | null
+  zhStale?: boolean
   stylePrompt: string | null
   personalizationEvidence: string[]
   draftPath: string
@@ -836,6 +838,20 @@ export interface DraftEmailSlotInput {
 }
 
 export interface DraftEmailSlotResult {
+  ok: boolean
+  message: string
+  productId?: string
+  leadId?: string
+  recipientKey?: string
+}
+
+export interface GenerateEmailDraftZhInput {
+  productId: string
+  leadId: string
+  recipientKey?: string
+}
+
+export interface GenerateEmailDraftZhResult {
   ok: boolean
   message: string
   productId?: string

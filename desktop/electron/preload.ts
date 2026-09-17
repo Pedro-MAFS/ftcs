@@ -22,6 +22,8 @@ import type {
   DraftEmailsResult,
   DraftEmailSlotInput,
   DraftEmailSlotResult,
+  GenerateEmailDraftZhInput,
+  GenerateEmailDraftZhResult,
   EmailDraftsSnapshotDto,
   EmailDraftSlotDetailDto,
   EmailRecipientPoolResultDto,
@@ -312,6 +314,10 @@ const api = {
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_GENERATE, input),
   draftEmailSlot: (input: DraftEmailSlotInput): Promise<DraftEmailSlotResult> =>
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_GENERATE_SLOT, input),
+  generateEmailDraftZh: (
+    input: GenerateEmailDraftZhInput,
+  ): Promise<GenerateEmailDraftZhResult> =>
+    ipcRenderer.invoke(IPC.EMAIL_DRAFT_GENERATE_ZH, input),
   enrichLeadContacts: (
     input: import('./ipc/types').EnrichLeadContactsInput,
   ): Promise<import('./ipc/types').EnrichLeadContactsResult> =>

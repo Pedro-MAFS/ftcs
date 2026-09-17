@@ -137,6 +137,23 @@ function sha(value: string, len: number): string {
   return createHash('sha256').update(value).digest('hex').slice(0, len)
 }
 
+export function computeZhSourceHash(subject: string, body: string): string {
+  return sha(`${subject}\n${body}`, 16)
+}
+
+export function isZhContrastStale(
+  subject: string,
+  body: string,
+  subjectZh: string | null,
+  bodyZh: string | null,
+  zhSourceHash: string | null,
+): boolean {
+  const hasZh = Boolean(subjectZh || bodyZh)
+  if (!hasZh) return false
+  if (!zhSourceHash) return true
+  return zhSourceHash !== computeZhSourceHash(subject, body)
+}
+
 /** 与 lead-store email-recipient-key 对齐 */
 export function recipientKeyFromEmail(raw: string): string | null {
   const normalized = normalizeEmail(raw)
@@ -730,6 +747,7 @@ export type EmailDraftSlotDetail = {
   body: string
   subjectZh: string | null
   bodyZh: string | null
+  zhStale: boolean
   stylePrompt: string | null
   personalizationEvidence: string[]
   draftPath: string
@@ -761,6 +779,7 @@ export function getEmailDraftSlot(
     body: '',
     subjectZh: null,
     bodyZh: null,
+    zhStale: false,
     stylePrompt: null,
     personalizationEvidence: [],
     draftPath: resolveSlotDraftRelPath(lid, key),
@@ -806,6 +825,10 @@ export function getEmailDraftSlot(
     ? recipient.recipient_aliases.map(String).map((s) => s.trim().toLowerCase()).filter(Boolean)
     : []
 
+  const subjectZh = asString(parsed.raw.subject_zh) || null
+  const bodyZh = asString(parsed.raw.body_zh) || null
+  const zhSourceHash = asString(parsed.raw.zh_source_hash) || null
+
   return {
     ...base,
     exists: true,
@@ -817,8 +840,15 @@ export function getEmailDraftSlot(
     language: asString(parsed.raw.language) || 'en',
     subject: parsed.subject,
     body: parsed.body,
-    subjectZh: asString(parsed.raw.subject_zh) || null,
-    bodyZh: asString(parsed.raw.body_zh) || null,
+    subjectZh,
+    bodyZh,
+    zhStale: isZhContrastStale(
+      parsed.subject,
+      parsed.body,
+      subjectZh,
+      bodyZh,
+      zhSourceHash,
+    ),
     stylePrompt: asString(parsed.raw.style_prompt) || null,
     personalizationEvidence: evidence,
     companyName:

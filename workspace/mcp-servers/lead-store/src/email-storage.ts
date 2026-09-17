@@ -1,4 +1,7 @@
 import {
+  createHash,
+} from "node:crypto";
+import {
   existsSync,
   mkdirSync,
   readFileSync,
@@ -133,6 +136,25 @@ export function saveEmailDraftSlot(
         ? null
         : (existing?.style_prompt ?? null);
 
+  const subject_zh =
+    raw.subject_zh === undefined
+      ? (existing?.subject_zh ?? null)
+      : raw.subject_zh === null || raw.subject_zh === ""
+        ? null
+        : String(raw.subject_zh);
+  const body_zh =
+    raw.body_zh === undefined
+      ? (existing?.body_zh ?? null)
+      : raw.body_zh === null || raw.body_zh === ""
+        ? null
+        : String(raw.body_zh);
+  const zh_source_hash =
+    raw.zh_source_hash === undefined
+      ? (existing?.zh_source_hash ?? null)
+      : raw.zh_source_hash === null || raw.zh_source_hash === ""
+        ? null
+        : String(raw.zh_source_hash);
+
   const draft: EmailDraft = EmailDraftSchema.parse({
     ...raw,
     id:
@@ -152,8 +174,9 @@ export function saveEmailDraftSlot(
     recipient: raw.recipient ?? existing?.recipient,
     subject,
     body,
-    subject_zh: raw.subject_zh ?? null,
-    body_zh: raw.body_zh ?? null,
+    subject_zh,
+    body_zh,
+    zh_source_hash,
     style_prompt,
     personalization_evidence: Array.isArray(raw.personalization_evidence)
       ? raw.personalization_evidence
@@ -177,6 +200,104 @@ export function saveEmailDraftSlot(
   }
 
   return draft;
+}
+
+export function computeZhSourceHash(subject: string, body: string): string {
+  return createHash("sha256")
+    .update(`${subject}\n${body}`, "utf8")
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/**
+ * 仅写入中文对照字段，不改外文 subject/body/status。
+ */
+export function saveEmailDraftZh(
+  root: string,
+  leadId: string,
+  slot: EmailDraftSlot,
+  input: { subject_zh: string; body_zh: string }
+):
+  | {
+      success: true;
+      lead_id: string;
+      recipient_key: string;
+      draft_path: string;
+      subject_zh: string | null;
+      body_zh: string | null;
+      zh_source_hash: string;
+    }
+  | { success: false; error: string; lead_id: string; recipient_key: string } {
+  const recipient_key = recipientKeyFromSlot(slot);
+  const existing = loadEmailDraftSlot(root, leadId, slot);
+  if (!existing) {
+    return {
+      success: false,
+      error: "draft_not_found",
+      lead_id: leadId,
+      recipient_key,
+    };
+  }
+
+  const subject_zh = input.subject_zh.trim() || null;
+  const body_zh = input.body_zh.trim() || null;
+  if (!subject_zh && !body_zh) {
+    return {
+      success: false,
+      error: "empty_zh",
+      lead_id: leadId,
+      recipient_key,
+    };
+  }
+
+  const zh_source_hash = computeZhSourceHash(existing.subject, existing.body);
+  const now = new Date().toISOString();
+  const draft: EmailDraft = EmailDraftSchema.parse({
+    ...existing,
+    updated_at: now,
+    subject_zh,
+    body_zh,
+    zh_source_hash,
+  });
+
+  const draftPath = getEmailDraftPathForSlot(root, leadId, slot);
+  writeFileSync(draftPath, `${JSON.stringify(draft, null, 2)}\n`, "utf8");
+
+  return {
+    success: true,
+    lead_id: leadId,
+    recipient_key,
+    draft_path: relativeDraftPath(leadId, slot),
+    subject_zh,
+    body_zh,
+    zh_source_hash,
+  };
+}
+
+export function clearEmailDraftZh(
+  root: string,
+  leadId: string,
+  slot: EmailDraftSlot
+): { cleared: boolean; path: string } {
+  const existing = loadEmailDraftSlot(root, leadId, slot);
+  const path = relativeDraftPath(leadId, slot);
+  if (!existing) return { cleared: false, path };
+  if (!existing.subject_zh && !existing.body_zh && !existing.zh_source_hash) {
+    return { cleared: false, path };
+  }
+  const draft: EmailDraft = EmailDraftSchema.parse({
+    ...existing,
+    updated_at: new Date().toISOString(),
+    subject_zh: null,
+    body_zh: null,
+    zh_source_hash: null,
+  });
+  writeFileSync(
+    getEmailDraftPathForSlot(root, leadId, slot),
+    `${JSON.stringify(draft, null, 2)}\n`,
+    "utf8"
+  );
+  return { cleared: true, path };
 }
 
 export function saveEmailDraft(

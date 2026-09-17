@@ -398,6 +398,19 @@ export function useWorkspace() {
     updatePipelineFromProfile()
   }
 
+  function resetAgentForTranslateEmail(leadId: string, recipientKey: string): void {
+    agentSkill.value = 'translate-outreach-email'
+    agentStatus.value = 'running'
+    resetTimelineView()
+    agentMeta.value = [
+      { label: '状态', value: '翻译对照中', tone: 'accent' },
+      { label: '线索', value: leadId.slice(0, 18) || '—' },
+      { label: '槽', value: recipientKey.slice(0, 18) || 'company' },
+      { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
+    ]
+    updatePipelineFromProfile()
+  }
+
   function resetAgentForEnrichContacts(
     leadIds: string | string[],
     verifyEmails: boolean,
@@ -457,6 +470,7 @@ export function useWorkspace() {
     resetAgentForDiscoverLeads,
     resetAgentForScoreAndDedupe,
     resetAgentForDraftEmail,
+    resetAgentForTranslateEmail,
     resetAgentForEnrichContacts,
     toggleTimelineExpand,
     isTimelineExpanded,

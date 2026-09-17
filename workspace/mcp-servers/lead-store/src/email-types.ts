@@ -31,6 +31,7 @@ export const EmailDraftSchema = z.object({
   body: z.string(),
   subject_zh: z.string().nullable().optional(),
   body_zh: z.string().nullable().optional(),
+  zh_source_hash: z.string().nullable().optional(),
   style_prompt: z.string().nullable().optional(),
   personalization_evidence: z.array(z.string()).default([]),
   review: EmailReviewSchema.default({

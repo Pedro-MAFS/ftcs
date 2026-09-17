@@ -23,6 +23,7 @@ const {
   agentSkill,
   agentStatus,
   resetAgentForDraftEmail,
+  resetAgentForTranslateEmail,
 } = useWorkspace()
 
 const loading = ref(false)
@@ -35,6 +36,7 @@ const rejectConfirmOpen = ref(false)
 const rejectAllConfirmOpen = ref(false)
 const rewriteConfirmOpen = ref(false)
 const discardConfirmOpen = ref(false)
+const zhContrastOpen = ref(false)
 const pendingRecipientKey = ref('')
 const actionMessage = ref('')
 
@@ -86,7 +88,14 @@ const isDirty = computed(
 const isDrafting = computed(
   () =>
     drafting.value ||
-    (generating.value && agentSkill.value === 'draft-outreach-email'),
+    (generating.value &&
+      (agentSkill.value === 'draft-outreach-email' ||
+        agentSkill.value === 'translate-outreach-email')),
+)
+
+const isTranslatingZh = computed(
+  () =>
+    generating.value && agentSkill.value === 'translate-outreach-email',
 )
 
 const isBusy = computed(
@@ -139,6 +148,26 @@ const canSlotDraft = computed(
     !!selectedRecipientKey.value &&
     !isBusy.value,
 )
+
+const canGenerateZh = computed(
+  () =>
+    !!activeProductId.value &&
+    !!selected.value &&
+    hasSlotDraft.value &&
+    !isDirty.value &&
+    !isBusy.value,
+)
+
+const hasZhContrast = computed(
+  () => Boolean(slotDetail.value?.subjectZh || slotDetail.value?.bodyZh),
+)
+
+const zhContrastStale = computed(() => Boolean(slotDetail.value?.zhStale))
+
+const zhActionLabel = computed(() => {
+  if (isTranslatingZh.value) return '生成中…'
+  return hasZhContrast.value ? '刷新中文对照' : '生成中文对照'
+})
 
 const slotActionLabel = computed(() => {
   if (isDrafting.value) return hasSlotDraft.value ? '重写中…' : '起草中…'
@@ -742,6 +771,43 @@ async function onApprove(): Promise<void> {
   }
 }
 
+async function onGenerateZh(): Promise<void> {
+  if (!canGenerateZh.value || !activeProductId.value || !selected.value) return
+  if (isDirty.value) {
+    actionMessage.value = '请先保存原文再生成对照'
+    return
+  }
+  if (!window.ftcs?.generateEmailDraftZh) {
+    actionMessage.value = '当前环境不支持中文对照'
+    return
+  }
+  if (generating.value) {
+    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    return
+  }
+  const preflightError = await ensureAgentReady('draft-email')
+  if (preflightError) {
+    actionMessage.value = preflightError
+    return
+  }
+  const leadId = selected.value.leadId
+  const recipientKey = selectedRecipientKey.value || 'company'
+  resetAgentForTranslateEmail(leadId, recipientKey)
+  actionMessage.value = ''
+  try {
+    const res = await window.ftcs.generateEmailDraftZh({
+      productId: activeProductId.value,
+      leadId,
+      recipientKey,
+    })
+    actionMessage.value = res.message
+    if (!res.ok) return
+    zhContrastOpen.value = true
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
 watch(activeProductId, () => {
   actionMessage.value = ''
   selectedId.value = ''
@@ -765,9 +831,14 @@ watch(
 watch(agentStatus, (status) => {
   if (
     (status === 'done' || status === 'error') &&
-    agentSkill.value === 'draft-outreach-email'
+    (agentSkill.value === 'draft-outreach-email' ||
+      agentSkill.value === 'translate-outreach-email')
   ) {
-    void refreshDrafts({ forceHydrate: true })
+    void refreshDrafts({ forceHydrate: true }).then(() => {
+      if (status === 'done' && agentSkill.value === 'translate-outreach-email') {
+        zhContrastOpen.value = true
+      }
+    })
   }
 })
 
@@ -975,6 +1046,61 @@ onUnmounted(() => {
               placeholder="邮件正文"
               spellcheck="false"
             />
+          </div>
+
+          <div class="email-zh-contrast">
+            <button
+              type="button"
+              class="email-zh-contrast__toggle"
+              :aria-expanded="zhContrastOpen"
+              @click="zhContrastOpen = !zhContrastOpen"
+            >
+              <span>{{ zhContrastOpen ? '▾' : '▸' }}</span>
+              <span>中文对照（辅助审阅，外发仍用原文）</span>
+              <span class="muted email-zh-contrast__badge">
+                {{
+                  hasZhContrast
+                    ? zhContrastStale
+                      ? '可能过期'
+                      : '已生成'
+                    : '未生成'
+                }}
+              </span>
+            </button>
+            <div v-if="zhContrastOpen" class="email-zh-contrast__panel">
+              <p v-if="zhContrastStale" class="email-zh-contrast__stale">
+                原文已更新，对照可能过期，建议刷新。
+              </p>
+              <p v-else-if="hasZhContrast && slotDetail?.zhStale === false" class="sr-only">
+                对照与原文一致
+              </p>
+              <dl v-if="hasZhContrast" class="email-zh-contrast__fields">
+                <div>
+                  <dt>中文主题</dt>
+                  <dd>{{ slotDetail?.subjectZh || '—' }}</dd>
+                </div>
+                <div>
+                  <dt>中文正文</dt>
+                  <dd class="email-zh-contrast__body">{{ slotDetail?.bodyZh || '—' }}</dd>
+                </div>
+              </dl>
+              <p v-else class="muted email-zh-contrast__empty">尚未生成中文对照</p>
+              <button
+                type="button"
+                class="btn-secondary btn-sm"
+                :disabled="!canGenerateZh"
+                :title="
+                  isDirty
+                    ? '请先保存原文再生成对照'
+                    : hasZhContrast
+                      ? '根据当前外文重新翻译'
+                      : '为当前收件人生成中文对照'
+                "
+                @click="onGenerateZh"
+              >
+                {{ zhActionLabel }}
+              </button>
+            </div>
           </div>
 
           <section

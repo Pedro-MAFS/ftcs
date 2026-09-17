@@ -27,6 +27,7 @@
 | `email_draft_generate` | 为高意向线索生成邮件草稿（json + md） |
 | `email_draft_get` | 读取单条邮件草稿 |
 | `email_draft_save` | 保存/更新邮件草稿（智能体润色后） |
+| `email_draft_save_zh` | 仅写入中文对照 `subject_zh`/`body_zh`（不改外文） |
 | `email_draft_list` | 列出邮件草稿 |
 
 ## 开发

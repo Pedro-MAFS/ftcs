@@ -34,6 +34,7 @@ import {
   recipientKeyFromEmail,
   type EmailDraftsArtifact,
 } from '../emails/emails-reader'
+import { clearEmailDraftZh } from '../emails/emails-writer'
 import { formatEmailStylePromptBlock, resolveEmailDraftStylePrompt } from '../settings/email-draft-style'
 import { readUserPrefs } from '../config/user-prefs'
 
@@ -225,6 +226,39 @@ function buildDraftOutreachSlotPrompt(input: {
     input.audience === 'company'
       ? `输出路径：data/emails/${input.leadId}/draft.json`
       : `输出路径：data/emails/${input.leadId}/{recipient_key}/draft.json`,
+  ].join('\n')
+}
+
+function buildTranslateOutreachPrompt(input: {
+  productId: string
+  leadId: string
+  recipientKey: string
+  audience: string
+  companyName: string
+  subject: string
+  body: string
+}): string {
+  return [
+    '请严格按 skill `translate-outreach-email` 执行：将下列外文开发信译为中文对照（辅助审阅）。',
+    '',
+    `产品 ID：${input.productId}`,
+    `线索 ID lead_id：${input.leadId}`,
+    `recipient_key：${input.recipientKey}`,
+    `audience：${input.audience}`,
+    `公司：${input.companyName || '（未知）'}`,
+    '',
+    '【外文主题】',
+    input.subject,
+    '',
+    '【外文正文】',
+    input.body,
+    '',
+    '执行要求：',
+    '1. 忠实译为简体中文主题与正文；不扩写；专有名词可保留英文。',
+    '2. 必须调用 lead-store.email_draft_save_zh（lead_id、recipient_key、subject_zh、body_zh）。',
+    '3. 禁止 email_draft_save / email_draft_plan / email_draft_plan_slot。',
+    '4. 不要改外文 subject/body，不要改审批状态。',
+    '5. 用一两句中文汇报已写入对照。',
   ].join('\n')
 }
 
@@ -1446,6 +1480,12 @@ export class AgentRunController {
         )
       }
 
+      try {
+        clearEmailDraftZh(leadId, checkKey, getWorkspaceRoot())
+      } catch {
+        // 清空对照失败不阻断起草成功
+      }
+
       const message = `单槽起草完成：${slot.draftPath}`
       timeline.addSuffix({
         id: 'sys-done',
@@ -1463,6 +1503,234 @@ export class AgentRunController {
         message,
       })
       return { ok: true, message, recipientKey: checkKey }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      timeline.addSuffix({
+        id: 'sys-error',
+        kind: 'error',
+        time: nowTime(),
+        title: '错误',
+        body: message,
+      })
+      flushTimeline()
+      pushState('error')
+      emit({
+        type: 'done',
+        ok: false,
+        productId,
+        message,
+      })
+      return { ok: false, message }
+    } finally {
+      stopEvents?.()
+      this.running = false
+      this.abort = null
+    }
+  }
+
+  async runTranslateOutreachEmail(
+    options: {
+      productId: string
+      leadId: string
+      recipientKey?: string
+    },
+    emit: AgentEventSink,
+  ): Promise<{ ok: boolean; message: string; recipientKey?: string }> {
+    if (this.running) {
+      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+    }
+
+    const client = this.getClient()
+    if (!client) {
+      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+    }
+
+    const productId = options.productId.trim()
+    const leadId = options.leadId.trim()
+    const recipientKey = options.recipientKey?.trim() || 'company'
+    if (!productId) throw new Error('缺少 productId')
+    if (!leadId) throw new Error('缺少 leadId')
+
+    const slotBefore = getEmailDraftSlot(productId, leadId, recipientKey)
+    if (!slotBefore.ok || !slotBefore.exists) {
+      throw new Error(`未找到草稿：${slotBefore.draftPath || recipientKey}`)
+    }
+    if (!slotBefore.subject?.trim() || !slotBefore.body?.trim()) {
+      throw new Error('外文主题或正文为空，无法生成对照')
+    }
+
+    const idleTimeoutMs = 8 * 60_000
+    this.running = true
+    this.abort = new AbortController()
+    const signal = this.abort.signal
+    const startedAt = Date.now()
+    const timeline = new TimelineBuilder()
+
+    const flushTimeline = () => {
+      const items = timeline.emitIfChanged()
+      if (items) emit({ type: 'timeline', items })
+    }
+
+    const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
+      const elapsedSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+      const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0')
+      const ss = String(elapsedSec % 60).padStart(2, '0')
+      let readiness = '翻译对照中'
+      let tone = 'accent'
+      if (status === 'done') {
+        readiness = '已完成'
+        tone = 'success'
+      } else if (status === 'error') {
+        readiness = '失败'
+        tone = 'warning'
+      }
+      emit({
+        type: 'state',
+        skill: 'translate-outreach-email',
+        status,
+        productId,
+        meta: [
+          { label: '状态', value: readiness, tone },
+          { label: '线索', value: leadId.slice(0, 18) },
+          { label: '槽', value: recipientKey },
+          { label: '产品', value: productId.slice(0, 18) },
+          { label: '耗时', value: `${mm}:${ss}` },
+        ],
+      })
+    }
+
+    const promptText = buildTranslateOutreachPrompt({
+      productId,
+      leadId,
+      recipientKey,
+      audience: slotBefore.audience,
+      companyName: slotBefore.companyName,
+      subject: slotBefore.subject,
+      body: slotBefore.body,
+    })
+
+    this.attachTimeline(timeline)
+    timeline.reset()
+    timeline.addPrefix({
+      id: 'sys-prepare',
+      kind: 'system',
+      time: nowTime(),
+      title: '系统',
+      body: `准备生成中文对照 · ${leadId} · ${recipientKey}`,
+    })
+    timeline.addPrefix({
+      id: 'user-translate',
+      kind: 'user',
+      time: nowTime(),
+      title: '你的指令 · 中文对照',
+      body: promptText,
+      collapsed: true,
+    })
+    pushState('running')
+    flushTimeline()
+
+    let stopEvents: (() => void) | null = null
+
+    try {
+      const created = await client.session.create({
+        title: `translate-outreach-email · ${leadId}`,
+      })
+      if (created.error || !created.data?.id) {
+        throw new Error(
+          typeof created.error === 'object' && created.error && 'message' in created.error
+            ? String((created.error as { message?: string }).message)
+            : '创建 OpenCode 会话失败',
+        )
+      }
+      this.sessionId = created.data.id
+      timeline.addPrefix({
+        id: 'sys-session',
+        kind: 'system',
+        time: nowTime(),
+        title: '会话',
+        body: `已创建 OpenCode session\n${this.sessionId}`,
+      })
+      flushTimeline()
+
+      const bridge = this.startEventBridge(
+        client,
+        this.sessionId,
+        timeline,
+        flushTimeline,
+        promptText,
+      )
+      stopEvents = bridge.stop
+
+      const promptPromise = client.session.promptAsync({
+        sessionID: this.sessionId,
+        parts: [{ type: 'text', text: promptText }],
+      })
+      void promptPromise
+
+      const idleResult = await this.waitForSessionIdle(
+        client,
+        this.sessionId,
+        signal,
+        idleTimeoutMs,
+      )
+
+      if (idleResult === 'abort') {
+        const abortMessage = this.autoAbortReason ?? '用户中止了中文对照生成'
+        pushState('error')
+        timeline.addSuffix({
+          id: 'sys-abort',
+          kind: 'error',
+          time: nowTime(),
+          title: this.autoAbortReason ? '失败' : '已中止',
+          body: abortMessage,
+        })
+        flushTimeline()
+        emit({
+          type: 'done',
+          ok: false,
+          productId,
+          message: abortMessage,
+        })
+        return { ok: false, message: abortMessage }
+      }
+
+      if (idleResult === 'timeout') {
+        throw new Error('等待 OpenCode 会话 idle 超时')
+      }
+
+      const slot = await loadWithGrace(
+        () => {
+          const detail = getEmailDraftSlot(productId, leadId, recipientKey)
+          const hasZh = Boolean(detail.subjectZh || detail.bodyZh)
+          return detail.ok && detail.exists && hasZh ? detail : null
+        },
+        { signal, attempts: 16, intervalMs: 500 },
+      )
+
+      if (!slot) {
+        throw new Error(
+          this.lastModelError ??
+            `会话已结束，但未写入中文对照。请确认已调用 email_draft_save_zh。`,
+        )
+      }
+
+      const message = `中文对照已写入：${slot.draftPath}`
+      timeline.addSuffix({
+        id: 'sys-done',
+        kind: 'system',
+        time: nowTime(),
+        title: '完成',
+        body: message,
+      })
+      flushTimeline()
+      pushState('done')
+      emit({
+        type: 'done',
+        ok: true,
+        productId,
+        message,
+      })
+      return { ok: true, message, recipientKey }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       timeline.addSuffix({

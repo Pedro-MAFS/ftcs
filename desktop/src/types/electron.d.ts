@@ -551,6 +551,7 @@ export interface EmailDraftSlotDetailDto {
   body: string
   subjectZh: string | null
   bodyZh: string | null
+  zhStale?: boolean
   stylePrompt: string | null
   personalizationEvidence: string[]
   draftPath: string
@@ -614,6 +615,20 @@ export interface DraftEmailSlotInput {
 }
 
 export interface DraftEmailSlotResult {
+  ok: boolean
+  message: string
+  productId?: string
+  leadId?: string
+  recipientKey?: string
+}
+
+export interface GenerateEmailDraftZhInput {
+  productId: string
+  leadId: string
+  recipientKey?: string
+}
+
+export interface GenerateEmailDraftZhResult {
   ok: boolean
   message: string
   productId?: string
@@ -885,6 +900,9 @@ declare global {
       ) => Promise<EmailRecipientPoolResultDto>
       draftEmails: (input: DraftEmailsInput) => Promise<DraftEmailsResult>
       draftEmailSlot: (input: DraftEmailSlotInput) => Promise<DraftEmailSlotResult>
+      generateEmailDraftZh: (
+        input: GenerateEmailDraftZhInput,
+      ) => Promise<GenerateEmailDraftZhResult>
       enrichLeadContacts: (input: {
         productId: string
         leadId?: string

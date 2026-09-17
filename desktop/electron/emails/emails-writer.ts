@@ -504,6 +504,49 @@ export function rejectEmailDraft(
 }
 
 /**
+ * 清空当前槽中文对照（外文重写后调用）。
+ */
+export function clearEmailDraftZh(
+  leadId: string,
+  recipientKey: string,
+  workspaceRoot: string,
+): { cleared: boolean; draftPath: string } {
+  const key = cleanString(recipientKey) || 'company'
+  const draftPath = resolveSlotDraftAbsPath(leadId, key, workspaceRoot)
+  const rel = resolveSlotDraftRelPath(leadId, key)
+  if (!fs.existsSync(draftPath)) {
+    return { cleared: false, draftPath: rel }
+  }
+
+  let draft: Record<string, unknown>
+  try {
+    const parsed = asRecord(JSON.parse(fs.readFileSync(draftPath, 'utf8')))
+    if (!parsed) return { cleared: false, draftPath: rel }
+    draft = parsed
+  } catch {
+    return { cleared: false, draftPath: rel }
+  }
+
+  if (
+    draft.subject_zh == null &&
+    draft.body_zh == null &&
+    draft.zh_source_hash == null
+  ) {
+    return { cleared: false, draftPath: rel }
+  }
+
+  const next = {
+    ...draft,
+    updated_at: new Date().toISOString(),
+    subject_zh: null,
+    body_zh: null,
+    zh_source_hash: null,
+  }
+  fs.writeFileSync(draftPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+  return { cleared: true, draftPath: rel }
+}
+
+/**
  * 按槽保存编辑：不改审批状态。
  */
 export function saveEmailDraftSlot(

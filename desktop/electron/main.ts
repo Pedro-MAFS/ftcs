@@ -64,6 +64,7 @@ import type {
   ExportLeadsCsvInput,
   DraftEmailsInput,
   DraftEmailSlotInput,
+  GenerateEmailDraftZhInput,
   RejectEmailDraftInput,
   ApproveEmailDraftInput,
   GetEmailDraftSlotInput,
@@ -1232,6 +1233,7 @@ function registerIpcHandlers(): void {
         body: '',
         subjectZh: null,
         bodyZh: null,
+        zhStale: false,
         stylePrompt: null,
         personalizationEvidence: [],
         draftPath: '',
@@ -1384,6 +1386,55 @@ function registerIpcHandlers(): void {
         productId,
         leadId,
         recipientKey: input.recipientKey || (audience === 'company' ? 'company' : undefined),
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.EMAIL_DRAFT_GENERATE_ZH, async (event, input: GenerateEmailDraftZhInput) => {
+    try {
+      const productId = input?.productId
+      const leadId = input?.leadId
+      if (!productId || typeof productId !== 'string') {
+        return { ok: false, message: '缺少 productId' }
+      }
+      if (!leadId || typeof leadId !== 'string') {
+        return { ok: false, message: '缺少 leadId' }
+      }
+      const recipientKey =
+        typeof input.recipientKey === 'string' && input.recipientKey.trim()
+          ? input.recipientKey.trim()
+          : 'company'
+      const preflight = await gateAgentStart('draft-email')
+      if (!preflight.ok) {
+        return { ok: false, message: preflight.message }
+      }
+
+      const sender = event.sender
+      void getAgentRunner()
+        .runTranslateOutreachEmail(
+          { productId, leadId, recipientKey },
+          (payload) => emitAgentEvent(sender, payload),
+        )
+        .catch((err) => {
+          emitAgentEvent(sender, {
+            type: 'done',
+            ok: false,
+            productId,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        })
+
+      return {
+        ok: true,
+        message: `正在生成中文对照…`,
+        productId,
+        leadId,
+        recipientKey,
       }
     } catch (err) {
       return {

@@ -44,13 +44,14 @@ import {
   loadEmailDraftSlot,
   planEmailDraftSlotForProduct,
   saveEmailDraftSlot,
+  saveEmailDraftZh,
   slotFromRecipientKey,
   recipientKeyFromSlot,
 } from "./email-storage.js";
 
 const server = new McpServer({
   name: "lead-store",
-  version: "0.5.6",
+  version: "0.5.7",
 });
 
 server.tool(
@@ -1048,6 +1049,35 @@ server.tool(
             null,
             2
           ),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  "email_draft_save_zh",
+  "Save Chinese review contrast (subject_zh/body_zh) for an existing draft slot only. Does NOT change English subject/body/status. Use after translate-outreach-email.",
+  {
+    lead_id: z.string(),
+    recipient_key: z.string().optional(),
+    subject_zh: z.string(),
+    body_zh: z.string(),
+    product_id: z.string().optional(),
+  },
+  async ({ lead_id, recipient_key, subject_zh, body_zh, product_id }) => {
+    void product_id;
+    const root = getProjectRoot();
+    const slot = slotFromRecipientKey(recipient_key);
+    const result = saveEmailDraftZh(root, lead_id, slot, {
+      subject_zh,
+      body_zh,
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(result, null, 2),
         },
       ],
     };
