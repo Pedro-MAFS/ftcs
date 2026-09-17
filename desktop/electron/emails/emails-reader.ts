@@ -140,6 +140,7 @@ type ScoredLeadLite = {
   status: string
   score: number | null
   email: string
+  contacts: Array<{ type: string; value: string }>
 }
 
 function loadScoredLeadMap(
@@ -160,15 +161,17 @@ function loadScoredLeadMap(
       const id = asString(raw.id)
       if (!id) continue
       const company = asRecord(raw.company) ?? {}
-      const contacts = Array.isArray(raw.contacts) ? raw.contacts : []
+      const contactsRaw = Array.isArray(raw.contacts) ? raw.contacts : []
+      const contacts: Array<{ type: string; value: string }> = []
       let email = ''
-      for (const c of contacts) {
+      for (const c of contactsRaw) {
         const contact = asRecord(c)
         if (!contact) continue
-        if (asString(contact.type) === 'email' && asString(contact.value)) {
-          email = asString(contact.value)
-          break
-        }
+        const type = asString(contact.type) || 'email'
+        const value = asString(contact.value)
+        if (!value) continue
+        contacts.push({ type, value })
+        if (!email && type === 'email') email = value
       }
       map.set(id, {
         id,
@@ -177,6 +180,7 @@ function loadScoredLeadMap(
         status: asString(raw.status) || 'new',
         score: asNumber(raw.score),
         email,
+        contacts,
       })
     }
   } catch {
@@ -203,6 +207,74 @@ export function listLeadsNeedingDraft(
 
 /** @deprecated 使用 listLeadsNeedingDraft；保留别名避免外部引用断裂 */
 export const listHighLeadsNeedingDraft = listLeadsNeedingDraft
+
+/** E3 通用本地部分（与 lead-store 冻结表对齐，供预计封数） */
+const GENERIC_EMAIL_LOCAL_PARTS = new Set([
+  'info',
+  'sales',
+  'contact',
+  'contacts',
+  'admin',
+  'support',
+  'hello',
+  'office',
+  'mail',
+  'enquiry',
+  'inquiry',
+  'service',
+  'help',
+  'team',
+  'marketing',
+  'business',
+  'export',
+  'import',
+  'purchase',
+  'purchasing',
+  'buyer',
+  'buyers',
+])
+
+const MAX_PERSON_DRAFT_SLOTS = 5
+
+function countPersonEmailsFromContacts(
+  contacts: Array<{ type?: string; value?: string }> | undefined,
+): number {
+  if (!Array.isArray(contacts)) return 0
+  const seen = new Set<string>()
+  let personCount = 0
+  for (const c of contacts) {
+    if (c?.type !== 'email') continue
+    const email = String(c.value ?? '')
+      .trim()
+      .toLowerCase()
+    if (!email.includes('@') || seen.has(email)) continue
+    seen.add(email)
+    const local = email.split('@')[0] ?? ''
+    if (!GENERIC_EMAIL_LOCAL_PARTS.has(local)) personCount += 1
+  }
+  return personCount
+}
+
+/** 预计 1+N 封数（公司向恒 1 + 个人向 cap 5） */
+export function estimateOutreachDraftCounts(
+  productId: string,
+  leadIds: string[],
+  workspaceRoot = getWorkspaceRoot(),
+): { leadCount: number; estimatedLetters: number; cappedLeads: number } {
+  const map = loadScoredLeadMap(productId, workspaceRoot)
+  let estimatedLetters = 0
+  let cappedLeads = 0
+  let leadCount = 0
+  for (const id of leadIds) {
+    const lead = map.get(id)
+    if (!lead) continue
+    leadCount += 1
+    const persons = countPersonEmailsFromContacts(lead.contacts)
+    if (persons > MAX_PERSON_DRAFT_SLOTS) cappedLeads += 1
+    estimatedLetters += 1 + Math.min(persons, MAX_PERSON_DRAFT_SLOTS)
+  }
+  return { leadCount, estimatedLetters, cappedLeads }
+}
 
 function needsMigration(raw: Record<string, unknown>): boolean {
   const hasVariants = Array.isArray(raw.variants) && raw.variants.length > 0

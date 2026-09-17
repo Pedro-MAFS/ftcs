@@ -27,6 +27,7 @@ import {
   type ScoredLeadsArtifact,
 } from '../leads/leads-reader'
 import {
+  estimateOutreachDraftCounts,
   listLeadsNeedingDraft,
   loadEmailDraftsArtifact,
   type EmailDraftsArtifact,
@@ -152,11 +153,15 @@ function buildScoreAndDedupePrompt(productId: string): string {
 function buildDraftOutreachPrompt(
   productId: string,
   leadIds: string[],
+  estimatedLetters: number,
 ): string {
   const idsJson = JSON.stringify(leadIds)
   const limit = Math.min(Math.max(leadIds.length, 1), 50)
   const styleBlock = formatEmailStylePromptBlock(
     resolveEmailDraftStylePrompt(readUserPrefs().emailDraftStylePrompt),
+  )
+  const stylePrompt = resolveEmailDraftStylePrompt(
+    readUserPrefs().emailDraftStylePrompt,
   )
   return [
     '请严格按 skill `draft-outreach-email` 执行，为指定线索生成开发信草稿。',
@@ -164,15 +169,16 @@ function buildDraftOutreachPrompt(
     `产品 ID：${productId}`,
     `线索 ID 列表 lead_ids：${idsJson}`,
     `limit：${limit}`,
+    `预计封数（约）：${estimatedLetters}`,
     '',
     ...(styleBlock ? [styleBlock] : []),
     '执行要求：',
-    '1. 调用 lead-store.leads_get_scored 确认 scored.json 存在；若无则停止并提示先运行 score-and-dedupe。',
-    '2. 必须调用 lead-store.email_draft_generate，传入上述 product_id、lead_ids、limit，以及 write_markdown: true。禁止用手写/Write 工具直接创建 draft.json。',
-    '3. 可选：对生成结果 email_draft_get 审阅；若需润色再 email_draft_save。',
-    '4. 用简短中文汇报：生成数量、跳过数量、每条公司名/收件邮箱/short subject、草稿路径；提醒人工审核后再发送。',
+    '1. 调用 lead-store.product_get 读取自家画像（公司/产品/卖点/认证等）；再 leads_get_scored 确认 scored.json 存在；缺一则停止并说明。',
+    '2. 必须调用 lead-store.email_draft_plan，传入上述 product_id、lead_ids、limit。该工具只返回 1+N 槽位计划，不写正文。',
+    `3. 对返回 plans 中每一个 slots[]：结合 product_get 与 personalization_hints，按用户行文风格直接撰写英文 subject/body（每槽一份正文），采用 plan 的 greeting_line；禁止编造线索或自家事实。然后 email_draft_save（write_markdown: true，并传入 style_prompt: ${JSON.stringify(stylePrompt)}、audience、recipient、personalization_evidence=hints）。禁止用手写/Write 直接创建 draft.json。`,
+    '4. 用简短中文汇报：线索数、落盘封数、skip/warning、每槽公司/邮箱/subject/路径；提醒人工审核后再发送。',
     '',
-    `输出路径：data/emails/{lead_id}/draft.json 、 data/emails/{lead_id}/draft.md`,
+    `输出路径：data/emails/{lead_id}/draft.json（公司向）；data/emails/{lead_id}/{recipient_key}/draft.json（个人向）`,
   ].join('\n')
 }
 
@@ -996,8 +1002,14 @@ export class AgentRunController {
     }
 
     if (leadIds.length > 50) {
-      throw new Error(`一次最多起草 50 封，当前 ${leadIds.length} 条，请缩小范围`)
+      throw new Error(`一次最多起草 50 条线索，当前 ${leadIds.length} 条，请缩小范围`)
     }
+
+    const estimate = estimateOutreachDraftCounts(productId, leadIds)
+    const idleTimeoutMs = Math.min(
+      60 * 60_000,
+      Math.max(20 * 60_000, 10 * 60_000 + estimate.estimatedLetters * 45_000),
+    )
 
     this.running = true
     this.abort = new AbortController()
@@ -1032,14 +1044,19 @@ export class AgentRunController {
         productId,
         meta: [
           { label: '状态', value: readiness, tone },
-          { label: '目标', value: String(leadIds.length) },
+          { label: '线索', value: String(leadIds.length) },
+          { label: '预计封', value: String(estimate.estimatedLetters) },
           { label: '产品', value: productId.slice(0, 18) },
           { label: '耗时', value: `${mm}:${ss}` },
         ],
       })
     }
 
-    const promptText = buildDraftOutreachPrompt(productId, leadIds)
+    const promptText = buildDraftOutreachPrompt(
+      productId,
+      leadIds,
+      estimate.estimatedLetters,
+    )
     this.attachTimeline(timeline)
     timeline.reset()
     timeline.addPrefix({
@@ -1102,7 +1119,7 @@ export class AgentRunController {
         client,
         this.sessionId,
         signal,
-        20 * 60_000,
+        idleTimeoutMs,
       )
 
       if (idleResult === 'abort') {

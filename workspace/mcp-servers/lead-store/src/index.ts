@@ -38,10 +38,11 @@ import {
 } from "./lead-storage.js";
 import { generateLeadId } from "./lead-id.js";
 import {
-  buildDraftSummary,
-  generateEmailDraftsForProduct,
+  planEmailDraftsForProduct,
+  flattenPlanSlots,
   listEmailDraftLeadSummaries,
   loadEmailDraftSlot,
+  planEmailDraftSlotForProduct,
   saveEmailDraftSlot,
   slotFromRecipientKey,
   recipientKeyFromSlot,
@@ -49,7 +50,7 @@ import {
 
 const server = new McpServer({
   name: "lead-store",
-  version: "0.5.5",
+  version: "0.5.6",
 });
 
 server.tool(
@@ -788,23 +789,24 @@ server.tool(
 );
 
 server.tool(
-  "email_draft_generate",
-  "Generate outreach email drafts for scored leads (default top 5 by score among status=new). Saves draft.json, draft.md, and updates lead status to email_drafted.",
+  "email_draft_plan",
+  "Plan 1+N outreach draft slots for scored leads (company + up to 5 person contacts). Does NOT write draft bodies — agent must compose and email_draft_save each slot.",
   {
     product_id: z.string(),
     lead_ids: z.array(z.string()).optional(),
     limit: z.number().int().min(1).max(50).default(5),
-    write_markdown: z.boolean().default(true),
   },
-  async ({ product_id, lead_ids, limit, write_markdown }) => {
+  async ({ product_id, lead_ids, limit }) => {
     const root = getProjectRoot();
     try {
-      const result = generateEmailDraftsForProduct(root, product_id, {
+      const result = planEmailDraftsForProduct(root, product_id, {
         lead_ids,
         limit,
-        write_markdown,
       });
-
+      const slot_count = result.plans.reduce(
+        (sum, plan) => sum + 1 + plan.persons.length,
+        0
+      );
       return {
         content: [
           {
@@ -813,15 +815,127 @@ server.tool(
               {
                 success: true,
                 product_id,
-                generated: result.drafts.length,
+                lead_count: result.plans.length,
+                slot_count,
                 skipped: result.skipped,
-                drafts: result.drafts.map((draft) => ({
-                  ...buildDraftSummary(draft),
-                  draft_path: `data/emails/${draft.lead_id}/draft.json`,
-                  markdown_path: write_markdown
-                    ? `data/emails/${draft.lead_id}/draft.md`
-                    : null,
-                  personalization_evidence: draft.personalization_evidence,
+                warnings: result.warnings,
+                plans: result.plans.map((plan) => ({
+                  lead_id: plan.lead_id,
+                  product_id: plan.product_id,
+                  language: plan.language,
+                  personalization_hints: plan.personalization_hints,
+                  truncated_person_count: plan.truncated_person_count,
+                  slots: flattenPlanSlots(plan),
+                })),
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ error: true, code: "EMAIL_DRAFT_PLAN_FAILED", message }),
+          },
+        ],
+      };
+    }
+  }
+);
+
+server.tool(
+  "email_draft_plan_slot",
+  "Plan a single draft slot (company or person). Person email may exist only in people[]. Agent must compose then email_draft_save.",
+  {
+    product_id: z.string(),
+    lead_id: z.string(),
+    audience: z.enum(["company", "person"]),
+    email: z.string().optional(),
+    recipient_key: z.string().optional(),
+  },
+  async ({ product_id, lead_id, audience, email, recipient_key }) => {
+    const root = getProjectRoot();
+    try {
+      const result = planEmailDraftSlotForProduct(root, product_id, lead_id, {
+        audience,
+        email,
+        recipient_key,
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ success: true, ...result }, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              code: "EMAIL_DRAFT_PLAN_SLOT_FAILED",
+              message,
+            }),
+          },
+        ],
+      };
+    }
+  }
+);
+
+server.tool(
+  "email_draft_generate",
+  "DEPRECATED: no longer writes template bodies. Returns the same payload as email_draft_plan. Use email_draft_plan then email_draft_save.",
+  {
+    product_id: z.string(),
+    lead_ids: z.array(z.string()).optional(),
+    limit: z.number().int().min(1).max(50).default(5),
+    write_markdown: z.boolean().default(true),
+  },
+  async ({ product_id, lead_ids, limit }) => {
+    const root = getProjectRoot();
+    try {
+      const result = planEmailDraftsForProduct(root, product_id, {
+        lead_ids,
+        limit,
+      });
+      const slot_count = result.plans.reduce(
+        (sum, plan) => sum + 1 + plan.persons.length,
+        0
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                success: true,
+                deprecated: true,
+                message:
+                  "email_draft_generate no longer writes drafts. Use email_draft_plan then email_draft_save for each slot.",
+                product_id,
+                lead_count: result.plans.length,
+                slot_count,
+                skipped: result.skipped,
+                warnings: result.warnings,
+                plans: result.plans.map((plan) => ({
+                  lead_id: plan.lead_id,
+                  product_id: plan.product_id,
+                  language: plan.language,
+                  personalization_hints: plan.personalization_hints,
+                  truncated_person_count: plan.truncated_person_count,
+                  slots: flattenPlanSlots(plan),
                 })),
               },
               null,

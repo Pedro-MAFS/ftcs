@@ -1,6 +1,6 @@
 ---
 name: draft-outreach-email
-description: 为已评分线索生成个性化意向邮件草稿（short/professional），保存 draft.json 与 draft.md。用户说写开发信、生成邮件、触达客户时使用。
+description: 为已评分线索按 1+N 槽位计划撰写开发信（公司向 1 封 + contacts 个人向 N 封），经 MCP save 落盘。用户说写开发信、生成邮件、触达客户时使用。
 phase: 1
 inputs:
   - name: product_id
@@ -15,147 +15,117 @@ inputs:
 outputs:
   - path: data/emails/{lead_id}/draft.json
     schema: EmailDraft
-  - path: data/emails/{lead_id}/draft.md
-    schema: markdown
+  - path: data/emails/{lead_id}/{recipient_key}/draft.json
+    schema: EmailDraft
 ---
 
 # draft-outreach-email
 
-为评分后的线索生成开发信草稿（**不限 tier**；默认取 `status=new` 按分数优先），保存至 `data/emails/{lead_id}/`，并将线索状态更新为 `email_drafted`。
+为评分后的线索生成开发信草稿（**不限 tier**；默认取 `status=new` 按分数优先）。
+
+- **公司向**：每条线索恰好 1 封 → `data/emails/{lead_id}/draft.json`
+- **个人向**：来自该 lead **`contacts`** 中个人级邮箱，最多 5 封 → `data/emails/{lead_id}/{recipient_key}/draft.json`
+
+正文由你直接撰写；MCP `email_draft_plan` 只返回槽位计划与称呼/路径提示，不落盘正文。
 
 ## 何时使用
 
-- `score-and-dedupe` 完成后，需要为已评分线索撰写开发信
+- `score-and-dedupe` 完成后需要撰写开发信
 - 用户说「生成邮件」「写开发信」「为客户准备触达邮件」
-- Phase 1 最后一环，完成后进入人工审核（Phase 2 发送）
+- Phase 1 最后一环，完成后进入人工审核
 
 ## 前置条件
 
 - MCP `lead-store` 已配置
-- 存在 `data/leads/{product_id}/scored.json`
-- 目标线索通常为 `status == "new"`（或用户指定 lead_ids；指定时不限 status/tier）
+- 存在该产品的画像（`product_get` 可读）与 `data/leads/{product_id}/scored.json`
 
 ## 输入参数
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
 | `product_id` | 必填 | 产品 ID |
-| `lead_ids` | 无 | 指定线索 ID 列表；不填则取 `status=new` 按分数 Top |
-| `limit` | `5` | 最多生成几封（工具上限 50；桌面批量会显式传入 lead_ids） |
+| `lead_ids` | 无 | 指定线索；不填则取 `status=new` 按分数 Top |
+| `limit` | `5` | 最多几条线索（上限 50） |
 
 ## 执行步骤
 
-### Step 1：确认评分线索
+### Step 1：读取自家画像与评分线索
 
-1. 调用 `lead-store.leads_get_scored`，传入 `product_id`
-2. 若无 scored 文件 → 停止，提示先运行 `score-and-dedupe`
-3. 若未指定 `lead_ids`，确认存在 `status == "new"` 的线索
+1. 调用 `lead-store.product_get({ product_id })`，掌握卖方公司名、产品/卖点、认证、网站等（撰写时必须结合，禁止臆造自家能力）
+2. 调用 `lead-store.leads_get_scored({ product_id })`；若无 scored 文件 → 停止，提示先运行 `score-and-dedupe`
 
-### Step 2：生成邮件草稿
+### Step 2：获取 1+N 槽位计划
 
 调用：
 
 ```
-lead-store.email_draft_generate({
+lead-store.email_draft_plan({
   product_id,
-  lead_ids,      // 可选
-  limit: 5,
-  write_markdown: true
+  lead_ids,   // 可选
+  limit
 })
 ```
 
-该工具会：
+工具只返回计划，不写 `draft.json`。关注：
 
-1. 读取 `profile.json` 与目标线索
-2. 为每条线索生成 2 个 variant：
-   - **short**（≤ 120 词）：简洁直接
-   - **professional**（≤ 200 词）：正式完整
-3. 写入 `data/emails/{lead_id}/draft.json`
-4. 写入 `data/emails/{lead_id}/draft.md`（供人工审核）
-5. 更新线索 `status` → `email_drafted`
-6. 记录 `personalization_evidence`（引用 match_reason、公司描述等）
+- `plans[].slots[]`：每槽含 `audience`、`recipient_key`、`email`、`greeting_line`、`draft_path`、`personalization_hints`
+- `skipped` / `warnings`（如 `person_slots_capped`）
 
-### Step 3：智能体审阅与润色（推荐）
+### Step 3：逐槽撰写并保存（必须）
 
-自动模板可作为基础。智能体应：
+对 `plans` 中 **每一个** `slots[]` 元素：
 
-1. 调用 `email_draft_get` 读取草稿
-2. 检查是否引用客户具体证据（网站产品、批发定位等）
-3. 必要时润色 subject/body，使语气自然、不模板化
-4. 调用 `email_draft_save` 保存修改
+1. 按会话中的 **用户行文风格** 撰写英文 `subject` + `body`（每槽仅一份正文）
+2. **采用** plan 的 `greeting_line` 作为称呼（公司向须保持 Team 语义）
+3. 内容须同时落脚 **线索侧**（`personalization_hints` / scored 已有事实）与 **自家侧**（`product_get` 中的公司/产品/卖点/认证等）；两边都禁止编造
+4. 建议正文 ≤200 英文词；须有明确 CTA
+5. 调用 `lead-store.email_draft_save`：
 
-**邮件约束**：
+```
+email_draft_save({
+  lead_id,
+  recipient_key,   // 公司向可省略或传 "company"
+  write_markdown: true,
+  draft: {
+    product_id,
+    audience,      // "company" | "person"
+    language,      // 用 plan 的 language
+    subject,
+    body,
+    style_prompt,  // 任务 Prompt 中的用户风格原文
+    personalization_evidence: personalization_hints,
+    recipient: {
+      company: company_name,
+      email,       // 公司向可空
+      name,        // 个人向可用 display_name
+      recipient_aliases  // 公司向可用 aliases
+    }
+  }
+})
+```
 
-- 必须有明确 CTA（报价、/catalog、15-min call）
-- 禁止虚假承诺、夸大其词
-- 首封邮件不附大附件
-- 使用客户市场语言（Phase 1 默认 `en`）
+**禁止**用手写/Write 工具直接创建或覆盖 `draft.json`。
+
+显式传入 `lead_ids` 时：覆盖该线索计划内已有稿。
 
 ### Step 4：输出摘要
 
-向用户展示：
+用简短中文汇报：
 
-- 生成邮件数量
-- 每条：公司名、收件邮箱、short 版 subject
-- 草稿路径（`draft.json` / `draft.md`）
-- 提示：**请人工审核后再发送**（Phase 2 才支持一键发送）
-
-## 输出要求
-
-- 每条目标线索各一份 `draft.json`
-- 含 `variants`（short + professional）
-- 含 `personalization_evidence`
-- 对应线索 `status` 更新为 `email_drafted`
+- 线索数、成功落盘封数、`skipped` / `warnings`
+- 每槽：公司名、收件邮箱（可空）、audience、subject、路径
+- 提醒：**请人工审核后再发送**
 
 ## 错误处理
 
 | 情况 | 处理 |
 |------|------|
 | 无 scored.json | 提示先运行 `score-and-dedupe` |
-| 无 high tier 线索 | 告知用户，可指定 lead_ids 或降低 tier 要求 |
-| 草稿已存在 | 工具会 skip；可传 lead_ids 强制覆盖（save） |
-
-## 输出 Schema（EmailDraft）
-
-路径：
-
-- `data/emails/{lead_id}/draft.json`
-- `data/emails/{lead_id}/draft.md`（人类可读审核稿）
-
-```json
-{
-  "id": "email_...",
-  "lead_id": "lead_...",
-  "product_id": "prod_...",
-  "created_at": "ISO8601",
-  "status": "pending_review",
-  "language": "en",
-  "variants": [
-    { "type": "short", "subject": "...", "body": "..." },
-    { "type": "professional", "subject": "...", "body": "..." }
-  ],
-  "personalization_evidence": [
-    "客户网站显示其经销水处理阀门",
-    "位于德国，符合目标市场"
-  ],
-  "selected_variant": null,
-  "review": {
-    "approved": null,
-    "reviewer_notes": null,
-    "reviewed_at": null
-  }
-}
-```
-
-`personalization_evidence` 必须能对应到线索的 `match_reason` / 网站事实，禁止空泛套话。
-
-## 示例对话
-
-> 请为 prod_20260712_001 的 Top 5 高意向客户生成开发信草稿。
-
-> 基于 scored.json，给 Covington Supply CO 写一封英文开发信。
+| 无产品画像 | 提示先完成产品画像 |
+| 线索已有公司向且未指定 lead_ids | 出现在 `skipped`（`draft_already_exists`） |
+| 个人邮箱过多 | `warnings.person_slots_capped`；仍写 cap 内槽位 |
 
 ## 流水线
 
 - 上一步：`score-and-dedupe`
-- 下一步：人工审核草稿；发送能力属后续阶段（勿在本 Skill 宣称已发送）
+- 下一步：人工审核草稿；发送能力属后续阶段

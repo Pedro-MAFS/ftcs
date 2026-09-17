@@ -102,6 +102,7 @@ function buildProfessionalBody(
   };
 }
 
+/** @deprecated US-M-02：生产路径禁止用模板写盘；仅保留单测夹具 */
 export function draftEmailForLead(
   root: string,
   profile: ProductProfile,

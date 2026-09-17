@@ -828,12 +828,12 @@ onUnmounted(() => {
           :disabled="!canBatchDraft"
           :title="
             pendingHighIds.length > 0
-              ? `为 ${pendingHighIds.length} 条已评分线索批量起草`
+              ? `为 ${pendingHighIds.length} 条线索批量起草（每条 1+N 封，Agent 撰写）`
               : '暂无待起草的已评分线索'
           "
           @click="onBatchDraftClick"
         >
-          {{ isDrafting ? '起草中…' : `批量起草${pendingHighIds.length ? ` ${pendingHighIds.length}` : ''}` }}
+          {{ isDrafting ? '起草中…' : `批量起草${pendingHighIds.length ? ` ${pendingHighIds.length} 条` : ''}` }}
         </button>
         <button
           type="button"

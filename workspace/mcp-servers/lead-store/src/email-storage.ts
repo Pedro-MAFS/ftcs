@@ -15,7 +15,7 @@ import {
   recipientKeyFromSlot,
   slotFromRecipientKey,
 } from "./email-types.js";
-import { draftEmailForLead, renderEmailDraftMarkdown, validateDraftWordLimits } from "./email-drafter.js";
+import { renderEmailDraftMarkdown, validateDraftWordLimits } from "./email-drafter.js";
 import {
   getEmailDraftMarkdownPathForSlot,
   getEmailDraftPathForSlot,
@@ -25,6 +25,13 @@ import { migrateEmailDraftFile, migrateEmailDraftsIfNeeded } from "./email-draft
 import { loadProfile } from "./storage.js";
 import { loadScoredLeads, saveScoredLeads } from "./lead-storage.js";
 import { buildScoredStats } from "./lead-scorer.js";
+import { generateEmailId } from "./email-id.js";
+import {
+  flattenPlanSlots,
+  planDraftSlots,
+  planSingleSlot,
+  type DraftSlotPlan,
+} from "./email-draft-plan.js";
 
 export type EmailDraftSlotSummary = {
   slot: EmailDraftSlot;
@@ -118,9 +125,20 @@ export function saveEmailDraftSlot(
       ? raw.audience
       : undefined) ?? (slot.kind === "company" ? "company" : "person");
 
+  const styleRaw = raw.style_prompt;
+  const style_prompt =
+    typeof styleRaw === "string"
+      ? styleRaw.trim() || null
+      : styleRaw === null
+        ? null
+        : (existing?.style_prompt ?? null);
+
   const draft: EmailDraft = EmailDraftSchema.parse({
     ...raw,
-    id: (typeof raw.id === "string" ? raw.id : undefined) ?? existing?.id ?? leadId,
+    id:
+      (typeof raw.id === "string" ? raw.id : undefined) ??
+      existing?.id ??
+      generateEmailId(root),
     lead_id: leadId,
     product_id: typeof raw.product_id === "string" ? raw.product_id : existing?.product_id,
     created_at:
@@ -136,7 +154,7 @@ export function saveEmailDraftSlot(
     body,
     subject_zh: raw.subject_zh ?? null,
     body_zh: raw.body_zh ?? null,
-    style_prompt: raw.style_prompt ?? null,
+    style_prompt,
     personalization_evidence: Array.isArray(raw.personalization_evidence)
       ? raw.personalization_evidence
       : existing?.personalization_evidence ?? [],
@@ -152,6 +170,10 @@ export function saveEmailDraftSlot(
   if (writeMarkdown) {
     const markdownPath = getEmailDraftMarkdownPathForSlot(root, leadId, slot);
     writeFileSync(markdownPath, renderEmailDraftMarkdown(draft), "utf8");
+  }
+
+  if (draft.product_id) {
+    updateLeadStatusInScored(root, draft.product_id, leadId, "email_drafted");
   }
 
   return draft;
@@ -331,17 +353,17 @@ export function selectLeadsForEmailDraft(
     .slice(0, limit);
 }
 
-export function generateEmailDraftsForProduct(
+export function planEmailDraftsForProduct(
   root: string,
   productId: string,
   options?: {
     lead_ids?: string[];
     limit?: number;
-    write_markdown?: boolean;
   }
 ): {
-  drafts: EmailDraft[];
+  plans: DraftSlotPlan[];
   skipped: Array<{ lead_id: string; reason: string }>;
+  warnings: Array<{ lead_id: string; code: string; detail: string }>;
 } {
   const profile = loadProfile(root, productId);
   if (!profile) {
@@ -355,8 +377,9 @@ export function generateEmailDraftsForProduct(
 
   const limit = options?.limit ?? 5;
   const targets = selectLeadsForEmailDraft(scored.leads, options?.lead_ids, limit);
-  const drafts: EmailDraft[] = [];
+  const plans: DraftSlotPlan[] = [];
   const skipped: Array<{ lead_id: string; reason: string }> = [];
+  const warnings: Array<{ lead_id: string; code: string; detail: string }> = [];
 
   for (const lead of targets) {
     if (loadEmailDraft(root, lead.id) && !options?.lead_ids) {
@@ -364,14 +387,66 @@ export function generateEmailDraftsForProduct(
       continue;
     }
 
-    const draft = draftEmailForLead(root, profile, lead, productId);
-    saveEmailDraft(root, lead.id, draft, options?.write_markdown ?? true);
-    updateLeadStatusInScored(root, productId, lead.id, "email_drafted");
-    drafts.push(draft);
+    const plan = planDraftSlots(lead, productId);
+    plans.push(plan);
+    if (plan.truncated_person_count > 0) {
+      warnings.push({
+        lead_id: lead.id,
+        code: "person_slots_capped",
+        detail: `truncated ${plan.truncated_person_count} person emails`,
+      });
+    }
   }
 
-  return { drafts, skipped };
+  return { plans, skipped, warnings };
 }
+
+export function planEmailDraftSlotForProduct(
+  root: string,
+  productId: string,
+  leadId: string,
+  options: {
+    audience: "company" | "person";
+    email?: string;
+    recipient_key?: string;
+  }
+): ReturnType<typeof planSingleSlot> {
+  const scored = loadScoredLeads(root, productId);
+  if (!scored) {
+    throw new Error(`No scored leads found for product: ${productId}`);
+  }
+  const lead = scored.leads.find((item) => item.id === leadId);
+  if (!lead) {
+    throw new Error(`Lead not found: ${leadId}`);
+  }
+  return planSingleSlot(lead, productId, options);
+}
+
+/**
+ * @deprecated US-M-02：不再写模板正文。请用 planEmailDraftsForProduct + Agent save。
+ * 保留函数签名仅供旧测试；生产 MCP 已改为转调 plan。
+ */
+export function generateEmailDraftsForProduct(
+  root: string,
+  productId: string,
+  options?: {
+    lead_ids?: string[];
+    limit?: number;
+    write_markdown?: boolean;
+  }
+): {
+  drafts: EmailDraft[];
+  skipped: Array<{ lead_id: string; reason: string }>;
+} {
+  void options?.write_markdown;
+  const planned = planEmailDraftsForProduct(root, productId, options);
+  return {
+    drafts: [],
+    skipped: planned.skipped,
+  };
+}
+
+export { flattenPlanSlots, planDraftSlots };
 
 export function buildDraftSummary(draft: EmailDraft): {
   lead_id: string;

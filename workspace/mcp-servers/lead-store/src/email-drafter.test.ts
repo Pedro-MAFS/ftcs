@@ -7,6 +7,7 @@ import { draftEmailForLead, renderEmailDraftMarkdown } from "./email-drafter.js"
 import {
   generateEmailDraftsForProduct,
   loadEmailDraft,
+  planEmailDraftsForProduct,
   saveEmailDraft,
   saveEmailDraftSlot,
   selectLeadsForEmailDraft,
@@ -108,7 +109,7 @@ test("draftEmailForLead creates single-body company draft", () => {
   }
 });
 
-test("generateEmailDraftsForProduct writes draft files and updates lead status", () => {
+test("planEmailDraftsForProduct returns 1+N slots without writing drafts", () => {
   const root = createTempProject();
   const productId = "prod_email_test";
 
@@ -122,28 +123,29 @@ test("generateEmailDraftsForProduct writes draft files and updates lead status",
       productId
     );
 
+    const lead = sampleScoredLead();
+    lead.contacts = [
+      { type: "email", value: "info@covingtonsupplyco.com", confidence: "high" },
+      { type: "email", value: "erik@covingtonsupplyco.com", confidence: "medium" },
+    ];
+
     saveScoredLeads(root, {
       product_id: productId,
       updated_at: new Date().toISOString(),
-      leads: [sampleScoredLead()],
+      leads: [lead],
       stats: { total: 1, by_tier: { high: 1, medium: 0, low: 0 }, by_status: { new: 1 } },
     });
 
-    const result = generateEmailDraftsForProduct(root, productId, { limit: 5 });
-    assert.equal(result.drafts.length, 1);
+    const result = planEmailDraftsForProduct(root, productId, { limit: 5 });
+    assert.equal(result.plans.length, 1);
+    assert.equal(result.plans[0]!.persons.length, 1);
+    assert.equal(result.plans[0]!.company.email, "info@covingtonsupplyco.com");
+    assert.equal(loadEmailDraft(root, lead.id), null);
 
-    const draft = loadEmailDraft(root, "lead_20260712_0011");
-    assert.ok(draft);
-    assert.equal(draft?.status, "pending_review");
-    assert.equal(draft?.audience, "company");
-    assert.ok(draft?.subject);
-    assert.ok(!("variants" in (JSON.parse(
-      readFileSync(join(root, "data", "emails", "lead_20260712_0011", "draft.json"), "utf8")
-    ) as object)));
-
-    const markdownPath = join(root, "data", "emails", "lead_20260712_0011", "draft.md");
-    assert.ok(existsSync(markdownPath));
-    assert.ok(readFileSync(markdownPath, "utf8").includes("Personalization Evidence"));
+    // deprecated generate must not write template bodies
+    const gen = generateEmailDraftsForProduct(root, productId, { limit: 5 });
+    assert.equal(gen.drafts.length, 0);
+    assert.equal(loadEmailDraft(root, lead.id), null);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

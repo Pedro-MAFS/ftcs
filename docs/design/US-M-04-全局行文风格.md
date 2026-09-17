@@ -210,9 +210,9 @@ flowchart LR
 
 | 消费方 | M-04 提供 | M-02 负责 |
 |--------|-----------|-----------|
-| 桌面批量/单条起草 | Prompt 已含风格块 | 1+N、选人、写 `style_prompt` 快照 |
-| `draft-outreach-email` Skill | 可读桌面注入的会话说明 | Skill 正文改为单正文 + 明示「遵循用户风格段」 |
-| 模板 `email-drafter`（若仍作兜底） | — | 模板无法理解自然语言风格时，以 Agent 润色路径为主；纯模板生成可不读风格（详设 M-02 裁） |
+| 桌面批量/单条起草 | Prompt 已含风格块 | `email_draft_plan` → Agent **直接撰写** → `save`（写入 `style_prompt`） |
+| `draft-outreach-email` Skill | 可读桌面注入的会话说明 | Skill：plan 后逐槽撰写；明示遵循用户风格段 |
+| 代码套话模板 | — | **不做**；分类/槽位计划仍由代码 |
 
 **M-04 验收不依赖** M-02 全部完成：只要设置能存、Prompt 在非空时含风格原文即可（可用日志/单测断言 `formatEmailStylePromptBlock`）。
 
@@ -275,3 +275,4 @@ flowchart LR
 | 日期 | 说明 |
 |------|------|
 | 2026-09-17 | 初稿：prefs 存全局自由文本、设置「开发信」分类、Prompt 注入与快照契约、500 码位上限 |
+| 2026-09-17 | 交叉引用：M-02 改为 plan + Agent 直写（无套话模板） |
