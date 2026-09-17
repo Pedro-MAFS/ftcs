@@ -125,3 +125,33 @@ export function getEmailDraftPath(root: string, leadId: string): string {
 export function getEmailDraftMarkdownPath(root: string, leadId: string): string {
   return join(getEmailDraftDir(root, leadId), "draft.md");
 }
+
+export function getEmailPersonDraftDir(
+  root: string,
+  leadId: string,
+  recipientKey: string
+): string {
+  return join(getEmailDraftDir(root, leadId), recipientKey);
+}
+
+export function getEmailDraftPathForSlot(
+  root: string,
+  leadId: string,
+  slot: { kind: "company" } | { kind: "person"; recipientKey: string }
+): string {
+  if (slot.kind === "company") {
+    return getEmailDraftPath(root, leadId);
+  }
+  return join(getEmailPersonDraftDir(root, leadId, slot.recipientKey), "draft.json");
+}
+
+export function getEmailDraftMarkdownPathForSlot(
+  root: string,
+  leadId: string,
+  slot: { kind: "company" } | { kind: "person"; recipientKey: string }
+): string {
+  if (slot.kind === "company") {
+    return getEmailDraftMarkdownPath(root, leadId);
+  }
+  return join(getEmailPersonDraftDir(root, leadId, slot.recipientKey), "draft.md");
+}

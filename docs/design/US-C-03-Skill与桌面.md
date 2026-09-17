@@ -34,7 +34,7 @@
 | 不做 | 归属 |
 |------|------|
 | people 抽屉徽章、sources 列表、单条「验证」按钮、scored people 手工维护 | US-C-04 |
-| `pickPrimaryRecipient` / 开发信优先 `hunter_valid` + `Dear FirstName` | **另立故事**（对接支持计划「开发信 · 多风格与中英对照」；原曾挂 C-04） |
+| `pickPrimaryRecipient` / 开发信优先 `hunter_valid` + `Dear FirstName` | **另立** → [21-需求-开发信重构.md](../21-需求-开发信重构.md) |
 | 任务编排节点 / 批量补全 | C2 / US-C-06～08 |
 | Hunter 官方代调网关 | 永不做（C3） |
 | builtin 补邮箱 | US-C-05 |
@@ -596,3 +596,4 @@ C-02 已登记 `build-mcp` / `prepare-template`；本故事发版前跑 `npm run
 | 2026-09-14 | **修订**：取消验邮「最多 3 封」；开启后对全部候选人验邮 |
 | 2026-09-14 | **修订**：验邮改为设置「集成」全局开关（默认开启）；线索页不再勾选 |
 | 2026-09-15 | **交叉引用**：抽屉徽章/单条验证/people 手工维护见 US-C-04；`pickPrimary` / Dear FirstName 改挂开发信重构故事 |
+| 2026-09-15 | 开发信另立 → docs/21-需求-开发信重构.md |

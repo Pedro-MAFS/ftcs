@@ -185,16 +185,20 @@ function syncApprovedMarkdown(
     return
   }
 
-  const variants = Array.isArray(draft.variants) ? draft.variants : []
-  const selected = cleanString(draft.selected_variant) || 'short'
-  const chosen =
-    variants.find((item) => {
-      const v = asRecord(item)
-      return v && cleanString(v.type) === selected
-    }) ?? asRecord(variants[0])
+  let subject = cleanString(draft.subject)
+  let body = asBody(draft.body)
+  if (!subject) {
+    const variants = Array.isArray(draft.variants) ? draft.variants : []
+    const selected = cleanString(draft.selected_variant) || 'professional'
+    const chosen =
+      variants.find((item) => {
+        const v = asRecord(item)
+        return v && cleanString(v.type) === selected
+      }) ?? asRecord(variants[0])
+    subject = chosen ? cleanString(chosen.subject) : ''
+    body = chosen ? asBody(chosen.body) : ''
+  }
 
-  const subject = chosen ? cleanString(chosen.subject) : ''
-  const body = chosen ? cleanString(chosen.body) : ''
   const review = asRecord(draft.review) ?? {}
   const reviewedAt = cleanString(review.reviewed_at) || new Date().toISOString()
 
@@ -202,7 +206,7 @@ function syncApprovedMarkdown(
     `# Email Draft · ${leadId}`,
     '',
     `- status: approved`,
-    `- selected_variant: ${selected}`,
+    `- audience: ${cleanString(draft.audience) || 'company'}`,
     `- reviewed_at: ${reviewedAt}`,
     '',
     `## Subject`,
@@ -279,7 +283,7 @@ export function rejectEmailDraft(
 }
 
 /**
- * 通过并保存：draft → approved，线索 → email_approved；不发送。
+ * 通过并保存：draft → approved（新 Schema 单正文），线索 → email_approved；不发送。
  */
 export function approveEmailDraft(
   input: ApproveEmailDraftInput,
@@ -326,31 +330,69 @@ export function approveEmailDraft(
     }
   }
 
-  const selectedVariant =
-    input.selectedVariant === 'professional' ? 'professional' : 'short'
-  draft = applyVariantEdits(draft, input.variants)
+  let subject = cleanString(draft.subject)
+  let body = asBody(draft.body)
 
-  const variants = Array.isArray(draft.variants) ? draft.variants : []
-  const hasVariant = variants.some((item) => {
-    const v = asRecord(item)
-    return v && cleanString(v.type) === selectedVariant
-  })
-  if (!hasVariant) {
+  if (input.variants && input.variants.length > 0) {
+    const preferred =
+      input.variants.find((v) => v.type === 'professional') ??
+      input.variants.find((v) => v.type === (input.selectedVariant === 'short' ? 'short' : 'professional')) ??
+      input.variants[0]
+    if (preferred) {
+      subject = cleanString(preferred.subject)
+      body = asBody(preferred.body)
+    }
+  } else if (!subject) {
+    draft = applyVariantEdits(draft, undefined)
+    const variants = Array.isArray(draft.variants) ? draft.variants : []
+    const pro = variants.find((item) => {
+      const v = asRecord(item)
+      return v && cleanString(v.type) === 'professional'
+    })
+    const first = asRecord(variants[0])
+    const chosen = asRecord(pro) ?? first
+    if (chosen) {
+      subject = cleanString(chosen.subject)
+      body = asBody(chosen.body)
+    }
+  }
+
+  if (!subject) {
     return {
       ok: false,
-      message: `草稿中不存在变体 ${selectedVariant}`,
+      message: '草稿缺少 subject，无法保存',
       productId,
       leadId,
     }
   }
 
   const reviewedAt = new Date().toISOString()
+  const recipient = asRecord(draft.recipient) ?? {}
   const nextDraft: Record<string, unknown> = {
-    ...draft,
-    product_id: draftProductId || productId,
+    id: cleanString(draft.id) || leadId,
     lead_id: cleanString(draft.lead_id) || leadId,
+    product_id: draftProductId || productId,
+    created_at: cleanString(draft.created_at) || reviewedAt,
+    updated_at: reviewedAt,
     status: 'approved',
-    selected_variant: selectedVariant,
+    language: cleanString(draft.language) || 'en',
+    audience: draft.audience === 'person' ? 'person' : 'company',
+    recipient: {
+      company: cleanString(recipient.company) || undefined,
+      email: cleanString(recipient.email) || undefined,
+      name: recipient.name === null ? null : cleanString(recipient.name) || undefined,
+      recipient_aliases: Array.isArray(recipient.recipient_aliases)
+        ? recipient.recipient_aliases
+        : undefined,
+    },
+    subject,
+    body,
+    subject_zh: draft.subject_zh ?? null,
+    body_zh: draft.body_zh ?? null,
+    style_prompt: draft.style_prompt ?? null,
+    personalization_evidence: Array.isArray(draft.personalization_evidence)
+      ? draft.personalization_evidence
+      : [],
     review: {
       approved: true,
       reviewer_notes: asRecord(draft.review)?.reviewer_notes ?? null,
@@ -378,7 +420,7 @@ export function approveEmailDraft(
 
   return {
     ok: true,
-    message: `已通过并保存：选用 ${selectedVariant}，线索状态 → email_approved`,
+    message: '已通过并保存：单正文，线索状态 → email_approved',
     productId,
     leadId,
   }

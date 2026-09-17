@@ -423,11 +423,33 @@ export interface EmailDraftRowDto {
   leadStatus: string
   score: number | null
   subject: string
+  body?: string
+  audience?: 'company' | 'person'
+  hasCompanyDraft?: boolean
+  personDraftCount?: number
+  draftCount?: number
+  subjectZh?: string | null
+  bodyZh?: string | null
+  stylePrompt?: string | null
+  recipientAliases?: string[]
+  slots?: EmailDraftSlotDto[]
   selectedVariant: string
   variants: EmailVariantDto[]
   personalizationEvidence: string[]
   draftPath: string
   markdownPath: string
+}
+
+export interface EmailDraftSlotDto {
+  slotKind: 'company' | 'person'
+  recipientKey: string
+  email: string
+  name: string
+  audience: 'company' | 'person'
+  status: string
+  subject: string
+  draftPath: string
+  hasZh: boolean
 }
 
 export interface EmailDraftsSnapshotDto {
@@ -438,6 +460,7 @@ export interface EmailDraftsSnapshotDto {
     total: number
     pendingReview: number
     pendingHigh: number
+    totalDraftFiles?: number
   }
 }
 

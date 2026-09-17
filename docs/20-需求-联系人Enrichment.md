@@ -296,7 +296,7 @@ flowchart LR
 - 抽屉展示 sources、confidence、验邮徽章（`hunter_valid` ✅ / `hunter_accept_all` ⚠️ / `hunter_unverified` 灰标等）。  
 - **单条验证**：对 `hunter_unverified` / `hunter_unknown` 提供行尾「验证」；**主进程**直调 Hunter verifier 写回 status（不启 Agent）；达标则按 C7 追加 `contacts`。  
 - scored 抽屉「编辑联系人」：people **增删改**（全量写回）；支持 `provider: manual`。  
-- **不包含**开发信收件人选人 / `Dear FirstName`（另立故事，对接支持计划「开发信 · 多风格与中英对照」）。
+- **不包含**开发信收件人选人 / `Dear FirstName`（已另立 → [21-需求-开发信重构.md](21-需求-开发信重构.md)）。
 
 ### US-C-05 · builtin（延后）
 
@@ -313,7 +313,7 @@ flowchart LR
 - [ ] **未验证** 的邮箱可在抽屉单条验证；验证后 `hunter_valid` 且达标则进入 `contacts`（C7）。  
 - [ ] 无 Key / 配额用尽 → 明确错误，不 silent fail。  
 - [ ] 用户可在抽屉删除 / 新增 / 修改误识别或遗漏的 person。  
-- [ ] （另立故事）开发信优先 `hunter_valid` 收件人 + `Dear {FirstName}`；多风格与中英对照。
+- [ ] 开发信多收件人 / 单风格 / 中英对照 → 见 [21-需求-开发信重构.md](21-需求-开发信重构.md)。
 
 ---
 
@@ -358,7 +358,8 @@ flowchart LR
 | [US-C-01 详设：people Schema 与 leads_patch_scored](design/US-C-01-people-schema与leads-patch-scored.md) | 数据层（已实现，lead-store 0.5.0） |
 | [US-C-02 详设：hunter-api MCP](design/US-C-02-hunter-api-MCP.md) | API 封装层（已实现，hunter-api 0.1.0） |
 | [US-C-03 详设：Skill 与桌面](design/US-C-03-Skill与桌面.md) | Skill + 设置多 Key + Preflight + 线索页按钮 |
-| [US-C-04 详设：抽屉 people 与手工维护](design/US-C-04-抽屉people与手工维护.md) | 徽章/sources/主进程单条验证；scored people 增删改；开发信选人另立 |
+| [US-C-04 详设：抽屉 people 与手工维护](design/US-C-04-抽屉people与手工维护.md) | 徽章/sources/主进程单条验证；scored people 增删改 |
+| [21-需求-开发信重构.md](21-需求-开发信重构.md) | 多收件人开发信 / 单风格 / 中英对照（承接原「另立故事」） |
 | [联系人Enrichment-spike-简明-Decodeck.md](research/联系人Enrichment-spike-简明-Decodeck.md) | builtin 难例（归档） |
 | [06-MCP工具规范.md](06-MCP工具规范.md) | hunter-api 登记 |
 
@@ -377,3 +378,4 @@ flowchart LR
 | 2026-09-14 | **验邮**：取消「最多 3 封」限制；开启验证后对本线索全部候选人验邮 |
 | 2026-09-14 | **C12**：验邮改为设置「集成」全局开关（`HUNTER_VERIFY_EMAILS`，默认开启）；线索页/抽屉不再勾选 |
 | 2026-09-15 | **US-C-04 详设**：抽屉徽章/sources/主进程单条验证 + scored people 手工维护；开发信选人/称呼划出另立故事（对接「多风格与中英对照」） |
+| 2026-09-15 | 开发信另立故事正式立项 → [21-需求-开发信重构.md](21-需求-开发信重构.md) |

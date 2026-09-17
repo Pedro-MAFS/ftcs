@@ -111,9 +111,9 @@ export const supportPlanItems: SupportPlanItem[] = [
   },
   {
     id: 'email-draft-styles',
-    title: '开发信 · 多风格与中英对照',
+    title: '开发信 · 多收件人与中英对照',
     description:
-      '起草开发信时可选多种行文风格（如正式、简洁、友好等），并支持中英文对照展示，便于审阅与修改后再发出。计划下一版交付。',
+      '每条线索强制 1 封公司向开发信，并按 contacts 中个人邮箱各起草一封（1+N）；邮件页在公司向槽与 contacts∪people 间切换审阅，支持单人补起草；取消简洁/专业双变体；全局行文风格为用户自由描述（由大模型理解），并支持中文对照审阅。需求见仓库 docs/21-需求-开发信重构.md。',
     priority: 'P0',
     status: 'planned',
   },

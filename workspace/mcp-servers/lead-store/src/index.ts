@@ -37,18 +37,19 @@ import {
   updateExplorationRun,
 } from "./lead-storage.js";
 import { generateLeadId } from "./lead-id.js";
-import { EmailDraftInputSchema } from "./email-types.js";
 import {
   buildDraftSummary,
   generateEmailDraftsForProduct,
-  listEmailDrafts,
-  loadEmailDraft,
-  saveEmailDraft,
+  listEmailDraftLeadSummaries,
+  loadEmailDraftSlot,
+  saveEmailDraftSlot,
+  slotFromRecipientKey,
+  recipientKeyFromSlot,
 } from "./email-storage.js";
 
 const server = new McpServer({
   name: "lead-store",
-  version: "0.4.1",
+  version: "0.5.5",
 });
 
 server.tool(
@@ -846,13 +847,15 @@ server.tool(
 
 server.tool(
   "email_draft_get",
-  "Load an email draft by lead ID.",
+  "Load an email draft by lead ID. Optional recipient_key selects a person slot; omit for company draft.",
   {
     lead_id: z.string(),
+    recipient_key: z.string().optional(),
   },
-  async ({ lead_id }) => {
+  async ({ lead_id, recipient_key }) => {
     const root = getProjectRoot();
-    const draft = loadEmailDraft(root, lead_id);
+    const slot = slotFromRecipientKey(recipient_key);
+    const draft = loadEmailDraftSlot(root, lead_id, slot);
     if (!draft) {
       return {
         isError: true,
@@ -862,37 +865,56 @@ server.tool(
             text: JSON.stringify({
               error: true,
               code: "NOT_FOUND",
-              message: `Email draft not found for lead: ${lead_id}`,
+              message: `Email draft not found for lead: ${lead_id}${
+                recipient_key ? ` recipient_key=${recipient_key}` : ""
+              }`,
             }),
           },
         ],
       };
     }
+    const draft_path =
+      slot.kind === "company"
+        ? `data/emails/${lead_id}/draft.json`
+        : `data/emails/${lead_id}/${slot.recipientKey}/draft.json`;
     return {
-      content: [{ type: "text", text: JSON.stringify(draft, null, 2) }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({ ...draft, draft_path, recipient_key: recipientKeyFromSlot(slot) }, null, 2),
+        },
+      ],
     };
   }
 );
 
 server.tool(
   "email_draft_save",
-  "Save or update an email draft manually (e.g. after agent refinement).",
+  "Save or update an email draft manually (e.g. after agent refinement). Optional recipient_key selects person slot.",
   {
     lead_id: z.string(),
-    draft: EmailDraftInputSchema.omit({ lead_id: true }),
+    recipient_key: z.string().optional(),
+    draft: z.record(z.unknown()),
     write_markdown: z.boolean().default(true),
   },
-  async ({ lead_id, draft, write_markdown }) => {
+  async ({ lead_id, recipient_key, draft, write_markdown }) => {
     const root = getProjectRoot();
-    const saved = saveEmailDraft(
+    const slot = slotFromRecipientKey(recipient_key);
+    const saved = saveEmailDraftSlot(
       root,
       lead_id,
+      slot,
       {
         ...draft,
         lead_id,
       },
       write_markdown
     );
+
+    const draft_path =
+      slot.kind === "company"
+        ? `data/emails/${lead_id}/draft.json`
+        : `data/emails/${lead_id}/${slot.recipientKey}/draft.json`;
 
     return {
       content: [
@@ -902,8 +924,11 @@ server.tool(
             {
               success: true,
               lead_id,
-              draft_path: `data/emails/${lead_id}/draft.json`,
-              markdown_path: write_markdown ? `data/emails/${lead_id}/draft.md` : null,
+              recipient_key: recipientKeyFromSlot(slot),
+              draft_path,
+              markdown_path: write_markdown
+                ? draft_path.replace(/draft\.json$/, "draft.md")
+                : null,
               draft: saved,
             },
             null,
@@ -917,13 +942,13 @@ server.tool(
 
 server.tool(
   "email_draft_list",
-  "List email drafts, optionally filtered by product ID.",
+  "List email drafts (one summary row per lead), optionally filtered by product ID. Migrates legacy dual-variant drafts in place.",
   {
     product_id: z.string().optional(),
   },
   async ({ product_id }) => {
     const root = getProjectRoot();
-    const drafts = listEmailDrafts(root, product_id);
+    const summaries = listEmailDraftLeadSummaries(root, product_id);
     return {
       content: [
         {
@@ -931,8 +956,27 @@ server.tool(
           text: JSON.stringify(
             {
               product_id: product_id ?? null,
-              total: drafts.length,
-              drafts: drafts.map((draft) => buildDraftSummary(draft)),
+              total: summaries.length,
+              drafts: summaries.map((row) => ({
+                lead_id: row.lead_id,
+                company: row.company_name,
+                subject: row.subject,
+                recipient: row.recipient_email,
+                audience: row.has_company_draft ? "company" : "person",
+                has_company_draft: row.has_company_draft,
+                person_draft_count: row.person_draft_count,
+                draft_count: row.draft_count,
+                status: row.status,
+                draft_path: row.representative_path,
+                slots: row.slots.map((s) => ({
+                  recipient_key: s.recipient_key,
+                  audience: s.audience,
+                  email: s.email,
+                  subject: s.subject,
+                  status: s.status,
+                  draft_path: s.draft_path,
+                })),
+              })),
             },
             null,
             2

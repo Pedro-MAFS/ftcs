@@ -1,6 +1,6 @@
 import type { ProductProfile } from "./profile-types.js";
 import type { ScoredLead } from "./lead-types.js";
-import type { EmailDraft, EmailVariant } from "./email-types.js";
+import type { EmailDraft } from "./email-types.js";
 import { generateEmailId, pickPrimaryEmail, resolveEmailLanguage } from "./email-id.js";
 
 function primaryProduct(profile: ProductProfile) {
@@ -56,34 +56,18 @@ function wordCount(text: string): number {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
-function buildShortVariant(profile: ProductProfile, lead: ScoredLead): EmailVariant {
-  const product = productLabel(profile);
-  const seller = sellerName(profile);
-  const hook = extractPersonalizationHook(lead);
-  const diffs = topDifferentiators(profile, 1);
-  const diffText = diffs[0] ? ` ${diffs[0]}.` : "";
-
-  const body = [
-    greeting(lead),
-    "",
-    `I came across your company and noticed ${hook}.`,
-    "",
-    `We are ${seller}, a manufacturer specializing in ${product}.${diffText} We support OEM/ODM and stable export supply.`,
-    "",
-    "Would you be open to a quick call this week to discuss pricing and lead time for your market?",
-    "",
-    "Best regards,",
-    seller,
-  ].join("\n");
-
-  return {
-    type: "short",
-    subject: `${product} Supply Partnership - Stable Delivery`,
-    body: trimToWordLimit(body, 120),
-  };
+function trimToWordLimit(text: string, maxWords: number): string {
+  const words = text.split(/\s+/);
+  if (words.length <= maxWords) {
+    return text;
+  }
+  return `${words.slice(0, maxWords).join(" ")}...`;
 }
 
-function buildProfessionalVariant(profile: ProductProfile, lead: ScoredLead): EmailVariant {
+function buildProfessionalBody(
+  profile: ProductProfile,
+  lead: ScoredLead
+): { subject: string; body: string } {
   const product = productLabel(profile);
   const seller = sellerName(profile);
   const hook = extractPersonalizationHook(lead);
@@ -113,18 +97,9 @@ function buildProfessionalVariant(profile: ProductProfile, lead: ScoredLead): Em
     .join("\n");
 
   return {
-    type: "professional",
     subject: `Partnership Inquiry: ${product} from ${seller}`,
     body: trimToWordLimit(body, 200),
   };
-}
-
-function trimToWordLimit(text: string, maxWords: number): string {
-  const words = text.split(/\s+/);
-  if (words.length <= maxWords) {
-    return text;
-  }
-  return `${words.slice(0, maxWords).join(" ")}...`;
 }
 
 export function draftEmailForLead(
@@ -133,18 +108,24 @@ export function draftEmailForLead(
   lead: ScoredLead,
   productId: string
 ): EmailDraft {
-  const variants = [buildShortVariant(profile, lead), buildProfessionalVariant(profile, lead)];
+  const now = new Date().toISOString();
+  const { subject, body } = buildProfessionalBody(profile, lead);
 
   return {
     id: generateEmailId(root),
     lead_id: lead.id,
     product_id: productId,
-    created_at: new Date().toISOString(),
+    created_at: now,
+    updated_at: now,
     status: "pending_review",
     language: resolveEmailLanguage(lead.company.country),
-    variants,
+    audience: "company",
+    subject,
+    body,
+    subject_zh: null,
+    body_zh: null,
+    style_prompt: null,
     personalization_evidence: buildPersonalizationEvidence(lead),
-    selected_variant: null,
     review: {
       approved: null,
       reviewer_notes: null,
@@ -152,7 +133,8 @@ export function draftEmailForLead(
     },
     recipient: {
       company: lead.company.name,
-      email: pickPrimaryEmail(lead.contacts),
+      email: pickPrimaryEmail(lead.contacts) || undefined,
+      name: null,
     },
   };
 }
@@ -165,32 +147,30 @@ export function renderEmailDraftMarkdown(draft: EmailDraft): string {
     `- Lead ID: ${draft.lead_id}`,
     `- Product ID: ${draft.product_id}`,
     `- Status: ${draft.status}`,
+    `- Audience: ${draft.audience}`,
     `- Language: ${draft.language}`,
     `- Recipient: ${draft.recipient?.email ?? "N/A"}`,
     "",
     "## Personalization Evidence",
     ...draft.personalization_evidence.map((item) => `- ${item}`),
     "",
+    "## Subject",
+    "",
+    draft.subject,
+    "",
+    "## Body",
+    "",
+    draft.body,
+    "",
   ];
-
-  for (const variant of draft.variants) {
-    lines.push(`## Variant: ${variant.type}`);
-    lines.push("");
-    lines.push(`**Subject:** ${variant.subject}`);
-    lines.push("");
-    lines.push(variant.body);
-    lines.push("");
-  }
 
   return `${lines.join("\n").trim()}\n`;
 }
 
 export function validateDraftWordLimits(draft: EmailDraft): void {
-  for (const variant of draft.variants) {
-    const count = wordCount(variant.body);
-    const limit = variant.type === "short" ? 120 : 200;
-    if (count > limit + 5) {
-      throw new Error(`Variant ${variant.type} exceeds word limit (${count}/${limit})`);
-    }
+  const count = wordCount(draft.body);
+  const limit = 200;
+  if (count > limit + 5) {
+    throw new Error(`Draft body exceeds word limit (${count}/${limit})`);
   }
 }

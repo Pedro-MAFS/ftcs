@@ -28,7 +28,7 @@ const rejectConfirmOpen = ref(false)
 const actionMessage = ref('')
 const snapshot = ref<EmailDraftsSnapshotDto | null>(null)
 const selectedId = ref('')
-const activeVariant = ref<VariantKey>('short')
+const activeVariant = ref<VariantKey>('professional')
 
 /** 本地改稿缓冲；轮询刷新同一 lead 时不覆盖 */
 const editLeadId = ref('')
@@ -131,10 +131,16 @@ function hydrateEdits(draft: EmailDraftRowDto, force: boolean): void {
     short: '',
     professional: '',
   }
+  const primarySubject = draft.subject || ''
+  const primaryBody = draft.body || ''
   for (const key of ['short', 'professional'] as const) {
     const variant = draft.variants.find((v) => v.type === key)
-    nextSubjects[key] = variant?.subject ?? ''
-    nextBodies[key] = variant?.body ?? ''
+    nextSubjects[key] = variant?.subject || primarySubject
+    nextBodies[key] = variant?.body || primaryBody
+  }
+  if (primarySubject) {
+    nextSubjects.professional = primarySubject
+    nextBodies.professional = primaryBody
   }
   editSubjects.value = nextSubjects
   editBodies.value = nextBodies
@@ -160,8 +166,7 @@ function applyRouteSelection(forceHydrate: boolean): boolean {
   const draft = snapshot.value.drafts.find((d) => d.leadId === leadId)
   if (!draft) return false
   selectedId.value = leadId
-  activeVariant.value =
-    draft.selectedVariant === 'professional' ? 'professional' : 'short'
+  activeVariant.value = 'professional'
   hydrateEdits(draft, forceHydrate || editLeadId.value !== leadId)
   return true
 }
@@ -252,8 +257,7 @@ async function onBatchDraft(): Promise<void> {
 
 function selectDraft(row: EmailDraftRowDto): void {
   selectedId.value = row.leadId
-  activeVariant.value =
-    row.selectedVariant === 'professional' ? 'professional' : 'short'
+  activeVariant.value = 'professional'
   hydrateEdits(row, true)
 }
 
