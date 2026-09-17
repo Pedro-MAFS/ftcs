@@ -34,6 +34,7 @@ const settingsCats: Array<{ id: SettingsCategory; label: string }> = [
   { id: 'search', label: '搜索服务' },
   { id: 'explore', label: '探索' },
   { id: 'integrations', label: '集成' },
+  { id: 'outreach', label: '开发信' },
   { id: 'workspace', label: '工作区' },
   { id: 'opencode', label: 'OpenCode 运行时' },
   { id: 'about', label: '关于与隐私' },

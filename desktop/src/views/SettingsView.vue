@@ -86,7 +86,15 @@ const form = reactive({
   googleProxyManualUrl: 'http://127.0.0.1:7890',
   searchDailyLimit: 50,
   customModelSupportsImage: false,
+  emailDraftStylePrompt: '专业，真诚',
 })
+
+const EMAIL_DRAFT_STYLE_PROMPT_MAX = 500
+const DEFAULT_EMAIL_DRAFT_STYLE_PROMPT = '专业，真诚'
+
+const emailStyleCharCount = computed(
+  () => [...form.emailDraftStylePrompt].length,
+)
 
 const channels: Array<{ id: ChannelMode; label: string }> = [
   { id: 'official', label: '官方通道' },
@@ -99,6 +107,7 @@ const categories: Array<{ id: typeof activeCategory.value; label: string }> = [
   { id: 'search', label: '搜索服务' },
   { id: 'explore', label: '探索' },
   { id: 'integrations', label: '集成' },
+  { id: 'outreach', label: '开发信' },
   { id: 'workspace', label: '工作区' },
   { id: 'opencode', label: 'OpenCode 运行时' },
   { id: 'about', label: '关于与隐私' },
@@ -218,6 +227,8 @@ function applySnapshot(data: SettingsSnapshot): void {
     data.googleProxyManualUrl || 'http://127.0.0.1:7890'
   form.searchDailyLimit = data.searchDailyLimit
   form.customModelSupportsImage = data.customModelSupportsImage
+  form.emailDraftStylePrompt =
+    data.emailDraftStylePrompt?.trim() || DEFAULT_EMAIL_DRAFT_STYLE_PROMPT
   if (data.channelMode === 'custom') {
     form.customModelId = data.model.includes('/')
       ? data.model.split('/').slice(1).join('/')
@@ -423,8 +434,13 @@ async function onSave(): Promise<void> {
       googleProxyManualUrl: form.googleProxyManualUrl,
       searchDailyLimit: form.searchDailyLimit,
       customModelSupportsImage: form.customModelSupportsImage,
+      emailDraftStylePrompt: form.emailDraftStylePrompt,
     })
     applySnapshot(result.settings)
+    if (!result.ok) {
+      error.value = result.message
+      return
+    }
     message.value = result.message
     await refresh()
   } catch (err) {
@@ -1347,6 +1363,49 @@ async function onCheckUpdate(): Promise<void> {
               {{ hunterTestMessage }}
             </p>
           </div>
+        </section>
+
+        <hr class="settings-divider" />
+
+        <!-- 开发信 -->
+        <section id="settings-outreach" class="settings-block">
+          <div class="settings-block__head">
+            <div class="settings-block__title">
+              <h3>开发信行文风格</h3>
+              <span class="muted mono">emailDraftStylePrompt</span>
+            </div>
+          </div>
+          <p class="hint-line">
+            <Icon name="info" :size="12" />
+            用自然语言描述期望语气。默认「专业，真诚」。修改后不会自动重写已有草稿，仅影响之后的起草与重写。
+          </p>
+          <textarea
+            v-model="form.emailDraftStylePrompt"
+            class="text-input"
+            rows="5"
+            placeholder="例：简洁、少套话；偏顾问语气，强调 OEM 与交期；活泼但专业，避免过度热情。"
+          />
+          <div class="settings-actions-row">
+            <p class="muted">
+              作用域：本机全局 · 跨产品 · {{ emailStyleCharCount }}/{{
+                EMAIL_DRAFT_STYLE_PROMPT_MAX
+              }} 字
+            </p>
+            <button
+              type="button"
+              class="btn-secondary btn-sm"
+              :disabled="
+                form.emailDraftStylePrompt.trim() ===
+                DEFAULT_EMAIL_DRAFT_STYLE_PROMPT
+              "
+              @click="form.emailDraftStylePrompt = DEFAULT_EMAIL_DRAFT_STYLE_PROMPT"
+            >
+              恢复默认
+            </button>
+          </div>
+          <p class="hint-line muted">
+            不做正式/简洁/友好等预设；由大模型理解自然语言并落实到主题与正文。
+          </p>
         </section>
 
         <hr class="settings-divider" />

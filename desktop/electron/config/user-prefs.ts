@@ -11,6 +11,8 @@ interface UserPrefs {
   opencodePath?: string
   /** 一键安装的 OfficeCLI 可执行文件绝对路径 */
   officecliPath?: string
+  /** 全局开发信行文风格（自由文本，可空） */
+  emailDraftStylePrompt?: string
   onboarding?: OnboardingState
   update?: {
     dismissedVersion?: string

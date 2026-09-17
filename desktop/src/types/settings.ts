@@ -61,6 +61,8 @@ export interface SettingsSnapshot {
   customModelSupportsImage: boolean
   opencodeConfigPath: string
   envPath: string
+  /** 全局开发信行文风格（自由文本，可空） */
+  emailDraftStylePrompt: string
 }
 
 export interface SettingsSaveInput {
@@ -79,6 +81,8 @@ export interface SettingsSaveInput {
   googleProxyManualUrl?: string
   searchDailyLimit: number
   customModelSupportsImage?: boolean
+  /** 省略则不修改；传入则校验后写入 prefs（允许空串清空） */
+  emailDraftStylePrompt?: string
 }
 
 export interface SettingsSaveResult {
@@ -122,6 +126,7 @@ export type SettingsCategory =
   | 'search'
   | 'explore'
   | 'integrations'
+  | 'outreach'
   | 'workspace'
   | 'opencode'
   | 'about'

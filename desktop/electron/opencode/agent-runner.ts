@@ -31,6 +31,8 @@ import {
   loadEmailDraftsArtifact,
   type EmailDraftsArtifact,
 } from '../emails/emails-reader'
+import { formatEmailStylePromptBlock, resolveEmailDraftStylePrompt } from '../settings/email-draft-style'
+import { readUserPrefs } from '../config/user-prefs'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -153,6 +155,9 @@ function buildDraftOutreachPrompt(
 ): string {
   const idsJson = JSON.stringify(leadIds)
   const limit = Math.min(Math.max(leadIds.length, 1), 50)
+  const styleBlock = formatEmailStylePromptBlock(
+    resolveEmailDraftStylePrompt(readUserPrefs().emailDraftStylePrompt),
+  )
   return [
     '请严格按 skill `draft-outreach-email` 执行，为指定线索生成开发信草稿。',
     '',
@@ -160,6 +165,7 @@ function buildDraftOutreachPrompt(
     `线索 ID 列表 lead_ids：${idsJson}`,
     `limit：${limit}`,
     '',
+    ...(styleBlock ? [styleBlock] : []),
     '执行要求：',
     '1. 调用 lead-store.leads_get_scored 确认 scored.json 存在；若无则停止并提示先运行 score-and-dedupe。',
     '2. 必须调用 lead-store.email_draft_generate，传入上述 product_id、lead_ids、limit，以及 write_markdown: true。禁止用手写/Write 工具直接创建 draft.json。',

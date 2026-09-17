@@ -2776,6 +2776,15 @@ select.text-input {
   font-family: var(--font-sans);
 }
 
+textarea.text-input {
+  height: auto;
+  min-height: 110px;
+  padding: 10px 12px;
+  line-height: 1.45;
+  resize: vertical;
+  font-family: var(--font-sans);
+}
+
 .input-row {
   display: flex;
   align-items: center;

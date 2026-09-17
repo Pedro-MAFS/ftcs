@@ -29,6 +29,11 @@ import {
   HUNTER_API_KEYS_MAX,
 } from './hunter-keys'
 import {
+  normalizeEmailDraftStylePrompt,
+  resolveEmailDraftStylePrompt,
+} from './email-draft-style'
+import { readUserPrefs, writeUserPrefs } from '../config/user-prefs'
+import {
   GOOGLE_PROXY_MODE_ENV,
   GOOGLE_PROXY_RESOLVED_ENV,
   GOOGLE_PROXY_URL_ENV,
@@ -89,6 +94,8 @@ export interface SettingsSnapshot {
   customModelSupportsImage: boolean
   opencodeConfigPath: string
   envPath: string
+  /** 全局开发信行文风格（自由文本，可空） */
+  emailDraftStylePrompt: string
 }
 
 export interface SettingsSaveInput {
@@ -110,6 +117,8 @@ export interface SettingsSaveInput {
   searchDailyLimit: number
   /** 自定义通道：勾选后写入 OpenCode modalities 以支持 Read 图片 */
   customModelSupportsImage?: boolean
+  /** 省略则不修改；传入则校验后写入 prefs（允许空串清空） */
+  emailDraftStylePrompt?: string
 }
 
 export interface SettingsSaveResult {
@@ -353,10 +362,25 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     customModelSupportsImage: parseEnvBool(env[CUSTOM_VISION_ENV]),
     opencodeConfigPath,
     envPath,
+    emailDraftStylePrompt: resolveEmailDraftStylePrompt(
+      readUserPrefs().emailDraftStylePrompt,
+    ),
   }
 }
 
 export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
+  if (input.emailDraftStylePrompt !== undefined) {
+    const normalized = normalizeEmailDraftStylePrompt(input.emailDraftStylePrompt)
+    if (!normalized.ok) {
+      return {
+        ok: false,
+        message: normalized.message,
+        settings: getSettingsSnapshot(),
+      }
+    }
+    writeUserPrefs({ emailDraftStylePrompt: normalized.value })
+  }
+
   const workspaceRoot = getWorkspaceRoot()
   const envPath = getEnvPath(workspaceRoot)
   const env = readEnvFile(envPath)
