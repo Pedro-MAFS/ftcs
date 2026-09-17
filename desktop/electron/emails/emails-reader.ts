@@ -2,6 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { getWorkspaceRoot } from '../config/paths'
+import {
+  buildEmailRecipientPool,
+  pickDefaultRecipientKey,
+} from './email-recipient-pool'
 
 export interface EmailVariantRow {
   type: string
@@ -103,6 +107,24 @@ function getCompanyMarkdownPath(leadId: string, workspaceRoot = getWorkspaceRoot
   return path.join(getEmailsDir(workspaceRoot), leadId, 'draft.md')
 }
 
+export function resolveSlotDraftAbsPath(
+  leadId: string,
+  recipientKey: string,
+  workspaceRoot = getWorkspaceRoot(),
+): string {
+  const key = recipientKey.trim() || COMPANY_KEY
+  if (key === COMPANY_KEY) {
+    return getCompanyDraftPath(leadId, workspaceRoot)
+  }
+  return path.join(getEmailsDir(workspaceRoot), leadId, key, 'draft.json')
+}
+
+export function resolveSlotDraftRelPath(leadId: string, recipientKey: string): string {
+  const key = recipientKey.trim() || COMPANY_KEY
+  if (key === COMPANY_KEY) return `data/emails/${leadId}/draft.json`
+  return `data/emails/${leadId}/${key}/draft.json`
+}
+
 function normalizeEmail(raw: string): string | null {
   const normalized = raw.trim().toLowerCase()
   if (!normalized || !normalized.includes('@')) return null
@@ -141,6 +163,12 @@ type ScoredLeadLite = {
   score: number | null
   email: string
   contacts: Array<{ type: string; value: string }>
+  people: Array<{
+    email: string
+    firstName: string | null
+    name: string | null
+    title: string | null
+  }>
 }
 
 function loadScoredLeadMap(
@@ -173,6 +201,20 @@ function loadScoredLeadMap(
         contacts.push({ type, value })
         if (!email && type === 'email') email = value
       }
+      const peopleRaw = Array.isArray(raw.people) ? raw.people : []
+      const people: ScoredLeadLite['people'] = []
+      for (const p of peopleRaw) {
+        const person = asRecord(p)
+        if (!person) continue
+        const pEmail = asString(person.email)
+        if (!pEmail) continue
+        people.push({
+          email: pEmail,
+          firstName: person.first_name === null ? null : asString(person.first_name) || null,
+          name: asString(person.name) || null,
+          title: person.title === null ? null : asString(person.title) || null,
+        })
+      }
       map.set(id, {
         id,
         companyName: asString(company.name) || id,
@@ -181,6 +223,7 @@ function loadScoredLeadMap(
         score: asNumber(raw.score),
         email,
         contacts,
+        people,
       })
     }
   } catch {
@@ -469,7 +512,7 @@ function buildLeadRow(
   const leadDir = path.join(getEmailsDir(workspaceRoot), leadId)
   if (!fs.existsSync(leadDir)) return null
 
-  const slots: EmailDraftSlotDto[] = []
+  const slots: EmailDraftSlotRow[] = []
   const companyPath = path.join(leadDir, 'draft.json')
   let companyParsed: ReturnType<typeof parseSlotFile> = null
   if (fs.existsSync(companyPath)) {
@@ -570,9 +613,50 @@ function buildLeadRow(
   }
 }
 
+/** 无磁盘稿时的左栏占位（路由 ?leadId= 进入） */
+export function buildEmailLeadStub(
+  productId: string,
+  leadId: string,
+  workspaceRoot = getWorkspaceRoot(),
+): EmailDraftRow | null {
+  const scored = loadScoredLeadMap(productId, workspaceRoot)
+  const lead = scored.get(leadId)
+  if (!lead) return null
+  return {
+    id: leadId,
+    leadId,
+    productId,
+    createdAt: '',
+    status: 'pending_review',
+    language: 'en',
+    companyName: lead.companyName,
+    recipientEmail: lead.email || '',
+    tier: lead.tier || '',
+    leadStatus: lead.status || '',
+    score: lead.score,
+    subject: '',
+    body: '',
+    audience: 'company',
+    hasCompanyDraft: false,
+    personDraftCount: 0,
+    draftCount: 0,
+    subjectZh: null,
+    bodyZh: null,
+    stylePrompt: null,
+    recipientAliases: [],
+    slots: [],
+    selectedVariant: 'professional',
+    variants: [{ type: 'professional', subject: '', body: '' }],
+    personalizationEvidence: [],
+    draftPath: `data/emails/${leadId}/draft.json`,
+    markdownPath: '',
+  }
+}
+
 export function listEmailDraftsSnapshot(
   productId: string,
   workspaceRoot = getWorkspaceRoot(),
+  options?: { includeLeadId?: string },
 ): EmailDraftsSnapshot {
   migrateAllEmailDrafts(workspaceRoot)
 
@@ -591,7 +675,19 @@ export function listEmailDraftsSnapshot(
     }
   }
 
-  drafts.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+  const includeLeadId = options?.includeLeadId?.trim()
+  if (includeLeadId && !drafts.some((d) => d.leadId === includeLeadId)) {
+    const stub = buildEmailLeadStub(productId, includeLeadId, workspaceRoot)
+    if (stub) drafts.unshift(stub)
+  }
+
+  drafts.sort((a, b) => {
+    if (includeLeadId) {
+      if (a.leadId === includeLeadId) return -1
+      if (b.leadId === includeLeadId) return 1
+    }
+    return (b.createdAt || '').localeCompare(a.createdAt || '')
+  })
 
   let pendingReview = 0
   for (const d of drafts) {
@@ -603,11 +699,208 @@ export function listEmailDraftsSnapshot(
     drafts,
     pendingHighLeadIds,
     stats: {
-      total: drafts.length,
+      total: drafts.filter((d) => d.draftCount > 0).length,
       pendingReview,
       pendingHigh: pendingHighLeadIds.length,
       totalDraftFiles,
     },
+  }
+}
+
+export type EmailDraftSlotDetail = {
+  ok: boolean
+  exists: boolean
+  message?: string
+  productId: string
+  leadId: string
+  recipientKey: string
+  audience: 'company' | 'person'
+  email: string
+  name: string
+  recipientAliases: string[]
+  status: string
+  language: string
+  subject: string
+  body: string
+  subjectZh: string | null
+  bodyZh: string | null
+  stylePrompt: string | null
+  personalizationEvidence: string[]
+  draftPath: string
+  companyName: string
+}
+
+export function getEmailDraftSlot(
+  productId: string,
+  leadId: string,
+  recipientKey: string,
+  workspaceRoot = getWorkspaceRoot(),
+): EmailDraftSlotDetail {
+  const pid = productId.trim()
+  const lid = leadId.trim()
+  const key = recipientKey.trim() || COMPANY_KEY
+  const base: EmailDraftSlotDetail = {
+    ok: true,
+    exists: false,
+    productId: pid,
+    leadId: lid,
+    recipientKey: key,
+    audience: key === COMPANY_KEY ? 'company' : 'person',
+    email: '',
+    name: '',
+    recipientAliases: [],
+    status: '',
+    language: 'en',
+    subject: '',
+    body: '',
+    subjectZh: null,
+    bodyZh: null,
+    stylePrompt: null,
+    personalizationEvidence: [],
+    draftPath: resolveSlotDraftRelPath(lid, key),
+    companyName: '',
+  }
+
+  if (!pid) return { ...base, ok: false, message: '缺少 productId' }
+  if (!lid) return { ...base, ok: false, message: '缺少 leadId' }
+
+  const scored = loadScoredLeadMap(pid, workspaceRoot)
+  const scoredLead = scored.get(lid)
+  base.companyName = scoredLead?.companyName || lid
+
+  migrateAllEmailDrafts(workspaceRoot)
+  const abs = resolveSlotDraftAbsPath(lid, key, workspaceRoot)
+  if (!fs.existsSync(abs)) {
+    return base
+  }
+
+  const parsed = parseSlotFile(
+    abs,
+    key === COMPANY_KEY ? 'company' : 'person',
+    key,
+  )
+  if (!parsed) {
+    return { ...base, ok: false, message: '草稿文件无效' }
+  }
+
+  const draftProductId = asString(parsed.raw.product_id)
+  if (draftProductId && draftProductId !== pid) {
+    return {
+      ...base,
+      ok: false,
+      message: `草稿属于 ${draftProductId}，与当前产品不一致`,
+    }
+  }
+
+  const evidence = Array.isArray(parsed.raw.personalization_evidence)
+    ? parsed.raw.personalization_evidence.map(String)
+    : []
+  const recipient = asRecord(parsed.raw.recipient) ?? {}
+  const aliases = Array.isArray(recipient.recipient_aliases)
+    ? recipient.recipient_aliases.map(String).map((s) => s.trim().toLowerCase()).filter(Boolean)
+    : []
+
+  return {
+    ...base,
+    exists: true,
+    audience: parsed.audience,
+    email: parsed.email,
+    name: parsed.name,
+    recipientAliases: aliases,
+    status: parsed.status,
+    language: asString(parsed.raw.language) || 'en',
+    subject: parsed.subject,
+    body: parsed.body,
+    subjectZh: asString(parsed.raw.subject_zh) || null,
+    bodyZh: asString(parsed.raw.body_zh) || null,
+    stylePrompt: asString(parsed.raw.style_prompt) || null,
+    personalizationEvidence: evidence,
+    companyName:
+      asString(recipient.company) ||
+      scoredLead?.companyName ||
+      lid,
+  }
+}
+
+export type EmailRecipientPoolResult = {
+  ok: boolean
+  message?: string
+  productId: string
+  leadId: string
+  companyName: string
+  tier: string
+  leadStatus: string
+  score: number | null
+  pool: ReturnType<typeof buildEmailRecipientPool>
+  defaultRecipientKey: string
+}
+
+export function getEmailRecipientPool(
+  productId: string,
+  leadId: string,
+  workspaceRoot = getWorkspaceRoot(),
+): EmailRecipientPoolResult {
+  const pid = productId.trim()
+  const lid = leadId.trim()
+  if (!pid) {
+    return {
+      ok: false,
+      message: '缺少 productId',
+      productId: '',
+      leadId: lid,
+      companyName: '',
+      tier: '',
+      leadStatus: '',
+      score: null,
+      pool: [],
+      defaultRecipientKey: COMPANY_KEY,
+    }
+  }
+  if (!lid) {
+    return {
+      ok: false,
+      message: '缺少 leadId',
+      productId: pid,
+      leadId: '',
+      companyName: '',
+      tier: '',
+      leadStatus: '',
+      score: null,
+      pool: [],
+      defaultRecipientKey: COMPANY_KEY,
+    }
+  }
+
+  migrateAllEmailDrafts(workspaceRoot)
+  const scored = loadScoredLeadMap(pid, workspaceRoot)
+  const lead = scored.get(lid)
+  const row = buildLeadRow(lid, scored, workspaceRoot, pid)
+  const slots = (row?.slots ?? []).map((s) => ({
+    recipientKey: s.recipientKey,
+    slotKind: s.slotKind,
+    email: s.email,
+    name: s.name,
+    status: s.status,
+  }))
+
+  const pool = buildEmailRecipientPool({
+    companyName: lead?.companyName || row?.companyName || lid,
+    contacts: lead?.contacts ?? [],
+    people: lead?.people ?? [],
+    slots,
+    recipientKeyFromEmail,
+  })
+
+  return {
+    ok: true,
+    productId: pid,
+    leadId: lid,
+    companyName: lead?.companyName || row?.companyName || lid,
+    tier: lead?.tier || row?.tier || '',
+    leadStatus: lead?.status || row?.leadStatus || '',
+    score: lead?.score ?? row?.score ?? null,
+    pool,
+    defaultRecipientKey: pickDefaultRecipientKey(pool),
   }
 }
 

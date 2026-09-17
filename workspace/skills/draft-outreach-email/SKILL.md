@@ -108,7 +108,34 @@ email_draft_save({
 
 显式传入 `lead_ids` 时：覆盖该线索计划内已有稿。
 
-### Step 4：输出摘要
+## 单槽模式
+
+当任务明确指定 **单条** `lead_id` + `audience`（及个人向 `email`）时，走单槽流程，只覆盖当前收件人。
+
+### 何时使用
+
+- 邮件页对某一收件人点击「起草」或「重写」
+- 用户说「只给某人写一封」「重写公司向」等单收件人意图
+
+### 执行步骤（单槽）
+
+1. 调用 `lead-store.product_get({ product_id })`
+2. 调用 `lead-store.email_draft_plan_slot`：
+
+```
+email_draft_plan_slot({
+  product_id,
+  lead_id,
+  audience,   // "company" | "person"
+  email       // 个人向必填
+})
+```
+
+3. 按返回槽位撰写英文 `subject`/`body`（采用 `greeting_line`），再 **一次** `email_draft_save`（带 `style_prompt`、`write_markdown: true`）
+4. **禁止**调用整 lead 的 `email_draft_plan`
+5. 简短汇报落盘路径与 subject
+
+## 输出摘要（批量 / 单槽通用）
 
 用简短中文汇报：
 

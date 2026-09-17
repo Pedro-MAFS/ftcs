@@ -63,8 +63,12 @@ import type {
   RawLeadSaveInput,
   ExportLeadsCsvInput,
   DraftEmailsInput,
+  DraftEmailSlotInput,
   RejectEmailDraftInput,
   ApproveEmailDraftInput,
+  GetEmailDraftSlotInput,
+  SaveEmailDraftSlotInput,
+  GetEmailRecipientPoolInput,
 } from './ipc/types'
 import { AgentRunController } from './opencode/agent-runner'
 import { bootstrapProductFromLibrary } from './profile/profile-bootstrap'
@@ -83,8 +87,8 @@ import { saveRawLead } from './leads/lead-writer'
 import { saveScoredPeople } from './leads/save-scored-people'
 import { verifyPersonEmail } from './leads/verify-person-email'
 import { saveCsvWithDialog } from './leads/export-csv'
-import { listEmailDraftsSnapshot } from './emails/emails-reader'
-import { approveEmailDraft, rejectEmailDraft } from './emails/emails-writer'
+import { listEmailDraftsSnapshot, getEmailDraftSlot, getEmailRecipientPool } from './emails/emails-reader'
+import { approveEmailDraft, rejectEmailDraft, saveEmailDraftSlot } from './emails/emails-writer'
 import {
   runAgentPreflight,
   type AgentPreflightKind,
@@ -1183,7 +1187,7 @@ function registerIpcHandlers(): void {
     },
   )
 
-  ipcMain.handle(IPC.EMAIL_DRAFT_LIST, (_event, productId: string) => {
+  ipcMain.handle(IPC.EMAIL_DRAFT_LIST, (_event, productId: string, includeLeadId?: string) => {
     try {
       if (!productId || typeof productId !== 'string') {
         return {
@@ -1193,7 +1197,9 @@ function registerIpcHandlers(): void {
           stats: { total: 0, pendingReview: 0, pendingHigh: 0 },
         }
       }
-      return listEmailDraftsSnapshot(productId)
+      return listEmailDraftsSnapshot(productId, undefined, {
+        includeLeadId: typeof includeLeadId === 'string' ? includeLeadId : undefined,
+      })
     } catch (err) {
       return {
         productId,
@@ -1201,6 +1207,65 @@ function registerIpcHandlers(): void {
         pendingHighLeadIds: [],
         stats: { total: 0, pendingReview: 0, pendingHigh: 0 },
         error: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.EMAIL_DRAFT_GET, (_event, input: GetEmailDraftSlotInput) => {
+    try {
+      return getEmailDraftSlot(input.productId, input.leadId, input.recipientKey)
+    } catch (err) {
+      return {
+        ok: false,
+        exists: false,
+        message: err instanceof Error ? err.message : String(err),
+        productId: input?.productId ?? '',
+        leadId: input?.leadId ?? '',
+        recipientKey: input?.recipientKey ?? 'company',
+        audience: 'company' as const,
+        email: '',
+        name: '',
+        recipientAliases: [],
+        status: '',
+        language: 'en',
+        subject: '',
+        body: '',
+        subjectZh: null,
+        bodyZh: null,
+        stylePrompt: null,
+        personalizationEvidence: [],
+        draftPath: '',
+        companyName: '',
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.EMAIL_DRAFT_SAVE, (_event, input: SaveEmailDraftSlotInput) => {
+    try {
+      return saveEmailDraftSlot(input)
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.EMAIL_RECIPIENT_POOL, (_event, input: GetEmailRecipientPoolInput) => {
+    try {
+      return getEmailRecipientPool(input.productId, input.leadId)
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+        productId: input?.productId ?? '',
+        leadId: input?.leadId ?? '',
+        companyName: '',
+        tier: '',
+        leadStatus: '',
+        score: null,
+        pool: [],
+        defaultRecipientKey: 'company',
       }
     }
   })
@@ -1266,6 +1331,59 @@ function registerIpcHandlers(): void {
         ok: true,
         message: `正在为 ${productId} 起草开发信（${scope}）…`,
         productId,
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.EMAIL_DRAFT_GENERATE_SLOT, async (event, input: DraftEmailSlotInput) => {
+    try {
+      const productId = input?.productId
+      const leadId = input?.leadId
+      if (!productId || typeof productId !== 'string') {
+        return { ok: false, message: '缺少 productId' }
+      }
+      if (!leadId || typeof leadId !== 'string') {
+        return { ok: false, message: '缺少 leadId' }
+      }
+      const audience = input.audience === 'person' ? 'person' : 'company'
+      const preflight = await gateAgentStart('draft-email')
+      if (!preflight.ok) {
+        return { ok: false, message: preflight.message }
+      }
+
+      const sender = event.sender
+      void getAgentRunner()
+        .runDraftOutreachEmailSlot(
+          {
+            productId,
+            leadId,
+            audience,
+            email: typeof input.email === 'string' ? input.email : undefined,
+            recipientKey:
+              typeof input.recipientKey === 'string' ? input.recipientKey : undefined,
+          },
+          (payload) => emitAgentEvent(sender, payload),
+        )
+        .catch((err) => {
+          emitAgentEvent(sender, {
+            type: 'done',
+            ok: false,
+            productId,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        })
+
+      return {
+        ok: true,
+        message: `正在为线索 ${leadId} 起草/重写当前收件人开发信…`,
+        productId,
+        leadId,
+        recipientKey: input.recipientKey || (audience === 'company' ? 'company' : undefined),
       }
     } catch (err) {
       return {

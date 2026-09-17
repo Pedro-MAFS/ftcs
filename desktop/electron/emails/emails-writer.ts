@@ -1,6 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getWorkspaceRoot } from '../config/paths'
+import {
+  resolveSlotDraftAbsPath,
+  resolveSlotDraftRelPath,
+} from './emails-reader'
 
 export interface RejectEmailDraftInput {
   productId: string
@@ -23,10 +27,15 @@ export interface EmailVariantEdit {
 export interface ApproveEmailDraftInput {
   productId: string
   leadId: string
-  /** 选用的邮件变体；默认 short */
+  /** 当前选中收件人槽；默认 company */
+  recipientKey?: string
+  /** 选用的邮件变体；默认 short（过渡兼容） */
   selectedVariant?: 'short' | 'professional'
-  /** 可选：一并写入的变体内容（人工改稿） */
+  /** 可选：一并写入的变体内容（人工改稿，过渡兼容） */
   variants?: EmailVariantEdit[]
+  /** 单正文改稿（优先于 variants） */
+  subject?: string
+  body?: string
 }
 
 export interface ApproveEmailDraftResult {
@@ -34,6 +43,24 @@ export interface ApproveEmailDraftResult {
   message: string
   productId?: string
   leadId?: string
+  recipientKey?: string
+}
+
+export interface SaveEmailDraftSlotInput {
+  productId: string
+  leadId: string
+  recipientKey: string
+  subject: string
+  body: string
+}
+
+export interface SaveEmailDraftSlotResult {
+  ok: boolean
+  message: string
+  productId?: string
+  leadId?: string
+  recipientKey?: string
+  draftPath?: string
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -167,21 +194,27 @@ function updateLeadStatus(
   return { ok: true, message: `线索状态已更新为 ${status}` }
 }
 
-function getDraftPath(leadId: string, workspaceRoot: string): string {
-  return path.join(getEmailLeadDir(leadId, workspaceRoot), 'draft.json')
-}
-
-function getMarkdownPath(leadId: string, workspaceRoot: string): string {
-  return path.join(getEmailLeadDir(leadId, workspaceRoot), 'draft.md')
+function getMarkdownPath(
+  leadId: string,
+  recipientKey: string,
+  workspaceRoot: string,
+): string {
+  const key = recipientKey.trim() || 'company'
+  if (key === 'company') {
+    return path.join(getEmailLeadDir(leadId, workspaceRoot), 'draft.md')
+  }
+  return path.join(getEmailLeadDir(leadId, workspaceRoot), key, 'draft.md')
 }
 
 function syncApprovedMarkdown(
   draft: Record<string, unknown>,
   leadId: string,
+  recipientKey: string,
   workspaceRoot: string,
 ): void {
-  const mdPath = getMarkdownPath(leadId, workspaceRoot)
-  if (!fs.existsSync(mdPath) && !fs.existsSync(getDraftPath(leadId, workspaceRoot))) {
+  const mdPath = getMarkdownPath(leadId, recipientKey, workspaceRoot)
+  const draftPath = resolveSlotDraftAbsPath(leadId, recipientKey, workspaceRoot)
+  if (!fs.existsSync(mdPath) && !fs.existsSync(draftPath)) {
     return
   }
 
@@ -207,6 +240,7 @@ function syncApprovedMarkdown(
     '',
     `- status: approved`,
     `- audience: ${cleanString(draft.audience) || 'company'}`,
+    `- recipient_key: ${recipientKey || 'company'}`,
     `- reviewed_at: ${reviewedAt}`,
     '',
     `## Subject`,
@@ -253,7 +287,6 @@ export function rejectEmailDraft(
 
   const statusResult = updateLeadStatus(productId, leadId, 'new', workspaceRoot)
   if (!statusResult.ok) {
-    // 若仅有邮件目录、scored 无此线索，仍尽量删邮件文件
     if (hasEmailDir) {
       removeEmailDocuments(leadId, workspaceRoot)
       return {
@@ -269,7 +302,7 @@ export function rejectEmailDraft(
   const removed = removeEmailDocuments(leadId, workspaceRoot)
   const parts = ['已驳回：线索状态回退为 new']
   if (removed.removed) {
-    parts.push(`已删除 data/emails/${leadId}/`)
+    parts.push(`已删除 data/emails/${leadId}/（整条线索全部开发信）`)
   } else if (!hasEmailDir) {
     parts.push('未找到邮件目录（可能已删除）')
   }
@@ -283,24 +316,26 @@ export function rejectEmailDraft(
 }
 
 /**
- * 通过并保存：draft → approved（新 Schema 单正文），线索 → email_approved；不发送。
+ * 按槽保存编辑：不改审批状态。
  */
-export function approveEmailDraft(
-  input: ApproveEmailDraftInput,
+export function saveEmailDraftSlot(
+  input: SaveEmailDraftSlotInput,
   workspaceRoot = getWorkspaceRoot(),
-): ApproveEmailDraftResult {
+): SaveEmailDraftSlotResult {
   const productId = cleanString(input.productId)
   const leadId = cleanString(input.leadId)
+  const recipientKey = cleanString(input.recipientKey) || 'company'
   if (!productId) return { ok: false, message: '缺少 productId' }
   if (!leadId) return { ok: false, message: '缺少 leadId' }
 
-  const draftPath = getDraftPath(leadId, workspaceRoot)
+  const draftPath = resolveSlotDraftAbsPath(leadId, recipientKey, workspaceRoot)
   if (!fs.existsSync(draftPath)) {
     return {
       ok: false,
-      message: `未找到草稿：data/emails/${leadId}/draft.json`,
+      message: `未找到草稿：${resolveSlotDraftRelPath(leadId, recipientKey)}`,
       productId,
       leadId,
+      recipientKey,
     }
   }
 
@@ -308,7 +343,7 @@ export function approveEmailDraft(
   try {
     const parsed = asRecord(JSON.parse(fs.readFileSync(draftPath, 'utf8')))
     if (!parsed) {
-      return { ok: false, message: 'draft.json 格式无效', productId, leadId }
+      return { ok: false, message: 'draft.json 格式无效', productId, leadId, recipientKey }
     }
     draft = parsed
   } catch (err) {
@@ -317,6 +352,7 @@ export function approveEmailDraft(
       message: err instanceof Error ? err.message : String(err),
       productId,
       leadId,
+      recipientKey,
     }
   }
 
@@ -327,16 +363,101 @@ export function approveEmailDraft(
       message: `草稿属于 ${draftProductId}，与当前产品 ${productId} 不一致`,
       productId,
       leadId,
+      recipientKey,
     }
   }
 
-  let subject = cleanString(draft.subject)
-  let body = asBody(draft.body)
+  const subject = cleanString(input.subject)
+  const body = asBody(input.body)
+  if (!subject) {
+    return { ok: false, message: '主题不能为空', productId, leadId, recipientKey }
+  }
 
-  if (input.variants && input.variants.length > 0) {
+  const now = new Date().toISOString()
+  const nextDraft: Record<string, unknown> = {
+    ...draft,
+    product_id: draftProductId || productId,
+    lead_id: cleanString(draft.lead_id) || leadId,
+    updated_at: now,
+    subject,
+    body,
+    status: cleanString(draft.status) || 'pending_review',
+  }
+
+  fs.writeFileSync(draftPath, `${JSON.stringify(nextDraft, null, 2)}\n`, 'utf8')
+  return {
+    ok: true,
+    message: '已保存当前收件人草稿',
+    productId,
+    leadId,
+    recipientKey,
+    draftPath: resolveSlotDraftRelPath(leadId, recipientKey),
+  }
+}
+
+/**
+ * 通过并保存：当前槽 draft → approved，线索 → email_approved；不发送。
+ */
+export function approveEmailDraft(
+  input: ApproveEmailDraftInput,
+  workspaceRoot = getWorkspaceRoot(),
+): ApproveEmailDraftResult {
+  const productId = cleanString(input.productId)
+  const leadId = cleanString(input.leadId)
+  const recipientKey = cleanString(input.recipientKey) || 'company'
+  if (!productId) return { ok: false, message: '缺少 productId' }
+  if (!leadId) return { ok: false, message: '缺少 leadId' }
+
+  const draftPath = resolveSlotDraftAbsPath(leadId, recipientKey, workspaceRoot)
+  if (!fs.existsSync(draftPath)) {
+    return {
+      ok: false,
+      message: `未找到草稿：${resolveSlotDraftRelPath(leadId, recipientKey)}`,
+      productId,
+      leadId,
+      recipientKey,
+    }
+  }
+
+  let draft: Record<string, unknown>
+  try {
+    const parsed = asRecord(JSON.parse(fs.readFileSync(draftPath, 'utf8')))
+    if (!parsed) {
+      return { ok: false, message: 'draft.json 格式无效', productId, leadId, recipientKey }
+    }
+    draft = parsed
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+      productId,
+      leadId,
+      recipientKey,
+    }
+  }
+
+  const draftProductId = cleanString(draft.product_id)
+  if (draftProductId && draftProductId !== productId) {
+    return {
+      ok: false,
+      message: `草稿属于 ${draftProductId}，与当前产品 ${productId} 不一致`,
+      productId,
+      leadId,
+      recipientKey,
+    }
+  }
+
+  let subject = cleanString(input.subject) || cleanString(draft.subject)
+  let body =
+    typeof input.body === 'string' ? input.body : asBody(draft.body)
+
+  if (!subject && input.variants && input.variants.length > 0) {
     const preferred =
       input.variants.find((v) => v.type === 'professional') ??
-      input.variants.find((v) => v.type === (input.selectedVariant === 'short' ? 'short' : 'professional')) ??
+      input.variants.find(
+        (v) =>
+          v.type === (input.selectedVariant === 'short' ? 'short' : 'professional'),
+      ) ??
       input.variants[0]
     if (preferred) {
       subject = cleanString(preferred.subject)
@@ -363,6 +484,7 @@ export function approveEmailDraft(
       message: '草稿缺少 subject，无法保存',
       productId,
       leadId,
+      recipientKey,
     }
   }
 
@@ -376,7 +498,10 @@ export function approveEmailDraft(
     updated_at: reviewedAt,
     status: 'approved',
     language: cleanString(draft.language) || 'en',
-    audience: draft.audience === 'person' ? 'person' : 'company',
+    audience:
+      draft.audience === 'person' || recipientKey !== 'company'
+        ? 'person'
+        : 'company',
     recipient: {
       company: cleanString(recipient.company) || undefined,
       email: cleanString(recipient.email) || undefined,
@@ -401,7 +526,7 @@ export function approveEmailDraft(
   }
 
   fs.writeFileSync(draftPath, `${JSON.stringify(nextDraft, null, 2)}\n`, 'utf8')
-  syncApprovedMarkdown(nextDraft, leadId, workspaceRoot)
+  syncApprovedMarkdown(nextDraft, leadId, recipientKey, workspaceRoot)
 
   const statusResult = updateLeadStatus(
     productId,
@@ -415,13 +540,15 @@ export function approveEmailDraft(
       message: `草稿已标记 approved，但线索状态更新失败：${statusResult.message}`,
       productId,
       leadId,
+      recipientKey,
     }
   }
 
   return {
     ok: true,
-    message: '已通过并保存：单正文，线索状态 → email_approved',
+    message: '已通过并保存当前收件人草稿，线索状态 → email_approved',
     productId,
     leadId,
+    recipientKey,
   }
 }

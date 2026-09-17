@@ -2515,6 +2515,104 @@ button:focus-visible {
   flex-wrap: wrap;
 }
 
+.recipient-chips {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.recipient-chip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 200px;
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.recipient-chip:hover {
+  background: var(--bg-hover);
+}
+
+.recipient-chip.is-active {
+  background: var(--bg-active);
+  border-color: var(--accent, #3d7eff);
+}
+
+.recipient-chip.is-empty {
+  opacity: 0.78;
+}
+
+.recipient-chip__dot {
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.recipient-chip__dot.has-draft {
+  background: var(--accent, #3d7eff);
+}
+
+.recipient-chip__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.recipient-chip__name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recipient-chip__sub {
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email-preview__style {
+  margin: 0;
+  font-size: 11px;
+}
+
+.email-preview__slot-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  min-height: 200px;
+}
+
+.email-preview__slot-empty-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .email-preview__path {
   margin-left: auto;
   font-size: 11px;
@@ -2544,6 +2642,27 @@ button:focus-visible {
   font-size: 12px;
   color: var(--text);
   word-break: break-word;
+}
+
+.email-preview__to {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.email-preview__to.has-more {
+  cursor: help;
+}
+
+.email-preview__to-more {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .email-preview__field--full {

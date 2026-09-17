@@ -54,6 +54,10 @@ export const IPC = {
   LEADS_ENRICH_CONTACTS: 'leads:enrich-contacts',
   EMAIL_DRAFT_LIST: 'email:draft-list',
   EMAIL_DRAFT_GENERATE: 'email:draft-generate',
+  EMAIL_DRAFT_GENERATE_SLOT: 'email:draft-generate-slot',
+  EMAIL_DRAFT_GET: 'email:draft-get',
+  EMAIL_DRAFT_SAVE: 'email:draft-save',
+  EMAIL_RECIPIENT_POOL: 'email:recipient-pool',
   EMAIL_DRAFT_REJECT: 'email:draft-reject',
   EMAIL_DRAFT_APPROVE: 'email:draft-approve',
   WORKFLOW_LIST_PLANS: 'workflow:list-plans',
@@ -721,8 +725,11 @@ export interface EmailVariantEditDto {
 export interface ApproveEmailDraftInput {
   productId: string
   leadId: string
+  recipientKey?: string
   selectedVariant?: 'short' | 'professional'
   variants?: EmailVariantEditDto[]
+  subject?: string
+  body?: string
 }
 
 export interface ApproveEmailDraftResult {
@@ -730,6 +737,100 @@ export interface ApproveEmailDraftResult {
   message: string
   productId?: string
   leadId?: string
+  recipientKey?: string
+}
+
+export interface GetEmailDraftSlotInput {
+  productId: string
+  leadId: string
+  recipientKey: string
+}
+
+export interface EmailDraftSlotDetailDto {
+  ok: boolean
+  exists: boolean
+  message?: string
+  productId: string
+  leadId: string
+  recipientKey: string
+  audience: 'company' | 'person'
+  email: string
+  name: string
+  recipientAliases: string[]
+  status: string
+  language: string
+  subject: string
+  body: string
+  subjectZh: string | null
+  bodyZh: string | null
+  stylePrompt: string | null
+  personalizationEvidence: string[]
+  draftPath: string
+  companyName: string
+}
+
+export interface SaveEmailDraftSlotInput {
+  productId: string
+  leadId: string
+  recipientKey: string
+  subject: string
+  body: string
+}
+
+export interface SaveEmailDraftSlotResult {
+  ok: boolean
+  message: string
+  productId?: string
+  leadId?: string
+  recipientKey?: string
+  draftPath?: string
+}
+
+export interface GetEmailRecipientPoolInput {
+  productId: string
+  leadId: string
+}
+
+export interface EmailRecipientPoolItemDto {
+  recipientKey: string
+  kind: 'company' | 'person'
+  email: string | null
+  emails: string[]
+  displayName: string
+  title: string | null
+  emailLevel: 'generic' | 'personal' | null
+  source: 'slot' | 'contacts' | 'people' | 'both'
+  hasDraft: boolean
+  draftStatus: string | null
+}
+
+export interface EmailRecipientPoolResultDto {
+  ok: boolean
+  message?: string
+  productId: string
+  leadId: string
+  companyName: string
+  tier: string
+  leadStatus: string
+  score: number | null
+  pool: EmailRecipientPoolItemDto[]
+  defaultRecipientKey: string
+}
+
+export interface DraftEmailSlotInput {
+  productId: string
+  leadId: string
+  audience: 'company' | 'person'
+  email?: string
+  recipientKey?: string
+}
+
+export interface DraftEmailSlotResult {
+  ok: boolean
+  message: string
+  productId?: string
+  leadId?: string
+  recipientKey?: string
 }
 
 export interface RawLeadContactEditDto {

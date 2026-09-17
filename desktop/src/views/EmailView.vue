@@ -6,9 +6,12 @@ import { useWorkspace } from '../composables/useWorkspace'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import Icon from '../components/shared/Icon.vue'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
-import type { EmailDraftRowDto, EmailDraftsSnapshotDto } from '../types/electron'
-
-type VariantKey = 'short' | 'professional'
+import type {
+  EmailDraftRowDto,
+  EmailDraftSlotDetailDto,
+  EmailDraftsSnapshotDto,
+  EmailRecipientPoolItemDto,
+} from '../types/electron'
 
 const meta = SECTION_META.email
 const route = useRoute()
@@ -21,25 +24,28 @@ const {
 } = useWorkspace()
 
 const loading = ref(false)
+const slotLoading = ref(false)
 const drafting = ref(false)
+const saving = ref(false)
 const rejecting = ref(false)
 const approving = ref(false)
 const rejectConfirmOpen = ref(false)
+const rewriteConfirmOpen = ref(false)
+const discardConfirmOpen = ref(false)
+const pendingRecipientKey = ref('')
 const actionMessage = ref('')
 const snapshot = ref<EmailDraftsSnapshotDto | null>(null)
 const selectedId = ref('')
-const activeVariant = ref<VariantKey>('professional')
+const selectedRecipientKey = ref('company')
+const recipientPool = ref<EmailRecipientPoolItemDto[]>([])
+const slotDetail = ref<EmailDraftSlotDetailDto | null>(null)
 
-/** 本地改稿缓冲；轮询刷新同一 lead 时不覆盖 */
 const editLeadId = ref('')
-const editSubjects = ref<Record<VariantKey, string>>({
-  short: '',
-  professional: '',
-})
-const editBodies = ref<Record<VariantKey, string>>({
-  short: '',
-  professional: '',
-})
+const editRecipientKey = ref('')
+const editSubject = ref('')
+const editBody = ref('')
+const savedSubject = ref('')
+const savedBody = ref('')
 
 const emptyStats = { total: 0, pendingReview: 0, pendingHigh: 0 }
 
@@ -52,6 +58,20 @@ const selected = computed(() => {
   return drafts.value.find((d) => d.leadId === selectedId.value) ?? null
 })
 
+const activePoolItem = computed(
+  () =>
+    recipientPool.value.find((p) => p.recipientKey === selectedRecipientKey.value) ??
+    null,
+)
+
+const hasSlotDraft = computed(() => Boolean(slotDetail.value?.exists))
+
+const isDirty = computed(
+  () =>
+    hasSlotDraft.value &&
+    (editSubject.value !== savedSubject.value || editBody.value !== savedBody.value),
+)
+
 const isDrafting = computed(
   () =>
     drafting.value ||
@@ -59,7 +79,12 @@ const isDrafting = computed(
 )
 
 const isBusy = computed(
-  () => isDrafting.value || generating.value || rejecting.value || approving.value,
+  () =>
+    isDrafting.value ||
+    generating.value ||
+    rejecting.value ||
+    approving.value ||
+    saving.value,
 )
 
 const canBatchDraft = computed(
@@ -73,6 +98,7 @@ const canReject = computed(
   () =>
     !!activeProductId.value &&
     !!selected.value &&
+    selected.value.draftCount > 0 &&
     !isBusy.value,
 )
 
@@ -80,13 +106,52 @@ const canApprove = computed(
   () =>
     !!activeProductId.value &&
     !!selected.value &&
+    hasSlotDraft.value &&
     !isBusy.value,
 )
+
+const canSave = computed(
+  () =>
+    !!activeProductId.value &&
+    !!selected.value &&
+    hasSlotDraft.value &&
+    isDirty.value &&
+    !isBusy.value,
+)
+
+const canSlotDraft = computed(
+  () =>
+    !!activeProductId.value &&
+    !!selected.value &&
+    !!selectedRecipientKey.value &&
+    !isBusy.value,
+)
+
+const slotActionLabel = computed(() => {
+  if (isDrafting.value) return hasSlotDraft.value ? '重写中…' : '起草中…'
+  return hasSlotDraft.value ? '重写' : '为该收件人起草'
+})
 
 const rejectConfirmMessage = computed(() => {
   const draft = selected.value
   if (!draft) return ''
-  return `确定驳回「${draft.companyName}」的开发信吗？将删除邮件草稿，并把线索状态回退为 new。`
+  return `确定驳回「${draft.companyName}」整条线索的全部开发信吗？将删除 data/emails 下该线索目录，并把线索状态回退为 new。`
+})
+
+const emptyStateHint = computed(() => {
+  if (activePoolItem.value?.kind === 'company') {
+    return '将生成公司向开发信（Dear … Team）'
+  }
+  if (activePoolItem.value?.source === 'people') {
+    return '将仅为该联系人生成一封，不会自动写入 contacts'
+  }
+  return '将仅为该收件人生成一封开发信'
+})
+
+const stylePromptPreview = computed(() => {
+  const raw = slotDetail.value?.stylePrompt?.trim()
+  if (!raw) return ''
+  return raw.length > 80 ? `${raw.slice(0, 80)}…` : raw
 })
 
 const subtitle = computed(() => {
@@ -97,60 +162,8 @@ const subtitle = computed(() => {
       ? `暂无草稿 · ${pendingHigh.value.length} 条已评分线索可批量起草`
       : '暂无草稿 · 请先在线索页完成评分，再批量起草开发信'
   }
-  return `${s.total} 封草稿 · 待审 ${s.pendingReview} · 待起草 ${s.pendingHigh}`
+  return `${s.total} 条线索有稿 · 待审 ${s.pendingReview} · 待起草 ${s.pendingHigh}`
 })
-
-const editSubject = computed({
-  get: () => editSubjects.value[activeVariant.value],
-  set: (value: string) => {
-    editSubjects.value = {
-      ...editSubjects.value,
-      [activeVariant.value]: value,
-    }
-  },
-})
-
-const editBody = computed({
-  get: () => editBodies.value[activeVariant.value],
-  set: (value: string) => {
-    editBodies.value = {
-      ...editBodies.value,
-      [activeVariant.value]: value,
-    }
-  },
-})
-
-function hydrateEdits(draft: EmailDraftRowDto, force: boolean): void {
-  if (!force && editLeadId.value === draft.leadId) return
-  editLeadId.value = draft.leadId
-  const nextSubjects: Record<VariantKey, string> = {
-    short: '',
-    professional: '',
-  }
-  const nextBodies: Record<VariantKey, string> = {
-    short: '',
-    professional: '',
-  }
-  const primarySubject = draft.subject || ''
-  const primaryBody = draft.body || ''
-  for (const key of ['short', 'professional'] as const) {
-    const variant = draft.variants.find((v) => v.type === key)
-    nextSubjects[key] = variant?.subject || primarySubject
-    nextBodies[key] = variant?.body || primaryBody
-  }
-  if (primarySubject) {
-    nextSubjects.professional = primarySubject
-    nextBodies.professional = primaryBody
-  }
-  editSubjects.value = nextSubjects
-  editBodies.value = nextBodies
-}
-
-function clearEdits(): void {
-  editLeadId.value = ''
-  editSubjects.value = { short: '', professional: '' }
-  editBodies.value = { short: '', professional: '' }
-}
 
 function routeLeadId(): string {
   const q = route.query.leadId
@@ -159,60 +172,220 @@ function routeLeadId(): string {
   return ''
 }
 
-/** 从线索页跳转时选中对应草稿 */
-function applyRouteSelection(forceHydrate: boolean): boolean {
-  const leadId = routeLeadId()
-  if (!leadId || !snapshot.value) return false
-  const draft = snapshot.value.drafts.find((d) => d.leadId === leadId)
-  if (!draft) return false
-  selectedId.value = leadId
-  activeVariant.value = 'professional'
-  hydrateEdits(draft, forceHydrate || editLeadId.value !== leadId)
-  return true
+function routeRecipientKey(): string {
+  const q = route.query.recipientKey
+  if (typeof q === 'string') return q.trim()
+  if (Array.isArray(q) && typeof q[0] === 'string') return q[0].trim()
+  return ''
 }
 
-async function refreshDrafts(options?: { forceHydrate?: boolean }): Promise<void> {
-  if (!window.ftcs?.listEmailDrafts || !activeProductId.value) {
-    snapshot.value = null
-    selectedId.value = ''
+function clearEdits(): void {
+  editLeadId.value = ''
+  editRecipientKey.value = ''
+  editSubject.value = ''
+  editBody.value = ''
+  savedSubject.value = ''
+  savedBody.value = ''
+  slotDetail.value = null
+}
+
+function hydrateFromSlot(detail: EmailDraftSlotDetailDto, force: boolean): void {
+  // 与旧版一致：同 lead+槽 且非强制时不覆盖编辑区，避免轮询把输入框「闪」掉
+  if (
+    !force &&
+    editLeadId.value === detail.leadId &&
+    editRecipientKey.value === detail.recipientKey
+  ) {
+    slotDetail.value = detail
+    return
+  }
+  editLeadId.value = detail.leadId
+  editRecipientKey.value = detail.recipientKey
+  if (detail.exists) {
+    editSubject.value = detail.subject || ''
+    editBody.value = detail.body || ''
+    savedSubject.value = detail.subject || ''
+    savedBody.value = detail.body || ''
+  } else {
+    editSubject.value = ''
+    editBody.value = ''
+    savedSubject.value = ''
+    savedBody.value = ''
+  }
+  slotDetail.value = detail
+}
+
+async function loadRecipientPool(leadId: string): Promise<string> {
+  if (!activeProductId.value || !window.ftcs?.getEmailRecipientPool) {
+    recipientPool.value = []
+    return 'company'
+  }
+  const res = await window.ftcs.getEmailRecipientPool({
+    productId: activeProductId.value,
+    leadId,
+  })
+  if (!res.ok) {
+    recipientPool.value = []
+    actionMessage.value = res.message || '加载收件人失败'
+    return 'company'
+  }
+  recipientPool.value = res.pool
+  const fromRoute = routeRecipientKey()
+  if (fromRoute && res.pool.some((p) => p.recipientKey === fromRoute)) {
+    return fromRoute
+  }
+  if (
+    selectedRecipientKey.value &&
+    res.pool.some((p) => p.recipientKey === selectedRecipientKey.value)
+  ) {
+    return selectedRecipientKey.value
+  }
+  return res.defaultRecipientKey || 'company'
+}
+
+async function loadCurrentSlot(options?: {
+  force?: boolean
+  showLoading?: boolean
+}): Promise<void> {
+  if (!activeProductId.value || !selectedId.value || !window.ftcs?.getEmailDraftSlot) {
     clearEdits()
     return
   }
-  loading.value = true
+  const showLoading = options?.showLoading !== false
+  if (showLoading) slotLoading.value = true
   try {
-    snapshot.value = await window.ftcs.listEmailDrafts(activeProductId.value)
+    const detail = await window.ftcs.getEmailDraftSlot({
+      productId: activeProductId.value,
+      leadId: selectedId.value,
+      recipientKey: selectedRecipientKey.value || 'company',
+    })
+    if (!detail.ok) {
+      actionMessage.value = detail.message || '读取草稿失败'
+      clearEdits()
+      return
+    }
+    hydrateFromSlot(detail, options?.force === true)
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    if (showLoading) slotLoading.value = false
+  }
+}
 
+async function selectLead(
+  leadId: string,
+  options?: { forceSlot?: boolean; showLoading?: boolean },
+): Promise<void> {
+  selectedId.value = leadId
+  const key = await loadRecipientPool(leadId)
+  selectedRecipientKey.value = key
+  await loadCurrentSlot({
+    force: options?.forceSlot !== false,
+    showLoading: options?.showLoading,
+  })
+}
+
+async function applyRecipientKey(nextKey: string, force = true): Promise<void> {
+  selectedRecipientKey.value = nextKey
+  await loadCurrentSlot({ force, showLoading: true })
+}
+
+function requestRecipientSwitch(nextKey: string): void {
+  if (nextKey === selectedRecipientKey.value) return
+  if (isDirty.value) {
+    pendingRecipientKey.value = nextKey
+    discardConfirmOpen.value = true
+    return
+  }
+  void applyRecipientKey(nextKey, true)
+}
+
+async function confirmDiscardForLeadOrRecipient(): Promise<void> {
+  const pending = pendingRecipientKey.value
+  discardConfirmOpen.value = false
+  pendingRecipientKey.value = ''
+  if (pending.startsWith('__lead__:')) {
+    await selectLead(pending.slice('__lead__:'.length), { forceSlot: true })
+    return
+  }
+  if (pending) await applyRecipientKey(pending, true)
+}
+
+function cancelDiscardSwitch(): void {
+  discardConfirmOpen.value = false
+  pendingRecipientKey.value = ''
+}
+
+async function refreshDrafts(options?: {
+  forceHydrate?: boolean
+  soft?: boolean
+}): Promise<void> {
+  if (!window.ftcs?.listEmailDrafts || !activeProductId.value) {
+    snapshot.value = null
+    selectedId.value = ''
+    recipientPool.value = []
+    clearEdits()
+    return
+  }
+  const soft = options?.soft === true
+  const forceHydrate = options?.forceHydrate === true
+  // 轮询软刷新：不闪 loading，且尽量只更新左栏列表
+  if (!soft) loading.value = true
+  try {
     const fromRoute = routeLeadId()
-    if (fromRoute && snapshot.value.drafts.some((d) => d.leadId === fromRoute)) {
-      applyRouteSelection(options?.forceHydrate === true)
-    } else if (
-      selectedId.value &&
-      !snapshot.value.drafts.some((d) => d.leadId === selectedId.value)
-    ) {
-      selectedId.value = snapshot.value.drafts[0]?.leadId ?? ''
-      clearEdits()
-    } else if (!selectedId.value && snapshot.value.drafts[0]) {
-      selectedId.value = snapshot.value.drafts[0].leadId
-    }
+    // 软刷新用当前选中做 stub；硬刷新才带路由 leadId
+    const includeLeadId = soft
+      ? selectedId.value || undefined
+      : fromRoute || selectedId.value || undefined
+    snapshot.value = await window.ftcs.listEmailDrafts(
+      activeProductId.value,
+      includeLeadId,
+    )
 
-    const draft =
-      snapshot.value.drafts.find((d) => d.leadId === selectedId.value) ??
-      snapshot.value.drafts[0] ??
-      null
-    if (draft) {
-      hydrateEdits(draft, options?.forceHydrate === true)
+    const inList = (id: string): boolean =>
+      Boolean(id && snapshot.value?.drafts.some((d) => d.leadId === id))
+
+    let keepLead = ''
+    if (soft) {
+      // 轮询：保持用户当前选中，绝不因 ?leadId= 跳回
+      if (inList(selectedId.value)) keepLead = selectedId.value
+      else keepLead = snapshot.value.drafts[0]?.leadId || ''
+    } else if (forceHydrate && inList(fromRoute)) {
+      keepLead = fromRoute
+    } else if (inList(selectedId.value)) {
+      keepLead = selectedId.value
+    } else if (inList(fromRoute)) {
+      keepLead = fromRoute
     } else {
-      clearEdits()
+      keepLead = snapshot.value.drafts[0]?.leadId || ''
     }
 
-    if (fromRoute && !snapshot.value.drafts.some((d) => d.leadId === fromRoute)) {
-      actionMessage.value = `未找到线索 ${fromRoute} 的邮件草稿`
+    if (!keepLead) {
+      selectedId.value = ''
+      recipientPool.value = []
+      clearEdits()
+      return
+    }
+
+    if (soft && keepLead === selectedId.value && !forceHydrate) {
+      // 软刷新：只刷新池标记（有稿/无稿），不强制重写正文、不闪 slotLoading
+      await loadRecipientPool(keepLead)
+      await loadCurrentSlot({ force: false, showLoading: false })
+    } else {
+      await selectLead(keepLead, {
+        forceSlot: forceHydrate || keepLead !== selectedId.value,
+        showLoading: !soft,
+      })
+    }
+
+    if (fromRoute && !soft && !inList(fromRoute)) {
+      actionMessage.value = `未找到线索 ${fromRoute}（可能尚未评分）`
     }
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
-    snapshot.value = null
+    if (!soft) snapshot.value = null
   } finally {
-    loading.value = false
+    if (!soft) loading.value = false
   }
 }
 
@@ -255,10 +428,99 @@ async function onBatchDraft(): Promise<void> {
   }
 }
 
+async function runSlotDraft(): Promise<void> {
+  if (!canSlotDraft.value || !activeProductId.value || !selected.value) return
+  if (!window.ftcs?.draftEmailSlot) {
+    actionMessage.value = '当前环境不支持单人起草'
+    return
+  }
+  if (generating.value) {
+    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    return
+  }
+
+  const preflightError = await ensureAgentReady('draft-email')
+  if (preflightError) {
+    actionMessage.value = preflightError
+    return
+  }
+
+  const item = activePoolItem.value
+  const audience = item?.kind === 'person' ? 'person' : 'company'
+  drafting.value = true
+  actionMessage.value = ''
+  resetAgentForDraftEmail(1)
+  rewriteConfirmOpen.value = false
+
+  try {
+    const res = await window.ftcs.draftEmailSlot({
+      productId: activeProductId.value,
+      leadId: selected.value.leadId,
+      audience,
+      email: item?.email || undefined,
+      recipientKey: selectedRecipientKey.value,
+    })
+    if (!res.ok) {
+      actionMessage.value = res.message
+      agentStatus.value = 'error'
+      return
+    }
+    actionMessage.value = res.message
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+    agentStatus.value = 'error'
+  } finally {
+    drafting.value = false
+  }
+}
+
+function onSlotDraftClick(): void {
+  if (!canSlotDraft.value) return
+  if (hasSlotDraft.value) {
+    rewriteConfirmOpen.value = true
+    return
+  }
+  void runSlotDraft()
+}
+
+async function onSave(): Promise<void> {
+  if (!canSave.value || !activeProductId.value || !selected.value) return
+  if (!window.ftcs?.saveEmailDraftSlot) {
+    actionMessage.value = '当前环境不支持保存草稿'
+    return
+  }
+  saving.value = true
+  actionMessage.value = ''
+  try {
+    const res = await window.ftcs.saveEmailDraftSlot({
+      productId: activeProductId.value,
+      leadId: selected.value.leadId,
+      recipientKey: selectedRecipientKey.value,
+      subject: editSubject.value,
+      body: editBody.value,
+    })
+    actionMessage.value = res.message
+    if (res.ok) {
+      savedSubject.value = editSubject.value
+      savedBody.value = editBody.value
+      await refreshDrafts({ soft: true })
+    }
+  } catch (err) {
+    actionMessage.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    saving.value = false
+  }
+}
+
 function selectDraft(row: EmailDraftRowDto): void {
-  selectedId.value = row.leadId
-  activeVariant.value = 'professional'
-  hydrateEdits(row, true)
+  if (isDirty.value && row.leadId !== selectedId.value) {
+    pendingRecipientKey.value = ''
+    // 切换 lead 时也做 dirty 确认：暂复用 discard 对话框，切到该 lead 的默认槽
+    discardConfirmOpen.value = true
+    pendingRecipientKey.value = `__lead__:${row.leadId}`
+    return
+  }
+  void selectLead(row.leadId, { forceSlot: true })
 }
 
 function statusLabel(status: string): string {
@@ -267,6 +529,62 @@ function statusLabel(status: string): string {
   if (status === 'rejected') return '已驳回'
   return status || '—'
 }
+
+function chipSecondary(item: EmailRecipientPoolItemDto): string {
+  if (item.kind === 'company') {
+    const list = item.emails?.length ? item.emails : item.email ? [item.email] : []
+    if (list.length === 0) return '无通用邮箱'
+    if (list.length === 1) return list[0]!
+    return `${list[0]} +${list.length - 1}`
+  }
+  const title = item.title?.trim()
+  if (title) return title.length > 24 ? `${title.slice(0, 24)}…` : title
+  return item.email || ''
+}
+
+const COMPANY_TO_VISIBLE = 2
+
+const toEmails = computed((): string[] => {
+  const seen = new Set<string>()
+  const out: string[] = []
+  const push = (raw: string | null | undefined) => {
+    const email = (raw || '').trim().toLowerCase()
+    if (!email || seen.has(email)) return
+    seen.add(email)
+    out.push(email)
+  }
+
+  if (activePoolItem.value?.kind === 'company') {
+    for (const e of activePoolItem.value.emails ?? []) push(e)
+    push(slotDetail.value?.email)
+    for (const a of slotDetail.value?.recipientAliases ?? []) push(a)
+    push(activePoolItem.value.email)
+    return out
+  }
+
+  push(slotDetail.value?.email)
+  push(activePoolItem.value?.email)
+  return out
+})
+
+const toEmailsTitle = computed(() =>
+  toEmails.value.length > COMPANY_TO_VISIBLE ? toEmails.value.join('\n') : '',
+)
+
+const toEmailsSummary = computed(() => {
+  const list = toEmails.value
+  if (list.length === 0) {
+    return activePoolItem.value?.kind === 'company' ? '（无通用邮箱）' : '—'
+  }
+  if (list.length <= COMPANY_TO_VISIBLE) return list.join(', ')
+  const head = list.slice(0, COMPANY_TO_VISIBLE).join(', ')
+  return `${head}`
+})
+
+const toEmailsMoreCount = computed(() => {
+  const n = toEmails.value.length - COMPANY_TO_VISIBLE
+  return n > 0 ? n : 0
+})
 
 function openRejectConfirm(): void {
   if (!canReject.value) return
@@ -293,6 +611,7 @@ async function confirmReject(): Promise<void> {
     if (res.ok) {
       rejectConfirmOpen.value = false
       selectedId.value = ''
+      recipientPool.value = []
       clearEdits()
       await refreshDrafts({ forceHydrate: true })
     }
@@ -315,22 +634,14 @@ async function onApprove(): Promise<void> {
     const res = await window.ftcs.approveEmailDraft({
       productId: activeProductId.value,
       leadId: selected.value.leadId,
-      selectedVariant: activeVariant.value,
-      variants: [
-        {
-          type: 'short',
-          subject: editSubjects.value.short,
-          body: editBodies.value.short,
-        },
-        {
-          type: 'professional',
-          subject: editSubjects.value.professional,
-          body: editBodies.value.professional,
-        },
-      ],
+      recipientKey: selectedRecipientKey.value,
+      subject: editSubject.value,
+      body: editBody.value,
     })
     actionMessage.value = res.message
     if (res.ok) {
+      savedSubject.value = editSubject.value
+      savedBody.value = editBody.value
       await refreshDrafts({ forceHydrate: true })
     }
   } catch (err) {
@@ -343,18 +654,20 @@ async function onApprove(): Promise<void> {
 watch(activeProductId, () => {
   actionMessage.value = ''
   selectedId.value = ''
+  selectedRecipientKey.value = 'company'
+  recipientPool.value = []
   clearEdits()
   void refreshDrafts({ forceHydrate: true })
 })
 
 watch(
-  () => route.query.leadId,
-  () => {
-    if (!snapshot.value) {
-      void refreshDrafts({ forceHydrate: true })
-      return
-    }
-    applyRouteSelection(true)
+  () =>
+    `${typeof route.query.leadId === 'string' ? route.query.leadId : ''}|${
+      typeof route.query.recipientKey === 'string' ? route.query.recipientKey : ''
+    }`,
+  (next, prev) => {
+    if (next === prev) return
+    void refreshDrafts({ forceHydrate: true })
   },
 )
 
@@ -372,7 +685,9 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
   void refreshDrafts({ forceHydrate: true })
   pollTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') void refreshDrafts()
+    if (document.visibilityState !== 'visible') return
+    if (isDirty.value || isBusy.value) return
+    void refreshDrafts({ soft: true })
   }, 8000)
 })
 
@@ -391,7 +706,7 @@ onUnmounted(() => {
       <div class="main-pane__actions">
         <button
           type="button"
-          class="btn-primary"
+          class="btn-secondary"
           :disabled="!canBatchDraft"
           :title="
             pendingHigh.length > 0
@@ -400,13 +715,31 @@ onUnmounted(() => {
           "
           @click="onBatchDraft"
         >
-          {{ isDrafting ? '起草中…' : `批量起草${pendingHigh.length ? ` ${pendingHigh.length}` : ''}` }}
+          {{ isDrafting && !selected ? '起草中…' : `批量起草${pendingHigh.length ? ` ${pendingHigh.length}` : ''}` }}
+        </button>
+        <button
+          type="button"
+          class="btn-primary"
+          :disabled="!canSlotDraft"
+          :title="hasSlotDraft ? '仅重写当前收件人草稿' : '仅为当前收件人起草'"
+          @click="onSlotDraftClick"
+        >
+          {{ slotActionLabel }}
+        </button>
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="!canSave"
+          title="保存当前收件人编辑（不改审批状态）"
+          @click="onSave"
+        >
+          {{ saving ? '保存中…' : '保存' }}
         </button>
         <button
           type="button"
           class="btn-secondary"
           :disabled="!canReject"
-          title="驳回当前草稿：删除邮件文件，线索回退为 new"
+          title="驳回整条线索的全部开发信"
           @click="openRejectConfirm"
         >
           {{ rejecting ? '驳回中…' : '驳回' }}
@@ -415,11 +748,11 @@ onUnmounted(() => {
           type="button"
           class="btn-secondary"
           :disabled="!canApprove"
-          title="保存当前编辑内容，选用当前变体并标记为已通过（不发送）"
+          title="通过并保存当前收件人草稿（不发送）"
           @click="onApprove"
         >
           <Icon name="check" :size="12" />
-          {{ approving ? '保存中…' : '通过并保存' }}
+          {{ approving ? '保存中…' : '通过' }}
         </button>
       </div>
     </header>
@@ -449,98 +782,140 @@ onUnmounted(() => {
           @click="selectDraft(row)"
         >
           <span class="draft-list__company">{{ row.companyName }}</span>
-          <span class="draft-list__subject">{{ row.subject || '（无主题）' }}</span>
+          <span class="draft-list__subject">
+            {{ row.subject || (row.draftCount ? '（无主题）' : '尚未起草') }}
+          </span>
           <span class="draft-list__meta">
-            {{ statusLabel(row.status) }}
+            {{ row.draftCount ? statusLabel(row.status) : '无稿' }}
+            <template v-if="row.draftCount"> · {{ row.draftCount }} 封</template>
             <template v-if="row.tier"> · {{ row.tier }}</template>
           </span>
         </button>
       </aside>
 
       <div v-if="selected" class="email-preview">
-        <div class="email-preview__toolbar">
+        <div class="recipient-chips" role="tablist" aria-label="收件人">
           <button
+            v-for="item in recipientPool"
+            :key="item.recipientKey"
             type="button"
-            class="filter-chip"
-            :class="{ 'is-active': activeVariant === 'short' }"
+            class="recipient-chip"
+            :class="{
+              'is-active': item.recipientKey === selectedRecipientKey,
+              'is-empty': !item.hasDraft,
+            }"
             :disabled="isBusy"
-            @click="activeVariant = 'short'"
+            role="tab"
+            :aria-selected="item.recipientKey === selectedRecipientKey"
+            @click="requestRecipientSwitch(item.recipientKey)"
           >
-            short
+            <span class="recipient-chip__dot" :class="{ 'has-draft': item.hasDraft }" />
+            <span class="recipient-chip__text">
+              <span class="recipient-chip__name">{{ item.displayName }}</span>
+              <span class="recipient-chip__sub muted">{{ chipSecondary(item) }}</span>
+            </span>
           </button>
-          <button
-            type="button"
-            class="filter-chip"
-            :class="{ 'is-active': activeVariant === 'professional' }"
-            :disabled="isBusy"
-            @click="activeVariant = 'professional'"
-          >
-            professional
-          </button>
-          <span class="email-preview__path muted">{{ selected.draftPath }}</span>
         </div>
 
-        <dl class="email-preview__fields">
-          <div class="email-preview__field">
-            <dt>To</dt>
-            <dd>{{ selected.recipientEmail || '—' }}</dd>
-          </div>
-          <div class="email-preview__field">
-            <dt>Company</dt>
-            <dd>{{ selected.companyName }}</dd>
-          </div>
-          <div class="email-preview__field email-preview__field--full">
-            <dt>Subject</dt>
-            <dd>
-              <input
-                v-model="editSubject"
-                type="text"
-                class="email-preview__input"
-                :disabled="isBusy"
-                placeholder="邮件主题"
-              />
-            </dd>
-          </div>
-          <div class="email-preview__field">
-            <dt>Language</dt>
-            <dd>{{ selected.language || 'en' }}</dd>
-          </div>
-        </dl>
+        <p v-if="stylePromptPreview" class="email-preview__style muted">
+          生成时风格：{{ stylePromptPreview }}
+        </p>
 
-        <div class="email-preview__body">
-          <textarea
-            v-model="editBody"
-            class="email-preview__textarea"
-            :disabled="isBusy"
-            placeholder="邮件正文"
-            spellcheck="false"
-          />
+        <template v-if="hasSlotDraft">
+          <dl class="email-preview__fields">
+            <div class="email-preview__field email-preview__field--full">
+              <dt>To</dt>
+              <dd
+                class="email-preview__to"
+                :class="{ 'has-more': toEmailsMoreCount > 0 }"
+                :title="toEmailsTitle || undefined"
+              >
+                <span>{{ toEmailsSummary }}</span>
+                <span v-if="toEmailsMoreCount > 0" class="email-preview__to-more">
+                  +{{ toEmailsMoreCount }}
+                </span>
+              </dd>
+            </div>
+            <div class="email-preview__field">
+              <dt>Company</dt>
+              <dd>{{ selected.companyName }}</dd>
+            </div>
+            <div class="email-preview__field email-preview__field--full">
+              <dt>Subject</dt>
+              <dd>
+                <input
+                  v-model="editSubject"
+                  type="text"
+                  class="email-preview__input"
+                  :disabled="isBusy"
+                  placeholder="邮件主题"
+                />
+              </dd>
+            </div>
+            <div class="email-preview__field">
+              <dt>Status</dt>
+              <dd>{{ statusLabel(slotDetail?.status || '') }}</dd>
+            </div>
+            <div class="email-preview__field">
+              <dt>Path</dt>
+              <dd class="muted">{{ slotDetail?.draftPath || '—' }}</dd>
+            </div>
+          </dl>
+
+          <div class="email-preview__body">
+            <textarea
+              v-model="editBody"
+              class="email-preview__textarea"
+              :disabled="isBusy"
+              placeholder="邮件正文"
+              spellcheck="false"
+            />
+          </div>
+
+          <section
+            v-if="slotDetail?.personalizationEvidence?.length"
+            class="email-preview__evidence"
+          >
+            <h4>personalization_evidence</h4>
+            <ul>
+              <li
+                v-for="(item, i) in slotDetail.personalizationEvidence"
+                :key="i"
+              >
+                {{ item }}
+              </li>
+            </ul>
+          </section>
+        </template>
+
+        <div v-else class="email-preview__slot-empty">
+          <p class="email-preview__slot-empty-title">
+            {{ slotLoading ? '加载中…' : '该收件人尚无开发信' }}
+          </p>
+          <p v-if="!slotLoading" class="muted">{{ emptyStateHint }}</p>
+          <button
+            v-if="!slotLoading"
+            type="button"
+            class="btn-primary"
+            :disabled="!canSlotDraft"
+            @click="onSlotDraftClick"
+          >
+            为该收件人起草
+          </button>
         </div>
-
-        <section v-if="selected.personalizationEvidence.length" class="email-preview__evidence">
-          <h4>personalization_evidence</h4>
-          <ul>
-            <li
-              v-for="(item, i) in selected.personalizationEvidence"
-              :key="i"
-            >
-              {{ item }}
-            </li>
-          </ul>
-        </section>
       </div>
 
       <div v-else class="email-preview email-preview--empty">
-        <p>{{ loading ? '加载草稿中…' : '选择左侧草稿查看内容' }}</p>
+        <p>{{ loading ? '加载草稿中…' : '选择左侧线索查看收件人与正文' }}</p>
         <p class="muted">
-          单条起草请在线索页对已评分线索点击「写邮件」
+          整 lead 批量起草可用顶栏「批量起草」；单人补洞在选定收件人后起草
         </p>
       </div>
     </div>
 
     <ConfirmDialog
       :open="rejectConfirmOpen"
-      title="驳回开发信"
+      title="驳回整条线索开发信"
       :message="rejectConfirmMessage"
       confirm-label="确认驳回"
       cancel-label="取消"
@@ -548,6 +923,26 @@ onUnmounted(() => {
       :busy="rejecting"
       @confirm="confirmReject"
       @cancel="closeRejectConfirm"
+    />
+    <ConfirmDialog
+      :open="rewriteConfirmOpen"
+      title="重写当前收件人"
+      message="将覆盖该收件人当前草稿，确定继续？"
+      confirm-label="确认重写"
+      cancel-label="取消"
+      :busy="isDrafting"
+      @confirm="runSlotDraft"
+      @cancel="rewriteConfirmOpen = false"
+    />
+    <ConfirmDialog
+      :open="discardConfirmOpen"
+      title="放弃未保存修改？"
+      message="当前收件人有未保存的编辑，切换后将丢失。"
+      confirm-label="放弃并切换"
+      cancel-label="取消"
+      danger
+      @confirm="confirmDiscardForLeadOrRecipient"
+      @cancel="cancelDiscardSwitch"
     />
   </section>
 </template>

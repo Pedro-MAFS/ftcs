@@ -20,7 +20,15 @@ import type {
   ScoreAndDedupeResult,
   DraftEmailsInput,
   DraftEmailsResult,
+  DraftEmailSlotInput,
+  DraftEmailSlotResult,
   EmailDraftsSnapshotDto,
+  EmailDraftSlotDetailDto,
+  EmailRecipientPoolResultDto,
+  GetEmailDraftSlotInput,
+  GetEmailRecipientPoolInput,
+  SaveEmailDraftSlotInput,
+  SaveEmailDraftSlotResult,
   RejectEmailDraftInput,
   RejectEmailDraftResult,
   ApproveEmailDraftInput,
@@ -287,10 +295,23 @@ const api = {
     ipcRenderer.invoke(IPC.LEADS_EXPORT_CSV, input),
   scoreAndDedupeLeads: (productId: string): Promise<ScoreAndDedupeResult> =>
     ipcRenderer.invoke(IPC.LEADS_SCORE_AND_DEDUPE, productId),
-  listEmailDrafts: (productId: string): Promise<EmailDraftsSnapshotDto> =>
-    ipcRenderer.invoke(IPC.EMAIL_DRAFT_LIST, productId),
+  listEmailDrafts: (
+    productId: string,
+    includeLeadId?: string,
+  ): Promise<EmailDraftsSnapshotDto> =>
+    ipcRenderer.invoke(IPC.EMAIL_DRAFT_LIST, productId, includeLeadId),
+  getEmailDraftSlot: (input: GetEmailDraftSlotInput): Promise<EmailDraftSlotDetailDto> =>
+    ipcRenderer.invoke(IPC.EMAIL_DRAFT_GET, input),
+  saveEmailDraftSlot: (input: SaveEmailDraftSlotInput): Promise<SaveEmailDraftSlotResult> =>
+    ipcRenderer.invoke(IPC.EMAIL_DRAFT_SAVE, input),
+  getEmailRecipientPool: (
+    input: GetEmailRecipientPoolInput,
+  ): Promise<EmailRecipientPoolResultDto> =>
+    ipcRenderer.invoke(IPC.EMAIL_RECIPIENT_POOL, input),
   draftEmails: (input: DraftEmailsInput): Promise<DraftEmailsResult> =>
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_GENERATE, input),
+  draftEmailSlot: (input: DraftEmailSlotInput): Promise<DraftEmailSlotResult> =>
+    ipcRenderer.invoke(IPC.EMAIL_DRAFT_GENERATE_SLOT, input),
   enrichLeadContacts: (
     input: import('./ipc/types').EnrichLeadContactsInput,
   ): Promise<import('./ipc/types').EnrichLeadContactsResult> =>

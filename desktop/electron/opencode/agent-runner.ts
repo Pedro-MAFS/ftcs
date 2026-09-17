@@ -28,8 +28,10 @@ import {
 } from '../leads/leads-reader'
 import {
   estimateOutreachDraftCounts,
+  getEmailDraftSlot,
   listLeadsNeedingDraft,
   loadEmailDraftsArtifact,
+  recipientKeyFromEmail,
   type EmailDraftsArtifact,
 } from '../emails/emails-reader'
 import { formatEmailStylePromptBlock, resolveEmailDraftStylePrompt } from '../settings/email-draft-style'
@@ -179,6 +181,50 @@ function buildDraftOutreachPrompt(
     '4. 用简短中文汇报：线索数、落盘封数、skip/warning、每槽公司/邮箱/subject/路径；提醒人工审核后再发送。',
     '',
     `输出路径：data/emails/{lead_id}/draft.json（公司向）；data/emails/{lead_id}/{recipient_key}/draft.json（个人向）`,
+  ].join('\n')
+}
+
+function buildDraftOutreachSlotPrompt(input: {
+  productId: string
+  leadId: string
+  audience: 'company' | 'person'
+  email?: string
+  recipientKey?: string
+}): string {
+  const styleBlock = formatEmailStylePromptBlock(
+    resolveEmailDraftStylePrompt(readUserPrefs().emailDraftStylePrompt),
+  )
+  const stylePrompt = resolveEmailDraftStylePrompt(
+    readUserPrefs().emailDraftStylePrompt,
+  )
+  const emailLine =
+    input.audience === 'person' && input.email
+      ? `邮箱 email：${JSON.stringify(input.email)}`
+      : input.audience === 'person'
+        ? '邮箱 email：未提供（请根据 plan_slot 返回使用）'
+        : '邮箱：公司向可空'
+  const keyLine = input.recipientKey
+    ? `期望 recipient_key：${JSON.stringify(input.recipientKey)}`
+    : ''
+  return [
+    '请严格按 skill `draft-outreach-email` 的「单槽模式」执行，仅为指定线索的一个收件人槽撰写/覆盖开发信。',
+    '',
+    `产品 ID：${input.productId}`,
+    `线索 ID lead_id：${input.leadId}`,
+    `audience：${input.audience}`,
+    emailLine,
+    ...(keyLine ? [keyLine] : []),
+    '',
+    ...(styleBlock ? [styleBlock] : []),
+    '执行要求：',
+    '1. 调用 lead-store.product_get 读取自家画像；再 leads_get_scored 确认 scored.json 存在；缺一则停止并说明。',
+    '2. 必须调用 lead-store.email_draft_plan_slot（传入 product_id、lead_id、audience；个人向务必带 email）。禁止调用整 lead 的 email_draft_plan。',
+    `3. 按用户行文风格撰写英文 subject/body（仅一份），采用 plan_slot 的 greeting_line；禁止编造。然后 email_draft_save 一次（write_markdown: true，style_prompt: ${JSON.stringify(stylePrompt)}，audience、recipient、personalization_evidence=hints）。禁止用手写/Write 直接创建 draft.json。`,
+    '4. 用简短中文汇报：落盘路径、subject、audience；提醒人工审核后再发送。',
+    '',
+    input.audience === 'company'
+      ? `输出路径：data/emails/${input.leadId}/draft.json`
+      : `输出路径：data/emails/${input.leadId}/{recipient_key}/draft.json`,
   ].join('\n')
 }
 
@@ -1180,6 +1226,243 @@ export class AgentRunController {
         emailDrafts,
       })
       return { ok: true, message, emailDrafts }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      timeline.addSuffix({
+        id: 'sys-error',
+        kind: 'error',
+        time: nowTime(),
+        title: '错误',
+        body: message,
+      })
+      flushTimeline()
+      pushState('error')
+      emit({
+        type: 'done',
+        ok: false,
+        productId,
+        message,
+      })
+      return { ok: false, message }
+    } finally {
+      stopEvents?.()
+      this.running = false
+      this.abort = null
+    }
+  }
+
+  async runDraftOutreachEmailSlot(
+    options: {
+      productId: string
+      leadId: string
+      audience: 'company' | 'person'
+      email?: string
+      recipientKey?: string
+    },
+    emit: AgentEventSink,
+  ): Promise<{ ok: boolean; message: string; recipientKey?: string }> {
+    if (this.running) {
+      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+    }
+
+    const client = this.getClient()
+    if (!client) {
+      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+    }
+
+    const productId = options.productId.trim()
+    const leadId = options.leadId.trim()
+    const audience = options.audience === 'person' ? 'person' : 'company'
+    const email = options.email?.trim() || ''
+    let recipientKey =
+      options.recipientKey?.trim() ||
+      (audience === 'company' ? 'company' : '')
+    if (!recipientKey && audience === 'person' && email) {
+      recipientKey = recipientKeyFromEmail(email) || ''
+    }
+    if (!productId) throw new Error('缺少 productId')
+    if (!leadId) throw new Error('缺少 leadId')
+    if (audience === 'person' && !email && !recipientKey) {
+      throw new Error('个人向起草需要 email 或 recipientKey')
+    }
+
+    const profile = loadProfile(productId)
+    if (!profile) {
+      throw new Error(`未找到产品画像：${productId}`)
+    }
+
+    const idleTimeoutMs = 10 * 60_000
+    this.running = true
+    this.abort = new AbortController()
+    const signal = this.abort.signal
+    const startedAt = Date.now()
+    const timeline = new TimelineBuilder()
+
+    const flushTimeline = () => {
+      const items = timeline.emitIfChanged()
+      if (items) emit({ type: 'timeline', items })
+    }
+
+    const pushState = (status: 'idle' | 'running' | 'done' | 'error') => {
+      const elapsedSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+      const mm = String(Math.floor(elapsedSec / 60)).padStart(2, '0')
+      const ss = String(elapsedSec % 60).padStart(2, '0')
+      let readiness = '单槽起草中'
+      let tone = 'accent'
+      if (status === 'done') {
+        readiness = '已完成'
+        tone = 'success'
+      } else if (status === 'error') {
+        readiness = '失败'
+        tone = 'warning'
+      }
+      emit({
+        type: 'state',
+        skill: 'draft-outreach-email',
+        status,
+        productId,
+        meta: [
+          { label: '状态', value: readiness, tone },
+          { label: '线索', value: leadId.slice(0, 18) },
+          { label: '槽', value: recipientKey || audience },
+          { label: '产品', value: productId.slice(0, 18) },
+          { label: '耗时', value: `${mm}:${ss}` },
+        ],
+      })
+    }
+
+    const promptText = buildDraftOutreachSlotPrompt({
+      productId,
+      leadId,
+      audience,
+      email: email || undefined,
+      recipientKey: recipientKey || undefined,
+    })
+    this.attachTimeline(timeline)
+    timeline.reset()
+    timeline.addPrefix({
+      id: 'sys-prepare',
+      kind: 'system',
+      time: nowTime(),
+      title: '系统',
+      body: `准备为 ${productId}（${profile.companyName || '未命名'}）单槽起草 · ${leadId} · ${recipientKey || audience}`,
+    })
+    timeline.addPrefix({
+      id: 'user-draft-slot',
+      kind: 'user',
+      time: nowTime(),
+      title: '你的指令 · 单槽邮件起草',
+      body: promptText,
+      collapsed: true,
+    })
+    pushState('running')
+    flushTimeline()
+
+    let stopEvents: (() => void) | null = null
+
+    try {
+      const created = await client.session.create({
+        title: `draft-outreach-email-slot · ${leadId}`,
+      })
+      if (created.error || !created.data?.id) {
+        throw new Error(
+          typeof created.error === 'object' && created.error && 'message' in created.error
+            ? String((created.error as { message?: string }).message)
+            : '创建 OpenCode 会话失败',
+        )
+      }
+      this.sessionId = created.data.id
+      timeline.addPrefix({
+        id: 'sys-session',
+        kind: 'system',
+        time: nowTime(),
+        title: '会话',
+        body: `已创建 OpenCode session\n${this.sessionId}`,
+      })
+      flushTimeline()
+
+      const bridge = this.startEventBridge(
+        client,
+        this.sessionId,
+        timeline,
+        flushTimeline,
+        promptText,
+      )
+      stopEvents = bridge.stop
+
+      const promptPromise = client.session.promptAsync({
+        sessionID: this.sessionId,
+        parts: [{ type: 'text', text: promptText }],
+      })
+      void promptPromise
+
+      const idleResult = await this.waitForSessionIdle(
+        client,
+        this.sessionId,
+        signal,
+        idleTimeoutMs,
+      )
+
+      if (idleResult === 'abort') {
+        const abortMessage = this.autoAbortReason ?? '用户中止了单槽邮件起草'
+        pushState('error')
+        timeline.addSuffix({
+          id: 'sys-abort',
+          kind: 'error',
+          time: nowTime(),
+          title: this.autoAbortReason ? '失败' : '已中止',
+          body: abortMessage,
+        })
+        flushTimeline()
+        emit({
+          type: 'done',
+          ok: false,
+          productId,
+          message: abortMessage,
+        })
+        return { ok: false, message: abortMessage }
+      }
+
+      if (idleResult === 'timeout') {
+        throw new Error('等待 OpenCode 会话 idle 超时')
+      }
+
+      if (!recipientKey && audience === 'person' && email) {
+        recipientKey = recipientKeyFromEmail(email) || recipientKey
+      }
+      const checkKey = recipientKey || 'company'
+      const slot = await loadWithGrace(
+        () => {
+          const detail = getEmailDraftSlot(productId, leadId, checkKey)
+          return detail.ok && detail.exists ? detail : null
+        },
+        { signal, attempts: 16, intervalMs: 500 },
+      )
+
+      if (!slot) {
+        throw new Error(
+          this.lastModelError ??
+            `会话已结束，但未找到目标槽草稿（${checkKey}）。请确认已调用 email_draft_plan_slot 与 email_draft_save。`,
+        )
+      }
+
+      const message = `单槽起草完成：${slot.draftPath}`
+      timeline.addSuffix({
+        id: 'sys-done',
+        kind: 'system',
+        time: nowTime(),
+        title: '完成',
+        body: message,
+      })
+      flushTimeline()
+      pushState('done')
+      emit({
+        type: 'done',
+        ok: true,
+        productId,
+        message,
+      })
+      return { ok: true, message, recipientKey: checkKey }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       timeline.addSuffix({
