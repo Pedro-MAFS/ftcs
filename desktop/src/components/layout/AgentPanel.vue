@@ -84,7 +84,11 @@ watch(
     <div class="agent-panel__meta">
       <div v-for="item in agentMeta" :key="item.label" class="meta-card">
         <span class="meta-card__label">{{ item.label }}</span>
-        <span class="meta-card__value" :class="item.tone ? `tone-${item.tone}` : undefined">
+        <span
+          class="meta-card__value"
+          :class="item.tone ? `tone-${item.tone}` : undefined"
+          :title="item.value || undefined"
+        >
           {{ item.value }}
         </span>
       </div>
