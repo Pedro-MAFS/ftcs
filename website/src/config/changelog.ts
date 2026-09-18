@@ -13,6 +13,17 @@ export const CHANGELOG_STARTED_AT = '0.5.0'
  */
 export const changelogReleases: ChangelogRelease[] = [
   {
+    version: '0.5.5',
+    releasedAt: '2026-09-18',
+    title: 'Hunter 补全联系人与开发信多收件人',
+    notes: [
+      '线索页支持 Hunter 补全联系人（自备 API Key）：按官网域名查找相关联系人，并可验证邮箱有效性；未配置不影响探索与开发信',
+      '开发信改为按收件人起草：每条线索一封公司向 + 个人邮箱各一封；邮件页可切换收件人审阅，支持单人补起草',
+      '取消短函 / 正式函双变体；在设置中用自然语言描述行文风格，影响之后的起草与重写',
+      '邮件页可生成中文对照辅助审阅（外发仍用原文）；支持按收件人通过或驳回，并可一键跳回对应线索',
+    ],
+  },
+  {
     version: '0.5.4',
     releasedAt: '2026-09-09',
     title: '官方通道新模型与透明计价',
