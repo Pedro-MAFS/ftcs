@@ -32,6 +32,7 @@ export default defineConfig({
         '/docs/workflow',
         '/docs/faq',
         '/docs/places-api-key',
+        '/docs/hunter-api-key',
       ]
     },
   } satisfies ViteSSGOptions,

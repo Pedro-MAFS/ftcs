@@ -23,28 +23,12 @@ export const supportPlanPriorityLabels: Record<SupportPlanPriority, string> = {
 /** 按状态、优先级排序：开发中在前，同状态内 P0 → P2 */
 export const supportPlanItems: SupportPlanItem[] = [
   {
-    id: 'people-contact-profile',
-    title: 'Hunter 集成 · 补全联系人',
-    description:
-      '在已有公司线索上，按买家角色补全关键联系人（姓名、职位、来源与匹配理由），供开发信选用收件人。Hunter BYOK 集成（domain-search 等），默认人工触发；与「邮箱有效性验证」同一期交付。',
-    priority: 'P0',
-    status: 'developing',
-  },
-  {
-    id: 'email-verification',
-    title: '邮箱有效性验证',
-    description:
-      '对补全或收集到的联系人邮箱做有效性校验（Hunter BYOK email-verifier：valid / accept_all 等）。与「人员联系画像」同一期开发交付，不单独排期。',
-    priority: 'P0',
-    status: 'developing',
-  },
-  {
     id: 'task-done-notification',
     title: '任务完成 · Windows 通知',
     description:
-      'Agent 长任务（探索、评分、开发信起草等）完成后弹出 Windows 系统通知。用户反馈：任务耗时长通常不会一直盯着界面，缺少提醒时容易忘记回来查看结果。计划下一版交付。',
+      'Agent 长任务（探索、评分、开发信起草等）完成后弹出 Windows 系统通知。用户反馈：任务耗时长通常不会一直盯着界面，缺少提醒时容易忘记回来查看结果。',
     priority: 'P0',
-    status: 'planned',
+    status: 'developing',
   },
   {
     id: 'desktop-silent-update',
@@ -59,14 +43,22 @@ export const supportPlanItems: SupportPlanItem[] = [
     title: '线索 · 目标公司深度画像',
     description:
       '在线索页为每条公司线索生成结构化「企业画像」：商业模式与体量、主营产品与品牌、目标市场与客户、供应链与采购倾向、行业地位与优势、合作机会与跟进建议，并附可改稿的破冰话术。用户反馈：拿到线索后仍要自行调研才能判断值不值得跟；希望打开线索即可一眼看懂目标公司并着手联系，减少重复检索。',
-    priority: 'P1',
+    priority: 'P0',
     status: 'planned',
   },
   {
     id: 'explore-intensity',
     title: '探索强度 · 高 / 中 / 低',
     description:
-      '支持配置探索强度三档。用户反馈：单次探索收获的线索偏少。不同档位在扩展关键词数量、搜索引擎（R1/R2）单次结果条数、Google Maps（R3）结果集上限等方面分级，在耗时与覆盖面之间权衡。计划下一版交付。',
+      '支持配置探索强度三档。用户反馈：单次探索收获的线索偏少。不同档位在扩展关键词数量、搜索引擎（R1/R2）单次结果条数、Google Maps（R3）结果集上限等方面分级，在耗时与覆盖面之间权衡。',
+    priority: 'P0',
+    status: 'developing',
+  },
+  {
+    id: 'ui-theme-toggle',
+    title: '界面主题 · 暗黑 / 日间模式',
+    description:
+      '桌面端支持暗黑模式与日间模式切换，并记住用户选择。长时间审阅线索与开发信时，可按环境与偏好切换主题，减轻视觉疲劳。',
     priority: 'P0',
     status: 'planned',
   },
@@ -102,22 +94,6 @@ export const supportPlanItems: SupportPlanItem[] = [
     status: 'planned',
   },
   {
-    id: 'email-to-lead-navigation',
-    title: '开发信 · 跳回对应线索',
-    description:
-      '在开发信界面可一键跳转回线索页，并自动选中该草稿关联的线索，便于对照公司信息与联系人后再改稿。',
-    priority: 'P1',
-    status: 'planned',
-  },
-  {
-    id: 'email-draft-styles',
-    title: '开发信 · 多收件人与中英对照',
-    description:
-      '每条线索强制 1 封公司向开发信，并按 contacts 中个人邮箱各起草一封（1+N）；邮件页在公司向槽与 contacts∪people 间切换审阅，支持单人补起草；取消简洁/专业双变体；全局行文风格为用户自由描述（由大模型理解），并支持中文对照审阅。需求见仓库 docs/21-需求-开发信重构.md。',
-    priority: 'P0',
-    status: 'planned',
-  },
-  {
     id: 'similar-leads-explore',
     title: '相似线索探索',
     description:
@@ -138,7 +114,7 @@ export const supportPlanItems: SupportPlanItem[] = [
     title: '定时运行编排任务',
     description:
       '对已保存的任务编排方案支持按计划定时触发（如每周复搜），后台执行并在完成或异常时通知用户。依赖任务编排能力。',
-    priority: 'P2',
+    priority: 'P0',
     status: 'planned',
   },
   {

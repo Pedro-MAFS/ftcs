@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://ftcs.ai-utills.com/</loc>
-    <lastmod>2026-09-09</lastmod>
+    <lastmod>2026-09-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
@@ -14,7 +14,7 @@
   </url>
   <url>
     <loc>https://ftcs.ai-utills.com/plan</loc>
-    <lastmod>2026-09-06</lastmod>
+    <lastmod>2026-09-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.75</priority>
   </url>
@@ -26,31 +26,31 @@
   </url>
   <url>
     <loc>https://ftcs.ai-utills.com/docs</loc>
-    <lastmod>2026-09-06</lastmod>
+    <lastmod>2026-09-18</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://ftcs.ai-utills.com/docs/getting-started</loc>
-    <lastmod>2026-09-09</lastmod>
+    <lastmod>2026-09-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://ftcs.ai-utills.com/docs/install</loc>
-    <lastmod>2026-09-06</lastmod>
+    <lastmod>2026-09-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
     <loc>https://ftcs.ai-utills.com/docs/workflow</loc>
-    <lastmod>2026-09-06</lastmod>
+    <lastmod>2026-09-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://ftcs.ai-utills.com/docs/faq</loc>
-    <lastmod>2026-09-09</lastmod>
+    <lastmod>2026-09-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -61,14 +61,20 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://ftcs.ai-utills.com/docs/hunter-api-key</loc>
+    <lastmod>2026-09-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://ftcs.ai-utills.com/llms.txt</loc>
-    <lastmod>2026-08-26</lastmod>
+    <lastmod>2026-09-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
     <loc>https://ftcs.ai-utills.com/llms-full.txt</loc>
-    <lastmod>2026-08-26</lastmod>
+    <lastmod>2026-09-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>

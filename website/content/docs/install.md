@@ -103,7 +103,8 @@ opencode --version
    - **官方通道（推荐）**：登录并开通后即可使用模型与搜索，无需再填搜索 Key  
    - **自定义**：填写自备模型 Key，并配置 Tavily 搜索 Key  
 3. 工作区默认在用户数据目录下的 `workspace`；可在设置中更改  
-4. **可选**：若计划使用 **R3 地图发现**，在设置 → 探索填写 [Google Places API Key](/docs/places-api-key)（须合法合规访问 Google）
+4. **可选**：若计划使用 **R3 地图发现**，在设置 → 探索填写 [Google Places API Key](/docs/places-api-key)（须合法合规访问 Google）  
+5. **可选**：若计划 **补全联系人**，在设置 → 集成填写 [Hunter API Key](/docs/hunter-api-key)
 
 模板会同步 skills、MCP 预打包产物与配置；你的 `data/` 与 `.env` 不会被模板覆盖。
 

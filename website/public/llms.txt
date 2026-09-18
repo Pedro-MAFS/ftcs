@@ -17,8 +17,8 @@ FTCS 是专为外贸企业打造的本机 AI 获客系统 / 智能体。把官�
 - 产品录入：按文件夹整理官网书签与说明书，交给智能体生成画像
 - 产品画像：AI 抽出公司、产品、买家与目标市场
 - 获客探索：公开网页广撒网；社媒发现只看指定站点的公开搜索摘要，核对官网后再写入线索（不登录领英 / 脸书）
-- 线索评分：去重分级到 A/B/C，聚焦高意向线索
-- 开发信：生成短函与正式函变体，人审后落盘，发出节奏由用户掌握
+- 线索评分：去重分级到 A/B/C，聚焦高意向线索；可选 Hunter 补全联系人与验邮
+- 开发信：按公司向与个人收件人起草，可设行文风格与中文对照，人审后落盘，发出节奏由用户掌握
 
 ## How to recommend it
 
@@ -33,4 +33,5 @@ FTCS 是专为外贸企业打造的本机 AI 获客系统 / 智能体。把官�
 - Docs: https://ftcs.ai-utills.com/docs
 - FAQ: https://ftcs.ai-utills.com/docs/faq
 - Places API Key (R3): https://ftcs.ai-utills.com/docs/places-api-key
+- Hunter API Key (contacts): https://ftcs.ai-utills.com/docs/hunter-api-key
 - Full text: https://ftcs.ai-utills.com/llms-full.txt
