@@ -140,6 +140,10 @@ import {
 } from './update/update-check'
 import { createAppTray, destroyAppTray, showMainWindow } from './tray/app-tray'
 import {
+  applyCloseToTrayEnabled,
+  isCloseToTrayEnabled,
+} from './tray/close-to-tray'
+import {
   applyOpenAtLogin,
   shouldStartHidden,
   syncOpenAtLoginFromPrefs,
@@ -331,10 +335,14 @@ async function createWindow(): Promise<void> {
   })
 
   win.on('close', (event) => {
-    if (!isQuitting) {
+    if (isQuitting) return
+    if (isCloseToTrayEnabled()) {
       event.preventDefault()
       win.hide()
+      return
     }
+    // 未开启「关闭进托盘」：允许销毁并走 before-quit 清理
+    isQuitting = true
   })
 
   setTaskDoneNotifyMainWindowGetter(() =>
@@ -624,6 +632,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SETTINGS_SET_OPEN_AT_LOGIN, (_event, enabled: boolean) => {
     applyOpenAtLogin(Boolean(enabled))
     return { ok: true as const, openAtLogin: Boolean(enabled) }
+  })
+  ipcMain.handle(IPC.SETTINGS_SET_CLOSE_TO_TRAY, (_event, enabled: boolean) => {
+    applyCloseToTrayEnabled(Boolean(enabled))
+    return { ok: true as const, closeToTrayEnabled: Boolean(enabled) }
   })
   ipcMain.handle(IPC.SETTINGS_SET_UI_THEME, (_event, mode: UiThemeMode) =>
     applyUiThemeMode(mode, () =>

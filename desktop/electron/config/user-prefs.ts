@@ -17,6 +17,8 @@ interface UserPrefs {
   taskDoneNotificationEnabled?: boolean
   /** 开机自启；缺省关闭 */
   openAtLogin?: boolean
+  /** 关闭窗口时最小化到托盘；缺省关闭 */
+  closeToTrayEnabled?: boolean
   /** 界面主题：dark | light | system；缺省 dark */
   uiThemeMode?: 'dark' | 'light' | 'system'
   onboarding?: OnboardingState

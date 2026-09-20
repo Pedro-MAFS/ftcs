@@ -108,6 +108,7 @@ const form = reactive({
   emailDraftStylePrompt: '专业，真诚',
   taskDoneNotificationEnabled: true,
   openAtLogin: false,
+  closeToTrayEnabled: false,
   uiThemeMode: 'dark' as UiThemeMode,
 })
 
@@ -131,6 +132,7 @@ const categories: Array<{ id: typeof activeCategory.value; label: string }> = [
   { id: 'integrations', label: '集成' },
   { id: 'outreach', label: '开发信' },
   { id: 'appearance', label: '外观' },
+  { id: 'startup', label: '启动与托盘' },
   { id: 'notifications', label: '通知' },
   { id: 'workspace', label: '工作区' },
   { id: 'opencode', label: 'OpenCode 运行时' },
@@ -229,6 +231,68 @@ const todayCompletionLabel = computed(() => {
   return v == null ? '—' : String(v)
 })
 
+/** 需点「保存配置」才落盘的字段快照（不含主题 / 开机自启 / 关闭进托盘） */
+type SaveableSettingsFingerprint = {
+  channelMode: string
+  apiKey: string
+  baseUrl: string
+  model: string
+  smallModel: string
+  customModelId: string
+  customSmallModelId: string
+  searchProvider: string
+  tavilyApiKey: string
+  placesApiKey: string
+  hunterKeys: string
+  hunterVerifyEmails: boolean
+  googleProxyMode: string
+  googleProxyManualUrl: string
+  searchDailyLimit: number
+  customModelSupportsImage: boolean
+  emailDraftStylePrompt: string
+  taskDoneNotificationEnabled: boolean
+}
+
+const saveableBaseline = ref<SaveableSettingsFingerprint | null>(null)
+
+function captureSaveableFingerprint(): SaveableSettingsFingerprint {
+  return {
+    channelMode: form.channelMode,
+    apiKey: form.apiKey,
+    baseUrl: form.baseUrl,
+    model: form.model,
+    smallModel: form.smallModel,
+    customModelId: form.customModelId,
+    customSmallModelId: form.customSmallModelId,
+    searchProvider: form.searchProvider,
+    tavilyApiKey: form.tavilyApiKey,
+    placesApiKey: form.placesApiKey,
+    hunterKeys: hunterKeySlots.value.map((k) => String(k)).join('\n'),
+    hunterVerifyEmails: form.hunterVerifyEmails,
+    googleProxyMode: form.googleProxyMode,
+    googleProxyManualUrl: form.googleProxyManualUrl,
+    searchDailyLimit: form.searchDailyLimit,
+    customModelSupportsImage: form.customModelSupportsImage,
+    emailDraftStylePrompt: form.emailDraftStylePrompt,
+    taskDoneNotificationEnabled: form.taskDoneNotificationEnabled,
+  }
+}
+
+function markSaveableBaseline(): void {
+  saveableBaseline.value = captureSaveableFingerprint()
+}
+
+const settingsDirty = computed(() => {
+  if (!saveableBaseline.value) return false
+  return (
+    JSON.stringify(captureSaveableFingerprint()) !==
+    JSON.stringify(saveableBaseline.value)
+  )
+})
+
+const saveDisabled = computed(() => saving.value || loading.value || !settingsDirty.value)
+const resetDisabled = computed(() => saving.value || loading.value || !settingsDirty.value)
+
 function applySnapshot(data: SettingsSnapshot): void {
   snapshot.value = data
   form.channelMode = data.channelMode
@@ -255,6 +319,7 @@ function applySnapshot(data: SettingsSnapshot): void {
     data.emailDraftStylePrompt?.trim() || DEFAULT_EMAIL_DRAFT_STYLE_PROMPT
   form.taskDoneNotificationEnabled = data.taskDoneNotificationEnabled !== false
   form.openAtLogin = data.openAtLogin === true
+  form.closeToTrayEnabled = data.closeToTrayEnabled === true
   form.uiThemeMode = (data.uiThemeMode as UiThemeMode) || 'dark'
   syncUiThemeFromSettings(form.uiThemeMode)
   if (data.channelMode === 'custom') {
@@ -278,6 +343,7 @@ function applySnapshot(data: SettingsSnapshot): void {
       form.smallModel = smallOpts[0]?.id || OFFICIAL_MODEL_CATALOG.small[0].id
     }
   }
+  markSaveableBaseline()
 }
 
 async function loadSettings(): Promise<void> {
@@ -465,6 +531,7 @@ async function onSave(): Promise<void> {
       emailDraftStylePrompt: form.emailDraftStylePrompt,
       taskDoneNotificationEnabled: form.taskDoneNotificationEnabled,
       openAtLogin: form.openAtLogin,
+      closeToTrayEnabled: form.closeToTrayEnabled,
       uiThemeMode: form.uiThemeMode,
     })
     applySnapshot(result.settings)
@@ -483,6 +550,39 @@ async function onSave(): Promise<void> {
 
 async function onUiThemeChange(): Promise<void> {
   await setUiThemeMode(form.uiThemeMode)
+}
+
+async function onOpenAtLoginChange(): Promise<void> {
+  if (!window.ftcs?.setOpenAtLogin) return
+  try {
+    const res = await window.ftcs.setOpenAtLogin(form.openAtLogin)
+    if (res.ok) {
+      form.openAtLogin = res.openAtLogin
+      showToast(form.openAtLogin ? '已开启开机自启' : '已关闭开机自启', {
+        tone: 'success',
+      })
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
+async function onCloseToTrayChange(): Promise<void> {
+  if (!window.ftcs?.setCloseToTray) return
+  try {
+    const res = await window.ftcs.setCloseToTray(form.closeToTrayEnabled)
+    if (res.ok) {
+      form.closeToTrayEnabled = res.closeToTrayEnabled
+      showToast(
+        form.closeToTrayEnabled
+          ? '已开启：关闭窗口时最小化到托盘'
+          : '已关闭：关闭窗口将退出应用',
+        { tone: 'success' },
+      )
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  }
 }
 
 async function onReset(): Promise<void> {
@@ -648,10 +748,10 @@ async function onCheckUpdate(): Promise<void> {
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
-        <button type="button" class="btn-secondary" :disabled="saving || loading" @click="onReset">
+        <button type="button" class="btn-secondary" :disabled="resetDisabled" @click="onReset">
           重置
         </button>
-        <button type="button" class="btn-primary" :disabled="saving || loading" @click="onSave">
+        <button type="button" class="btn-primary" :disabled="saveDisabled" @click="onSave">
           <Icon name="save" :size="12" />
           {{ saving ? '保存中…' : '保存配置' }}
         </button>
@@ -1479,6 +1579,49 @@ async function onCheckUpdate(): Promise<void> {
 
         <hr class="settings-divider" />
 
+        <!-- 启动与托盘 -->
+        <section id="settings-startup" class="settings-block">
+          <div class="settings-block__head">
+            <div class="settings-block__title">
+              <h3>开机自启</h3>
+              <span class="muted mono">openAtLogin</span>
+            </div>
+          </div>
+          <p class="hint-line">
+            <Icon name="info" :size="12" />
+            登录 Windows 后自动启动（可先藏托盘、不抢前台）。系统「设置 → 应用 → 启动」可能拦截。勾选后立即生效。
+          </p>
+          <label class="settings-checkbox">
+            <input
+              v-model="form.openAtLogin"
+              type="checkbox"
+              @change="onOpenAtLoginChange"
+            />
+            <span>开机时自动启动外贸获客</span>
+          </label>
+
+          <hr class="settings-divider settings-divider--inner" />
+
+          <div class="settings-block__title" style="margin-top: 8px">
+            <h3>关闭窗口行为</h3>
+            <span class="muted mono">closeToTrayEnabled</span>
+          </div>
+          <p class="hint-line">
+            <Icon name="info" :size="12" />
+            开启后，点窗口「×」会隐藏到系统托盘（进程继续跑，便于定时任务）；完全退出请用托盘菜单「退出」。默认关闭；需要定时任务时可在线索页一键开启。勾选后立即生效。
+          </p>
+          <label class="settings-checkbox">
+            <input
+              v-model="form.closeToTrayEnabled"
+              type="checkbox"
+              @change="onCloseToTrayChange"
+            />
+            <span>关闭窗口时最小化到托盘</span>
+          </label>
+        </section>
+
+        <hr class="settings-divider" />
+
         <!-- 通知 -->
         <section id="settings-notifications" class="settings-block">
           <div class="settings-block__head">
@@ -1498,19 +1641,6 @@ async function onCheckUpdate(): Promise<void> {
           <p class="hint-line muted">
             作用域：本机全局 · 默认开启 · 标题为「FTCS·外贸获客智能体」
           </p>
-          <hr class="settings-divider settings-divider--inner" />
-          <div class="settings-block__title" style="margin-top: 8px">
-            <h3>开机自启</h3>
-            <span class="muted mono">openAtLogin</span>
-          </div>
-          <p class="hint-line">
-            <Icon name="info" :size="12" />
-            登录 Windows 后自动启动并常驻托盘（不抢前台）。关闭窗口会隐藏到托盘；请从托盘菜单「退出」完全退出。系统策略可能拦截自启。
-          </p>
-          <label class="settings-checkbox">
-            <input v-model="form.openAtLogin" type="checkbox" />
-            <span>开机时自动启动外贸获客</span>
-          </label>
         </section>
 
         <hr class="settings-divider" />

@@ -67,6 +67,8 @@ export interface SettingsSnapshot {
   taskDoneNotificationEnabled: boolean
   /** 开机自启；默认 false */
   openAtLogin: boolean
+  /** 关闭窗口时最小化到托盘；默认 false */
+  closeToTrayEnabled: boolean
   /** 界面主题：dark | light | system */
   uiThemeMode: 'dark' | 'light' | 'system'
 }
@@ -93,6 +95,8 @@ export interface SettingsSaveInput {
   taskDoneNotificationEnabled?: boolean
   /** 省略则不修改；开机自启 */
   openAtLogin?: boolean
+  /** 省略则不修改；关闭进托盘 */
+  closeToTrayEnabled?: boolean
   /** 省略则不修改；界面主题 */
   uiThemeMode?: 'dark' | 'light' | 'system'
 }
@@ -140,6 +144,7 @@ export type SettingsCategory =
   | 'integrations'
   | 'outreach'
   | 'appearance'
+  | 'startup'
   | 'notifications'
   | 'workspace'
   | 'opencode'

@@ -17,8 +17,9 @@ const { products, activeProductId } = useWorkspace()
 const schedules = ref<WorkflowSchedule[]>([])
 const loading = ref(false)
 const saving = ref(false)
-const enablingLogin = ref(false)
-const openAtLogin = ref(true)
+const enablingBackground = ref(false)
+const openAtLogin = ref(false)
+const closeToTrayEnabled = ref(false)
 const error = ref('')
 const message = ref('')
 const editorOpen = ref(false)
@@ -45,7 +46,10 @@ const WEEKDAYS = [
 
 const canAdd = computed(() => schedules.value.length < 5)
 const hasEnabledSchedule = computed(() => schedules.value.some((s) => s.enabled))
-const showLoginHint = computed(() => !openAtLogin.value)
+/** 定时需要：开机自启 + 关闭进托盘，缺任一则引导 */
+const showBackgroundHint = computed(
+  () => !openAtLogin.value || !closeToTrayEnabled.value,
+)
 
 const planNameById = computed(() => {
   const map = new Map<string, string>()
@@ -69,11 +73,12 @@ function describeSchedule(s: WorkflowSchedule): string {
   return `${product} · ${plan} · 每日 ${s.timeLocal}`
 }
 
-async function reloadLoginPref(): Promise<void> {
+async function reloadBackgroundPrefs(): Promise<void> {
   if (!window.ftcs?.getSettings) return
   try {
     const data = await window.ftcs.getSettings()
     openAtLogin.value = data.openAtLogin === true
+    closeToTrayEnabled.value = data.closeToTrayEnabled === true
   } catch {
     // ignore
   }
@@ -93,20 +98,25 @@ async function reload(): Promise<void> {
   }
 }
 
-async function enableOpenAtLogin(): Promise<void> {
-  if (!window.ftcs?.setOpenAtLogin) return
-  enablingLogin.value = true
+/** 一键开启定时所需的后台能力：开机自启 + 关闭进托盘 */
+async function enableScheduleBackground(): Promise<void> {
+  enablingBackground.value = true
   error.value = ''
   try {
-    const res = await window.ftcs.setOpenAtLogin(true)
-    if (res.ok) {
-      openAtLogin.value = true
-      message.value = '已开启开机自启：登录 Windows 后会在托盘常驻，便于定时任务运行'
+    if (!openAtLogin.value && window.ftcs?.setOpenAtLogin) {
+      const res = await window.ftcs.setOpenAtLogin(true)
+      if (res.ok) openAtLogin.value = true
     }
+    if (!closeToTrayEnabled.value && window.ftcs?.setCloseToTray) {
+      const res = await window.ftcs.setCloseToTray(true)
+      if (res.ok) closeToTrayEnabled.value = true
+    }
+    message.value =
+      '已开启开机自启与关闭进托盘：关机后仍可自动拉起，关窗后进程留在托盘，定时任务才能到点执行'
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
-    enablingLogin.value = false
+    enablingBackground.value = false
   }
 }
 
@@ -161,13 +171,11 @@ async function onSave(): Promise<void> {
       return
     }
     editorOpen.value = false
-    message.value = form.enabled
-      ? '已保存定时任务。请保持应用在托盘运行（关闭窗口不会退出）。'
-      : '已保存定时任务'
+    message.value = '已保存定时任务'
     await reload()
-    if (form.enabled && !openAtLogin.value) {
+    if (form.enabled && showBackgroundHint.value) {
       message.value =
-        '已保存定时任务。建议开启开机自启，否则关机后需手动打开应用才能到点执行。'
+        '已保存定时任务。定时需要应用在后台运行：请开启开机自启（关机后仍能拉起）与关闭进托盘（关窗后进程不退出）。'
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -208,7 +216,7 @@ async function onDelete(s: WorkflowSchedule): Promise<void> {
 
 onMounted(() => {
   void reload()
-  void reloadLoginPref()
+  void reloadBackgroundPrefs()
 })
 
 watch(
@@ -235,21 +243,23 @@ watch(
     </div>
     <p class="muted schedule-panel__hint">
       <Icon name="info" :size="12" />
-      绑定产品与方案，按每日/每周本地时刻自动执行。关闭窗口会藏到托盘（不退出）。最多 5 条。
+      绑定产品与方案，按每日/每周本地时刻自动执行。建议开启「启动与托盘」中的开机自启与关闭进托盘，以便后台常驻。最多 5 条。
     </p>
-    <div v-if="showLoginHint" class="schedule-login-hint">
+    <div v-if="showBackgroundHint" class="schedule-login-hint">
       <p>
-        <strong>尚未开启开机自启。</strong>
-        定时任务需要应用在后台运行；关机或重启后若未手动打开，将无法到点执行。
-        <template v-if="hasEnabledSchedule">你已启用定时任务，建议现在开启。</template>
+        <strong>定时任务需要后台常驻。</strong>
+        默认不打扰：不开机自启、关窗即退出。若要用定时：
+        <em>开机自启</em>保证重启后仍能拉起；
+        <em>关闭进托盘</em>保证点「×」后进程还在，到点才能执行。
+        <template v-if="hasEnabledSchedule">你已有启用中的定时任务，建议现在开启。</template>
       </p>
       <button
         type="button"
         class="btn-primary"
-        :disabled="enablingLogin"
-        @click="enableOpenAtLogin"
+        :disabled="enablingBackground"
+        @click="enableScheduleBackground"
       >
-        {{ enablingLogin ? '开启中…' : '一键开启开机自启' }}
+        {{ enablingBackground ? '开启中…' : '一键开启自启与托盘' }}
       </button>
     </div>
     <p v-if="error" class="schedule-panel__err">{{ error }}</p>

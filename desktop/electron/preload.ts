@@ -259,6 +259,10 @@ const api = {
     enabled: boolean,
   ): Promise<{ ok: boolean; openAtLogin: boolean }> =>
     ipcRenderer.invoke(IPC.SETTINGS_SET_OPEN_AT_LOGIN, enabled),
+  setCloseToTray: (
+    enabled: boolean,
+  ): Promise<{ ok: boolean; closeToTrayEnabled: boolean }> =>
+    ipcRenderer.invoke(IPC.SETTINGS_SET_CLOSE_TO_TRAY, enabled),
   setUiTheme: (
     mode: 'dark' | 'light' | 'system',
   ): Promise<{ ok: boolean; mode: string; effective: string }> =>
