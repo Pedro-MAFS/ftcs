@@ -869,6 +869,9 @@ declare global {
       setOpenAtLogin?: (
         enabled: boolean,
       ) => Promise<{ ok: boolean; openAtLogin: boolean }>
+      setUiTheme?: (
+        mode: 'dark' | 'light' | 'system',
+      ) => Promise<{ ok: boolean; mode: string; effective: string }>
       detectGoogleProxy: () => Promise<{
         ok: boolean
         rule: string

@@ -17,6 +17,8 @@ interface UserPrefs {
   taskDoneNotificationEnabled?: boolean
   /** 开机自启；缺省关闭 */
   openAtLogin?: boolean
+  /** 界面主题：dark | light | system；缺省 dark */
+  uiThemeMode?: 'dark' | 'light' | 'system'
   onboarding?: OnboardingState
   update?: {
     dismissedVersion?: string

@@ -14,6 +14,10 @@ import { shareAppDownload } from '../composables/useShareApp'
 import { useOnboarding } from '../composables/useOnboarding'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { showToast } from '../composables/useToast'
+import { useUiTheme } from '../composables/useUiTheme'
+import type { UiThemeMode } from '../utils/ui-theme'
+
+const { setMode: setUiThemeMode, syncFromSettings: syncUiThemeFromSettings } = useUiTheme()
 
 const meta = SECTION_META.settings
 const { status, runtimeHealthy, runtimeLabel, loading, restartOpenCode, refresh } =
@@ -104,6 +108,7 @@ const form = reactive({
   emailDraftStylePrompt: '专业，真诚',
   taskDoneNotificationEnabled: true,
   openAtLogin: false,
+  uiThemeMode: 'dark' as UiThemeMode,
 })
 
 const EMAIL_DRAFT_STYLE_PROMPT_MAX = 500
@@ -125,6 +130,7 @@ const categories: Array<{ id: typeof activeCategory.value; label: string }> = [
   { id: 'explore', label: '探索' },
   { id: 'integrations', label: '集成' },
   { id: 'outreach', label: '开发信' },
+  { id: 'appearance', label: '外观' },
   { id: 'notifications', label: '通知' },
   { id: 'workspace', label: '工作区' },
   { id: 'opencode', label: 'OpenCode 运行时' },
@@ -249,6 +255,8 @@ function applySnapshot(data: SettingsSnapshot): void {
     data.emailDraftStylePrompt?.trim() || DEFAULT_EMAIL_DRAFT_STYLE_PROMPT
   form.taskDoneNotificationEnabled = data.taskDoneNotificationEnabled !== false
   form.openAtLogin = data.openAtLogin === true
+  form.uiThemeMode = (data.uiThemeMode as UiThemeMode) || 'dark'
+  syncUiThemeFromSettings(form.uiThemeMode)
   if (data.channelMode === 'custom') {
     form.customModelId = data.model.includes('/')
       ? data.model.split('/').slice(1).join('/')
@@ -457,6 +465,7 @@ async function onSave(): Promise<void> {
       emailDraftStylePrompt: form.emailDraftStylePrompt,
       taskDoneNotificationEnabled: form.taskDoneNotificationEnabled,
       openAtLogin: form.openAtLogin,
+      uiThemeMode: form.uiThemeMode,
     })
     applySnapshot(result.settings)
     if (!result.ok) {
@@ -470,6 +479,10 @@ async function onSave(): Promise<void> {
   } finally {
     saving.value = false
   }
+}
+
+async function onUiThemeChange(): Promise<void> {
+  await setUiThemeMode(form.uiThemeMode)
 }
 
 async function onReset(): Promise<void> {
@@ -1425,6 +1438,43 @@ async function onCheckUpdate(): Promise<void> {
           <p class="hint-line muted">
             不做正式/简洁/友好等预设；由大模型理解自然语言并落实到主题与正文。
           </p>
+        </section>
+
+        <hr class="settings-divider" />
+
+        <!-- 外观 -->
+        <section id="settings-appearance" class="settings-block">
+          <div class="settings-block__head">
+            <div class="settings-block__title">
+              <h3>界面主题</h3>
+              <span class="muted mono">uiThemeMode</span>
+            </div>
+          </div>
+          <p class="hint-line">
+            <Icon name="info" :size="12" />
+            选择暗黑或日间模式；也可跟随 Windows 系统外观。切换后立即生效并记住本机偏好。
+          </p>
+          <div class="theme-mode-row">
+            <label
+              v-for="opt in [
+                { id: 'dark', label: '暗黑' },
+                { id: 'light', label: '日间' },
+                { id: 'system', label: '跟随系统' },
+              ]"
+              :key="opt.id"
+              class="theme-mode-option"
+              :class="{ 'is-active': form.uiThemeMode === opt.id }"
+            >
+              <input
+                v-model="form.uiThemeMode"
+                type="radio"
+                name="uiThemeMode"
+                :value="opt.id"
+                @change="onUiThemeChange"
+              />
+              <span>{{ opt.label }}</span>
+            </label>
+          </div>
         </section>
 
         <hr class="settings-divider" />

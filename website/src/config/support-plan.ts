@@ -58,9 +58,9 @@ export const supportPlanItems: SupportPlanItem[] = [
     id: 'ui-theme-toggle',
     title: '界面主题 · 暗黑 / 日间模式',
     description:
-      '桌面端支持暗黑模式与日间模式切换，并记住用户选择。长时间审阅线索与开发信时，可按环境与偏好切换主题，减轻视觉疲劳。',
+      '桌面端支持暗黑、日间与跟随系统，切换后立即生效并记住本机选择。长时间审阅线索与开发信时可按环境与偏好切换，减轻视觉疲劳。',
     priority: 'P0',
-    status: 'planned',
+    status: 'developing',
   },
   {
     id: 'library-pdf-scanned',

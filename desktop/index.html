@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -7,7 +7,7 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#141414" />
     <title>外贸获客智能体</title>
     <style>
@@ -16,6 +16,11 @@
         margin: 0;
         background: #141414;
         color: #e4e4e4;
+      }
+      html[data-theme='light'],
+      html[data-theme='light'] body {
+        background: #f4f4f5;
+        color: #18181b;
       }
     </style>
   </head>

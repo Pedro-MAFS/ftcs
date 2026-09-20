@@ -35,6 +35,7 @@ import {
 import { resolveTaskDoneNotificationEnabled } from '../notify/task-done-notify-logic'
 import { readUserPrefs, writeUserPrefs } from '../config/user-prefs'
 import { applyOpenAtLogin } from '../login/login-item'
+import { resolveUiThemeMode } from '../theme/ui-theme'
 import {
   GOOGLE_PROXY_MODE_ENV,
   GOOGLE_PROXY_RESOLVED_ENV,
@@ -102,6 +103,8 @@ export interface SettingsSnapshot {
   taskDoneNotificationEnabled: boolean
   /** 开机自启；默认 false */
   openAtLogin: boolean
+  /** 界面主题 */
+  uiThemeMode: 'dark' | 'light' | 'system'
 }
 
 export interface SettingsSaveInput {
@@ -129,6 +132,8 @@ export interface SettingsSaveInput {
   taskDoneNotificationEnabled?: boolean
   /** 省略则不修改；开机自启 */
   openAtLogin?: boolean
+  /** 省略则不修改；界面主题 */
+  uiThemeMode?: 'dark' | 'light' | 'system'
 }
 
 export interface SettingsSaveResult {
@@ -379,6 +384,7 @@ export function getSettingsSnapshot(): SettingsSnapshot {
       readUserPrefs().taskDoneNotificationEnabled,
     ),
     openAtLogin: readUserPrefs().openAtLogin === true,
+    uiThemeMode: resolveUiThemeMode(readUserPrefs().uiThemeMode),
   }
 }
 
@@ -403,6 +409,10 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
 
   if (input.openAtLogin !== undefined) {
     applyOpenAtLogin(Boolean(input.openAtLogin))
+  }
+
+  if (input.uiThemeMode !== undefined) {
+    writeUserPrefs({ uiThemeMode: resolveUiThemeMode(input.uiThemeMode) })
   }
 
   const workspaceRoot = getWorkspaceRoot()

@@ -1,5 +1,6 @@
-/* Cursor / OpenCode inspired dark theme */
-:root {
+/* FTCS themes — dark default (product baseline) */
+:root,
+:root[data-theme='dark'] {
   color-scheme: dark;
 
   --bg-app: #141414;
@@ -59,6 +60,39 @@
   color: var(--text);
   background: var(--bg-app);
   -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-app: #f4f4f5;
+  --bg-panel: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-hover: #ececef;
+  --bg-input: #ffffff;
+  --bg-active: #e4e4e7;
+
+  --border: #d4d4d8;
+  --border-subtle: #e4e4e7;
+  --border-focus: #2563eb;
+
+  --text: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
+  --text-inverse: #fafafa;
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-muted: rgb(37 99 235 / 12%);
+
+  --success: #16a34a;
+  --success-bg: rgb(22 163 74 / 12%);
+  --warning: #ca8a04;
+  --warning-bg: rgb(202 138 4 / 12%);
+  --danger: #dc2626;
+  --danger-bg: rgb(220 38 38 / 10%);
+  --neutral: #71717a;
+  --neutral-bg: rgb(113 113 122 / 10%);
 }
 
 * {
@@ -3337,6 +3371,37 @@ textarea.text-input {
   display: block;
   margin-top: 2px;
   font-size: 11px;
+}
+
+.theme-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.theme-mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  user-select: none;
+}
+
+.theme-mode-option.is-active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--accent-muted);
+}
+
+.theme-mode-option input {
+  margin: 0;
 }
 
 .about-row {

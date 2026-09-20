@@ -154,17 +154,25 @@ import {
   startWorkflowScheduler,
   stopWorkflowScheduler,
 } from './schedule/workflow-scheduler'
-import type { WorkflowScheduleSaveInput } from './schedule/workflow-schedule-types'
+import {
+  applyUiThemeMode,
+  bootstrapUiThemeFromPrefs,
+  getStoredUiThemeMode,
+  getTitleBarColors,
+  type UiThemeMode,
+} from './theme/ui-theme'
 
 // 尽早加载 desktop/.env（electron-vite 不会把 FTCS_* 写入 process.env）
 loadDesktopEnvFile()
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-/** 与前端 --bg-panel 一致，标题栏 / Overlay 共用 */
-const TITLE_BAR_BG = '#1a1a1a'
-const TITLE_BAR_FG = '#e4e4e4'
+/** 与前端 --bg-panel / --text 一致，随主题切换 */
 const TITLE_BAR_HEIGHT = 40
+
+function currentTitleBar(): { bg: string; fg: string; windowBg: string } {
+  return getTitleBarColors(getStoredUiThemeMode())
+}
 
 /**
  * Windows Server / 无独显环境常见 GpuControl.CreateCommandBuffer 报错，
@@ -245,6 +253,7 @@ function getAppIconPath(): string {
 
 function getWindowOptions(): BrowserWindowConstructorOptions {
   const iconPath = getAppIconPath()
+  const chrome = currentTitleBar()
   const options: BrowserWindowConstructorOptions = {
     width: 1180,
     height: 760,
@@ -252,7 +261,7 @@ function getWindowOptions(): BrowserWindowConstructorOptions {
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: '#141414',
+    backgroundColor: chrome.windowBg,
     title: '外贸获客智能体',
     icon: iconPath,
     webPreferences: {
@@ -270,8 +279,8 @@ function getWindowOptions(): BrowserWindowConstructorOptions {
   } else {
     options.titleBarStyle = 'hidden'
     options.titleBarOverlay = {
-      color: TITLE_BAR_BG,
-      symbolColor: TITLE_BAR_FG,
+      color: chrome.bg,
+      symbolColor: chrome.fg,
       height: TITLE_BAR_HEIGHT,
     }
   }
@@ -345,7 +354,8 @@ async function createWindow(): Promise<void> {
 /** Windows 自定义标题栏首启黑屏：用尺寸微扰 + 透明度触发合成 */
 function forceWin32WindowPaint(win: BrowserWindow): void {
   try {
-    win.setBackgroundColor('#141414')
+    const chrome = currentTitleBar()
+    win.setBackgroundColor(chrome.windowBg)
     const [w, h] = win.getSize()
     win.setSize(w, h + 1)
     win.setSize(w, h)
@@ -615,6 +625,11 @@ function registerIpcHandlers(): void {
     applyOpenAtLogin(Boolean(enabled))
     return { ok: true as const, openAtLogin: Boolean(enabled) }
   })
+  ipcMain.handle(IPC.SETTINGS_SET_UI_THEME, (_event, mode: UiThemeMode) =>
+    applyUiThemeMode(mode, () =>
+      mainWindow && !mainWindow.isDestroyed() ? mainWindow : null,
+    ),
+  )
   ipcMain.handle(IPC.SETTINGS_DETECT_GOOGLE_PROXY, () => detectSystemGoogleProxy())
   ipcMain.handle(
     IPC.SETTINGS_TEST_GOOGLE_PLACES,
@@ -1736,18 +1751,24 @@ async function bootstrapOpenCode(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
-  // 强制暗色系统主题，避免 Windows 原生控件/菜单仍为浅色
-  nativeTheme.themeSource = 'dark'
+  // 主题：跟随 prefs（dark/light/system），不再写死 dark
+  bootstrapUiThemeFromPrefs()
   if (process.platform === 'win32') {
     // 打包态用 appId；开发态按 Electron 文档用 execPath（需开始菜单固定 electron.exe 才有可靠 click）
     const aumid = app.isPackaged ? 'com.ftcs.desktop' : process.execPath
     app.setAppUserModelId(aumid)
-    console.log('[ftcs:notify] setAppUserModelId', {
-      aumid,
-      packaged: app.isPackaged,
-      execPath: process.execPath,
-    })
   }
+  console.log('[ftcs:notify] setAppUserModelId', {
+    packaged: app.isPackaged,
+    execPath: process.execPath,
+  })
+
+  nativeTheme.on('updated', () => {
+    if (getStoredUiThemeMode() !== 'system') return
+    applyUiThemeMode('system', () =>
+      mainWindow && !mainWindow.isDestroyed() ? mainWindow : null,
+    )
+  })
 
   registerIpcHandlers()
 

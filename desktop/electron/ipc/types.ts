@@ -10,6 +10,7 @@ export const IPC = {
   SETTINGS_SAVE: 'settings:save',
   SETTINGS_PICK_WORKSPACE: 'settings:pick-workspace',
   SETTINGS_SET_OPEN_AT_LOGIN: 'settings:set-open-at-login',
+  SETTINGS_SET_UI_THEME: 'settings:set-ui-theme',
   SETTINGS_DETECT_GOOGLE_PROXY: 'settings:detect-google-proxy',
   SETTINGS_TEST_GOOGLE_PLACES: 'settings:test-google-places',
   SETTINGS_TEST_HUNTER: 'settings:test-hunter',
@@ -1096,6 +1097,7 @@ export interface SettingsSnapshot {
   emailDraftStylePrompt?: string
   taskDoneNotificationEnabled?: boolean
   openAtLogin?: boolean
+  uiThemeMode?: 'dark' | 'light' | 'system'
 }
 
 export interface SettingsSaveInput {
@@ -1116,6 +1118,7 @@ export interface SettingsSaveInput {
   emailDraftStylePrompt?: string
   taskDoneNotificationEnabled?: boolean
   openAtLogin?: boolean
+  uiThemeMode?: 'dark' | 'light' | 'system'
 }
 
 export interface SettingsSaveResult {

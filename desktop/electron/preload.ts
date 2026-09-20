@@ -259,6 +259,10 @@ const api = {
     enabled: boolean,
   ): Promise<{ ok: boolean; openAtLogin: boolean }> =>
     ipcRenderer.invoke(IPC.SETTINGS_SET_OPEN_AT_LOGIN, enabled),
+  setUiTheme: (
+    mode: 'dark' | 'light' | 'system',
+  ): Promise<{ ok: boolean; mode: string; effective: string }> =>
+    ipcRenderer.invoke(IPC.SETTINGS_SET_UI_THEME, mode),
   pickWorkspace: (): Promise<{ path: string | null }> =>
     ipcRenderer.invoke(IPC.SETTINGS_PICK_WORKSPACE),
   getPathForFile: (file: File): string => {

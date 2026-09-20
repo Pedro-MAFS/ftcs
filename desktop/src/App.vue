@@ -8,10 +8,13 @@ import ConfirmDialog from './components/shared/ConfirmDialog.vue'
 import { useAuth } from './composables/useAuth'
 import { useInbox } from './composables/useInbox'
 import { useScheduleRunner } from './composables/useScheduleRunner'
+import { ensureUiThemeListener, useUiTheme } from './composables/useUiTheme'
 
 const platform = ref('win32')
 useInbox()
 useScheduleRunner()
+ensureUiThemeListener()
+const { syncFromSettings } = useUiTheme()
 
 const {
   gatewayResetPromptOpen,
@@ -20,9 +23,15 @@ const {
   confirmGatewayReset,
 } = useAuth()
 
-onMounted(() => {
+onMounted(async () => {
   platform.value = window.ftcs?.platform ?? 'win32'
   document.documentElement.dataset.platform = platform.value
+  try {
+    const settings = await window.ftcs?.getSettings?.()
+    if (settings?.uiThemeMode) syncFromSettings(settings.uiThemeMode)
+  } catch {
+    // ignore
+  }
 })
 </script>
 
