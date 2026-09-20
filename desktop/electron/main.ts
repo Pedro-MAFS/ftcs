@@ -19,7 +19,11 @@ import {
   saveSettings,
   type SettingsSaveInput,
 } from './settings/settings-service'
-import { setTaskDoneNotifyMainWindowGetter } from './notify/task-done-notify'
+import {
+  setTaskDoneNotifyMainWindowGetter,
+  showTaskDoneNotification,
+} from './notify/task-done-notify'
+import { formatTaskDoneNotifyBody } from './notify/task-done-notify-body'
 import {
   detectSystemGoogleProxy,
   testGooglePlacesConnectivity,
@@ -165,10 +169,36 @@ function getAgentRunner(): AgentRunController {
   return agentRunner
 }
 
+/** 最近一次 Agent state.skill，供 done 通知文案（US-N-02） */
+let lastAgentSkill = ''
+
 function emitAgentEvent(
   sender: Electron.WebContents | null | undefined,
   payload: import('./ipc/types').AgentEventPayload,
 ): void {
+  try {
+    if (payload.type === 'state' && payload.skill) {
+      lastAgentSkill = payload.skill
+    }
+    if (payload.type === 'done') {
+      const body = formatTaskDoneNotifyBody({
+        skill: lastAgentSkill,
+        ok: payload.ok,
+        message: payload.message || '',
+      })
+      const shown = showTaskDoneNotification({ ok: payload.ok, body })
+      console.log('[ftcs:notify] done→show', {
+        skill: lastAgentSkill,
+        ok: payload.ok,
+        shown,
+        bodyPreview: body.slice(0, 80),
+      })
+    }
+  } catch (err) {
+    console.warn('[ftcs:notify] done hook error', err)
+    // 通知失败不得阻断 IPC
+  }
+
   try {
     sender?.send(IPC.AGENT_EVENT, payload)
   } catch {
@@ -1636,7 +1666,14 @@ app.whenReady().then(async () => {
   // 强制暗色系统主题，避免 Windows 原生控件/菜单仍为浅色
   nativeTheme.themeSource = 'dark'
   if (process.platform === 'win32') {
-    app.setAppUserModelId('com.ftcs.desktop')
+    // 打包态用 appId；开发态按 Electron 文档用 execPath（需开始菜单固定 electron.exe 才有可靠 click）
+    const aumid = app.isPackaged ? 'com.ftcs.desktop' : process.execPath
+    app.setAppUserModelId(aumid)
+    console.log('[ftcs:notify] setAppUserModelId', {
+      aumid,
+      packaged: app.isPackaged,
+      execPath: process.execPath,
+    })
   }
 
   registerIpcHandlers()

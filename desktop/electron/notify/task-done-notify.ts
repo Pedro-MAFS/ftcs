@@ -28,18 +28,65 @@ export type TaskDoneNotifyInput = {
 }
 
 type MainWindowGetter = () => BrowserWindow | null
+type ElectronNotification = InstanceType<typeof import('electron').Notification>
 
+const LOG = '[ftcs:notify]'
 const requireElectron = createRequire(import.meta.url)
 
 let getMainWindow: MainWindowGetter = () => null
+let notifySeq = 0
 
-function loadElectronNotification(): typeof import('electron').Notification | null {
+/**
+ * Electron 要求保留 Notification 强引用，否则会被 GC，click 永远不触发。
+ * @see https://www.electronjs.org/docs/latest/api/notification
+ */
+const activeNotifications: ElectronNotification[] = []
+
+function log(...args: unknown[]): void {
+  console.log(LOG, ...args)
+}
+
+function logWarn(...args: unknown[]): void {
+  console.warn(LOG, ...args)
+}
+
+function describeWindow(win: BrowserWindow | null): Record<string, unknown> {
+  if (!win) return { exists: false }
   try {
-    const electron = requireElectron('electron') as typeof import('electron')
-    return electron.Notification ?? null
+    return {
+      exists: true,
+      destroyed: win.isDestroyed(),
+      focused: win.isFocused(),
+      minimized: win.isMinimized(),
+      visible: win.isVisible(),
+      alwaysOnTop: win.isAlwaysOnTop(),
+    }
+  } catch (err) {
+    return { exists: true, describeError: String(err) }
+  }
+}
+
+function loadElectron(): typeof import('electron') | null {
+  try {
+    return requireElectron('electron') as typeof import('electron')
   } catch {
     return null
   }
+}
+
+function loadElectronNotification(): typeof import('electron').Notification | null {
+  return loadElectron()?.Notification ?? null
+}
+
+function retainNotification(notification: ElectronNotification, id: number): void {
+  activeNotifications.push(notification)
+  const release = (reason: string): void => {
+    const idx = activeNotifications.indexOf(notification)
+    if (idx >= 0) activeNotifications.splice(idx, 1)
+    log('release', { id, reason, remaining: activeNotifications.length })
+  }
+  notification.once('close', () => release('close'))
+  notification.once('failed', () => release('failed'))
 }
 
 export function setTaskDoneNotifyMainWindowGetter(getter: MainWindowGetter): void {
@@ -50,15 +97,35 @@ export function isTaskDoneNotificationEnabled(): boolean {
   return resolveTaskDoneNotificationEnabled(readUserPrefs().taskDoneNotificationEnabled)
 }
 
-export function focusMainWindowFromNotification(): void {
+export function focusMainWindowFromNotification(source = 'click'): void {
   const win = getMainWindow()
-  if (!win) return
+  log('focus:start', { source, window: describeWindow(win) })
+  if (!win) {
+    logWarn('focus:abort no main window')
+    return
+  }
   try {
-    if (win.isMinimized()) win.restore()
+    // Windows 常需先让 app 抢前台权限，否则只闪任务栏
+    try {
+      loadElectron()?.app?.focus?.()
+      log('focus:app.focus ok')
+    } catch (err) {
+      logWarn('focus:app.focus failed', err)
+    }
+    if (win.isMinimized()) {
+      win.restore()
+      log('focus:restore', describeWindow(win))
+    }
     win.show()
+    win.moveTop()
+    // 短暂置顶绕过 AllowSetForegroundWindow 限制（Windows）
+    win.setAlwaysOnTop(true)
     win.focus()
-  } catch {
-    // 静默
+    win.setAlwaysOnTop(false)
+    win.focus()
+    log('focus:done', describeWindow(win))
+  } catch (err) {
+    logWarn('focus:error', err)
   }
 }
 
@@ -67,15 +134,20 @@ export function focusMainWindowFromNotification(): void {
  * @returns true 表示已调用 Notification.show；false 表示被闸门跳过或失败
  */
 export function showTaskDoneNotification(input: TaskDoneNotifyInput): boolean {
+  const id = ++notifySeq
   const body = truncateTaskDoneNotifyBody(input.body ?? '')
-  if (!body) return false
+  if (!body) {
+    log('show:skip empty body', { id })
+    return false
+  }
 
   const win = getMainWindow()
   const windowState = win
     ? { isFocused: win.isFocused(), isMinimized: win.isMinimized() }
     : null
 
-  const NotificationCtor = loadElectronNotification()
+  const electron = loadElectron()
+  const NotificationCtor = electron?.Notification ?? null
   let supported = false
   try {
     supported = Boolean(NotificationCtor?.isSupported?.())
@@ -83,13 +155,34 @@ export function showTaskDoneNotification(input: TaskDoneNotifyInput): boolean {
     supported = false
   }
 
+  const enabled = isTaskDoneNotificationEnabled()
+  const suppressed = isWorkflowNotifySuppressed()
   const allow = shouldShowTaskDoneNotification({
-    enabled: isTaskDoneNotificationEnabled(),
-    suppressed: isWorkflowNotifySuppressed(),
+    enabled,
+    suppressed,
     supported,
     window: windowState,
   })
-  if (!allow || !NotificationCtor) return false
+
+  log('show:gate', {
+    id,
+    ok: input.ok,
+    bodyPreview: body.slice(0, 80),
+    allow,
+    enabled,
+    suppressed,
+    supported,
+    window: windowState,
+    platform: process.platform,
+    packaged: electron?.app?.isPackaged,
+    execPath: process.execPath,
+    activeCount: activeNotifications.length,
+  })
+
+  if (!allow || !NotificationCtor) {
+    log('show:skipped', { id, allow, hasCtor: Boolean(NotificationCtor) })
+    return false
+  }
 
   try {
     const notification = new NotificationCtor({
@@ -97,17 +190,32 @@ export function showTaskDoneNotification(input: TaskDoneNotifyInput): boolean {
       body,
       silent: false,
     })
+    retainNotification(notification, id)
+    notification.on('show', () => {
+      log('event:show', { id })
+    })
     notification.on('click', () => {
-      focusMainWindowFromNotification()
+      log('event:click', { id, window: describeWindow(getMainWindow()) })
+      focusMainWindowFromNotification('notification-click')
+    })
+    notification.on('close', () => {
+      log('event:close', { id })
+    })
+    notification.on('failed', (...args: unknown[]) => {
+      logWarn('event:failed', { id, args })
     })
     notification.show()
+    log('show:called', { id, retained: activeNotifications.length })
     return true
-  } catch {
+  } catch (err) {
+    logWarn('show:error', { id, err })
     return false
   }
 }
 
-/** 单测用：重置主窗口 getter */
+/** 单测用：重置主窗口 getter 与活跃通知引用 */
 export function resetTaskDoneNotifyForTests(): void {
   getMainWindow = () => null
+  activeNotifications.length = 0
+  notifySeq = 0
 }
