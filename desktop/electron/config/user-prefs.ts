@@ -13,6 +13,8 @@ interface UserPrefs {
   officecliPath?: string
   /** 全局开发信行文风格（自由文本，可空） */
   emailDraftStylePrompt?: string
+  /** 任务完成 Windows 通知；缺省视为开启 */
+  taskDoneNotificationEnabled?: boolean
   onboarding?: OnboardingState
   update?: {
     dismissedVersion?: string

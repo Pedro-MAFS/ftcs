@@ -32,6 +32,7 @@ import {
   normalizeEmailDraftStylePrompt,
   resolveEmailDraftStylePrompt,
 } from './email-draft-style'
+import { resolveTaskDoneNotificationEnabled } from '../notify/task-done-notify-logic'
 import { readUserPrefs, writeUserPrefs } from '../config/user-prefs'
 import {
   GOOGLE_PROXY_MODE_ENV,
@@ -96,6 +97,8 @@ export interface SettingsSnapshot {
   envPath: string
   /** 全局开发信行文风格（自由文本，可空） */
   emailDraftStylePrompt: string
+  /** 任务完成 Windows 通知；默认 true */
+  taskDoneNotificationEnabled: boolean
 }
 
 export interface SettingsSaveInput {
@@ -119,6 +122,8 @@ export interface SettingsSaveInput {
   customModelSupportsImage?: boolean
   /** 省略则不修改；传入则校验后写入 prefs（允许空串清空） */
   emailDraftStylePrompt?: string
+  /** 省略则不修改；任务完成 Windows 通知开关 */
+  taskDoneNotificationEnabled?: boolean
 }
 
 export interface SettingsSaveResult {
@@ -365,6 +370,9 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     emailDraftStylePrompt: resolveEmailDraftStylePrompt(
       readUserPrefs().emailDraftStylePrompt,
     ),
+    taskDoneNotificationEnabled: resolveTaskDoneNotificationEnabled(
+      readUserPrefs().taskDoneNotificationEnabled,
+    ),
   }
 }
 
@@ -379,6 +387,12 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
       }
     }
     writeUserPrefs({ emailDraftStylePrompt: normalized.value })
+  }
+
+  if (input.taskDoneNotificationEnabled !== undefined) {
+    writeUserPrefs({
+      taskDoneNotificationEnabled: Boolean(input.taskDoneNotificationEnabled),
+    })
   }
 
   const workspaceRoot = getWorkspaceRoot()

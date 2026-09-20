@@ -1085,6 +1085,8 @@ export interface SettingsSnapshot {
   customModelSupportsImage: boolean
   opencodeConfigPath: string
   envPath: string
+  emailDraftStylePrompt?: string
+  taskDoneNotificationEnabled?: boolean
 }
 
 export interface SettingsSaveInput {
@@ -1102,6 +1104,8 @@ export interface SettingsSaveInput {
   googleProxyManualUrl?: string
   searchDailyLimit: number
   customModelSupportsImage?: boolean
+  emailDraftStylePrompt?: string
+  taskDoneNotificationEnabled?: boolean
 }
 
 export interface SettingsSaveResult {

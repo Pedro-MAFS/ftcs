@@ -19,6 +19,7 @@ import {
   saveSettings,
   type SettingsSaveInput,
 } from './settings/settings-service'
+import { setTaskDoneNotifyMainWindowGetter } from './notify/task-done-notify'
 import {
   detectSystemGoogleProxy,
   testGooglePlacesConnectivity,
@@ -262,6 +263,10 @@ async function createWindow(): Promise<void> {
   win.on('focus', () => {
     void maybeRefreshUsageAfterRechargeFocus()
   })
+
+  setTaskDoneNotifyMainWindowGetter(() =>
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow : null,
+  )
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)

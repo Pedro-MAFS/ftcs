@@ -26,7 +26,7 @@ export const supportPlanItems: SupportPlanItem[] = [
     id: 'task-done-notification',
     title: '任务完成 · Windows 通知',
     description:
-      'Agent 长任务（探索、评分、开发信起草等）完成后弹出 Windows 系统通知。用户反馈：任务耗时长通常不会一直盯着界面，缺少提醒时容易忘记回来查看结果。',
+      'Agent 长任务（探索、评分、开发信起草等）完成后，若窗口未聚焦则弹出 Windows 系统通知；编排一键跑通仅整段结束通知一次。需求见仓库 docs/22-需求-任务完成Windows通知.md。',
     priority: 'P0',
     status: 'developing',
   },

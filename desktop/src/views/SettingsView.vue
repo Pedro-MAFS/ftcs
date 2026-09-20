@@ -102,6 +102,7 @@ const form = reactive({
   searchDailyLimit: 50,
   customModelSupportsImage: false,
   emailDraftStylePrompt: '专业，真诚',
+  taskDoneNotificationEnabled: true,
 })
 
 const EMAIL_DRAFT_STYLE_PROMPT_MAX = 500
@@ -123,6 +124,7 @@ const categories: Array<{ id: typeof activeCategory.value; label: string }> = [
   { id: 'explore', label: '探索' },
   { id: 'integrations', label: '集成' },
   { id: 'outreach', label: '开发信' },
+  { id: 'notifications', label: '通知' },
   { id: 'workspace', label: '工作区' },
   { id: 'opencode', label: 'OpenCode 运行时' },
   { id: 'about', label: '关于与隐私' },
@@ -244,6 +246,7 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.customModelSupportsImage = data.customModelSupportsImage
   form.emailDraftStylePrompt =
     data.emailDraftStylePrompt?.trim() || DEFAULT_EMAIL_DRAFT_STYLE_PROMPT
+  form.taskDoneNotificationEnabled = data.taskDoneNotificationEnabled !== false
   if (data.channelMode === 'custom') {
     form.customModelId = data.model.includes('/')
       ? data.model.split('/').slice(1).join('/')
@@ -450,6 +453,7 @@ async function onSave(): Promise<void> {
       searchDailyLimit: form.searchDailyLimit,
       customModelSupportsImage: form.customModelSupportsImage,
       emailDraftStylePrompt: form.emailDraftStylePrompt,
+      taskDoneNotificationEnabled: form.taskDoneNotificationEnabled,
     })
     applySnapshot(result.settings)
     if (!result.ok) {
@@ -1417,6 +1421,29 @@ async function onCheckUpdate(): Promise<void> {
           </div>
           <p class="hint-line muted">
             不做正式/简洁/友好等预设；由大模型理解自然语言并落实到主题与正文。
+          </p>
+        </section>
+
+        <hr class="settings-divider" />
+
+        <!-- 通知 -->
+        <section id="settings-notifications" class="settings-block">
+          <div class="settings-block__head">
+            <div class="settings-block__title">
+              <h3>任务完成通知</h3>
+              <span class="muted mono">taskDoneNotificationEnabled</span>
+            </div>
+          </div>
+          <p class="hint-line">
+            <Icon name="info" :size="12" />
+            长任务结束且窗口不在前台时，弹出 Windows 系统通知。可在系统「通知和操作」中管理权限。
+          </p>
+          <label class="settings-checkbox">
+            <input v-model="form.taskDoneNotificationEnabled" type="checkbox" />
+            <span>启用任务完成通知</span>
+          </label>
+          <p class="hint-line muted">
+            作用域：本机全局 · 默认开启 · 标题为「FTCS·外贸获客智能体」
           </p>
         </section>
 
