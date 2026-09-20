@@ -89,6 +89,8 @@ export const IPC = {
   UPDATE_CHECK: 'update:check',
   UPDATE_SNOOZE: 'update:snooze',
   UPDATE_DISMISS: 'update:dismiss',
+  NOTIFY_SET_WORKFLOW_SUPPRESSED: 'notify:set-workflow-suppressed',
+  NOTIFY_SHOW_TASK_DONE: 'notify:show-task-done',
   APP_GET_VERSION: 'app:get-version',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',

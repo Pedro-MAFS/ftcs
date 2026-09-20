@@ -805,6 +805,11 @@ declare global {
       checkForUpdate: (opts?: { forceNotify?: boolean }) => Promise<UpdateCheckResult>
       snoozeUpdate: () => Promise<{ ok: boolean }>
       dismissUpdate: (version: string) => Promise<{ ok: boolean }>
+      setWorkflowNotifySuppressed?: (suppressed: boolean) => Promise<void>
+      showTaskDoneNotification?: (input: {
+        ok: boolean
+        body: string
+      }) => Promise<boolean>
       saveSettings: (
         input: SettingsSaveInput,
       ) => Promise<SettingsSaveResult & { status: AppStatus }>

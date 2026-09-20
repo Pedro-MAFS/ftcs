@@ -21,6 +21,7 @@ import {
 } from './settings/settings-service'
 import {
   setTaskDoneNotifyMainWindowGetter,
+  setWorkflowNotifySuppressed,
   showTaskDoneNotification,
 } from './notify/task-done-notify'
 import { formatTaskDoneNotifyBody } from './notify/task-done-notify-body'
@@ -650,6 +651,17 @@ function registerIpcHandlers(): void {
     dismissAppUpdate(String(version || ''))
     return { ok: true }
   })
+  ipcMain.handle(IPC.NOTIFY_SET_WORKFLOW_SUPPRESSED, (_event, suppressed: boolean) => {
+    setWorkflowNotifySuppressed(Boolean(suppressed))
+  })
+  ipcMain.handle(
+    IPC.NOTIFY_SHOW_TASK_DONE,
+    (_event, input: { ok?: boolean; body?: string }) =>
+      showTaskDoneNotification({
+        ok: Boolean(input?.ok),
+        body: String(input?.body ?? ''),
+      }),
+  )
   ipcMain.handle(IPC.SETTINGS_SAVE, async (_event, input: SettingsSaveInput) => {
     const result = saveSettings(input)
     if (!runtime) {

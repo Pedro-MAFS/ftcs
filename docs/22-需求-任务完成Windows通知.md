@@ -133,7 +133,7 @@ flowchart LR
 |----|------|--------|------|------|
 | **US-N-01** | 主进程通知服务 + 未聚焦判定 + 设置读写 | Must | — | 封装 show；读开关；点击 focus；权限降级 |
 | **US-N-02** | 单步 Agent 长任务完成/失败挂钩 | Must | N-01 | 在 `done` 路径按 N1/N5/N6 调用；编排进行中由 N-03 抑制 |
-| **US-N-03** | 编排整段结束通知 | Must | N-01、编排现网 | 方案开始抑制单步；结束（成败/中止）通知一次 |
+| **US-N-03** | 编排整段结束通知 | Must | N-01、编排现网 | **编码已落地** → [design/US-N-03-编排整段结束通知.md](design/US-N-03-编排整段结束通知.md) |
 
 建议实现顺序：**N-01 → N-02 → N-03**（N-03 可与 N-02 同迭代，但必须有抑制标记，避免串跑时连弹）。
 
@@ -188,7 +188,7 @@ flowchart LR
 |----|------|
 | 优先级 | Must |
 | 依赖 | US-N-01；[docs/18](18-需求-任务编排一键跑通.md) 执行器现网 |
-| 状态 | 待详设 |
+| 状态 | **编码已落地** → [design/US-N-03-编排整段结束通知.md](design/US-N-03-编排整段结束通知.md) |
 
 **验收要点**
 
@@ -243,11 +243,13 @@ flowchart LR
 | 2026-09-20 | US-N-01 编码落地（notify 模块 + 设置「通知」开关） |
 | 2026-09-20 | US-N-02 详设已立（单步挂钩 + 分场景通知正文冻结表） |
 | 2026-09-20 | US-N-02 编码落地（formatTaskDoneNotifyBody + emitAgentEvent 挂钩） |
+| 2026-09-20 | US-N-03 详设已立（executePlan 抑制 + 整段一次通知 + W1～W4 文案） |
+| 2026-09-20 | US-N-03 编码落地（notify IPC、`formatWorkflowPlanNotifyBody`、`executePlan` finally） |
 
 ---
 
 ## 11. 下一步（不在本文交付）
 
-1. ~~用户确认本文后，撰写 **US-N-01** 详设~~ → 已完成并编码。  
-2. ~~US-N-02 详设~~ → 已完成：[US-N-02-单步Agent任务完成通知.md](design/US-N-02-单步Agent任务完成通知.md)。下一步编码 N-02；并行或随后 US-N-03 详设。  
-3. 随桌面发版更新 changelog，并将支持计划 `task-done-notification` 下线。
+1. ~~US-N-01 / US-N-02 详设与编码~~ → 已完成。  
+2. ~~US-N-03 详设与编码~~ → 已完成（IPC + `executePlan` 抑制/整段通知）。  
+3. 真机验收（§7 清单）后随桌面发版更新 changelog，并将支持计划 `task-done-notification` 下线。

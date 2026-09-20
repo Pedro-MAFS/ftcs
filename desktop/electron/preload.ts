@@ -202,6 +202,12 @@ const api = {
   snoozeUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.UPDATE_SNOOZE),
   dismissUpdate: (version: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.UPDATE_DISMISS, version),
+  setWorkflowNotifySuppressed: (suppressed: boolean): Promise<void> =>
+    ipcRenderer.invoke(IPC.NOTIFY_SET_WORKFLOW_SUPPRESSED, suppressed),
+  showTaskDoneNotification: (input: {
+    ok: boolean
+    body: string
+  }): Promise<boolean> => ipcRenderer.invoke(IPC.NOTIFY_SHOW_TASK_DONE, input),
   saveSettings: (
     input: SettingsSaveInput,
   ): Promise<SettingsSaveResult & { status: AppStatus }> =>

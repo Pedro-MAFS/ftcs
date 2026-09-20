@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import type { WorkflowPlan } from '../types/electron'
-import { formatWorkflowFail, runWorkflowPreflight } from './useWorkflowExecute'
+import {
+  formatWorkflowFail,
+  notifyWorkflowPlanFinished,
+  runWorkflowPreflight,
+} from './useWorkflowExecute'
 
 describe('useWorkflowExecute helpers', () => {
   it('formatWorkflowFail builds Chinese message', () => {
@@ -68,5 +72,46 @@ describe('useWorkflowExecute helpers', () => {
     const err = await runWorkflowPreflight(plan)
     assert.equal(err, null)
     assert.deepEqual(calls, ['discover-leads', 'discover-leads-r2', 'score-and-dedupe'])
+  })
+
+  it('notifyWorkflowPlanFinished unsuppresses then shows once on success', async () => {
+    const order: string[] = []
+    const ftcs = {
+      setWorkflowNotifySuppressed: async (v: boolean) => {
+        order.push(`suppress:${v}`)
+      },
+      showTaskDoneNotification: async (input: { ok: boolean; body: string }) => {
+        order.push(`show:${input.ok}:${input.body}`)
+        return true
+      },
+    }
+
+    await notifyWorkflowPlanFinished(ftcs, {
+      suppressArmed: true,
+      planNameForNotify: '标准获客',
+      outcome: { ok: true, message: 'x', completedSteps: 2 },
+    })
+
+    assert.deepEqual(order, [
+      'suppress:false',
+      'show:true:任务方案「标准获客」已完成（2 步）',
+    ])
+  })
+
+  it('notifyWorkflowPlanFinished no-op when suppress not armed', async () => {
+    let called = false
+    await notifyWorkflowPlanFinished(
+      {
+        setWorkflowNotifySuppressed: async () => {
+          called = true
+        },
+      },
+      {
+        suppressArmed: false,
+        planNameForNotify: 'X',
+        outcome: { ok: true, message: '', completedSteps: 1 },
+      },
+    )
+    assert.equal(called, false)
   })
 })

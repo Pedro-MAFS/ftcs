@@ -9,6 +9,7 @@ import { parseCompanyDomain } from '../utils/parse-company-domain'
 import { ensureAgentReady } from './useAgentPreflight'
 import { useExploreStart } from './useExploreStart'
 import { useWorkspace } from './useWorkspace'
+import { formatWorkflowPlanNotifyBody } from '../utils/format-workflow-plan-notify-body'
 import { waitForAgentDone } from './wait-for-agent-done'
 
 export type WorkflowExecuteResult =
@@ -52,6 +53,46 @@ function countPendingEnrich(rows: LeadRowDto[] | undefined): number {
 
 function isAbortError(err: unknown): boolean {
   return err instanceof DOMException && err.name === 'AbortError'
+}
+
+type WorkflowNotifyFtcs = {
+  setWorkflowNotifySuppressed?: (suppressed: boolean) => Promise<void> | void
+  showTaskDoneNotification?: (input: {
+    ok: boolean
+    body: string
+  }) => Promise<boolean> | boolean
+}
+
+/** US-N-03：编排结束解除抑制并弹一次系统通知（供单测） */
+export async function notifyWorkflowPlanFinished(
+  ftcs: WorkflowNotifyFtcs | undefined,
+  input: {
+    suppressArmed: boolean
+    outcome: WorkflowExecuteResult | null
+    planNameForNotify: string
+  },
+): Promise<void> {
+  if (!input.suppressArmed) return
+  try {
+    await ftcs?.setWorkflowNotifySuppressed?.(false)
+    if (!input.outcome) return
+    const aborted =
+      !input.outcome.ok && input.outcome.message === '已中止'
+    const body = formatWorkflowPlanNotifyBody({
+      planName: input.planNameForNotify,
+      ok: input.outcome.ok,
+      aborted,
+      completedSteps: input.outcome.completedSteps,
+      failedStepLabel:
+        input.outcome.ok || aborted ? undefined : input.outcome.failedStep?.label,
+    })
+    await ftcs?.showTaskDoneNotification?.({
+      ok: input.outcome.ok,
+      body,
+    })
+  } catch {
+    // 静默
+  }
 }
 
 async function loadWorkflowPlan(planId: string): Promise<WorkflowPlan | null> {
@@ -293,11 +334,21 @@ export function useWorkflowExecute(options?: {
 
     running.value = true
     currentPlanName.value = plan.name
+    const planNameForNotify = plan.name
     abortController = new AbortController()
     let completed = 0
     let failedStep: WorkflowNodeId | undefined
+    let outcome: WorkflowExecuteResult | null = null
+    let suppressArmed = false
 
     try {
+      try {
+        await window.ftcs?.setWorkflowNotifySuppressed?.(true)
+        suppressArmed = true
+      } catch {
+        console.warn('[ftcs:notify] setWorkflowNotifySuppressed(true) failed')
+      }
+
       for (let i = 0; i < plan.steps.length; i += 1) {
         const step = plan.steps[i]
         currentStepIndex.value = i
@@ -323,12 +374,14 @@ export function useWorkflowExecute(options?: {
 
       const msg = `方案「${plan.name}」已完成（${completed} 步）`
       options?.onMessage?.(msg)
-      return { ok: true, message: msg, completedSteps: completed }
+      outcome = { ok: true, message: msg, completedSteps: completed }
+      return outcome
     } catch (err) {
       if (isAbortError(err)) {
         const msg = '已中止'
         options?.onMessage?.(msg)
-        return { ok: false, message: msg, completedSteps: completed }
+        outcome = { ok: false, message: msg, completedSteps: completed }
+        return outcome
       }
 
       const detail = err instanceof Error ? err.message : String(err)
@@ -338,7 +391,7 @@ export function useWorkflowExecute(options?: {
           : currentStepLabel.value || '未知步骤'
       const msg = formatWorkflowFail(plan.name, label, detail)
       options?.onMessage?.(msg)
-      return {
+      outcome = {
         ok: false,
         message: msg,
         failedStep:
@@ -347,12 +400,18 @@ export function useWorkflowExecute(options?: {
             : undefined,
         completedSteps: completed,
       }
+      return outcome
     } finally {
       running.value = false
       currentStepIndex.value = -1
       currentStepLabel.value = ''
       currentPlanName.value = ''
       abortController = null
+      await notifyWorkflowPlanFinished(window.ftcs, {
+        suppressArmed,
+        outcome,
+        planNameForNotify,
+      })
     }
   }
 
