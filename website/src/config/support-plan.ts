@@ -113,9 +113,9 @@ export const supportPlanItems: SupportPlanItem[] = [
     id: 'scheduled-tasks',
     title: '定时运行编排任务',
     description:
-      '对已保存的任务编排方案支持按计划定时触发（如每周复搜），后台执行并在完成或异常时通知用户。依赖任务编排能力。',
+      '对已保存的任务编排方案支持按计划定时触发（每日/每周本地时刻），绑定产品与方案；依赖托盘常驻与可选开机自启，后台执行并在完成或异常时用系统通知提醒。',
     priority: 'P0',
-    status: 'planned',
+    status: 'developing',
   },
   {
     id: 'in-app-email-send',

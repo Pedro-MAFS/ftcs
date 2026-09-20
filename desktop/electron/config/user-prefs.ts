@@ -15,6 +15,8 @@ interface UserPrefs {
   emailDraftStylePrompt?: string
   /** 任务完成 Windows 通知；缺省视为开启 */
   taskDoneNotificationEnabled?: boolean
+  /** 开机自启；缺省关闭 */
+  openAtLogin?: boolean
   onboarding?: OnboardingState
   update?: {
     dismissedVersion?: string

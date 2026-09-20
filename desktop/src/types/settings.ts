@@ -65,6 +65,8 @@ export interface SettingsSnapshot {
   emailDraftStylePrompt: string
   /** 任务完成 Windows 通知；默认 true */
   taskDoneNotificationEnabled: boolean
+  /** 开机自启；默认 false */
+  openAtLogin: boolean
 }
 
 export interface SettingsSaveInput {
@@ -87,6 +89,8 @@ export interface SettingsSaveInput {
   emailDraftStylePrompt?: string
   /** 省略则不修改；任务完成 Windows 通知开关 */
   taskDoneNotificationEnabled?: boolean
+  /** 省略则不修改；开机自启 */
+  openAtLogin?: boolean
 }
 
 export interface SettingsSaveResult {

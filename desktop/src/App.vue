@@ -7,9 +7,11 @@ import AppToast from './components/shared/AppToast.vue'
 import ConfirmDialog from './components/shared/ConfirmDialog.vue'
 import { useAuth } from './composables/useAuth'
 import { useInbox } from './composables/useInbox'
+import { useScheduleRunner } from './composables/useScheduleRunner'
 
 const platform = ref('win32')
 useInbox()
+useScheduleRunner()
 
 const {
   gatewayResetPromptOpen,

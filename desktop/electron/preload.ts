@@ -208,10 +208,57 @@ const api = {
     ok: boolean
     body: string
   }): Promise<boolean> => ipcRenderer.invoke(IPC.NOTIFY_SHOW_TASK_DONE, input),
+  listWorkflowSchedules: (): Promise<{
+    ok: boolean
+    schedules: import('./schedule/workflow-schedule-types').WorkflowSchedule[]
+  }> => ipcRenderer.invoke(IPC.SCHEDULE_LIST),
+  saveWorkflowSchedule: (
+    input: import('./schedule/workflow-schedule-types').WorkflowScheduleSaveInput,
+  ): Promise<
+    | { ok: true; schedule: import('./schedule/workflow-schedule-types').WorkflowSchedule }
+    | { ok: false; message: string }
+  > => ipcRenderer.invoke(IPC.SCHEDULE_SAVE, input),
+  deleteWorkflowSchedule: (
+    id: string,
+  ): Promise<{ ok: true } | { ok: false; message: string }> =>
+    ipcRenderer.invoke(IPC.SCHEDULE_DELETE, id),
+  markWorkflowScheduleRun: (input: {
+    scheduleId: string
+    skipped?: boolean
+    ok?: boolean
+  }): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.SCHEDULE_MARK_RUN, input),
+  onScheduleTrigger: (
+    handler: (payload: {
+      scheduleId: string
+      productId: string
+      planId: string
+      reason: 'due' | 'catch-up'
+    }) => void,
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      payload: {
+        scheduleId: string
+        productId: string
+        planId: string
+        reason: 'due' | 'catch-up'
+      },
+    ) => {
+      handler(payload)
+    }
+    ipcRenderer.on(IPC.SCHEDULE_TRIGGER, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.SCHEDULE_TRIGGER, listener)
+    }
+  },
   saveSettings: (
     input: SettingsSaveInput,
   ): Promise<SettingsSaveResult & { status: AppStatus }> =>
     ipcRenderer.invoke(IPC.SETTINGS_SAVE, input),
+  setOpenAtLogin: (
+    enabled: boolean,
+  ): Promise<{ ok: boolean; openAtLogin: boolean }> =>
+    ipcRenderer.invoke(IPC.SETTINGS_SET_OPEN_AT_LOGIN, enabled),
   pickWorkspace: (): Promise<{ path: string | null }> =>
     ipcRenderer.invoke(IPC.SETTINGS_PICK_WORKSPACE),
   getPathForFile: (file: File): string => {

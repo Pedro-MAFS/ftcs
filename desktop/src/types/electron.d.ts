@@ -205,6 +205,38 @@ export interface WorkflowPlanSaveInput {
   steps: WorkflowPlanStep[]
 }
 
+export type WorkflowScheduleRecurrence = 'daily' | 'weekly'
+
+export interface WorkflowSchedule {
+  id: string
+  productId: string
+  planId: string
+  enabled: boolean
+  recurrence: WorkflowScheduleRecurrence
+  weekday?: number | null
+  timeLocal: string
+  lastRunAt?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorkflowScheduleSaveInput {
+  id?: string
+  productId: string
+  planId: string
+  enabled?: boolean
+  recurrence: WorkflowScheduleRecurrence
+  weekday?: number | null
+  timeLocal: string
+}
+
+export type ScheduleTriggerPayload = {
+  scheduleId: string
+  productId: string
+  planId: string
+  reason: 'due' | 'catch-up'
+}
+
 export interface WorkflowListPlansResult {
   ok: boolean
   plans: WorkflowPlan[]
@@ -810,9 +842,33 @@ declare global {
         ok: boolean
         body: string
       }) => Promise<boolean>
+      listWorkflowSchedules?: () => Promise<{
+        ok: boolean
+        schedules: WorkflowSchedule[]
+      }>
+      saveWorkflowSchedule?: (
+        input: WorkflowScheduleSaveInput,
+      ) => Promise<
+        | { ok: true; schedule: WorkflowSchedule }
+        | { ok: false; message: string }
+      >
+      deleteWorkflowSchedule?: (
+        id: string,
+      ) => Promise<{ ok: true } | { ok: false; message: string }>
+      markWorkflowScheduleRun?: (input: {
+        scheduleId: string
+        skipped?: boolean
+        ok?: boolean
+      }) => Promise<{ ok: boolean }>
+      onScheduleTrigger?: (
+        handler: (payload: ScheduleTriggerPayload) => void,
+      ) => () => void
       saveSettings: (
         input: SettingsSaveInput,
       ) => Promise<SettingsSaveResult & { status: AppStatus }>
+      setOpenAtLogin?: (
+        enabled: boolean,
+      ) => Promise<{ ok: boolean; openAtLogin: boolean }>
       detectGoogleProxy: () => Promise<{
         ok: boolean
         rule: string

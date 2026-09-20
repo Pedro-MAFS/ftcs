@@ -138,6 +138,23 @@ import {
   getAppVersion,
   snoozeAppUpdate,
 } from './update/update-check'
+import { createAppTray, destroyAppTray, showMainWindow } from './tray/app-tray'
+import {
+  applyOpenAtLogin,
+  shouldStartHidden,
+  syncOpenAtLoginFromPrefs,
+} from './login/login-item'
+import {
+  deleteWorkflowSchedule,
+  listWorkflowSchedules,
+  saveWorkflowSchedule,
+} from './schedule/workflow-schedules'
+import {
+  handleScheduleRunResult,
+  startWorkflowScheduler,
+  stopWorkflowScheduler,
+} from './schedule/workflow-scheduler'
+import type { WorkflowScheduleSaveInput } from './schedule/workflow-schedule-types'
 
 // 尽早加载 desktop/.env（electron-vite 不会把 FTCS_* 写入 process.env）
 loadDesktopEnvFile()
@@ -162,6 +179,10 @@ let runtime: OpenCodeRuntime | null = null
 let agentRunner: AgentRunController | null = null
 /** Electron 不会 await before-quit；需要 preventDefault + 二次 quit */
 let isCleaningUp = false
+/** 托盘「退出」或真正退出时为 true，此时允许窗口 close 销毁 */
+let isQuitting = false
+/** 登录自启 / --hidden：创建后不强制 show */
+let startHidden = false
 
 function getAgentRunner(): AgentRunController {
   if (!agentRunner) {
@@ -271,6 +292,11 @@ async function createWindow(): Promise<void> {
   let shown = false
   const showOnce = (reason: string): void => {
     if (shown || win.isDestroyed()) return
+    if (startHidden) {
+      shown = true
+      console.log('[window] keep hidden (tray / login)', reason)
+      return
+    }
     shown = true
     console.log('[window] show', reason)
     win.show()
@@ -293,6 +319,13 @@ async function createWindow(): Promise<void> {
 
   win.on('focus', () => {
     void maybeRefreshUsageAfterRechargeFocus()
+  })
+
+  win.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault()
+      win.hide()
+    }
   })
 
   setTaskDoneNotifyMainWindowGetter(() =>
@@ -578,6 +611,10 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettingsSnapshot())
+  ipcMain.handle(IPC.SETTINGS_SET_OPEN_AT_LOGIN, (_event, enabled: boolean) => {
+    applyOpenAtLogin(Boolean(enabled))
+    return { ok: true as const, openAtLogin: Boolean(enabled) }
+  })
   ipcMain.handle(IPC.SETTINGS_DETECT_GOOGLE_PROXY, () => detectSystemGoogleProxy())
   ipcMain.handle(
     IPC.SETTINGS_TEST_GOOGLE_PLACES,
@@ -661,6 +698,30 @@ function registerIpcHandlers(): void {
         ok: Boolean(input?.ok),
         body: String(input?.body ?? ''),
       }),
+  )
+  ipcMain.handle(IPC.SCHEDULE_LIST, () => ({
+    ok: true as const,
+    schedules: listWorkflowSchedules(),
+  }))
+  ipcMain.handle(IPC.SCHEDULE_SAVE, (_event, input: WorkflowScheduleSaveInput) =>
+    saveWorkflowSchedule(input),
+  )
+  ipcMain.handle(IPC.SCHEDULE_DELETE, (_event, id: string) =>
+    deleteWorkflowSchedule(String(id || '')),
+  )
+  ipcMain.handle(
+    IPC.SCHEDULE_MARK_RUN,
+    (
+      _event,
+      input: { scheduleId?: string; skipped?: boolean; ok?: boolean },
+    ) => {
+      handleScheduleRunResult({
+        scheduleId: String(input?.scheduleId || ''),
+        skipped: Boolean(input?.skipped),
+        ok: Boolean(input?.ok),
+      })
+      return { ok: true as const }
+    },
   )
   ipcMain.handle(IPC.SETTINGS_SAVE, async (_event, input: SettingsSaveInput) => {
     const result = saveSettings(input)
@@ -1690,19 +1751,41 @@ app.whenReady().then(async () => {
 
   registerIpcHandlers()
 
+  startHidden = shouldStartHidden()
+  syncOpenAtLoginFromPrefs()
+
+  createAppTray(
+    {
+      onShow: () => showMainWindow(mainWindow),
+      onQuit: () => {
+        isQuitting = true
+        app.quit()
+      },
+    },
+    getAppIconPath(),
+  )
+
   // 先开窗口，再启 OpenCode，避免 Server 失败时界面空白，也避免 GPU 日志被误认为 Server 阻塞
   await createWindow()
   void bootstrapOpenCode()
 
+  startWorkflowScheduler({
+    getMainWindow: () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null),
+  })
+
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
+      startHidden = false
       await createWindow()
+    } else {
+      showMainWindow(mainWindow)
     }
   })
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  // 托盘常驻：隐藏窗口不销毁时不会到这里；真退出由托盘「退出」触发
+  if (process.platform !== 'darwin' && isQuitting) {
     app.quit()
   }
 })
@@ -1712,6 +1795,9 @@ app.on('window-all-closed', () => {
  * 必须先 preventDefault，等 stop() 完成（含 taskkill）再真正退出。
  */
 app.on('before-quit', (event) => {
+  isQuitting = true
+  stopWorkflowScheduler()
+  destroyAppTray()
   if (isCleaningUp) return
   event.preventDefault()
   isCleaningUp = true

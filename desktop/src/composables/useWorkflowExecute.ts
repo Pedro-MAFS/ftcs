@@ -55,6 +55,13 @@ function isAbortError(err: unknown): boolean {
   return err instanceof DOMException && err.name === 'AbortError'
 }
 
+/** 模块级共享，避免线索页与定时触发器各持一份 running */
+const workflowRunning = ref(false)
+const workflowCurrentStepIndex = ref(-1)
+const workflowCurrentStepLabel = ref('')
+const workflowCurrentPlanName = ref('')
+let workflowAbortController: AbortController | null = null
+
 type WorkflowNotifyFtcs = {
   setWorkflowNotifySuppressed?: (suppressed: boolean) => Promise<void> | void
   showTaskDoneNotification?: (input: {
@@ -114,11 +121,10 @@ export function useWorkflowExecute(options?: {
   executePlan: (planId: string) => Promise<WorkflowExecuteResult>
   cancel: () => Promise<void>
 } {
-  const running = ref(false)
-  const currentStepIndex = ref(-1)
-  const currentStepLabel = ref('')
-  const currentPlanName = ref('')
-  let abortController: AbortController | null = null
+  const running = workflowRunning
+  const currentStepIndex = workflowCurrentStepIndex
+  const currentStepLabel = workflowCurrentStepLabel
+  const currentPlanName = workflowCurrentPlanName
 
   const {
     activeProductId,
@@ -335,7 +341,7 @@ export function useWorkflowExecute(options?: {
     running.value = true
     currentPlanName.value = plan.name
     const planNameForNotify = plan.name
-    abortController = new AbortController()
+    workflowAbortController = new AbortController()
     let completed = 0
     let failedStep: WorkflowNodeId | undefined
     let outcome: WorkflowExecuteResult | null = null
@@ -360,7 +366,11 @@ export function useWorkflowExecute(options?: {
           throw new Error(gate)
         }
 
-        const launch = await launchStep(step.nodeId, productId, abortController.signal)
+        const launch = await launchStep(
+          step.nodeId,
+          productId,
+          workflowAbortController.signal,
+        )
         await refreshPipelineArtifacts()
         await options?.refreshLeads?.()
 
@@ -406,7 +416,7 @@ export function useWorkflowExecute(options?: {
       currentStepIndex.value = -1
       currentStepLabel.value = ''
       currentPlanName.value = ''
-      abortController = null
+      workflowAbortController = null
       await notifyWorkflowPlanFinished(window.ftcs, {
         suppressArmed,
         outcome,
@@ -416,7 +426,7 @@ export function useWorkflowExecute(options?: {
   }
 
   async function cancel(): Promise<void> {
-    abortController?.abort()
+    workflowAbortController?.abort()
     await window.ftcs?.abortProfile?.()
   }
 

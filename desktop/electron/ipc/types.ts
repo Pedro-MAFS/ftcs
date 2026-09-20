@@ -9,6 +9,7 @@ export const IPC = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_SAVE: 'settings:save',
   SETTINGS_PICK_WORKSPACE: 'settings:pick-workspace',
+  SETTINGS_SET_OPEN_AT_LOGIN: 'settings:set-open-at-login',
   SETTINGS_DETECT_GOOGLE_PROXY: 'settings:detect-google-proxy',
   SETTINGS_TEST_GOOGLE_PLACES: 'settings:test-google-places',
   SETTINGS_TEST_HUNTER: 'settings:test-hunter',
@@ -91,6 +92,11 @@ export const IPC = {
   UPDATE_DISMISS: 'update:dismiss',
   NOTIFY_SET_WORKFLOW_SUPPRESSED: 'notify:set-workflow-suppressed',
   NOTIFY_SHOW_TASK_DONE: 'notify:show-task-done',
+  SCHEDULE_LIST: 'schedule:list',
+  SCHEDULE_SAVE: 'schedule:save',
+  SCHEDULE_DELETE: 'schedule:delete',
+  SCHEDULE_MARK_RUN: 'schedule:mark-run',
+  SCHEDULE_TRIGGER: 'schedule:trigger',
   APP_GET_VERSION: 'app:get-version',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
@@ -1089,6 +1095,7 @@ export interface SettingsSnapshot {
   envPath: string
   emailDraftStylePrompt?: string
   taskDoneNotificationEnabled?: boolean
+  openAtLogin?: boolean
 }
 
 export interface SettingsSaveInput {
@@ -1108,6 +1115,7 @@ export interface SettingsSaveInput {
   customModelSupportsImage?: boolean
   emailDraftStylePrompt?: string
   taskDoneNotificationEnabled?: boolean
+  openAtLogin?: boolean
 }
 
 export interface SettingsSaveResult {
@@ -1249,3 +1257,10 @@ export type {
   WorkflowSavePlanResult,
   WorkflowDeletePlanResult,
 } from '../workflow/workflow-plans-types'
+
+export type {
+  WorkflowSchedule,
+  WorkflowScheduleRecurrence,
+  WorkflowScheduleSaveInput,
+} from '../schedule/workflow-schedule-types'
+

@@ -34,6 +34,7 @@ import {
 } from './email-draft-style'
 import { resolveTaskDoneNotificationEnabled } from '../notify/task-done-notify-logic'
 import { readUserPrefs, writeUserPrefs } from '../config/user-prefs'
+import { applyOpenAtLogin } from '../login/login-item'
 import {
   GOOGLE_PROXY_MODE_ENV,
   GOOGLE_PROXY_RESOLVED_ENV,
@@ -99,6 +100,8 @@ export interface SettingsSnapshot {
   emailDraftStylePrompt: string
   /** 任务完成 Windows 通知；默认 true */
   taskDoneNotificationEnabled: boolean
+  /** 开机自启；默认 false */
+  openAtLogin: boolean
 }
 
 export interface SettingsSaveInput {
@@ -124,6 +127,8 @@ export interface SettingsSaveInput {
   emailDraftStylePrompt?: string
   /** 省略则不修改；任务完成 Windows 通知开关 */
   taskDoneNotificationEnabled?: boolean
+  /** 省略则不修改；开机自启 */
+  openAtLogin?: boolean
 }
 
 export interface SettingsSaveResult {
@@ -373,6 +378,7 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     taskDoneNotificationEnabled: resolveTaskDoneNotificationEnabled(
       readUserPrefs().taskDoneNotificationEnabled,
     ),
+    openAtLogin: readUserPrefs().openAtLogin === true,
   }
 }
 
@@ -393,6 +399,10 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
     writeUserPrefs({
       taskDoneNotificationEnabled: Boolean(input.taskDoneNotificationEnabled),
     })
+  }
+
+  if (input.openAtLogin !== undefined) {
+    applyOpenAtLogin(Boolean(input.openAtLogin))
   }
 
   const workspaceRoot = getWorkspaceRoot()

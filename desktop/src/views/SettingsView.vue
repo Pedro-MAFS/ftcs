@@ -103,6 +103,7 @@ const form = reactive({
   customModelSupportsImage: false,
   emailDraftStylePrompt: '专业，真诚',
   taskDoneNotificationEnabled: true,
+  openAtLogin: false,
 })
 
 const EMAIL_DRAFT_STYLE_PROMPT_MAX = 500
@@ -247,6 +248,7 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.emailDraftStylePrompt =
     data.emailDraftStylePrompt?.trim() || DEFAULT_EMAIL_DRAFT_STYLE_PROMPT
   form.taskDoneNotificationEnabled = data.taskDoneNotificationEnabled !== false
+  form.openAtLogin = data.openAtLogin === true
   if (data.channelMode === 'custom') {
     form.customModelId = data.model.includes('/')
       ? data.model.split('/').slice(1).join('/')
@@ -454,6 +456,7 @@ async function onSave(): Promise<void> {
       customModelSupportsImage: form.customModelSupportsImage,
       emailDraftStylePrompt: form.emailDraftStylePrompt,
       taskDoneNotificationEnabled: form.taskDoneNotificationEnabled,
+      openAtLogin: form.openAtLogin,
     })
     applySnapshot(result.settings)
     if (!result.ok) {
@@ -1445,6 +1448,19 @@ async function onCheckUpdate(): Promise<void> {
           <p class="hint-line muted">
             作用域：本机全局 · 默认开启 · 标题为「FTCS·外贸获客智能体」
           </p>
+          <hr class="settings-divider settings-divider--inner" />
+          <div class="settings-block__title" style="margin-top: 8px">
+            <h3>开机自启</h3>
+            <span class="muted mono">openAtLogin</span>
+          </div>
+          <p class="hint-line">
+            <Icon name="info" :size="12" />
+            登录 Windows 后自动启动并常驻托盘（不抢前台）。关闭窗口会隐藏到托盘；请从托盘菜单「退出」完全退出。系统策略可能拦截自启。
+          </p>
+          <label class="settings-checkbox">
+            <input v-model="form.openAtLogin" type="checkbox" />
+            <span>开机时自动启动外贸获客</span>
+          </label>
         </section>
 
         <hr class="settings-divider" />
