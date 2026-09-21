@@ -118,6 +118,30 @@ export const supportPlanItems: SupportPlanItem[] = [
     status: 'developing',
   },
   {
+    id: 'agent-free-chat',
+    title: 'Agent 聊天框 · 自由聊天',
+    description:
+      '右侧 Agent 聊天框目前只展示流水线任务的过程与结果，输入框提示自由对话暂未开放。希望能在聊天框直接输入并与 Agent 自由对话，而不必只通过左侧流水线启动固定任务。',
+    priority: 'P1',
+    status: 'planned',
+  },
+  {
+    id: 'usage-activity',
+    title: '用户活跃度感知',
+    description:
+      '大致了解应用被怎么用：哪些功能有人用、任务有没有跑完、使用频次与版本分布。只统计去标识的使用计数，绝不收集线索、公司、邮箱、开发信、资料库、密钥、聊天内容等隐私与业务数据。',
+    priority: 'P1',
+    status: 'planned',
+  },
+  {
+    id: 'user-data-storage',
+    title: '用户数据 · 更高效的存储',
+    description:
+      '线索、探索记录、评分结果等用户数据目前以纯文本 JSON 整文件读写。数据量变大后，打开、筛选和保存都会变慢。需要改成按条读写、不必每次加载整份文件的组织方式；具体方案待详设，不改变现有业务含义。',
+    priority: 'P1',
+    status: 'planned',
+  },
+  {
     id: 'in-app-email-send',
     title: '系统内发送开发信',
     description:
