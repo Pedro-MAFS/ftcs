@@ -856,7 +856,7 @@ onMounted(() => {
             </div>
             <div v-if="isOfficial" class="onboarding__card">
               <p class="hint-line">
-                官方通道下免费提供搜索服务，无需单独配置。
+                官方通道下搜索由官方提供，无需单独配置，费用从账户余额扣除。
               </p>
             </div>
             <div v-else class="onboarding__card">

@@ -1141,7 +1141,7 @@ async function onCheckUpdate(): Promise<void> {
           <template v-if="isOfficial">
             <p class="hint-line">
               <Icon name="info" :size="12" />
-              官方通道下免费提供搜索服务，无需单独配置。
+              官方通道下搜索由官方提供，无需单独配置，费用从账户余额扣除。
             </p>
             <div class="field-grid">
               <div>
@@ -1150,7 +1150,7 @@ async function onCheckUpdate(): Promise<void> {
               </div>
               <div>
                 <label class="field-label">计费方式</label>
-                <input class="text-input" value="官方免费提供" disabled />
+                <input class="text-input" value="按账户余额计费" disabled />
               </div>
             </div>
             <label class="field-label">TAVILY_API_KEY</label>
