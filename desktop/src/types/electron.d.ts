@@ -875,6 +875,9 @@ declare global {
       setUiTheme?: (
         mode: 'dark' | 'light' | 'system',
       ) => Promise<{ ok: boolean; mode: string; effective: string }>
+      setExploreIntensity?: (
+        intensity: 'low' | 'medium' | 'high',
+      ) => Promise<{ ok: boolean; exploreIntensity: 'low' | 'medium' | 'high' }>
       detectGoogleProxy: () => Promise<{
         ok: boolean
         rule: string

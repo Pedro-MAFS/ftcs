@@ -38,6 +38,11 @@ import { applyOpenAtLogin } from '../login/login-item'
 import { applyCloseToTrayEnabled, resolveCloseToTrayEnabled } from '../tray/close-to-tray'
 import { resolveUiThemeMode } from '../theme/ui-theme'
 import {
+  applyExploreIntensity,
+  resolveExploreIntensity,
+  type ExploreIntensity,
+} from '../explore/explore-intensity'
+import {
   GOOGLE_PROXY_MODE_ENV,
   GOOGLE_PROXY_RESOLVED_ENV,
   GOOGLE_PROXY_URL_ENV,
@@ -108,6 +113,8 @@ export interface SettingsSnapshot {
   closeToTrayEnabled: boolean
   /** 界面主题 */
   uiThemeMode: 'dark' | 'light' | 'system'
+  /** 探索强度；默认 medium */
+  exploreIntensity: ExploreIntensity
 }
 
 export interface SettingsSaveInput {
@@ -139,6 +146,8 @@ export interface SettingsSaveInput {
   closeToTrayEnabled?: boolean
   /** 省略则不修改；界面主题 */
   uiThemeMode?: 'dark' | 'light' | 'system'
+  /** 省略则不修改；探索强度 */
+  exploreIntensity?: ExploreIntensity
 }
 
 export interface SettingsSaveResult {
@@ -393,6 +402,7 @@ export function getSettingsSnapshot(): SettingsSnapshot {
       readUserPrefs().closeToTrayEnabled,
     ),
     uiThemeMode: resolveUiThemeMode(readUserPrefs().uiThemeMode),
+    exploreIntensity: resolveExploreIntensity(readUserPrefs().exploreIntensity),
   }
 }
 
@@ -425,6 +435,10 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
 
   if (input.uiThemeMode !== undefined) {
     writeUserPrefs({ uiThemeMode: resolveUiThemeMode(input.uiThemeMode) })
+  }
+
+  if (input.exploreIntensity !== undefined) {
+    applyExploreIntensity(input.exploreIntensity)
   }
 
   const workspaceRoot = getWorkspaceRoot()

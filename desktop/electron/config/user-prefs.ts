@@ -21,6 +21,8 @@ interface UserPrefs {
   closeToTrayEnabled?: boolean
   /** 界面主题：dark | light | system；缺省 dark */
   uiThemeMode?: 'dark' | 'light' | 'system'
+  /** 探索强度：low | medium | high；缺省 medium */
+  exploreIntensity?: 'low' | 'medium' | 'high'
   onboarding?: OnboardingState
   update?: {
     dismissedVersion?: string

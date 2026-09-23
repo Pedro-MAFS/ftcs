@@ -267,6 +267,10 @@ const api = {
     mode: 'dark' | 'light' | 'system',
   ): Promise<{ ok: boolean; mode: string; effective: string }> =>
     ipcRenderer.invoke(IPC.SETTINGS_SET_UI_THEME, mode),
+  setExploreIntensity: (
+    intensity: 'low' | 'medium' | 'high',
+  ): Promise<{ ok: boolean; exploreIntensity: 'low' | 'medium' | 'high' }> =>
+    ipcRenderer.invoke(IPC.SETTINGS_SET_EXPLORE_INTENSITY, intensity),
   pickWorkspace: (): Promise<{ path: string | null }> =>
     ipcRenderer.invoke(IPC.SETTINGS_PICK_WORKSPACE),
   getPathForFile: (file: File): string => {

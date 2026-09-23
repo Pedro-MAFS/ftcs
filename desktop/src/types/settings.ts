@@ -71,6 +71,8 @@ export interface SettingsSnapshot {
   closeToTrayEnabled: boolean
   /** 界面主题：dark | light | system */
   uiThemeMode: 'dark' | 'light' | 'system'
+  /** 探索强度：low | medium | high；默认 medium */
+  exploreIntensity: 'low' | 'medium' | 'high'
 }
 
 export interface SettingsSaveInput {
@@ -99,6 +101,8 @@ export interface SettingsSaveInput {
   closeToTrayEnabled?: boolean
   /** 省略则不修改；界面主题 */
   uiThemeMode?: 'dark' | 'light' | 'system'
+  /** 省略则不修改；探索强度（主路径走 setExploreIntensity） */
+  exploreIntensity?: 'low' | 'medium' | 'high'
 }
 
 export interface SettingsSaveResult {

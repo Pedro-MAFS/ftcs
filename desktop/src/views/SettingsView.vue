@@ -110,7 +110,36 @@ const form = reactive({
   openAtLogin: false,
   closeToTrayEnabled: false,
   uiThemeMode: 'dark' as UiThemeMode,
+  exploreIntensity: 'medium' as 'low' | 'medium' | 'high',
 })
+
+const EXPLORE_INTENSITY_OPTIONS: Array<{
+  id: 'low' | 'medium' | 'high'
+  label: string
+  summary: string
+}> = [
+  {
+    id: 'low',
+    label: '低',
+    summary: '每轮目标约 10 词；搜索每次 3 条；地图每次最多 10 条。',
+  },
+  {
+    id: 'medium',
+    label: '中',
+    summary: '每轮目标约 20 词；搜索每次 5 条；地图每次最多 20 条。',
+  },
+  {
+    id: 'high',
+    label: '高',
+    summary: '每轮目标约 40 词；搜索每次 10 条；地图每次最多 40 条。',
+  },
+]
+
+const exploreIntensitySummary = computed(
+  () =>
+    EXPLORE_INTENSITY_OPTIONS.find((o) => o.id === form.exploreIntensity)
+      ?.summary ?? EXPLORE_INTENSITY_OPTIONS[1].summary,
+)
 
 const EMAIL_DRAFT_STYLE_PROMPT_MAX = 500
 const DEFAULT_EMAIL_DRAFT_STYLE_PROMPT = '专业，真诚'
@@ -321,6 +350,10 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.openAtLogin = data.openAtLogin === true
   form.closeToTrayEnabled = data.closeToTrayEnabled === true
   form.uiThemeMode = (data.uiThemeMode as UiThemeMode) || 'dark'
+  form.exploreIntensity =
+    data.exploreIntensity === 'low' || data.exploreIntensity === 'high'
+      ? data.exploreIntensity
+      : 'medium'
   syncUiThemeFromSettings(form.uiThemeMode)
   if (data.channelMode === 'custom') {
     form.customModelId = data.model.includes('/')
@@ -550,6 +583,22 @@ async function onSave(): Promise<void> {
 
 async function onUiThemeChange(): Promise<void> {
   await setUiThemeMode(form.uiThemeMode)
+}
+
+async function onExploreIntensityChange(): Promise<void> {
+  if (!window.ftcs?.setExploreIntensity) return
+  try {
+    const res = await window.ftcs.setExploreIntensity(form.exploreIntensity)
+    if (res.ok) {
+      form.exploreIntensity = res.exploreIntensity
+      const label =
+        EXPLORE_INTENSITY_OPTIONS.find((o) => o.id === form.exploreIntensity)
+          ?.label ?? '中'
+      showToast(`已设为${label}探索强度`, { tone: 'success' })
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  }
 }
 
 async function onOpenAtLoginChange(): Promise<void> {
@@ -1228,7 +1277,38 @@ async function onCheckUpdate(): Promise<void> {
         <!-- 探索 -->
         <section id="settings-explore" class="settings-block">
           <div class="settings-block__head">
-            <h3>探索</h3>
+            <div class="settings-block__title">
+              <h3>探索强度</h3>
+              <span class="muted mono">exploreIntensity</span>
+            </div>
+          </div>
+          <p class="hint-line">
+            <Icon name="info" :size="12" />
+            更高会多出关键词、每次搜索与地图结果更多，耗时和费用更高。改档后需再次「扩展关键词」才影响词表；不会改已经生成的词。切换后立即生效，不必点上方「保存配置」。
+          </p>
+          <div class="theme-mode-row">
+            <label
+              v-for="opt in EXPLORE_INTENSITY_OPTIONS"
+              :key="opt.id"
+              class="theme-mode-option"
+              :class="{ 'is-active': form.exploreIntensity === opt.id }"
+            >
+              <input
+                v-model="form.exploreIntensity"
+                type="radio"
+                name="exploreIntensity"
+                :value="opt.id"
+                @change="onExploreIntensityChange"
+              />
+              <span>{{ opt.label }}</span>
+            </label>
+          </div>
+          <p class="hint-line muted">{{ exploreIntensitySummary }}</p>
+
+          <hr class="settings-divider settings-divider--inner" />
+
+          <div class="settings-block__title" style="margin-top: 8px">
+            <h3>R2 社媒站点</h3>
             <span class="muted mono">data/prefs/explore-r2.json</span>
           </div>
           <p class="hint-line">

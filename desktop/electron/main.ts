@@ -165,6 +165,7 @@ import {
   getTitleBarColors,
   type UiThemeMode,
 } from './theme/ui-theme'
+import { applyExploreIntensity } from './explore/explore-intensity'
 
 // 尽早加载 desktop/.env（electron-vite 不会把 FTCS_* 写入 process.env）
 loadDesktopEnvFile()
@@ -642,6 +643,10 @@ function registerIpcHandlers(): void {
       mainWindow && !mainWindow.isDestroyed() ? mainWindow : null,
     ),
   )
+  ipcMain.handle(IPC.SETTINGS_SET_EXPLORE_INTENSITY, (_event, intensity: unknown) => {
+    const exploreIntensity = applyExploreIntensity(intensity)
+    return { ok: true as const, exploreIntensity }
+  })
   ipcMain.handle(IPC.SETTINGS_DETECT_GOOGLE_PROXY, () => detectSystemGoogleProxy())
   ipcMain.handle(
     IPC.SETTINGS_TEST_GOOGLE_PLACES,

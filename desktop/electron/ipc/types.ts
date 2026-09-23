@@ -12,6 +12,7 @@ export const IPC = {
   SETTINGS_SET_OPEN_AT_LOGIN: 'settings:set-open-at-login',
   SETTINGS_SET_CLOSE_TO_TRAY: 'settings:set-close-to-tray',
   SETTINGS_SET_UI_THEME: 'settings:set-ui-theme',
+  SETTINGS_SET_EXPLORE_INTENSITY: 'settings:set-explore-intensity',
   SETTINGS_DETECT_GOOGLE_PROXY: 'settings:detect-google-proxy',
   SETTINGS_TEST_GOOGLE_PLACES: 'settings:test-google-places',
   SETTINGS_TEST_HUNTER: 'settings:test-hunter',
@@ -1100,6 +1101,7 @@ export interface SettingsSnapshot {
   openAtLogin?: boolean
   closeToTrayEnabled?: boolean
   uiThemeMode?: 'dark' | 'light' | 'system'
+  exploreIntensity?: 'low' | 'medium' | 'high'
 }
 
 export interface SettingsSaveInput {
@@ -1122,6 +1124,7 @@ export interface SettingsSaveInput {
   openAtLogin?: boolean
   closeToTrayEnabled?: boolean
   uiThemeMode?: 'dark' | 'light' | 'system'
+  exploreIntensity?: 'low' | 'medium' | 'high'
 }
 
 export interface SettingsSaveResult {
