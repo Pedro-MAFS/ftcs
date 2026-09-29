@@ -78,6 +78,19 @@ test("search cache miss when pageSize differs", () => {
       },
     ]);
     assert.equal(readSearchCache(root, "q", "en", "US", 10), null);
+    assert.equal(readSearchCache(root, "q", "en", "US", 40), null);
+
+    writeSearchCache(root, "q", "en", "US", 40, "custom", [
+      {
+        placeId: "y",
+        displayName: "Y",
+        formattedAddress: "B",
+        types: [],
+      },
+    ]);
+    assert.equal(readSearchCache(root, "q", "en", "US", 20)?.places[0]?.placeId, "x");
+    assert.equal(readSearchCache(root, "q", "en", "US", 40)?.places[0]?.placeId, "y");
+    assert.notEqual(buildSearchCacheKey("q", "en", "US", 20), buildSearchCacheKey("q", "en", "US", 40));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

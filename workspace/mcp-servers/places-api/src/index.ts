@@ -7,7 +7,7 @@ import {
   PlacesHttpError,
   PlacesResponseInvalidError,
   placeDetailsCustom,
-  textSearchCustom,
+  textSearchUpTo,
 } from "./custom.js";
 import { findProjectRoot } from "./paths.js";
 import {
@@ -19,6 +19,7 @@ import { initPlacesFetch } from "./fetch.js";
 import {
   PlaceDetailsResponseSchema,
   TextSearchResponseSchema,
+  textSearchPageSizeSchema,
 } from "./types.js";
 
 const server = new McpServer({
@@ -90,7 +91,7 @@ server.tool(
       .string()
       .optional()
       .describe("ISO 3166-1 alpha-2 region bias, e.g. DE, US"),
-    pageSize: z.number().int().min(1).max(20).default(20).describe("Max results (1-20, no pagination)"),
+    pageSize: textSearchPageSizeSchema,
   },
   async ({ textQuery, languageCode, regionCode, pageSize }) => {
     const trimmedQuery = textQuery.trim();
@@ -123,7 +124,7 @@ server.tool(
         };
       }
 
-      const places = await textSearchCustom(
+      const places = await textSearchUpTo(
         gate.apiKey,
         trimmedQuery,
         languageCode,
