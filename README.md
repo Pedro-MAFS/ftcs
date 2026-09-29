@@ -67,3 +67,4 @@ Token 网关已迁至**独立 Git 仓库**维护；本仓仅保留桌面端对�
 - [x] Phase 2.1 外贸 Web UI（P0）
 - [ ] Phase 2.4 审核与发送 / email-sender
 - [ ] Phase 2 scheduler 定时探索
+- [ ] 
