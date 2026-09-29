@@ -45,9 +45,6 @@ const editorOpen = ref(false)
 const scoringLeads = ref(false)
 const previewRound = ref('R1')
 const previewDimension = ref('all')
-/** 最多执行词数；null/0 = 不限制。开始 R1 按 R1 词截断，开始 R2 按合格 R2 词截断 */
-const maxQueriesLimit = ref<number | null>(null)
-const MAX_QUERIES_STORAGE_KEY = 'ftcs.explore.maxQueriesLimit'
 
 let progressTimer: ReturnType<typeof setInterval> | null = null
 
@@ -227,41 +224,14 @@ async function stopAgent(): Promise<void> {
   stopProgressPolling()
 }
 
-function persistMaxQueriesLimit(): void {
-  try {
-    if (maxQueriesLimit.value == null || maxQueriesLimit.value <= 0) {
-      localStorage.removeItem(MAX_QUERIES_STORAGE_KEY)
-    } else {
-      localStorage.setItem(MAX_QUERIES_STORAGE_KEY, String(Math.floor(maxQueriesLimit.value)))
-    }
-  } catch {
-    // ignore
-  }
-}
-
-function onMaxQueriesInput(event: Event): void {
-  const raw = (event.target as HTMLInputElement).value
-  if (raw.trim() === '') {
-    maxQueriesLimit.value = null
-  } else {
-    const n = Number(raw)
-    maxQueriesLimit.value = Number.isFinite(n) ? n : null
-  }
-  persistMaxQueriesLimit()
-}
-
 const {
   exploreRound,
   hasKeywordsReady,
-  r1QueryCount,
-  r2QueryCount,
-  r3QueryCount,
   canStartSelected,
   startDisabledReason,
   isStartingExplore,
   startExplore: runExploreStart,
 } = useExploreStart({
-  maxQueriesLimit,
   extraBusy: () => scoringLeads.value,
   onLaunch: startProgressPolling,
   onFail: stopProgressPolling,
@@ -380,11 +350,7 @@ watch(agentStatus, (status) => {
 
 onMounted(() => {
   try {
-    const saved = localStorage.getItem(MAX_QUERIES_STORAGE_KEY)
-    if (saved) {
-      const n = Number(saved)
-      if (Number.isFinite(n) && n > 0) maxQueriesLimit.value = n
-    }
+    localStorage.removeItem('ftcs.explore.maxQueriesLimit')
   } catch {
     // ignore
   }
@@ -405,26 +371,6 @@ onUnmounted(() => {
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
-        <label
-          class="explore-max-queries"
-          title="留空表示执行该次开始的轮次全部词。开始 R1 按 R1 词计数，开始 R2 按带站点的 R2 词计数，开始 R3 按 R3 地图发现词计数。"
-        >
-          <span class="muted">最多词数</span>
-          <input
-            class="text-input explore-max-queries__input"
-            type="number"
-            min="1"
-            step="1"
-            :placeholder="
-              r1QueryCount || r2QueryCount || r3QueryCount
-                ? `R1 ${r1QueryCount} · R2 ${r2QueryCount} · R3 ${r3QueryCount}`
-                : '全部'
-            "
-            :value="maxQueriesLimit ?? ''"
-            :disabled="isStartingExplore"
-            @input="onMaxQueriesInput"
-          />
-        </label>
         <button
           type="button"
           class="btn-secondary"

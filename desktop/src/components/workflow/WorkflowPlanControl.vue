@@ -9,7 +9,6 @@ const props = withDefaults(
     disabled?: boolean
     disabledReason?: string
     executing?: boolean
-    maxQueriesLimit?: number | null
     selectedPlanId?: string
   }>(),
   {
@@ -17,7 +16,6 @@ const props = withDefaults(
     disabled: false,
     disabledReason: '',
     executing: false,
-    maxQueriesLimit: null,
   },
 )
 

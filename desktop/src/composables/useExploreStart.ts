@@ -1,4 +1,4 @@
-import { computed, ref, watch, type MaybeRefOrGetter, type Ref, toValue } from 'vue'
+import { computed, ref, watch, type MaybeRefOrGetter, toValue } from 'vue'
 import { useWorkspace } from './useWorkspace'
 import { ensureAgentReady } from './useAgentPreflight'
 import type { ExploreStartRound } from '../components/explore/ExploreStartControl.vue'
@@ -16,7 +16,6 @@ function readSavedRound(): ExploreStartRound {
 }
 
 export function useExploreStart(options?: {
-  maxQueriesLimit?: Ref<number | null>
   extraBusy?: MaybeRefOrGetter<boolean>
   onLaunch?: () => void
   onFail?: () => void
@@ -159,13 +158,9 @@ export function useExploreStart(options?: {
     }
   })
 
-  /** 默认该轮全部词；若填写了正数上限则取 min(上限, 可用数) */
+  /** 该轮合格词全部执行，不再接受页面上的词数上限 */
   function resolveMaxQueries(available: number): number {
-    const limit = options?.maxQueriesLimit?.value
-    if (limit == null || !Number.isFinite(limit) || limit <= 0) {
-      return Math.max(1, available)
-    }
-    return Math.max(1, Math.min(Math.floor(limit), available || Math.floor(limit)))
+    return Math.max(1, available)
   }
 
   async function startR1(): Promise<{ ok: boolean; message: string }> {
