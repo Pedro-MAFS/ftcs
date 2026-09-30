@@ -5,7 +5,7 @@
 > **依赖**：[24-需求-探索强度.md](../24-需求-探索强度.md) I2、I4、I9～I11；[US-EI-01](US-EI-01-探索强度设置.md) 已落地的 `getExploreIntensity` / `getExploreIntensityLimits().keywordTargetPerRound`；US-EI-04 验收要点。  
 > **不在本期**：去掉「最多词数」（**US-EI-02**，已落地）；Places 翻页（**US-EI-03**，已落地）；搜索返回条数 / 补官网次数（**US-EI-05**）；R3 Places 条数与详情上限（**US-EI-06**）。  
 > **文档位置**：`docs/design/`  
-> **状态**：详设已立（2026-09-29）
+> **状态**：编码已落地（2026-09-30）
 
 ---
 
@@ -172,3 +172,4 @@
 |------|------|
 | 2026-09-29 | 草案：接 EI-01 常量表；改 prompt + expand-keywords 技能；允许低于目标；明确非目标留给 EI-05/06 |
 | 2026-09-29 | 正式写入 docs/design；状态改为详设已立 |
+| 2026-09-30 | 编码落地：启动扩展时写入 `keyword_target_per_round`；技能自检改为对照指令；完成摘要带档位目标 |

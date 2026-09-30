@@ -37,6 +37,16 @@ import {
 import { clearEmailDraftZh } from '../emails/emails-writer'
 import { formatEmailStylePromptBlock, resolveEmailDraftStylePrompt } from '../settings/email-draft-style'
 import { readUserPrefs } from '../config/user-prefs'
+import {
+  getExploreIntensity,
+  getExploreIntensityLimits,
+} from '../explore/explore-intensity'
+import type { ExploreIntensity } from '../explore/explore-intensity-logic'
+import {
+  exploreIntensityShortLabel,
+  formatExpandKeywordsDoneMessage,
+  formatExpandKeywordsTargets,
+} from '../explore/expand-keywords-targets'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -117,7 +127,11 @@ function buildPrompt(bootstrap: BootstrapResult): string {
   ].join('\n')
 }
 
-function buildExpandKeywordsPrompt(productId: string): string {
+function buildExpandKeywordsPrompt(
+  productId: string,
+  intensity: ExploreIntensity,
+  keywordTarget: number,
+): string {
   const siteHint = formatEnabledR2SitesForPrompt(listExploreR2Sites(getWorkspaceRoot()))
   return [
     '请严格按 skill `expand-keywords` 执行，为指定产品扩展获客关键词与搜索查询。',
@@ -128,10 +142,11 @@ function buildExpandKeywordsPrompt(productId: string): string {
     '',
     '执行要求：',
     '1. 调用 lead-store.product_get 确认画像存在且 status == "ready"。',
-    '2. 由你直接生成五维关键词与 30～50 条 search_queries（覆盖 ≥4 维）。R1 占总数 ≥60%，普通产品/场景/买家/地理/竞品替代句，不要 site_id。R2 只给当前启用站点出词，每条必须带 site_id，query 禁止 site: / intitle: / inurl: / filetype:。R3 地图发现 6～12 条，round=R3，须含城市/区域 + 品类/场景，不要 site_id，query 同样禁止上述运算符。不要 R4。禁止调用 keywords_expand。',
+    '2. 由你直接生成五维关键词与 search_queries（覆盖 ≥4 维）。条数按下述目标。query 禁止 site: / intitle: / inurl: / filetype:。禁止调用 keywords_expand。',
+    formatExpandKeywordsTargets(keywordTarget, intensity),
     '3. 调用 lead-store.keywords_save 保存完整 expansion；若校验失败则修正后重试。',
-    '4. 可用 keywords_get 核对 stats；不足则补充后再 save。抽查 R2 均有 site_id；by_round.R3 在 6～12（total≥40 时）；无 R4。',
-    '5. 完成后用简短中文汇报：总查询数、各维度/轮次分布、3～5 条样例（含 1～2 条 R3；R2 样例请带 site_id）、下一步建议（探索页「开始 R1」「开始 R2」或「开始 R3」）。',
+    '4. 可用 keywords_get 对照上述目标核对 R1、每个启用社媒的 R2、R3。允许低于目标，但摘要须写明各轮实际条数；低于目标时用一句话说明原因。抽查 R2 均有 site_id；无 R4。',
+    `5. 完成后用简短中文汇报：按${exploreIntensityShortLabel(intensity)}档目标 ${keywordTarget}、各轮实际条数与目标、低于目标时的原因、各维度分布、3～5 条样例（含 1～2 条 R3；R2 样例请带 site_id）、下一步建议（探索页「开始 R1」「开始 R2」或「开始 R3」）。`,
     '',
     `输出路径：data/keywords/${productId}/expansion.json`,
   ].join('\n')
@@ -639,6 +654,9 @@ export class AgentRunController {
       throw new Error(`画像未就绪（${profile.status}）。${missing}`)
     }
 
+    const exploreIntensity = getExploreIntensity()
+    const keywordTarget = getExploreIntensityLimits(exploreIntensity).keywordTargetPerRound
+
     this.running = true
     this.abort = new AbortController()
     const signal = this.abort.signal
@@ -677,7 +695,11 @@ export class AgentRunController {
       })
     }
 
-    const promptText = buildExpandKeywordsPrompt(productId)
+    const promptText = buildExpandKeywordsPrompt(
+      productId,
+      exploreIntensity,
+      keywordTarget,
+    )
     this.attachTimeline(timeline)
     timeline.reset()
     timeline.addPrefix({
@@ -685,7 +707,7 @@ export class AgentRunController {
       kind: 'system',
       time: nowTime(),
       title: '系统',
-      body: `准备为 ${productId}（${profile.companyName || '未命名'}）扩展关键词`,
+      body: `准备为 ${productId}（${profile.companyName || '未命名'}）扩展关键词 · 按${exploreIntensityShortLabel(exploreIntensity)}档目标 ${keywordTarget}`,
     })
     timeline.addPrefix({
       id: 'user-expand',
@@ -780,7 +802,12 @@ export class AgentRunController {
       }
 
       const total = expansion.stats.total_queries
-      const message = `关键词已扩展：${productId} · ${total} 条搜索词`
+      const message = formatExpandKeywordsDoneMessage(
+        productId,
+        total,
+        exploreIntensity,
+        keywordTarget,
+      )
       timeline.addSuffix({
         id: 'sys-done',
         kind: 'system',

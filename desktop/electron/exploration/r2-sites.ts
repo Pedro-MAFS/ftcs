@@ -229,7 +229,7 @@ export function formatR2IncludeDomainsForPrompt(sites: ExploreR2SiteRecord[]): s
 export function formatEnabledR2SitesForPrompt(sites: ExploreR2SiteDto[]): string {
   const enabled = sites.filter((site) => site.enabled)
   if (!enabled.length) {
-    return '当前没有启用的 R2 站点：不要生成 round=R2 的 search_queries，全部使用 R1。'
+    return '当前没有启用的 R2 站点：不要生成 round=R2 的 search_queries。R1 与 R3 仍按任务指令中的目标生成。'
   }
   const lines = enabled.map((site) => `- ${site.id}（${site.label}）`)
   return `当前启用的 R2 站点（每条 R2 词的 site_id 必须是下列之一）：\n${lines.join('\n')}`

@@ -44,10 +44,13 @@ outputs:
 
 - 找到可能采购/经销/进口该产品的海外买家或渠道商
 - 覆盖用户目标市场与买家类型
-- **R1 广撒网**（普通检索句）占多数；**R2 社媒发现**只给当前启用的站点出词（见 `config/explore-r2-sites.yaml` + `data/prefs/explore-r2.json`）
-- **R3 地图发现**：6～12 条，城市/区域 + 品类/场景，供 Google Places `textQuery`；**不要** `site_id`；query 禁止 `site:` / `intitle:` / `inurl:` / `filetype:`
+- 任务指令会给出本轮每项目标条数（下称 T）：R1 为 T 条；每个当前启用社媒的 R2 各为 T 条；R3 为 T 条。不另设总数上限
+- **R1 广撒网**：普通检索句，不要 `site_id`
+- **R2 社媒发现**：只给当前启用的站点出词（见 `config/explore-r2-sites.yaml` + `data/prefs/explore-r2.json`）；每个启用站各以 T 为目标
+- **R3 地图发现**：城市/区域 + 品类/场景，供 Google Places `textQuery`；**不要** `site_id`；query 禁止 `site:` / `intitle:` / `inurl:` / `filetype:`。用更多城市/区域与不同搜法接近目标，禁止同义反复凑数
 - **不要**生成 R4
 - 用语贴近真实搜索习惯，可含合理行业黑话、缩写、本地语
+- 尽可能达到目标。产品简单、再写会重复或空泛时允许少于目标，摘要说明原因
 
 读取启用站点：先读工作区 `config/explore-r2-sites.yaml`，再用 `data/prefs/explore-r2.json` 的 `enabled` 覆盖 `default_enabled`。yaml 不存在则默认启用 `linkedin_company` 与 `facebook_page`。
 
@@ -67,13 +70,14 @@ outputs:
 
 #### `search_queries`（可执行搜索句）
 
-- 总数 **30～50**（Phase 1 上限 50）
 - 至少覆盖 **4** 个维度（争取 5 个）
-- **R1 ≥ 60%**：普通产品 / 场景 / 买家 / 地理 / 竞品替代检索句；**不要** `site_id`；**不要**写 `site:` 等运算符
-- **R3：6～12 条**（总数 ≥40 时至少 6）：**城市/区域 + 本地商户/品类意图**（如 `Bodenbelag Fachhandel München`、`flooring store Dallas Texas`）；`round=R3`；**不要** `site_id`；禁止 Google 运算符。优先 `dimension=geo` 或 `buyer`，可用 `scenario`；须含明确城市/都会区名，不要仅国家级地理句（那是 R1）
-- **R2**：剩余全部，只给**当前启用**站点出词；每条必须有 `site_id`（登记表中的 id，如 `linkedin_company`）；query 仍是自然语言，**禁止** `site:` / `intitle:` / `inurl:` / `filetype:`。站点限定由后续搜索层的 `include_domains` 处理。可对同一句话按不同 `site_id` 各出一条；按启用站均分，每站至少 2 条
+- **R1 目标 T 条**：普通产品 / 场景 / 买家 / 地理 / 竞品替代检索句；**不要** `site_id`；**不要**写 `site:` 等运算符
+- **R2 目标：每个当前启用社媒各 T 条**：只给**当前启用**站点出词；每条必须有 `site_id`（登记表中的 id，如 `linkedin_company`）；query 仍是自然语言，**禁止** `site:` / `intitle:` / `inurl:` / `filetype:`。站点限定由后续搜索层的 `include_domains` 处理。可对同一句话按不同 `site_id` 各出一条。未启用站不出词
+- **R3 目标 T 条**：**城市/区域 + 本地商户/品类意图**（如 `Bodenbelag Fachhandel München`、`flooring store Dallas Texas`）；`round=R3`；**不要** `site_id`；禁止 Google 运算符。优先 `dimension=geo` 或 `buyer`，可用 `scenario`；须含明确城市/都会区名，不要仅国家级地理句（那是 R1）。用更多地理位置与不同搜法接近 T，禁止把同一句改写多遍凑数
 - **不要**生成 `round=R4`
-- 0 个启用站点 → 不要 R2 词，在 R1 与 R3 间分配
+- **不设** `search_queries` 总数上限
+- 0 个启用站点 → 不要 R2 词；R1、R3 仍各以 T 为目标
+- 尽可能达到 T。产品简单、再写会重复、空泛或脱离画像时，允许少于 T
 - 每条必须含：`id`、`query`、`dimension`、`language`、`priority`、`round`；R2 另含 `site_id`
 - `dimension`：`product` \| `scenario` \| `buyer` \| `geo` \| `competitor`
 - `priority`：`high` \| `medium` \| `low`
@@ -100,29 +104,32 @@ outputs:
 
 保存后可 `keywords_get` 核对：
 
-- `stats.total_queries >= 30`
+- 对照任务指令中的目标：R1 条数、每个启用社媒的 R2 条数、R3 条数是否接近 T
+- 允许低于目标；低于目标不算失败，但摘要必须写明实际条数与原因
 - `by_dimension` 中至少 4 个维度 count > 0
 - 抽查 3～5 条是否像真人会搜的词
-- 所有 `round=R2` 均有 `site_id`，query 不含 `site:`
-- `by_round.R3` ∈ [6, 12]（当 total ≥ 40）；R3 无 `site_id`、无运算符；抽查含城市名
+- 所有 `round=R2` 均有 `site_id`，query 不含 `site:`；未启用站没有词
+- R3 无 `site_id`、无运算符；抽查含城市名，且不是同义反复
 - `by_round.R4` 为 0 或不出现
 
-不足则继续推理补充并再次 `keywords_save`。
+远低于目标且摘要没有合理少写说明时，继续推理补充并再次 `keywords_save`。有合理少写说明则可结束。
 
 ### Step 6：输出摘要
 
 向用户展示：
 
 - 产品 ID 与保存路径
-- 总查询数与各轮次/维度分布
-- 每个维度 2～3 条代表性 `search_queries`（样例须含 **1～2 条 R3**）
+- 任务指令中的探索强度与 `keyword_target_per_round`
+- 各轮实际条数对照目标；低于目标时用一句话说明原因
+- 总查询数与各维度分布
+- 每个维度 2～3 条代表性 `search_queries`（样例须含 **1～2 条 R3**；R2 样例带 `site_id`）
 - 下一步建议：探索页「开始 R1」（`discover-leads`）、「开始 R2」（`discover-leads-r2`）或「开始 R3」（`discover-leads-r3`）。
 
 ## 输出要求
 
 - 必须写入 `data/keywords/{product_id}/expansion.json`
 - `product_id` 与画像 ID 一致
-- `stats.total_queries >= 30`
+- 各轮尽量接近任务指令中的目标；允许少于目标，但摘要须对照说明
 - 至少覆盖 4 个维度
 
 ## 错误处理
@@ -132,11 +139,15 @@ outputs:
 | 画像不存在 | 提示先运行 `extract-product-profile` |
 | 画像为 `draft` | 列出 `missing_fields`，引导补全 |
 | `keywords_save` 校验失败 | 展示错误并修正后重试，不宣称已完成 |
-| 查询数 < 30 或维度不足 | 继续生成并再次保存 |
+| 远低于目标且无摘要说明 | 继续生成并再次保存 |
+| 有合理少写说明 | 可以结束 |
+| 维度不足 | 继续生成并再次保存 |
 
 ## 输出 Schema（KeywordExpansion）
 
 路径：`data/keywords/{product_id}/expansion.json`
+
+示例只演示字段，不是完整词表。条数按任务指令中的 T 生成。
 
 ```json
 {
@@ -159,7 +170,7 @@ outputs:
       "round": "R1"
     },
     {
-      "id": "q_031",
+      "id": "q_002",
       "query": "industrial ball valve distributor Europe",
       "dimension": "buyer",
       "language": "en",
@@ -168,7 +179,7 @@ outputs:
       "site_id": "linkedin_company"
     },
     {
-      "id": "q_041",
+      "id": "q_003",
       "query": "Bodenbelag Fachhandel München",
       "dimension": "geo",
       "language": "de",
@@ -177,9 +188,9 @@ outputs:
     }
   ],
   "stats": {
-    "total_queries": 42,
-    "by_round": { "R1": 26, "R2": 8, "R3": 8 },
-    "by_dimension": { "product": 10, "scenario": 8, "buyer": 12, "geo": 10, "competitor": 5 }
+    "total_queries": 3,
+    "by_round": { "R1": 1, "R2": 1, "R3": 1 },
+    "by_dimension": { "buyer": 2, "geo": 1 }
   }
 }
 ```
