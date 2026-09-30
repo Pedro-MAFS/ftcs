@@ -47,6 +47,7 @@ import {
   formatExpandKeywordsDoneMessage,
   formatExpandKeywordsTargets,
 } from '../explore/expand-keywords-targets'
+import { formatDiscoverSearchLimits } from '../explore/discover-search-limits'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -328,12 +329,16 @@ function buildEnrichLeadContactsPrompt(
 function buildDiscoverLeadsR3Prompt(
   productId: string,
   maxQueries: number,
+  intensity: ExploreIntensity,
+  searchNumResults: number,
 ): string {
   return [
     '请严格按 skill `discover-leads-r3` 执行 R3 地图发现。',
     '',
     `产品 ID：${productId}`,
     `最多搜索词 max_queries：${maxQueries}`,
+    '',
+    formatDiscoverSearchLimits(searchNumResults, intensity),
     '',
     '执行要求：',
     '1. lead-store.product_get 确认画像 ready；lead-store.keywords_get 读取 search_queries。',
@@ -352,6 +357,8 @@ function buildDiscoverLeadsR3Prompt(
 function buildDiscoverLeadsR2Prompt(
   productId: string,
   maxQueries: number,
+  intensity: ExploreIntensity,
+  searchNumResults: number,
 ): string {
   const includeHint = formatR2IncludeDomainsForPrompt(loadExploreR2Registry(getWorkspaceRoot()))
   return [
@@ -359,6 +366,8 @@ function buildDiscoverLeadsR2Prompt(
     '',
     `产品 ID：${productId}`,
     `最多搜索词 max_queries：${maxQueries}`,
+    '',
+    formatDiscoverSearchLimits(searchNumResults, intensity),
     '',
     includeHint,
     '',
@@ -379,7 +388,12 @@ function buildDiscoverLeadsR2Prompt(
 
 function buildDiscoverLeadsPrompt(
   productId: string,
-  options: { rounds: string[]; maxQueries: number },
+  options: {
+    rounds: string[]
+    maxQueries: number
+    intensity: ExploreIntensity
+    searchNumResults: number
+  },
 ): string {
   const rounds = options.rounds.length ? options.rounds : ['R1']
   return [
@@ -388,6 +402,8 @@ function buildDiscoverLeadsPrompt(
     `产品 ID：${productId}`,
     `轮次 rounds：${JSON.stringify(rounds)}`,
     `最多搜索词 max_queries：${options.maxQueries}`,
+    '',
+    formatDiscoverSearchLimits(options.searchNumResults, options.intensity),
     '',
     '执行要求：',
     '1. lead-store.product_get 确认画像 ready；lead-store.keywords_get 读取 search_queries。',
@@ -2118,11 +2134,28 @@ export class AgentRunController {
       })
     }
 
+    const exploreIntensity = getExploreIntensity()
+    const searchNumResults = getExploreIntensityLimits(exploreIntensity).searchNumResults
     const promptText = isR3
-      ? buildDiscoverLeadsR3Prompt(productId, maxQueries)
+      ? buildDiscoverLeadsR3Prompt(
+          productId,
+          maxQueries,
+          exploreIntensity,
+          searchNumResults,
+        )
       : isR2
-        ? buildDiscoverLeadsR2Prompt(productId, maxQueries)
-        : buildDiscoverLeadsPrompt(productId, { rounds, maxQueries })
+        ? buildDiscoverLeadsR2Prompt(
+            productId,
+            maxQueries,
+            exploreIntensity,
+            searchNumResults,
+          )
+        : buildDiscoverLeadsPrompt(productId, {
+            rounds,
+            maxQueries,
+            intensity: exploreIntensity,
+            searchNumResults,
+          })
     this.attachTimeline(timeline)
     timeline.reset()
     timeline.addPrefix({
@@ -2130,7 +2163,7 @@ export class AgentRunController {
       kind: 'system',
       time: nowTime(),
       title: '系统',
-      body: `准备为 ${productId}（${profile.companyName || '未命名'}）执行 ${roundName} · 最多 ${maxQueries} 词（可用 ${availableCount}）`,
+      body: `准备为 ${productId}（${profile.companyName || '未命名'}）执行 ${roundName} · 最多 ${maxQueries} 词（可用 ${availableCount}）· 每次搜索 ${searchNumResults} 条`,
     })
     timeline.addPrefix({
       id: 'user-discover',

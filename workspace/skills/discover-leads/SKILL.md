@@ -76,7 +76,7 @@ Phase 1 默认执行 **R1 广撒网**。
 search-api.search_web({
   query: search_query.query,
   language: search_query.language,
-  num_results: 5
+  num_results: <任务指令 search_num_results>
 })
 ```
 
@@ -85,7 +85,7 @@ search-api.search_web({
 
 #### 2b. 打开并分析候选 URL
 
-对每条搜索结果（最多 5 个）：
+对每条搜索结果（最多 `search_num_results` 个；返回更少则按实际条数）：
 
 1. **跳过**以下站点（非目标客户来源）：
    - 新闻/博客/论坛/百科/社交媒体/纯聚合搜索页
@@ -225,7 +225,7 @@ lead-store.exploration_finish({
 ### search-api 要点
 
 - 工具：`search_web`、`search_usage`
-- `search_web` 常用参数：`query`、`language`、`num_results`（建议 5）
+- `search_web` 常用参数：`query`、`language`、`num_results`（用任务指令中的 `search_num_results`）
 - 日配额耗尽时返回 `DAILY_LIMIT_EXCEEDED` → 停止并保存进度
 - Key 来自工作区 `.env` 的 `TAVILY_API_KEY`（由 MCP 环境注入）
 

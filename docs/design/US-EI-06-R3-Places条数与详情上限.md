@@ -60,7 +60,7 @@
 |----|------|
 | **Q1 数字来源** | `getExploreIntensityLimits().placesResultLimit` → `T_places`；详情用既有 `floorThreeQuarters` |
 | **Q2 注入点** | 主进程 `buildDiscoverLeadsR3Prompt` 内读 limits；渲染进程不传 intensity |
-| **Q3 指令字段** | 写明：`探索强度`、`places_result_limit：{T_places}`、`places_text_search 的 pageSize（要多少条）必须用此值`、`详情上限：⌊本次 Places 实际返回×3/4⌋`、`先过滤再按原顺序取到上限`、`禁止技能自己翻页`、`官网打开仍每词2/每轮15` |
+| **Q3 指令字段** | 写明：`探索强度`、`places_result_limit：{T_places}`、`places_text_search 的 pageSize（要多少条）必须用此值`、`详情上限：⌊本次 Places 实际返回×3/4⌋`、`先过滤再按原顺序取到上限`、`禁止技能自己翻页`、`官网打开不设每词、每轮次数上限` |
 | **Q4 与 EI-03** | 本故事假设 MCP 已支持 1～60 并在 >20 时翻页；若运行环境未合入 EI-03，高档传 40 会失败——实现前确认 main 已含 EI-03 |
 | **Q5 过滤顺序** | 保持现网：Places 结果 → 现有过滤规则 → 再截到详情上限 → 再调 `place_details` |
 | **Q6 实际返回 < 请求** | 详情分母 = 实际返回；上游无下一页时 MCP 返回已合并条数，技能按实际算 3/4，不为凑满失败 |
@@ -93,7 +93,7 @@ places_result_limit：{T_places}
 - places_text_search 的 pageSize（「要多少条」）必须用此值；不要写死 20
 - 不要自己翻页或使用 nextPageToken（MCP 已处理）
 - Place Details 上限 = floor(本次 Places 实际返回条数 × 0.75)；先过滤，再按原顺序取到该上限；不要写死 15
-- 官网 chrome 打开：仍每词最多 2、每轮最多 15（不变）
+- 官网 chrome 打开：不设每词、每轮次数上限（已解析出的公司官网都打开并判断）
 ```
 
 若 EI-05 已合入，保留其 `search_num_results` / 补官网规则段落，本故事只增改 Places/详情相关句，勿冲掉 EI-05 文案。

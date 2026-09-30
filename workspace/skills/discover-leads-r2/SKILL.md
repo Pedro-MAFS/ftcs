@@ -73,13 +73,10 @@ yaml 中找不到该 `site_id`、或 `include_domains` 为空 → **跳过该词
 
 | 上限 | 值 |
 |------|----|
-| 每词社媒 `num_results` | 5 |
-| 每词二次搜索（无 include 的 `search_web`） | 2 |
-| 每轮二次搜索 | 20 |
-| 每词官网打开（chrome） | 2 |
-| 每轮官网打开 | 15 |
+| 每词社媒 `num_results` | 任务指令中的 `search_num_results` |
+| 每词二次搜索（无 include 的 `search_web`） | `floor(本词社媒 search_web 实际返回条数 × 0.75)`。摘要里已有官网的条目不补搜、不占次数 |
 
-先按 `max_queries` 截词，再在词内套上表。达到「每轮官网打开」后，即使又解析出官网也 **不打开、不写 Lead**。
+先按 `max_queries` 截词，再在词内套上表。已解析出的公司官网都打开并判断；同域名已有线索则跳过。不设每词、每轮的官网打开次数上限。
 
 日限额 `DAILY_LIMIT_EXCEEDED` 或官方通道 402 → 立即停止，`exploration_finish` 保存进度，告知用户。
 
@@ -117,7 +114,7 @@ yaml 中找不到该 `site_id`、或 `include_domains` 为空 → **跳过该词
 search-api.search_web({
   query: search_query.query,
   language: search_query.language,
-  num_results: 5,
+  num_results: <任务指令 search_num_results>,
   include_domains: <该 site_id 的数组>
 })
 ```
@@ -127,7 +124,7 @@ search-api.search_web({
 
 #### 2b. 从摘要抽公司
 
-只使用每条结果的 `title`、`url`、`snippet`/`content`（最多 5 条）。
+只使用每条结果的 `title`、`url`、`snippet`/`content`（最多 `search_num_results` 条；返回更少则按实际条数）。
 
 **丢弃（不进入 2c）：**
 
@@ -152,13 +149,13 @@ search-api.search_web({
 
 通过 → 得到 `website_url` 与 `social_url`（本条社媒结果 URL），进入 Step 3。本条 **不**二次搜索。
 
-**没有官网：** 若本词二次搜 < 2 且本轮二次搜 < 20：
+**没有官网：** 若本词二次搜次数还没达到 `floor(本词社媒 search_web 实际返回条数 × 0.75)`：
 
 ```
 search-api.search_web({
   query: "{company_name} official website {country_or_region?} {product_or_category?}",
   language: search_query.language,
-  num_results: 5
+  num_results: <任务指令 search_num_results>
 })
 ```
 
@@ -187,7 +184,6 @@ search-api.search_web({
 仅当 Step 2 得到 `website_url`。打开前：
 
 1. `lead-store.lead_list_raw`（不要只查 R2，合并已有 R1/R2）按 **官网域名** 去重；已有则跳过，不打开
-2. 本词官网打开 < 2 且本轮 < 15；否则不打开、不写 Lead
 
 使用 **chrome-devtools-mcp**，目标必须是 `website_url`（官网），**禁止**传入社媒 URL：
 

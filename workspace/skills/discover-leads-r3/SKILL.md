@@ -93,13 +93,10 @@ R3 词 → Places Search → 过滤 → Details(≤15) → 官网? → [无则 T
 |------|-----|
 | 每词 Text Search | 1（不翻页） |
 | 每词 Place Details | 15 |
-| 每词 Tavily 补官网 | 2 |
-| 每轮 Tavily 补官网 | 20 |
-| 每词官网打开（chrome） | 2 |
-| 每轮官网打开 | 15 |
-| 补官网 `num_results` | 5 |
+| 每词 Tavily 补官网 | `floor(本词 places_text_search 实际返回条数 × 0.75)`。已有官网的不补搜、不占次数。分母是 Search 返回的地点条数，不是 Details 条数 |
+| 补官网 `num_results` | 任务指令中的 `search_num_results` |
 
-先按 `max_queries` 截词，再套上表。达「每轮官网打开」上限后 **不打开、不写 Lead**。
+先按 `max_queries` 截词，再套上表。已解析出的公司官网都打开并判断；同域名已有线索则跳过。不设每词、每轮的官网打开次数上限。
 
 Tavily `DAILY_LIMIT_EXCEEDED` 或官方通道 402 → 立即停止并 `exploration_finish`。
 
@@ -222,13 +219,13 @@ places-api.place_details({
 
 **有 `websiteUri`：** 规范化 URL，host 不在黑名单 → `website_url`，进 Step 4。
 
-**无或无效：** 若本词 Tavily < 2 且本轮 < 20：
+**无或无效：** 若本词 Tavily 补搜次数还没达到 `floor(本词 places_text_search 实际返回条数 × 0.75)`：
 
 ```
 search-api.search_web({
   query: "{displayName} official website {country_or_region?} {product_or_category?}",
   language: search_query.language,
-  num_results: 5
+  num_results: <任务指令 search_num_results>
 })
 ```
 
@@ -239,7 +236,6 @@ search-api.search_web({
 有 `website_url` 时：
 
 1. `lead-store.lead_list_raw` — 按 **官网域名** 去重，该产品 raw 已有同域则跳过
-2. 本词官网打开 < 2 且本轮 < 15
 
 ```
 chrome-devtools: new_page(url) 或 navigate_page → website_url
