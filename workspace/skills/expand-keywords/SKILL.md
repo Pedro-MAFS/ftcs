@@ -44,9 +44,9 @@ outputs:
 
 - 找到可能采购/经销/进口该产品的海外买家或渠道商
 - 覆盖用户目标市场与买家类型
-- 任务指令会给出本轮每项目标条数（下称 T）：R1 为 T 条；每个当前启用社媒的 R2 各为 T 条；R3 为 T 条。不另设总数上限
+- 任务指令会分别给出 R1 目标、每个当前启用社媒的 R2 目标、R3 目标。三者可以不同。不另设总数上限
 - **R1 广撒网**：普通检索句，不要 `site_id`
-- **R2 社媒发现**：只给当前启用的站点出词（见 `config/explore-r2-sites.yaml` + `data/prefs/explore-r2.json`）；每个启用站各以 T 为目标
+- **R2 社媒发现**：只给当前启用的站点出词（见 `config/explore-r2-sites.yaml` + `data/prefs/explore-r2.json`）；每个启用站按任务指令中的 R2 目标出词
 - **R3 地图发现**：城市/区域 + 品类/场景，供 Google Places `textQuery`；**不要** `site_id`；query 禁止 `site:` / `intitle:` / `inurl:` / `filetype:`。用更多城市/区域与不同搜法接近目标，禁止同义反复凑数
 - **不要**生成 R4
 - 用语贴近真实搜索习惯，可含合理行业黑话、缩写、本地语
@@ -71,13 +71,13 @@ outputs:
 #### `search_queries`（可执行搜索句）
 
 - 至少覆盖 **4** 个维度（争取 5 个）
-- **R1 目标 T 条**：普通产品 / 场景 / 买家 / 地理 / 竞品替代检索句；**不要** `site_id`；**不要**写 `site:` 等运算符
-- **R2 目标：每个当前启用社媒各 T 条**：只给**当前启用**站点出词；每条必须有 `site_id`（登记表中的 id，如 `linkedin_company`）；query 仍是自然语言，**禁止** `site:` / `intitle:` / `inurl:` / `filetype:`。站点限定由后续搜索层的 `include_domains` 处理。可对同一句话按不同 `site_id` 各出一条。未启用站不出词
-- **R3 目标 T 条**：**城市/区域 + 本地商户/品类意图**（如 `Bodenbelag Fachhandel München`、`flooring store Dallas Texas`）；`round=R3`；**不要** `site_id`；禁止 Google 运算符。优先 `dimension=geo` 或 `buyer`，可用 `scenario`；须含明确城市/都会区名，不要仅国家级地理句（那是 R1）。用更多地理位置与不同搜法接近 T，禁止把同一句改写多遍凑数
+- **R1**：条数按任务指令中的 R1 目标。普通产品 / 场景 / 买家 / 地理 / 竞品替代检索句；**不要** `site_id`；**不要**写 `site:` 等运算符
+- **R2**：每个当前启用社媒按任务指令中的 R2 目标出词。只给**当前启用**站点；每条必须有 `site_id`（登记表中的 id，如 `linkedin_company`）；query 仍是自然语言，**禁止** `site:` / `intitle:` / `inurl:` / `filetype:`。站点限定由后续搜索层的 `include_domains` 处理。可对同一句话按不同 `site_id` 各出一条。未启用站不出词
+- **R3**：条数按任务指令中的 R3 目标。**城市/区域 + 本地商户/品类意图**（如 `Bodenbelag Fachhandel München`、`flooring store Dallas Texas`）；`round=R3`；**不要** `site_id`；禁止 Google 运算符。优先 `dimension=geo` 或 `buyer`，可用 `scenario`；须含明确城市/都会区名，不要仅国家级地理句（那是 R1）。用更多地理位置与不同搜法接近该目标，禁止把同一句改写多遍凑数
 - **不要**生成 `round=R4`
 - **不设** `search_queries` 总数上限
-- 0 个启用站点 → 不要 R2 词；R1、R3 仍各以 T 为目标
-- 尽可能达到 T。产品简单、再写会重复、空泛或脱离画像时，允许少于 T
+- 0 个启用站点 → 不要 R2 词；R1、R3 仍按任务指令中各自的目标
+- 尽可能达到各项目标。产品简单、再写会重复、空泛或脱离画像时，允许少于目标
 - 每条必须含：`id`、`query`、`dimension`、`language`、`priority`、`round`；R2 另含 `site_id`
 - `dimension`：`product` \| `scenario` \| `buyer` \| `geo` \| `competitor`
 - `priority`：`high` \| `medium` \| `low`
@@ -104,7 +104,7 @@ outputs:
 
 保存后可 `keywords_get` 核对：
 
-- 对照任务指令中的目标：R1 条数、每个启用社媒的 R2 条数、R3 条数是否接近 T
+- 对照任务指令中的目标：R1 条数、每个启用社媒的 R2 条数、R3 条数是否接近各自的目标
 - 允许低于目标；低于目标不算失败，但摘要必须写明实际条数与原因
 - `by_dimension` 中至少 4 个维度 count > 0
 - 抽查 3～5 条是否像真人会搜的词
@@ -119,7 +119,7 @@ outputs:
 向用户展示：
 
 - 产品 ID 与保存路径
-- 任务指令中的探索强度与 `keyword_target_per_round`
+- 任务指令中的探索强度，以及 R1、R2、R3 各自的目标
 - 各轮实际条数对照目标；低于目标时用一句话说明原因
 - 总查询数与各维度分布
 - 每个维度 2～3 条代表性 `search_queries`（样例须含 **1～2 条 R3**；R2 样例带 `site_id`）
@@ -147,7 +147,7 @@ outputs:
 
 路径：`data/keywords/{product_id}/expansion.json`
 
-示例只演示字段，不是完整词表。条数按任务指令中的 T 生成。
+示例只演示字段，不是完整词表。条数按任务指令中的 R1、R2、R3 目标生成。
 
 ```json
 {

@@ -1,6 +1,9 @@
 export type ExploreIntensity = 'low' | 'medium' | 'high'
 
 export type ExploreIntensityLimits = {
+  /** R1 广撒网搜索词目标 */
+  keywordTargetR1: number
+  /** 每个启用社媒的 R2、以及 R3 的目标 */
   keywordTargetPerRound: number
   searchNumResults: number
   placesResultLimit: number
@@ -10,18 +13,21 @@ export type ExploreIntensityLimits = {
 
 const LIMITS: Record<ExploreIntensity, ExploreIntensityLimits> = {
   low: {
+    keywordTargetR1: 20,
     keywordTargetPerRound: 10,
     searchNumResults: 3,
     placesResultLimit: 10,
     threeQuartersRatio: 0.75,
   },
   medium: {
+    keywordTargetR1: 40,
     keywordTargetPerRound: 20,
     searchNumResults: 5,
     placesResultLimit: 20,
     threeQuartersRatio: 0.75,
   },
   high: {
+    keywordTargetR1: 60,
     keywordTargetPerRound: 40,
     searchNumResults: 10,
     placesResultLimit: 40,

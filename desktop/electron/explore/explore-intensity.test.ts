@@ -20,18 +20,21 @@ describe('explore-intensity-logic', () => {
 
   it('limits：三档数字表', () => {
     assert.deepEqual(getExploreIntensityLimitsFor('low'), {
+      keywordTargetR1: 20,
       keywordTargetPerRound: 10,
       searchNumResults: 3,
       placesResultLimit: 10,
       threeQuartersRatio: 0.75,
     })
     assert.deepEqual(getExploreIntensityLimitsFor('medium'), {
+      keywordTargetR1: 40,
       keywordTargetPerRound: 20,
       searchNumResults: 5,
       placesResultLimit: 20,
       threeQuartersRatio: 0.75,
     })
     assert.deepEqual(getExploreIntensityLimitsFor('high'), {
+      keywordTargetR1: 60,
       keywordTargetPerRound: 40,
       searchNumResults: 10,
       placesResultLimit: 40,

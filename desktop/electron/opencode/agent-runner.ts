@@ -134,7 +134,8 @@ function buildPrompt(bootstrap: BootstrapResult): string {
 function buildExpandKeywordsPrompt(
   productId: string,
   intensity: ExploreIntensity,
-  keywordTarget: number,
+  r1Target: number,
+  perSiteAndR3Target: number,
 ): string {
   const siteHint = formatEnabledR2SitesForPrompt(listExploreR2Sites(getWorkspaceRoot()))
   return [
@@ -147,10 +148,10 @@ function buildExpandKeywordsPrompt(
     '执行要求：',
     '1. 调用 lead-store.product_get 确认画像存在且 status == "ready"。',
     '2. 由你直接生成五维关键词与 search_queries（覆盖 ≥4 维）。条数按下述目标。query 禁止 site: / intitle: / inurl: / filetype:。禁止调用 keywords_expand。',
-    formatExpandKeywordsTargets(keywordTarget, intensity),
+    formatExpandKeywordsTargets(r1Target, perSiteAndR3Target, intensity),
     '3. 调用 lead-store.keywords_save 保存完整 expansion；若校验失败则修正后重试。',
     '4. 可用 keywords_get 对照上述目标核对 R1、每个启用社媒的 R2、R3。允许低于目标，但摘要须写明各轮实际条数；低于目标时用一句话说明原因。抽查 R2 均有 site_id；无 R4。',
-    `5. 完成后用简短中文汇报：按${exploreIntensityShortLabel(intensity)}档目标 ${keywordTarget}、各轮实际条数与目标、低于目标时的原因、各维度分布、3～5 条样例（含 1～2 条 R3；R2 样例请带 site_id）、下一步建议（探索页「开始 R1」「开始 R2」或「开始 R3」）。`,
+    `5. 完成后用简短中文汇报：按${exploreIntensityShortLabel(intensity)}档 R1 目标 ${r1Target}、各轮实际条数与目标、低于目标时的原因、各维度分布、3～5 条样例（含 1～2 条 R3；R2 样例请带 site_id）、下一步建议（探索页「开始 R1」「开始 R2」或「开始 R3」）。`,
     '',
     `输出路径：data/keywords/${productId}/expansion.json`,
   ].join('\n')
@@ -677,7 +678,9 @@ export class AgentRunController {
     }
 
     const exploreIntensity = getExploreIntensity()
-    const keywordTarget = getExploreIntensityLimits(exploreIntensity).keywordTargetPerRound
+    const keywordLimits = getExploreIntensityLimits(exploreIntensity)
+    const r1Target = keywordLimits.keywordTargetR1
+    const perSiteAndR3Target = keywordLimits.keywordTargetPerRound
 
     this.running = true
     this.abort = new AbortController()
@@ -720,7 +723,8 @@ export class AgentRunController {
     const promptText = buildExpandKeywordsPrompt(
       productId,
       exploreIntensity,
-      keywordTarget,
+      r1Target,
+      perSiteAndR3Target,
     )
     this.attachTimeline(timeline)
     timeline.reset()
@@ -729,7 +733,7 @@ export class AgentRunController {
       kind: 'system',
       time: nowTime(),
       title: '系统',
-      body: `准备为 ${productId}（${profile.companyName || '未命名'}）扩展关键词 · 按${exploreIntensityShortLabel(exploreIntensity)}档目标 ${keywordTarget}`,
+      body: `准备为 ${productId}（${profile.companyName || '未命名'}）扩展关键词 · 按${exploreIntensityShortLabel(exploreIntensity)}档 R1 目标 ${r1Target}`,
     })
     timeline.addPrefix({
       id: 'user-expand',
@@ -828,7 +832,7 @@ export class AgentRunController {
         productId,
         total,
         exploreIntensity,
-        keywordTarget,
+        r1Target,
       )
       timeline.addSuffix({
         id: 'sys-done',
