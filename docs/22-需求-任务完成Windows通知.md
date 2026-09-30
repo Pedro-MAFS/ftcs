@@ -1,9 +1,9 @@
 # 22 - 需求：任务完成 · Windows 通知
 
 > **文档类型**：本期需求 + 用户故事（**US-N**，Notify）  
-> **状态**：**需求已立（2026-09-20）** — 规则已拍板；详设与编码另开  
+> **状态**：**v0.5.6 已交付（2026-09-30）**  
 > **基线**：桌面端 **v0.5.5+**（Agent `done` 事件与任务编排一键跑通已落地）  
-> **对齐**：官网支持计划 `task-done-notification`（任务完成 · Windows 通知，P0 · 开发中）  
+> **对齐**：官网支持计划 `task-done-notification`（任务完成 · Windows 通知）  
 > **承接**：[18-需求-任务编排一键跑通.md](18-需求-任务编排一键跑通.md) **R8** / US-W-03「完成推送通知」延后项  
 > **关联**：[04-实施计划.md](04-实施计划.md)、[website/src/config/support-plan.ts](../website/src/config/support-plan.ts)
 

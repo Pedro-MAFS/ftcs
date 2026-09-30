@@ -23,14 +23,6 @@ export const supportPlanPriorityLabels: Record<SupportPlanPriority, string> = {
 /** 按状态、优先级排序：开发中在前，同状态内 P0 → P2 */
 export const supportPlanItems: SupportPlanItem[] = [
   {
-    id: 'task-done-notification',
-    title: '任务完成 · Windows 通知',
-    description:
-      'Agent 长任务（探索、评分、开发信起草等）完成后，若窗口未聚焦则弹出 Windows 系统通知；编排一键跑通仅整段结束通知一次。需求见仓库 docs/22-需求-任务完成Windows通知.md。',
-    priority: 'P0',
-    status: 'developing',
-  },
-  {
     id: 'desktop-silent-update',
     title: '桌面端 · 后台检测与下载更新',
     description:
@@ -45,14 +37,6 @@ export const supportPlanItems: SupportPlanItem[] = [
       '在线索页为每条公司线索生成结构化「企业画像」：商业模式与体量、主营产品与品牌、目标市场与客户、供应链与采购倾向、行业地位与优势、合作机会与跟进建议，并附可改稿的破冰话术。用户反馈：拿到线索后仍要自行调研才能判断值不值得跟；希望打开线索即可一眼看懂目标公司并着手联系，减少重复检索。',
     priority: 'P0',
     status: 'planned',
-  },
-  {
-    id: 'ui-theme-toggle',
-    title: '界面主题 · 暗黑 / 日间模式',
-    description:
-      '桌面端支持暗黑、日间与跟随系统，切换后立即生效并记住本机选择。长时间审阅线索与开发信时可按环境与偏好切换，减轻视觉疲劳。',
-    priority: 'P0',
-    status: 'developing',
   },
   {
     id: 'library-pdf-scanned',
@@ -100,14 +84,6 @@ export const supportPlanItems: SupportPlanItem[] = [
       '根据竞品或对标企业的公开信息，反查其客户 / 采购商线索，辅助找到同类买家。',
     priority: 'P1',
     status: 'planned',
-  },
-  {
-    id: 'scheduled-tasks',
-    title: '定时运行编排任务',
-    description:
-      '对已保存的任务编排方案支持按计划定时触发（每日/每周本地时刻），绑定产品与方案；依赖托盘常驻与可选开机自启，后台执行并在完成或异常时用系统通知提醒。',
-    priority: 'P0',
-    status: 'developing',
   },
   {
     id: 'agent-free-chat',
