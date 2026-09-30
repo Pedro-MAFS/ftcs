@@ -21,7 +21,7 @@ outputs:
 **R3 地图发现**：用 expansion 里的地图发现词，经 **Google Places API** 找本地商户 → 解析或补全 **公司官网** → **chrome 打开官网** 对照产品画像判断是否目标客户 → 通过才写入 `raw/R3.jsonl`。
 
 ```text
-R3 词 → Places Search → 过滤 → Details(≤15) → 官网? → [无则 Tavily 补搜] → chrome 官网 → 判断 → lead_append_raw
+R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过滤 → Details（不超过 floor(实际返回×0.75)）→ 官网? → [无则 Tavily 补搜] → chrome 官网 → 判断 → lead_append_raw
 ```
 
 发现层 **只用 Places**；补官网用 Tavily `search_web`（不带 `include_domains`）。**不**打开 Google 地图页面。
@@ -47,12 +47,12 @@ R3 词 → Places Search → 过滤 → Details(≤15) → 官网? → [无则 T
 
 `exploration_start` 传 `rounds: ["R3"]`。
 
-## 冻结常量
+## 本轮 Places 数量
 
 | 常量 | 值 | 说明 |
 |------|-----|------|
-| `PLACES_PAGE_SIZE` | **20** | `places_text_search.pageSize`；不翻页 |
-| `MAX_DETAILS_PER_KEYWORD` | **15** | 每词 Place Details 上限 |
+| `places_result_limit` | 任务指令中的值 | `places_text_search` 的 pageSize，表示要多少条。超过 20 条由 places-api 合并后一次返回，调用方不翻页、不使用 `nextPageToken` |
+| 每词 Place Details | `floor(本词 Search 实际返回条数 × 0.75)` | 先按下方规则过滤，再按原顺序取到该上限。过滤后不够就有多少查多少 |
 
 ## 硬禁令
 
@@ -91,8 +91,8 @@ R3 词 → Places Search → 过滤 → Details(≤15) → 官网? → [无则 T
 
 | 上限 | 值 |
 |------|-----|
-| 每词 Text Search | 1（不翻页） |
-| 每词 Place Details | 15 |
+| 每词 Text Search | 1 次调用。`pageSize` 用任务指令中的 `places_result_limit`。超过 20 条由 places-api 合并，不要自己翻页 |
+| 每词 Place Details | `floor(本词 places_text_search 实际返回条数 × 0.75)`。先过滤，再按原顺序取到该上限 |
 | 每词 Tavily 补官网 | `floor(本词 places_text_search 实际返回条数 × 0.75)`。已有官网的不补搜、不占次数。分母是 Search 返回的地点条数，不是 Details 条数 |
 | 补官网 `num_results` | 任务指令中的 `search_num_results` |
 
@@ -112,7 +112,7 @@ Places `MISSING_PLACES_API_KEY` / 401 / 403 → **停止整任务**，提示设�
 
 另丢弃：空 `displayName`、纯泛称（如仅 "Parking"）、`businessStatus === "CLOSED_PERMANENTLY"`、地址与画像目标国家明显冲突、本 run 已处理过的 `placeId`。
 
-过滤后按 Search **原顺序**取前 15 条调 Details。
+过滤后按 Search **原顺序**取前 `floor(本词实际返回条数 × 0.75)` 条调 Details。不够就有多少查多少。
 
 ## 不得当作官网的域名
 
@@ -185,7 +185,7 @@ places-api.places_text_search({
   textQuery: search_query.query,
   languageCode: search_query.language,
   regionCode: <§regionCode 推断，可选>,
-  pageSize: 20
+  pageSize: <任务指令 places_result_limit>
 })
 ```
 
@@ -199,9 +199,9 @@ places-api.places_text_search({
 
 对 `places[]` 应用 [POI / types 过滤](#poi--types-过滤) → `candidates[]`。
 
-#### 2c. Place Details（≤15）
+#### 2c. Place Details
 
-按顺序最多 15 次：
+按过滤后的原顺序调用，次数不超过 `floor(本词 places_text_search 实际返回条数 × 0.75)`。过滤后不足该上限时，有多少查多少：
 
 ```
 places-api.place_details({
@@ -334,8 +334,8 @@ lead-store.exploration_finish({ product_id, run_id, status: "completed" })
 
 ### places-api
 
-- Search：`textQuery` = expansion `query` 原样；`pageSize=20`
-- Details：过滤后前 15 条；FieldMask 由 MCP 冻结
+- Search：`textQuery` = expansion `query` 原样；`pageSize` 用任务指令中的 `places_result_limit`。一次调用即可，不要传 `pageToken`
+- Details：过滤后按原顺序取到 `floor(实际返回条数 × 0.75)`；FieldMask 由 MCP 冻结
 - 响应在 `content[0].text`；`error: true` 时读 `code` / `message`
 
 ## 示例对话

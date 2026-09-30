@@ -47,7 +47,10 @@ import {
   formatExpandKeywordsDoneMessage,
   formatExpandKeywordsTargets,
 } from '../explore/expand-keywords-targets'
-import { formatDiscoverSearchLimits } from '../explore/discover-search-limits'
+import {
+  formatDiscoverPlacesLimits,
+  formatDiscoverSearchLimits,
+} from '../explore/discover-search-limits'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -331,6 +334,7 @@ function buildDiscoverLeadsR3Prompt(
   maxQueries: number,
   intensity: ExploreIntensity,
   searchNumResults: number,
+  placesResultLimit: number,
 ): string {
   return [
     '请严格按 skill `discover-leads-r3` 执行 R3 地图发现。',
@@ -340,12 +344,14 @@ function buildDiscoverLeadsR3Prompt(
     '',
     formatDiscoverSearchLimits(searchNumResults, intensity),
     '',
+    formatDiscoverPlacesLimits(placesResultLimit, intensity),
+    '',
     '执行要求：',
     '1. lead-store.product_get 确认画像 ready；lead-store.keywords_get 读取 search_queries。',
     '2. search-api.search_usage 确认当日配额未用尽（官方通道以余额为准）。',
     '3. lead-store.exploration_start({ product_id, rounds: ["R3"] })，记住 run_id。',
     '4. 只跑 round=R3 且无 site_id 的词，按 priority 取前 max_queries 条。',
-    '5. 对每个词：places_text_search(pageSize=20) → 过滤 → place_details(≤15)；无官网则 Tavily search_web 补搜；chrome 只打开公司官网，对照画像判断是否目标客户，通过才 lead_append_raw（round=R3，run_id 必填，snippet 以「发现：place_id=」开头）。禁止打开 Google 地图。',
+    '5. 对每个词：places_text_search 的 pageSize 用下述 places_result_limit，一次调用即可；过滤后 place_details 不超过 floor(本次实际返回×0.75)。无官网则 Tavily search_web 补搜；chrome 只打开公司官网，对照画像判断是否目标客户，通过才 lead_append_raw（round=R3，run_id 必填，snippet 以「发现：place_id=」开头）。禁止打开 Google 地图，禁止自己翻页。',
     '6. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。全程未通过官网判断也允许 completed 且 0 条线索。',
     '7. 用简短中文汇报：run_id、R3 词数、Places Search/Details 次数、Tavily 补搜/官网打开次数、线索数、跳过原因、3～5 条样例或「无新线索」、下一步 score-and-dedupe。',
     '',
@@ -2135,13 +2141,16 @@ export class AgentRunController {
     }
 
     const exploreIntensity = getExploreIntensity()
-    const searchNumResults = getExploreIntensityLimits(exploreIntensity).searchNumResults
+    const exploreLimits = getExploreIntensityLimits(exploreIntensity)
+    const searchNumResults = exploreLimits.searchNumResults
+    const placesResultLimit = exploreLimits.placesResultLimit
     const promptText = isR3
       ? buildDiscoverLeadsR3Prompt(
           productId,
           maxQueries,
           exploreIntensity,
           searchNumResults,
+          placesResultLimit,
         )
       : isR2
         ? buildDiscoverLeadsR2Prompt(
@@ -2163,7 +2172,7 @@ export class AgentRunController {
       kind: 'system',
       time: nowTime(),
       title: '系统',
-      body: `准备为 ${productId}（${profile.companyName || '未命名'}）执行 ${roundName} · 最多 ${maxQueries} 词（可用 ${availableCount}）· 每次搜索 ${searchNumResults} 条`,
+      body: `准备为 ${productId}（${profile.companyName || '未命名'}）执行 ${roundName} · 最多 ${maxQueries} 词（可用 ${availableCount}）· 每次搜索 ${searchNumResults} 条${isR3 ? ` · 地图每次 ${placesResultLimit} 条` : ''}`,
     })
     timeline.addPrefix({
       id: 'user-discover',

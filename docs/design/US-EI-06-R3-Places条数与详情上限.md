@@ -5,7 +5,7 @@
 > **依赖**：[24-需求-探索强度.md](../24-需求-探索强度.md) §4.2、§4.3、I5、I8、I12；[US-EI-01](US-EI-01-探索强度设置.md) `placesResultLimit` / `floorThreeQuarters`；[US-EI-03](US-EI-03-Places超过20条自动翻页.md)（高档 40 由 MCP 翻页合并，技能不自己翻页）；US-EI-06 验收要点。  
 > **不在本期**：扩展关键词（**US-EI-04**）；搜索 `num_results` 与补官网次数（**US-EI-05**）；官网 chrome 打开上限（每词 2 / 每轮 15）；改 places-api MCP 翻页逻辑（已由 EI-03 落地）。  
 > **文档位置**：`docs/design/`  
-> **状态**：详设已立（2026-09-29）
+> **状态**：编码已落地（2026-09-30）
 
 ---
 
@@ -167,3 +167,4 @@ places_result_limit：{T_places}
 | 日期 | 说明 |
 |------|------|
 | 2026-09-29 | 详设已立：注入 placesResultLimit；详情 ⌊实际×3/4⌋；依赖 EI-03；不改补官网与 chrome |
+| 2026-09-30 | 编码落地：R3 指令注入 places_result_limit；详情按实际返回的 3/4；不恢复官网打开次数上限 |

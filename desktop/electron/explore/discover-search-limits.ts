@@ -13,3 +13,18 @@ export function formatDiscoverSearchLimits(
     '- 官网 chrome 打开：已解析出的公司官网都打开，再判断是否目标客户。不设每词打开次数，也不设每轮打开次数。同域名已有线索则不重复打开；社媒页、目录页、打不开或判断为否的不写线索',
   ].join('\n')
 }
+
+/** R3 任务指令里的 Places 条数与详情上限。数字只来自调用方传入的 placesResultLimit。 */
+export function formatDiscoverPlacesLimits(
+  placesResultLimit: number,
+  intensity: ExploreIntensity,
+): string {
+  return [
+    `探索强度：${intensity}`,
+    `places_result_limit：${placesResultLimit}`,
+    '- places_text_search 的 pageSize（「要多少条」）必须用此值；不要写死 20',
+    '- 不要自己翻页或使用 nextPageToken（MCP 已处理）',
+    '- Place Details 上限 = floor(本次 Places 实际返回条数 × 0.75)；先过滤，再按原顺序取到该上限；不要写死 15',
+    '- 官网 chrome 打开：不设每词、每轮次数上限（已解析出的公司官网都打开并判断）',
+  ].join('\n')
+}
