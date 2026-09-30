@@ -17,6 +17,11 @@ export function resolveEffectiveTheme(
   return prefersDark ? 'dark' : 'light'
 }
 
+/** 标题栏快捷切换：切到与当前画面相反的明确外观，不经过「跟随系统」。 */
+export function oppositeExplicitTheme(effective: ResolvedUiTheme): 'dark' | 'light' {
+  return effective === 'dark' ? 'light' : 'dark'
+}
+
 export function applyDocumentTheme(effective: ResolvedUiTheme): void {
   if (typeof document === 'undefined') return
   document.documentElement.dataset.theme = effective

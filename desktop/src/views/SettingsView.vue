@@ -17,7 +17,11 @@ import { showToast } from '../composables/useToast'
 import { useUiTheme } from '../composables/useUiTheme'
 import type { UiThemeMode } from '../utils/ui-theme'
 
-const { setMode: setUiThemeMode, syncFromSettings: syncUiThemeFromSettings } = useUiTheme()
+const {
+  mode: uiThemeMode,
+  setMode: setUiThemeMode,
+  syncFromSettings: syncUiThemeFromSettings,
+} = useUiTheme()
 
 const meta = SECTION_META.settings
 const { status, runtimeHealthy, runtimeLabel, loading, restartOpenCode, refresh } =
@@ -111,6 +115,10 @@ const form = reactive({
   closeToTrayEnabled: false,
   uiThemeMode: 'dark' as UiThemeMode,
   exploreIntensity: 'medium' as 'low' | 'medium' | 'high',
+})
+
+watch(uiThemeMode, (next) => {
+  form.uiThemeMode = next
 })
 
 const EXPLORE_INTENSITY_OPTIONS: Array<{
@@ -1632,7 +1640,7 @@ async function onCheckUpdate(): Promise<void> {
           </div>
           <p class="hint-line">
             <Icon name="info" :size="12" />
-            选择暗黑或日间模式；也可跟随 Windows 系统外观。切换后立即生效并记住本机偏好。
+            选择暗黑、日间或跟随 Windows 系统外观。标题栏按钮在当前画面的日间和暗黑之间一键切换。切换后立即生效并记住本机偏好。
           </p>
           <div class="theme-mode-row">
             <label

@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../shared/Icon.vue'
 import RuntimePopover from './RuntimePopover.vue'
 import AuthMenu from './AuthMenu.vue'
 import { useWorkspace } from '../../composables/useWorkspace'
+import { useUiTheme } from '../../composables/useUiTheme'
+import { oppositeExplicitTheme } from '../../utils/ui-theme'
 import { SECTION_META, type WorkspaceSection } from '../../types/workspace'
 
 defineProps<{
@@ -12,6 +15,13 @@ defineProps<{
 
 const router = useRouter()
 const { activeProduct } = useWorkspace()
+const { effective, setMode } = useUiTheme()
+const nextTheme = computed(() => oppositeExplicitTheme(effective.value))
+const themeLabel = computed(() => (nextTheme.value === 'light' ? '切换到日间' : '切换到暗黑'))
+
+function toggleTheme(): void {
+  void setMode(nextTheme.value)
+}
 
 const steps: WorkspaceSection[] = ['input', 'profile', 'explore', 'leads', 'email']
 
@@ -43,6 +53,15 @@ function go(section: WorkspaceSection): void {
     </nav>
 
     <div class="title-bar__right">
+      <button
+        type="button"
+        class="icon-btn"
+        :title="themeLabel"
+        :aria-label="themeLabel"
+        @click="toggleTheme"
+      >
+        <Icon :name="nextTheme === 'light' ? 'sun' : 'moon'" :size="16" />
+      </button>
       <RuntimePopover />
       <AuthMenu />
       <button
