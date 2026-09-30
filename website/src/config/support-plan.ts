@@ -47,14 +47,6 @@ export const supportPlanItems: SupportPlanItem[] = [
     status: 'planned',
   },
   {
-    id: 'explore-intensity',
-    title: '探索强度 · 高 / 中 / 低',
-    description:
-      '支持配置探索强度三档。用户反馈：单次探索收获的线索偏少。不同档位在扩展关键词数量、搜索引擎（R1/R2）单次结果条数、Google Maps（R3）结果集上限等方面分级，在耗时与覆盖面之间权衡。',
-    priority: 'P0',
-    status: 'developing',
-  },
-  {
     id: 'ui-theme-toggle',
     title: '界面主题 · 暗黑 / 日间模式',
     description:
