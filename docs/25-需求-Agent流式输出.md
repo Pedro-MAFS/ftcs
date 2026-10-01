@@ -1,7 +1,7 @@
 # 25 - 需求:桌面端右侧 Agent · think / 正文增量流式输出
 
 > **文档类型**:本期需求 + 用户故事(**US-ST**,STream)  
-> **状态**:**v0.5.7 进行中**  
+> **状态**:**v0.5.7 进行中（US-ST-01/02 详设已确认待开发）**  
 > **基线**:桌面端 **v0.5.6+**(OpenCode 事件时间线、右侧 Agent 面板已落地)  
 > **对齐**:GitHub Issue [#17](https://github.com/Pedro-MAFS/ftcs/issues/17);计划项建议 ID `agent-stream-think-reply`  
 > **关联**:[08-产品架构决策-Electron-OpenCode.md](08-产品架构决策-Electron-OpenCode.md)
@@ -82,7 +82,8 @@ flowchart LR
 |----|------|
 | 优先级 | Must |
 | 依赖 | — |
-| 状态 | 待详设 |
+| 状态 | **详设已确认待开发** |
+| 详设 | [`docs/design/US-ST-01-增量事件接入与时间线状态.md`](design/US-ST-01-增量事件接入与时间线状态.md) |
 
 **验收要点**
 
@@ -92,6 +93,14 @@ flowchart LR
 - 函数调用相关事件/展示路径与现网一致(整段)。  
 - 不新增、不替换底层协议约定(ST4);详设写明复用的现有事件类型与字段。  
 - 异常或中断时时间线状态可结束,不永久「转圈」。
+
+**关键决策(详设锁定)**
+
+1. **增量源**:只接 Legacy `message.part.delta`(`properties`: `sessionID`, `messageID`, `partID`, `field`, `delta`)
+2. **终态源**:继续接 `message.part.updated`,整份 `part.text` 覆盖同 id 卡片(终态权威)
+3. **合并**:一卡一 partID(`assistant-${partID}` / `reasoning-${partID}`);delta 追加,updated 覆盖并清除 pending buffer
+4. **不接**:全部 `session.next.*`、V2/Global 信封、`message.part.delta` 以外的猜字段
+5. **工具**:仅 `updated`;忽略针对 tool part 的 delta(若有)
 
 ---
 
@@ -103,7 +112,8 @@ flowchart LR
 |----|------|
 | 优先级 | Must |
 | 依赖 | US-ST-01 |
-| 状态 | 待详设 |
+| 状态 | **详设已确认待开发** |
+| 详设 | [`docs/design/US-ST-02-右侧think正文UI流式渲染.md`](design/US-ST-02-右侧think正文UI流式渲染.md) |
 
 **验收要点**
 
@@ -113,6 +123,15 @@ flowchart LR
 - 函数调用块仍整段出现(与现网一致)。  
 - 长输出过程中用户能感知「还活着」(有持续文本变化或明确进行中态)。  
 - 任务结束后最终文案与现网语义一致(无丢字、无明显乱序;允许详设定义合并规则)。
+
+**关键决策(详设锁定)**
+
+1. **数据源**:仅 ST-01 发出的 `timeline` 快照;渲染进程不订 SSE
+2. **节流**:主进程对 **delta 触发的 flush** 做 ≤ **50ms** 合并(`scheduleFlush`);`updated` / error / removed / 任务结束 **立即 flush**
+3. **流式中 reasoning**:该卡 `body` 正在增长时强制展开(或忽略 collapsed 预览),避免只看到 160 字 preview 像卡住;`updated` 终态后若超长可再折叠
+4. **贴底**:保持现网 `pinToBottom`:用户未上滚时跟滚
+5. **Markdown**:继续纯文本 `<pre>`(不改富渲染)
+6. **进行中态**:不强制新 UI 控件;验收以文本持续变化为准
 
 ---
 
@@ -145,12 +164,13 @@ flowchart LR
 |------|------|
 | 2026-10-01 | 初稿:ST1～ST5;US-ST-01～02;对齐 #17 与 v0.5.7 |
 | 2026-10-01 | 补 ST6(整合不删整段);验收与清单同步;马丰顺确认进仓 |
+| 2026-10-01 | US-ST-01/02 详设已确认待开发;添加详设文档链接与关键决策摘要 |
 
 ---
 
 ## 9. 下一步
 
 1. ~~马丰顺确认~~ → 写入仓库 `docs/25-需求-Agent流式输出.md`,#17 回链(进行中)。  
-2. @FTCS 详细设计 按 US-ST-01 → 02 出详设(含 ST6 合并规则)。  
+2. ~~@FTCS 详细设计~~ → **已完成**:US-ST-01 与 US-ST-02 详设已落盘,包含 ST6 合并规则。  
 3. 详设落盘后 @FTCS 开发 申请开工。  
 4. 随后补 #9 / #6 的需求文档与 US 拆分。

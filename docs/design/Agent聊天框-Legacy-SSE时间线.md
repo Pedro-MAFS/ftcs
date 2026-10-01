@@ -5,7 +5,8 @@
 > **订阅**：`GET /event` · `client.event.subscribe()` · **只消费 Legacy 信封**  
 > **事件参考**：[../reference/opencode-events/README.md](../reference/opencode-events/README.md)（信封）· [triggers.md](../reference/opencode-events/triggers.md)（何时触发）· [legacy.md](../reference/opencode-events/legacy.md)（字段）· [nested-types.md](../reference/opencode-events/nested-types.md)（Part / ToolState）  
 > **主代码**：`desktop/electron/opencode/agent-runner.ts` · UI：`desktop/src/components/layout/AgentPanel.vue`  
-> **不做**：改用 V2/Global/Sync 订阅；开放自由对话发送；实现 question 问答 UI；改任务结束读产物的业务判定；**猜字段 / 为旧逻辑写兼容分支**
+> **不做**：改用 V2/Global/Sync 订阅；开放自由对话发送；实现 question 问答 UI；改任务结束读产物的业务判定；**猜字段 / 为旧逻辑写兼容分支**  
+> **修订注**（2026-10-01）：think/正文增量流式现由 [US-ST-01](US-ST-01-增量事件接入与时间线状态.md) 接通 `message.part.delta`；本文档其余约束仍然有效；工具仍整段。
 
 ---
 
@@ -243,3 +244,11 @@ session.status = idle | session.error
 ## 10. 维护
 
 升级 `@opencode-ai/sdk` 后：对照 [legacy.md](../reference/opencode-events/legacy.md) 检查 §4 所列 `type` 的 `properties` 是否改名；`ToolState` 对照 [nested-types.md](../reference/opencode-events/nested-types.md)。新增的无关 `type`（含新的 `session.next.*`）默认忽略，不扩时间线，除非要增加新卡片种类。
+
+---
+
+## 11. 修订记录
+
+| 日期 | 说明 |
+|------|------|
+| 2026-10-01 | 修订注：think/正文增量流式已由 [US-ST-01](US-ST-01-增量事件接入与时间线状态.md) 接通 `message.part.delta`；本文档其余约束（权限、会话态、工具整段等）仍然有效 |
