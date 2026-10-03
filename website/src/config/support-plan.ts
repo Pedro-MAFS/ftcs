@@ -23,14 +23,6 @@ export const supportPlanPriorityLabels: Record<SupportPlanPriority, string> = {
 /** 按状态、优先级排序：开发中在前，同状态内 P0 → P2 */
 export const supportPlanItems: SupportPlanItem[] = [
   {
-    id: 'desktop-silent-update',
-    title: '桌面端 · 后台检测与下载更新',
-    description:
-      '当前新版本需用户自行打开官网下载安装包并重新安装；应用内「检查更新」仅提示版本并跳转下载页。用户反馈希望自动监测新版本、在后台下载安装包，下载完成后提醒用户安装或重启以完成更新，减少手工升级步骤。',
-    priority: 'P1',
-    status: 'planned',
-  },
-  {
     id: 'lead-company-intelligence',
     title: '线索 · 目标公司深度画像',
     description:
@@ -58,14 +50,6 @@ export const supportPlanItems: SupportPlanItem[] = [
     title: '业务流程引导',
     description:
       '按录入 → 画像 → 探索 → 线索 → 开发信的主线，提供更清晰的新手引导与空态提示，减少不知道下一步该做什么的困惑。',
-    priority: 'P1',
-    status: 'planned',
-  },
-  {
-    id: 'ui-button-states',
-    title: '业务界面 · 按钮可用状态',
-    description:
-      '各业务按钮明确何时可点、何时置灰，并在不可用时给出简短原因（如「需先完成画像」「探索进行中」），减少误点与试错。',
     priority: 'P1',
     status: 'planned',
   },
