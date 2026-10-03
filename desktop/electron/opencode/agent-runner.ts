@@ -2729,10 +2729,75 @@ export class AgentRunController {
     let lastRetryBody = ''
     let sawSessionError = false
     let watchdogTimer: ReturnType<typeof setTimeout> | null = null
+    
+    // US-ST-01: pending delta 缓冲与 partID 类型映射
+    const pendingDeltas = new Map<string, string[]>()
+    const partKinds = new Map<string, 'text' | 'reasoning'>()
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+    const DELTA_FLUSH_THROTTLE_MS = 50
+
+    // US-ST-02: 节流 flush（delta 触发）与立即 flush（updated/error/removed）
+    const scheduleFlush = (): void => {
+      if (flushTimer != null) return
+      flushTimer = setTimeout(() => {
+        flushTimer = null
+        flush()
+      }, DELTA_FLUSH_THROTTLE_MS)
+    }
+
+    const flushNow = (): void => {
+      if (flushTimer != null) {
+        clearTimeout(flushTimer)
+        flushTimer = null
+      }
+      flush()
+    }
 
     const applySnapshot = (item: AgentTimelineItem): void => {
       timeline.upsertSessionItem(item)
-      flush()
+      flushNow()
+    }
+
+    // US-ST-01: delta 追加辅助函数
+    const appendDeltaToCard = (
+      id: string,
+      kind: AgentTimelineItem['kind'],
+      title: string,
+      delta: string,
+    ): void => {
+      const items = timeline.snapshot()
+      const existing = items.find((item) => item.id === id)
+      if (existing) {
+        timeline.upsertSessionItem({
+          ...existing,
+          body: existing.body + delta,
+          // US-ST-02: 流式中 reasoning 保持展开
+          collapsed: kind === 'reasoning' ? false : existing.collapsed,
+        })
+      } else {
+        timeline.upsertSessionItem({
+          id,
+          kind,
+          time: nowTime(),
+          title,
+          body: delta,
+          // US-ST-02: 流式中 reasoning 默认展开
+          collapsed: kind === 'reasoning' ? false : undefined,
+        })
+      }
+      scheduleFlush()
+    }
+
+    // US-ST-01: 回放缓冲的 delta
+    const replayPendingDeltas = (partID: string, kind: 'text' | 'reasoning'): void => {
+      const buffered = pendingDeltas.get(partID)
+      if (!buffered || buffered.length === 0) return
+      const cardId = kind === 'text' ? `assistant-${partID}` : `reasoning-${partID}`
+      const cardKind = kind === 'text' ? 'assistant' : 'reasoning'
+      const title = kind === 'text' ? '模型回复' : '思考'
+      const fullDelta = buffered.join('')
+      appendDeltaToCard(cardId, cardKind, title, fullDelta)
+      pendingDeltas.delete(partID)
     }
 
     const disarmWatchdog = (): void => {
@@ -2797,7 +2862,20 @@ export class AgentRunController {
         case 'message.updated': {
           if (event.properties.sessionID !== sessionId) return
           const { info } = event.properties
+          const wasUnknown = !messageRoles.has(info.id)
           messageRoles.set(info.id, info.role)
+          // US-ST-01: 角色确认为 assistant 后，回放所有已知类型且有缓冲的 part
+          if (wasUnknown && info.role === 'assistant') {
+            for (const [partID, buffered] of pendingDeltas.entries()) {
+              if (buffered.length === 0) continue
+              const kind = partKinds.get(partID)
+              if (kind === 'text') {
+                replayPendingDeltas(partID, 'text')
+              } else if (kind === 'reasoning') {
+                replayPendingDeltas(partID, 'reasoning')
+              }
+            }
+          }
           if (info.role === 'assistant' && info.error) {
             const body = formatMessageError(info.error)
             this.lastModelError = body
@@ -2808,7 +2886,45 @@ export class AgentRunController {
               title: '模型调用失败',
               body,
             })
-            flush()
+            flushNow()
+          }
+          return
+        }
+
+        case 'message.part.delta': {
+          // US-ST-01: 接通增量事件
+          if (event.properties.sessionID !== sessionId) return
+          const { messageID, partID, field, delta } = event.properties as {
+            messageID: string
+            partID: string
+            field: string
+            delta: string
+          }
+          if (!delta) return
+          // 仅处理文本字段（text / reasoning 的 'text' 字段）
+          if (field !== 'text') return
+          const role = messageRoles.get(messageID)
+          if (role === 'user') return
+          if (role == null) {
+            // 角色尚不可知，缓冲 delta
+            if (!pendingDeltas.has(partID)) {
+              pendingDeltas.set(partID, [])
+            }
+            pendingDeltas.get(partID)!.push(delta)
+            return
+          }
+          // 角色已知为 assistant，追加或创建卡片
+          const kind = partKinds.get(partID)
+          if (kind === 'text') {
+            appendDeltaToCard(`assistant-${partID}`, 'assistant', '模型回复', delta)
+          } else if (kind === 'reasoning') {
+            appendDeltaToCard(`reasoning-${partID}`, 'reasoning', '思考', delta)
+          } else {
+            // 类型未知，缓冲
+            if (!pendingDeltas.has(partID)) {
+              pendingDeltas.set(partID, [])
+            }
+            pendingDeltas.get(partID)!.push(delta)
           }
           return
         }
@@ -2816,10 +2932,23 @@ export class AgentRunController {
         case 'message.part.updated': {
           if (event.properties.sessionID !== sessionId) return
           const { part } = event.properties
-          if (messageRoles.get(part.messageID) === 'user') return
+          const role = messageRoles.get(part.messageID)
+          if (role === 'user') return
           if (part.type === 'text') {
             if (part.ignored === true) return
-            if (!part.text || part.text.trim() === userPrompt.trim()) return
+            // US-ST-01: 先写入类型（即使空正文），再回放缓冲
+            const wasUnknownType = !partKinds.has(part.id)
+            partKinds.set(part.id, 'text')
+            if (wasUnknownType && role === 'assistant') {
+              replayPendingDeltas(part.id, 'text')
+            }
+            // 空正文不建卡不覆盖；用户 prompt 回声过滤只用于非空 text
+            if (!part.text) return
+            if (part.text.trim() === userPrompt.trim()) return
+            // 如果角色尚不可知，等待 message.updated
+            if (role == null) return
+            // US-ST-01: 结束时用整份 part.text 覆盖，清缓冲
+            pendingDeltas.delete(part.id)
             applySnapshot({
               id: `assistant-${part.id}`,
               kind: 'assistant',
@@ -2830,7 +2959,19 @@ export class AgentRunController {
             return
           }
           if (part.type === 'reasoning') {
+            // US-ST-01: 先写入类型（即使空正文），再回放缓冲
+            const wasUnknownType = !partKinds.has(part.id)
+            partKinds.set(part.id, 'reasoning')
+            if (wasUnknownType && role === 'assistant') {
+              replayPendingDeltas(part.id, 'reasoning')
+            }
+            // 空正文不建卡不覆盖
             if (!part.text) return
+            // 如果角色尚不可知，等待 message.updated
+            if (role == null) return
+            // US-ST-01: 结束时用整份 part.text 覆盖，清缓冲
+            pendingDeltas.delete(part.id)
+            // US-ST-02: 流式中展开，终态后按长度规则折叠
             applySnapshot({
               id: `reasoning-${part.id}`,
               kind: 'reasoning',
@@ -2853,7 +2994,10 @@ export class AgentRunController {
           timeline.removeSessionItem(`assistant-${partID}`)
           timeline.removeSessionItem(`reasoning-${partID}`)
           timeline.removeSessionItem(`tool-${partID}`)
-          flush()
+          // US-ST-01: 清理缓冲
+          pendingDeltas.delete(partID)
+          partKinds.delete(partID)
+          flushNow()
           return
         }
 
@@ -2881,7 +3025,7 @@ export class AgentRunController {
             retrySince = 0
           }
           disarmWatchdog()
-          flush()
+          flushNow()
           return
         }
 
@@ -2904,7 +3048,7 @@ export class AgentRunController {
               body: lastRetryBody,
             })
             armWatchdog()
-            flush()
+            flushNow()
             return
           }
           if (status.type === 'idle') {
@@ -2916,7 +3060,7 @@ export class AgentRunController {
                 title: '模型重试已恢复',
                 body: `${lastRetryBody}\n已恢复，继续执行。`,
               })
-              flush()
+              flushNow()
             }
             retrySince = 0
             sawSessionError = false
@@ -2946,6 +3090,8 @@ export class AgentRunController {
       stop: () => {
         stopped = true
         disarmWatchdog()
+        // US-ST-02: 停止时 flush 最后一帧
+        flushNow()
       },
     }
   }
