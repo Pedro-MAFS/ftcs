@@ -13,7 +13,7 @@ import type {
   OfficeCliInstallResult,
   OfficeCliReadyResult,
 } from './onboarding'
-import type { UpdateCheckResult } from './update'
+import type { UpdateCheckResult, UpdateDownloadState } from './update'
 
 export type AgentTimelineItem = {
   id: string
@@ -837,6 +837,12 @@ declare global {
       checkForUpdate: (opts?: { forceNotify?: boolean }) => Promise<UpdateCheckResult>
       snoozeUpdate: () => Promise<{ ok: boolean }>
       dismissUpdate: (version: string) => Promise<{ ok: boolean }>
+      getUpdateState: () => Promise<UpdateDownloadState>
+      onUpdateProgress: (handler: (state: UpdateDownloadState) => void) => () => void
+      onUpdateChecked: (handler: (result: UpdateCheckResult) => void) => () => void
+      retryUpdateDownload: () => Promise<UpdateDownloadState>
+      installUpdate: () => Promise<{ ok: boolean; message: string }>
+      deferUpdate: () => Promise<UpdateDownloadState>
       setWorkflowNotifySuppressed?: (suppressed: boolean) => Promise<void>
       showTaskDoneNotification?: (input: {
         ok: boolean
