@@ -89,6 +89,8 @@ flowchart LR
 
 - 存在可观测的增量事件路径(或等价状态更新),覆盖 think 与正文;非整段 `done` 才首次出现全文。  
 - 保留现网整段(chunked)路径;增量叠到同一时间线条目;整段/结束事件作终态对齐(ST6)。  
+- 空正文的 start `updated` 仍须登记 part 类型(text / reasoning);不因此建卡、不覆盖已有正文。  
+- 提前到达或类型未明时缓冲的 delta **必须回放到同一张卡**,不得在登记/终态时只删除缓冲。  
 - 仅有整段、无增量时行为与现网一致。  
 - 函数调用相关事件/展示路径与现网一致(整段)。  
 - 不新增、不替换底层协议约定(ST4);详设写明复用的现有事件类型与字段。  
@@ -98,7 +100,7 @@ flowchart LR
 
 1. **增量源**:只接 Legacy `message.part.delta`(`properties`: `sessionID`, `messageID`, `partID`, `field`, `delta`)
 2. **终态源**:继续接 `message.part.updated`,整份 `part.text` 覆盖同 id 卡片(终态权威)
-3. **合并**:一卡一 partID(`assistant-${partID}` / `reasoning-${partID}`);delta 追加,updated 覆盖并清除 pending buffer
+3. **合并**:一卡一 partID(`assistant-${partID}` / `reasoning-${partID}`);delta 追加;空 start `updated` 只登记类型;非空终态 `updated` 覆盖并在回放后清除 pending buffer(缓冲须先回放)
 4. **不接**:全部 `session.next.*`、V2/Global 信封、`message.part.delta` 以外的猜字段
 5. **工具**:仅 `updated`;忽略针对 tool part 的 delta(若有)
 
@@ -140,6 +142,7 @@ flowchart LR
 - [ ] think 随增量刷新,非整段一次性出现。  
 - [ ] 正文回复同上。  
 - [ ] 现网整段路径保留并与增量整合,无双份内容(ST6)。  
+- [ ] 空 start 登记类型;缓冲 delta 回放进同一张卡(不可只删缓冲)。  
 - [ ] 函数调用展示仍为整段。  
 - [ ] 等待过程中可感知 Agent 仍在输出。  
 - [ ] 未引入协议层变更。  
@@ -165,6 +168,7 @@ flowchart LR
 | 2026-10-01 | 初稿:ST1～ST5;US-ST-01～02;对齐 #17 与 v0.5.7 |
 | 2026-10-01 | 补 ST6(整合不删整段);验收与清单同步;马丰顺确认进仓 |
 | 2026-10-01 | US-ST-01/02 详设已确认待开发;添加详设文档链接与关键决策摘要 |
+| 2026-10-03 | 验收补强:空 start 登记类型;缓冲须回放(对齐 #17 手测缺口) |
 
 ---
 
