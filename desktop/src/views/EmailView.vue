@@ -456,19 +456,16 @@ async function onBatchDraft(): Promise<void> {
     return
   }
 
-  drafting.value = true
-  actionMessage.value = ''
-  resetAgentForDraftEmail(pendingHigh.value.length)
-
   try {
     const res = await window.ftcs.draftEmails({
       productId: activeProductId.value,
     })
     if (!res.ok) {
-      actionMessage.value = res.message
-      agentStatus.value = 'error'
+      showToast(res.message, { tone: 'error' })
       return
     }
+    drafting.value = true
+    resetAgentForDraftEmail(res.acceptedCount ?? pendingHigh.value.length)
     actionMessage.value = res.message
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
