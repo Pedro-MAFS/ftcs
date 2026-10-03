@@ -2788,6 +2788,18 @@ export class AgentRunController {
       scheduleFlush()
     }
 
+    // US-ST-01: 回放缓冲的 delta
+    const replayPendingDeltas = (partID: string, kind: 'text' | 'reasoning'): void => {
+      const buffered = pendingDeltas.get(partID)
+      if (!buffered || buffered.length === 0) return
+      const cardId = kind === 'text' ? `assistant-${partID}` : `reasoning-${partID}`
+      const cardKind = kind === 'text' ? 'assistant' : 'reasoning'
+      const title = kind === 'text' ? '模型回复' : '思考'
+      const fullDelta = buffered.join('')
+      appendDeltaToCard(cardId, cardKind, title, fullDelta)
+      pendingDeltas.delete(partID)
+    }
+
     const disarmWatchdog = (): void => {
       if (watchdogTimer != null) {
         clearTimeout(watchdogTimer)
@@ -2852,11 +2864,17 @@ export class AgentRunController {
           const { info } = event.properties
           const wasUnknown = !messageRoles.has(info.id)
           messageRoles.set(info.id, info.role)
-          // US-ST-01: 角色确认后回放 pending delta
+          // US-ST-01: 角色确认为 assistant 后，回放所有已知类型且有缓冲的 part
           if (wasUnknown && info.role === 'assistant') {
-            // 查找该 message 下可能缓冲的 part delta（需要从 part 的 messageID 反查）
-            // 由于我们只存了 partID → deltas，这里暂不处理，留待 part.updated 时处理
-            // 实际上当 part.updated 到达时，role 已知，会自动处理
+            for (const [partID, buffered] of pendingDeltas.entries()) {
+              if (buffered.length === 0) continue
+              const kind = partKinds.get(partID)
+              if (kind === 'text') {
+                replayPendingDeltas(partID, 'text')
+              } else if (kind === 'reasoning') {
+                replayPendingDeltas(partID, 'reasoning')
+              }
+            }
           }
           if (info.role === 'assistant' && info.error) {
             const body = formatMessageError(info.error)
@@ -2918,12 +2936,19 @@ export class AgentRunController {
           if (role === 'user') return
           if (part.type === 'text') {
             if (part.ignored === true) return
-            if (!part.text || part.text.trim() === userPrompt.trim()) return
-            // US-ST-01: 记录类型，清除 pending delta，覆盖卡片
+            // US-ST-01: 先写入类型（即使空正文），再回放缓冲
+            const wasUnknownType = !partKinds.has(part.id)
             partKinds.set(part.id, 'text')
-            pendingDeltas.delete(part.id)
+            if (wasUnknownType && role === 'assistant') {
+              replayPendingDeltas(part.id, 'text')
+            }
+            // 空正文不建卡不覆盖；用户 prompt 回声过滤只用于非空 text
+            if (!part.text) return
+            if (part.text.trim() === userPrompt.trim()) return
             // 如果角色尚不可知，等待 message.updated
             if (role == null) return
+            // US-ST-01: 结束时用整份 part.text 覆盖，清缓冲
+            pendingDeltas.delete(part.id)
             applySnapshot({
               id: `assistant-${part.id}`,
               kind: 'assistant',
@@ -2934,12 +2959,19 @@ export class AgentRunController {
             return
           }
           if (part.type === 'reasoning') {
-            if (!part.text) return
-            // US-ST-01: 记录类型，清除 pending delta，覆盖卡片
+            // US-ST-01: 先写入类型（即使空正文），再回放缓冲
+            const wasUnknownType = !partKinds.has(part.id)
             partKinds.set(part.id, 'reasoning')
-            pendingDeltas.delete(part.id)
+            if (wasUnknownType && role === 'assistant') {
+              replayPendingDeltas(part.id, 'reasoning')
+            }
+            // 空正文不建卡不覆盖
+            if (!part.text) return
             // 如果角色尚不可知，等待 message.updated
             if (role == null) return
+            // US-ST-01: 结束时用整份 part.text 覆盖，清缓冲
+            pendingDeltas.delete(part.id)
+            // US-ST-02: 流式中展开，终态后按长度规则折叠
             applySnapshot({
               id: `reasoning-${part.id}`,
               kind: 'reasoning',
