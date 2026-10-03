@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { resolveSettingsUpdateActions } from '../composables/update-banner-model'
 import Icon from '../components/shared/Icon.vue'
 import { useAppStatus } from '../composables/useAppStatus'
 import { useAuth } from '../composables/useAuth'
@@ -43,12 +44,25 @@ const {
   appVersion,
   checking: updateChecking,
   result: updateResult,
+  downloadState,
   checkForUpdate,
   openDownloadPage,
   openChangelogPage,
   refreshAppVersion,
+  installUpdate,
+  retryDownload,
 } = useUpdateCheck()
-const updateHint = ref('')
+const manualCheckedUpdate = ref(false)
+const manualCheckingUpdate = ref(false)
+const updateActions = computed(() =>
+  resolveSettingsUpdateActions({
+    platform: window.ftcs?.platform ?? 'win32',
+    check: updateResult.value,
+    download: downloadState.value,
+    manualChecked: manualCheckedUpdate.value,
+    manualChecking: manualCheckingUpdate.value,
+  }),
+)
 const confirmLogout = ref(false)
 const confirmResetGateway = ref(false)
 const authHint = ref('')
@@ -788,11 +802,12 @@ onMounted(() => {
 })
 
 async function onCheckUpdate(): Promise<void> {
-  updateHint.value = '正在检查…'
-  const res = await checkForUpdate({ forceNotify: true })
-  updateHint.value = res.message
-  if (res.ok && res.hasUpdate) {
-    updateHint.value = `${res.message}。可点击「前往下载页」获取安装包。`
+  manualCheckedUpdate.value = true
+  manualCheckingUpdate.value = true
+  try {
+    await checkForUpdate({ forceNotify: true })
+  } finally {
+    manualCheckingUpdate.value = false
   }
 }
 </script>
@@ -1829,15 +1844,48 @@ async function onCheckUpdate(): Promise<void> {
               {{ updateChecking ? '检查中…' : '检查更新' }}
             </button>
             <button
-              v-if="updateResult.hasUpdate"
+              v-if="updateActions.showInstall"
+              type="button"
+              class="btn-primary btn-sm"
+              @click="installUpdate"
+            >
+              立即安装/重启
+            </button>
+            <button
+              v-if="updateActions.showGoDownload"
               type="button"
               class="btn-primary btn-sm"
               @click="openDownloadPage"
             >
               前往下载页
             </button>
+            <button
+              v-if="updateActions.showRetryCheck"
+              type="button"
+              class="btn-secondary btn-sm"
+              :disabled="updateChecking"
+              @click="onCheckUpdate"
+            >
+              重试
+            </button>
+            <button
+              v-if="updateActions.showRetryDownload"
+              type="button"
+              class="btn-secondary btn-sm"
+              @click="retryDownload"
+            >
+              重试
+            </button>
+            <button
+              v-if="updateActions.showOfficial"
+              type="button"
+              class="btn-secondary btn-sm"
+              @click="openDownloadPage"
+            >
+              去官网下载
+            </button>
           </div>
-          <p v-if="updateHint" class="hint-line">{{ updateHint }}</p>
+          <p v-if="updateActions.line" class="hint-line">{{ updateActions.line }}</p>
           <p class="hint-line mono">清单：{{ PRODUCT_LINKS.updateManifest }}</p>
 
           <label class="field-label">首次引导</label>

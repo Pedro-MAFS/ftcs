@@ -93,6 +93,13 @@ export const IPC = {
   UPDATE_CHECK: 'update:check',
   UPDATE_SNOOZE: 'update:snooze',
   UPDATE_DISMISS: 'update:dismiss',
+  UPDATE_STATE: 'update:state',
+  UPDATE_PROGRESS: 'update:progress',
+  UPDATE_RETRY: 'update:retry',
+  UPDATE_INSTALL: 'update:install',
+  UPDATE_DEFER: 'update:defer',
+  /** 主进程定时检查完成后推给界面。手动检查仍走 UPDATE_CHECK 的返回值。 */
+  UPDATE_CHECKED: 'update:checked',
   NOTIFY_SET_WORKFLOW_SUPPRESSED: 'notify:set-workflow-suppressed',
   NOTIFY_SHOW_TASK_DONE: 'notify:show-task-done',
   SCHEDULE_LIST: 'schedule:list',
@@ -106,6 +113,11 @@ export const IPC = {
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_GET_LOGS */
   SIDECAR_GET_LOGS: 'opencode:get-logs',
 } as const
+
+export type {
+  UpdateDownloadPhase,
+  UpdateDownloadState,
+} from '../update/update-download-types'
 
 export interface UpdateCheckResult {
   ok: boolean

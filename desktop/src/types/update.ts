@@ -13,3 +13,16 @@ export interface UpdateCheckResult {
   checkedAt: string
   manifestUrl: string
 }
+
+export type UpdateDownloadPhase = 'idle' | 'downloading' | 'ready' | 'failed'
+
+export interface UpdateDownloadState {
+  phase: UpdateDownloadPhase
+  version: string | null
+  received: number
+  total: number | null
+  message: string
+  deferred: boolean
+  downloadPage: string
+  revision: number
+}
