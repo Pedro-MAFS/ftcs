@@ -137,7 +137,16 @@ import {
   dismissAppUpdate,
   getAppVersion,
   snoozeAppUpdate,
+  type UpdateCheckResult,
 } from './update/update-check'
+import { delayUntilNextUpdateCheck } from './update/update-schedule'
+import {
+  bindUpdateDownloadBroadcast,
+  deferUpdateInstall,
+  getUpdateDownloadState,
+  installDownloadedUpdate,
+  retryUpdateDownload,
+} from './update/update-download'
 import { createAppTray, destroyAppTray, showMainWindow } from './tray/app-tray'
 import {
   applyCloseToTrayEnabled,
@@ -494,19 +503,51 @@ async function gateAgentStart(kind: AgentPreflightKind) {
 
 function broadcastAuthChanged(): void {
   const session = getAuthSession()
+  broadcastToWindows(IPC.AUTH_CHANGED, session)
+}
+
+function broadcastToWindows(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      try {
-        win.webContents.send(IPC.AUTH_CHANGED, session)
-      } catch {
-        // ignore
-      }
+    if (win.isDestroyed()) continue
+    try {
+      win.webContents.send(channel, payload)
+    } catch {
+      // ignore
     }
   }
 }
 
+let updateCheckTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleNextUpdateCheck(checkedAtIso: string): void {
+  if (updateCheckTimer) {
+    clearTimeout(updateCheckTimer)
+    updateCheckTimer = null
+  }
+  const delay = delayUntilNextUpdateCheck(checkedAtIso)
+  updateCheckTimer = setTimeout(() => {
+    updateCheckTimer = null
+    void runScheduledUpdateCheck()
+  }, delay)
+}
+
+async function runScheduledUpdateCheck(): Promise<void> {
+  const result = await checkForAppUpdate({ forceNotify: false })
+  broadcastToWindows(IPC.UPDATE_CHECKED, result)
+  if (result.ok) scheduleNextUpdateCheck(result.checkedAt)
+}
+
+async function runUpdateCheck(opts?: { forceNotify?: boolean }): Promise<UpdateCheckResult> {
+  const result = await checkForAppUpdate({ forceNotify: Boolean(opts?.forceNotify) })
+  if (result.ok) scheduleNextUpdateCheck(result.checkedAt)
+  return result
+}
+
 function registerIpcHandlers(): void {
   setAuthSessionListener(broadcastAuthChanged)
+  bindUpdateDownloadBroadcast((state) => {
+    broadcastToWindows(IPC.UPDATE_PROGRESS, state)
+  })
   ipcMain.handle(IPC.APP_GET_STATUS, async () => buildAppStatus())
   ipcMain.handle(IPC.APP_OPEN_EXTERNAL, async (_event, url: string) => {
     const raw = String(url || '').trim()
@@ -710,7 +751,7 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.APP_GET_VERSION, () => getAppVersion())
   ipcMain.handle(IPC.UPDATE_CHECK, async (_event, opts?: { forceNotify?: boolean }) =>
-    checkForAppUpdate({ forceNotify: Boolean(opts?.forceNotify) }),
+    runUpdateCheck(opts),
   )
   ipcMain.handle(IPC.UPDATE_SNOOZE, () => {
     snoozeAppUpdate()
@@ -719,6 +760,16 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.UPDATE_DISMISS, (_event, version: string) => {
     dismissAppUpdate(String(version || ''))
     return { ok: true }
+  })
+  ipcMain.handle(IPC.UPDATE_STATE, () => getUpdateDownloadState())
+  ipcMain.handle(IPC.UPDATE_RETRY, () => {
+    retryUpdateDownload()
+    return getUpdateDownloadState()
+  })
+  ipcMain.handle(IPC.UPDATE_INSTALL, () => installDownloadedUpdate())
+  ipcMain.handle(IPC.UPDATE_DEFER, () => {
+    deferUpdateInstall()
+    return getUpdateDownloadState()
   })
   ipcMain.handle(IPC.NOTIFY_SET_WORKFLOW_SUPPRESSED, (_event, suppressed: boolean) => {
     setWorkflowNotifySuppressed(Boolean(suppressed))

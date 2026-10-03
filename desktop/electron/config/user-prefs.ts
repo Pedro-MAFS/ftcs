@@ -27,6 +27,8 @@ interface UserPrefs {
   update?: {
     dismissedVersion?: string
     snoozeUntil?: string
+    /** 上次成功检查的 ISO 时间。失败不写。忽略/稍后不再参与要不要下载。 */
+    lastCheckedAt?: string
   }
 }
 
