@@ -77,7 +77,7 @@ import type {
   SaveEmailDraftSlotInput,
   GetEmailRecipientPoolInput,
 } from './ipc/types'
-import { AgentRunController } from './opencode/agent-runner'
+import { AgentRunController, capDraftOutreachLeadIds } from './opencode/agent-runner'
 import { bootstrapProductFromLibrary } from './profile/profile-bootstrap'
 import { listProductSummaries, loadProfile } from './profile/profile-reader'
 import { createEmptyDraftProfile, saveProductProfile, softDeleteProductProfile } from './profile/profile-writer'
@@ -94,7 +94,12 @@ import { saveRawLead } from './leads/lead-writer'
 import { saveScoredPeople } from './leads/save-scored-people'
 import { verifyPersonEmail } from './leads/verify-person-email'
 import { saveCsvWithDialog } from './leads/export-csv'
-import { listEmailDraftsSnapshot, getEmailDraftSlot, getEmailRecipientPool } from './emails/emails-reader'
+import {
+  getEmailDraftSlot,
+  getEmailRecipientPool,
+  listEmailDraftsSnapshot,
+  listLeadsNeedingDraft,
+} from './emails/emails-reader'
 import { approveEmailDraft, rejectEmailDraft, saveEmailDraftSlot } from './emails/emails-writer'
 import {
   runAgentPreflight,
@@ -1499,6 +1504,9 @@ function registerIpcHandlers(): void {
       const leadIds = Array.isArray(input.leadIds)
         ? input.leadIds.filter((id) => typeof id === 'string' && id.trim())
         : undefined
+      const explicit = Boolean(leadIds && leadIds.length > 0)
+      const targetIds = explicit ? leadIds! : listLeadsNeedingDraft(productId)
+      const capped = capDraftOutreachLeadIds(targetIds, { rankedByScore: !explicit })
 
       const sender = event.sender
       void getAgentRunner()
@@ -1516,14 +1524,15 @@ function registerIpcHandlers(): void {
           })
         })
 
-      const scope =
-        leadIds && leadIds.length > 0
-          ? `${leadIds.length} 条指定线索`
-          : '全部待起草已评分线索'
+      const scope = explicit
+        ? `${capped.leadIds.length} 条指定线索`
+        : '全部待起草已评分线索'
       return {
         ok: true,
-        message: `正在为 ${productId} 起草开发信（${scope}）…`,
+        message:
+          capped.notice || `正在为 ${productId} 起草开发信（${scope}）…`,
         productId,
+        acceptedCount: capped.leadIds.length,
       }
     } catch (err) {
       return {

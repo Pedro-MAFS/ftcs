@@ -560,20 +560,17 @@ async function startDraftEmails(leadIds?: string[]): Promise<void> {
     return
   }
 
-  drafting.value = true
-  actionMessage.value = ''
-  resetAgentForDraftEmail(targetCount)
-
   try {
     const res = await window.ftcs.draftEmails({
       productId: activeProductId.value,
       leadIds,
     })
     if (!res.ok) {
-      actionMessage.value = res.message
-      agentStatus.value = 'error'
+      showToast(res.message, { tone: 'error' })
       return
     }
+    drafting.value = true
+    resetAgentForDraftEmail(res.acceptedCount ?? targetCount)
     actionMessage.value = res.message
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)

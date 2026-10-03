@@ -618,6 +618,26 @@ class TimelineBuilder {
   }
 }
 
+export const DRAFT_OUTREACH_MAX_LEADS = 50
+
+/**
+ * 超过上限时只保留前面的线索并给出提示，不中断起草。
+ * rankedByScore 为真时，调用方已按评分从高到低排过序。
+ */
+export function capDraftOutreachLeadIds(
+  leadIds: string[],
+  options?: { rankedByScore?: boolean },
+): { leadIds: string[]; notice: string } {
+  if (leadIds.length <= DRAFT_OUTREACH_MAX_LEADS) {
+    return { leadIds, notice: '' }
+  }
+  const kept = leadIds.slice(0, DRAFT_OUTREACH_MAX_LEADS)
+  const notice = options?.rankedByScore
+    ? `共 ${leadIds.length} 条待起草，本次先起草评分较高的前 ${DRAFT_OUTREACH_MAX_LEADS} 条`
+    : `共 ${leadIds.length} 条，本次先起草前 ${DRAFT_OUTREACH_MAX_LEADS} 条`
+  return { leadIds: kept, notice }
+}
+
 export class AgentRunController {
   private abort: AbortController | null = null
   private sessionId: string | null = null
@@ -1109,10 +1129,13 @@ export class AgentRunController {
     }
 
     const explicitIds = (options?.leadIds ?? []).map((id) => id.trim()).filter(Boolean)
-    const leadIds =
-      explicitIds.length > 0
-        ? explicitIds
-        : listLeadsNeedingDraft(productId)
+    const resolvedIds =
+      explicitIds.length > 0 ? explicitIds : listLeadsNeedingDraft(productId)
+    const capped = capDraftOutreachLeadIds(resolvedIds, {
+      rankedByScore: explicitIds.length === 0,
+    })
+    const leadIds = capped.leadIds
+    const capNotice = capped.notice
 
     if (leadIds.length === 0) {
       const message =
@@ -1134,10 +1157,6 @@ export class AgentRunController {
       return { ok: true, message }
     }
 
-    if (leadIds.length > 50) {
-      throw new Error(`一次最多起草 50 条线索，当前 ${leadIds.length} 条，请缩小范围`)
-    }
-
     const estimate = estimateOutreachDraftCounts(productId, leadIds)
     const idleTimeoutMs = Math.min(
       60 * 60_000,
@@ -1150,7 +1169,11 @@ export class AgentRunController {
     const startedAt = Date.now()
     const afterIso = new Date().toISOString()
     const timeline = new TimelineBuilder()
-    const modeLabel = explicitIds.length > 0 ? `指定 ${leadIds.length} 条` : `待起草 ${leadIds.length} 条`
+    const modeLabel = capNotice
+      ? capNotice
+      : explicitIds.length > 0
+        ? `指定 ${leadIds.length} 条`
+        : `待起草 ${leadIds.length} 条`
 
     const flushTimeline = () => {
       const items = timeline.emitIfChanged()

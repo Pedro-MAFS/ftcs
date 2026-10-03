@@ -224,14 +224,13 @@ export function useWorkflowExecute(options?: {
           return { ipcOk: false, message: '批量起草接口不可用' }
         }
         const pending = emailDraftsSnapshot.value?.pendingHighLeadIds.length ?? 0
-        resetAgentForDraftEmail(pending)
         const donePromise = waitForAgentDone(productId, { signal })
         try {
           const res = await window.ftcs.draftEmails({ productId })
           if (!res.ok) {
-            agentStatus.value = 'error'
             return { ipcOk: false, message: res.message }
           }
+          resetAgentForDraftEmail(res.acceptedCount ?? pending)
           const done = await donePromise
           return { ipcOk: done.ok, message: done.message }
         } catch (err) {

@@ -514,6 +514,8 @@ export interface DraftEmailsResult {
   ok: boolean
   message: string
   productId?: string
+  /** 本次实际起草的线索数；超过上限时已截断 */
+  acceptedCount?: number
 }
 
 export interface RejectEmailDraftInput {
