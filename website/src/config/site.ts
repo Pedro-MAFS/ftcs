@@ -41,6 +41,8 @@ export interface SiteConfig {
   phone?: string
   /** 页脚联系邮箱 */
   email?: string
+  /** 进度与问题：GitHub Issues */
+  issuesUrl: string
   /** 下载页顶部提示（可选） */
   downloadTip?: string
   /** Microsoft Clarity 项目 ID；留空则不加载统计脚本 */
@@ -72,6 +74,7 @@ export const siteConfig: SiteConfig = {
   ],
   phone: '+8617852032649',
   email: 'mfs1998@qq.com',
+  issuesUrl: 'https://github.com/Pedro-MAFS/ftcs/issues',
   downloadTip:
     '国内用户建议优先使用 Gitee 下载，速度通常明显更快；海外或 Gitee 不可用时可改用 GitHub。',
   // 在 https://clarity.microsoft.com/ 创建项目后，把项目 ID 填到这里即可启用
@@ -144,12 +147,6 @@ export const seoCopy = {
     title: '发布日志',
     description: `查看 FTCS 外贸获客系统各版本更新说明。发布日志自 0.5.0 起记录。`,
     path: '/changelog',
-  },
-  supportPlan: {
-    title: '支持计划 | FTCS 外贸获客系统',
-    description:
-      '查看 FTCS 已纳入计划的功能方向：优先级、开发中与规划中状态。欢迎通过桌面版意见反馈参与。',
-    path: '/plan',
   },
 } as const
 

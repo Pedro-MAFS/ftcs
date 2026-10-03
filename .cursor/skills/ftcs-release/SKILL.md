@@ -50,6 +50,8 @@ description: >-
 - 下载页说明
 - 帮助文档：`website/content/docs/install.md`、`getting-started.md`、`workflow.md`、`faq.md`，以及这些页面上仍写着旧行为的文案
 
+官网不再有支持计划页，进度看 GitHub Issues（https://github.com/Pedro-MAFS/ftcs/issues）。不要把该页列入必查对外页。
+
 changelog、`latest.json`、`site.ts` 的版本号和下载地址不算这一步，仍走后面的发布日志和下载 URL 步骤。
 
 有过时描述就改对应页；没有就在发版回报里明确写「官网内容无需调整」，并写出看过哪些页。
