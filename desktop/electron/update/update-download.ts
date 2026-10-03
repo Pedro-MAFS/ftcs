@@ -1,18 +1,16 @@
 import { spawn } from 'node:child_process'
-import { once } from 'node:events'
-import { createWriteStream } from 'node:fs'
-import fs from 'node:fs/promises'
 import path from 'node:path'
+import type { Readable } from 'node:stream'
 import { app, net } from 'electron'
 import { createUpdateDownloadEngine } from './update-download-engine'
 import type { UpdateDownloadEngine } from './update-download-engine'
 import type { UpdateDownloadRequest, UpdateDownloadState } from './update-download-types'
 import { installerCommand } from './update-setup-urls'
-
-type WebReader = {
-  read: () => Promise<{ done: boolean; value?: Uint8Array }>
-  cancel: () => Promise<void>
-}
+import {
+  downloadNodeHttpToFile,
+  saveDownloadBody,
+  type DownloadHeaders,
+} from './update-download-transfer'
 
 export type { UpdateDownloadRequest, UpdateDownloadState } from './update-download-types'
 
@@ -86,93 +84,102 @@ async function spawnInstaller(exePath: string): Promise<void> {
   })
 }
 
+const MAX_REDIRECTS = 5
+
+/**
+ * 安装包下载不用 net.fetch。Gitee 跳转后的 Content-Disposition 含中文文件名，
+ * net.fetch 会把它写进只接受 Latin-1 的 Headers，并在响应回调里抛未捕获异常。
+ * 这里用 net.request 只读状态码、Location 和正文，中文文件名不影响 Gitee 下载成功。
+ */
 export async function downloadUrlToFile(
   url: string,
   partPath: string,
   onProgress: (received: number, total: number | null) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const doFetch =
-    typeof net.fetch === 'function' ? net.fetch.bind(net) : globalThis.fetch.bind(globalThis)
-  const res = await doFetch(url, {
-    method: 'GET',
-    signal,
-    redirect: 'follow',
-    cache: 'no-store',
-  })
-  if (!res.ok) {
-    await cancelBody(res)
-    throw new Error(`HTTP ${res.status}`)
-  }
-  const lengthHeader = res.headers.get('content-length')
-  const parsed = lengthHeader ? Number.parseInt(lengthHeader, 10) : Number.NaN
-  const total = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-  const body = res.body
-  if (!body) throw new Error('空响应')
-  await fs.mkdir(path.dirname(partPath), { recursive: true })
-  try {
-    await writeResponseBody(body, partPath, onProgress, signal, total)
-  } catch (err) {
-    await fs.rm(partPath, { force: true }).catch(() => undefined)
-    throw err
-  }
-  let size = 0
-  try {
-    size = (await fs.stat(partPath)).size
-  } catch {
-    size = 0
-  }
-  if (size <= 0) {
-    await fs.rm(partPath, { force: true }).catch(() => undefined)
-    throw new Error('文件为空')
-  }
+  await downloadOnce(url, partPath, onProgress, signal, MAX_REDIRECTS)
 }
 
-async function writeResponseBody(
-  body: ReadableStream<Uint8Array>,
+async function downloadOnce(
+  url: string,
   partPath: string,
   onProgress: (received: number, total: number | null) => void,
   signal: AbortSignal,
-  total: number | null,
+  redirectsLeft: number,
 ): Promise<void> {
-  const reader = (body as unknown as { getReader: () => WebReader }).getReader()
-  const ws = createWriteStream(partPath)
-  let received = 0
-  const onAbort = () => {
-    ws.destroy()
-    void reader.cancel().catch(() => undefined)
-  }
-  signal.addEventListener('abort', onAbort, { once: true })
-  try {
-    while (true) {
-      if (signal.aborted) {
-        const err = new Error('The operation was aborted')
-        err.name = 'AbortError'
-        throw err
-      }
-      const { done, value } = await reader.read()
-      if (done) break
-      if (!value || value.byteLength === 0) continue
-      received += value.byteLength
-      const buf = Buffer.from(value)
-      if (!ws.write(buf)) await once(ws, 'drain')
-      onProgress(received, total)
+  if (typeof net.request === 'function') {
+    const response = await electronGet(url, signal)
+    const statusCode = response.statusCode ?? 0
+    if (statusCode >= 300 && statusCode < 400) {
+      const location = locationOf(response.headers.location)
+      response.resume()
+      if (!location) throw new Error(`HTTP ${statusCode}`)
+      if (redirectsLeft <= 0) throw new Error('下载重定向次数过多')
+      return downloadOnce(
+        new URL(location, url).toString(),
+        partPath,
+        onProgress,
+        signal,
+        redirectsLeft - 1,
+      )
     }
-    const finished = once(ws, 'finish')
-    ws.end()
-    await finished
-  } catch (err) {
-    ws.destroy()
-    throw err
-  } finally {
-    signal.removeEventListener('abort', onAbort)
+    await saveDownloadBody({
+      statusCode,
+      headers: response.headers,
+      body: response,
+      partPath,
+      onProgress,
+      signal,
+    })
+    return
   }
+  await downloadNodeHttpToFile(url, partPath, onProgress, signal, redirectsLeft)
 }
 
-async function cancelBody(res: Response): Promise<void> {
-  try {
-    await res.body?.cancel()
-  } catch {
-    // 失败响应的正文可以丢弃
-  }
+function locationOf(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0]
+  return value
+}
+
+type ElectronDownloadResponse = Readable & {
+  statusCode?: number
+  headers: DownloadHeaders & { location?: string | string[] }
+  resume: () => void
+}
+
+function electronGet(url: string, signal: AbortSignal): Promise<ElectronDownloadResponse> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(abortError())
+      return
+    }
+    const request = net.request({
+      method: 'GET',
+      url,
+      redirect: 'manual',
+    })
+    const onAbort = () => {
+      request.abort()
+      fail(abortError())
+    }
+    const fail = (err: Error) => {
+      signal.removeEventListener('abort', onAbort)
+      reject(err)
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    request.on('response', (response) => {
+      signal.removeEventListener('abort', onAbort)
+      resolve(response as unknown as ElectronDownloadResponse)
+    })
+    request.on('error', (err: Error) => {
+      fail(err instanceof Error ? err : new Error(String(err)))
+    })
+    request.end()
+  })
+}
+
+function abortError(): Error {
+  const err = new Error('The operation was aborted')
+  err.name = 'AbortError'
+  return err
 }
