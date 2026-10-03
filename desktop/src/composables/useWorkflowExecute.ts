@@ -145,42 +145,7 @@ export function useWorkflowExecute(options?: {
   function assertStepReady(nodeId: WorkflowNodeId): string | null {
     if (!activeProductId.value) return '请先在侧栏选择产品'
     if (generating.value) return '已有任务在运行'
-
-    switch (nodeId) {
-      case 'expand-keywords':
-        if (currentProfile.value?.status !== 'ready') {
-          return '画像未就绪，请补全必填字段后再执行'
-        }
-        return null
-      case 'discover-r1':
-        if (!explore.canStartR1.value) return explore.startR1DisabledReason.value || '无法开始 R1 探索'
-        return null
-      case 'discover-r2':
-        if (!explore.canStartR2.value) return explore.startR2DisabledReason.value || '无法开始 R2 探索'
-        return null
-      case 'discover-r3':
-        if (!explore.canStartR3.value) return explore.startR3DisabledReason.value || '无法开始 R3 探索'
-        return null
-      case 'score-and-dedupe': {
-        const raw = leadsSnapshot.value?.stats.raw ?? 0
-        if (raw <= 0) return '暂无未评分原始线索，请先完成探索'
-        return null
-      }
-      case 'draft-outreach-email': {
-        const pending = emailDraftsSnapshot.value?.pendingHighLeadIds.length ?? 0
-        if (pending <= 0) return '暂无待起草的已评分线索'
-        return null
-      }
-      case 'enrich-lead-contacts': {
-        const pending = countPendingEnrich(leadsSnapshot.value?.rows)
-        if (pending <= 0) {
-          return '暂无待补全线索（需已评分、有官网域名、且尚未有关键联系人）'
-        }
-        return null
-      }
-      default:
-        return `未知步骤：${nodeId}`
-    }
+    return null
   }
 
   async function launchStep(

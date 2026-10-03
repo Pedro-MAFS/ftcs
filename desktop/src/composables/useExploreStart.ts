@@ -1,4 +1,4 @@
-import { computed, ref, watch, type MaybeRefOrGetter, toValue } from 'vue'
+import { computed, onMounted, ref, watch, type MaybeRefOrGetter, toValue } from 'vue'
 import { useWorkspace } from './useWorkspace'
 import { ensureAgentReady } from './useAgentPreflight'
 import type { ExploreStartRound } from '../components/explore/ExploreStartControl.vue'
@@ -34,6 +34,7 @@ export function useExploreStart(options?: {
   const startingR1 = ref(false)
   const startingR2 = ref(false)
   const startingR3 = ref(false)
+  const placesKeySet = ref(false)
 
   const extraBusy = computed(() => Boolean(toValue(options?.extraBusy)))
 
@@ -96,7 +97,8 @@ export function useExploreStart(options?: {
       hasKeywordsReady.value &&
       r3QueryCount.value > 0 &&
       !generating.value &&
-      !isLaunching.value
+      !isLaunching.value &&
+      placesKeySet.value
     )
   })
 
@@ -118,6 +120,9 @@ export function useExploreStart(options?: {
   const startR3DisabledReason = computed(() => {
     if (generating.value || isLaunching.value) return '已有任务在运行'
     if (!hasKeywordsReady.value) return '请先完成关键词扩展'
+    if (!placesKeySet.value) {
+      return '请先在设置 → 探索中配置 Google Places API Key（仅 R3 需要）'
+    }
     if (r3QueryCount.value > 0) return ''
     return '当前没有 R3 地图发现词，请重新扩展关键词'
   })
@@ -149,6 +154,23 @@ export function useExploreStart(options?: {
       startingR3.value ||
       isDiscovering.value,
   )
+
+  async function checkPlacesKey(): Promise<void> {
+    try {
+      const settings = await window.ftcs?.getSettings?.()
+      placesKeySet.value = settings?.placesApiKeySet ?? false
+    } catch {
+      placesKeySet.value = false
+    }
+  }
+
+  onMounted(() => {
+    void checkPlacesKey()
+  })
+
+  watch(activeProductId, () => {
+    void checkPlacesKey()
+  })
 
   watch(exploreRound, (value) => {
     try {
