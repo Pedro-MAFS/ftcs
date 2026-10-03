@@ -42,7 +42,21 @@ description: >-
 
 改文本用 Cursor 写入或 UTF-8 工具（见仓库 `AGENTS.md`）。
 
-### 2. 升版本号（AI）
+### 2. 官网内容是否要改（AI）
+
+发版时必须对照本版用户可见改动，检查官网对外页面还准不准：
+
+- 首页产品介绍
+- 下载页说明
+- 帮助文档：`website/content/docs/install.md`、`getting-started.md`、`workflow.md`、`faq.md`，以及这些页面上仍写着旧行为的文案
+
+changelog、`latest.json`、`site.ts` 的版本号和下载地址不算这一步，仍走后面的发布日志和下载 URL 步骤。
+
+有过时描述就改对应页；没有就在发版回报里明确写「官网内容无需调整」，并写出看过哪些页。
+
+不为此新开路由，不改阿里云流水线。
+
+### 3. 升版本号（AI）
 
 同一号写进：
 
@@ -53,7 +67,7 @@ description: >-
 
 `minVersion` 仅在有兼容性下限变化时改。
 
-### 3. 发布日志与检查更新清单（AI）
+### 4. 发布日志与检查更新清单（AI）
 
 两处 `notes` 用同一组句子：
 
@@ -62,7 +76,7 @@ description: >-
 
 改了帮助或 changelog 时，更新 `website/public/sitemap.xml` 相关 `<lastmod>`。新官网路由才改 `website/vite.config.ts` 的 `includedRoutes`。
 
-### 4. 写好下载 URL（AI）
+### 5. 写好下载 URL（AI）
 
 在 `website/src/config/site.ts` 按下面约定填 tag 与文件名。人上传 Release 之后，用这四条 URL 抽查。
 
@@ -77,7 +91,7 @@ Gitee 中文文件名在 URL 中编码：`外贸获客` → `%E5%A4%96%E8%B4%B8%
 
 源码仓是 `foreign-trade-customer-search`；安装包发到上面的 **ftcs** 仓。
 
-### 5. 打安装包（AI，用户要求时执行）
+### 6. 打安装包（AI，用户要求时执行）
 
 ```powershell
 cd desktop
@@ -91,18 +105,18 @@ npm run dist
 
 打完告诉人这两个路径。`desktop/release/`、`desktop/out/`、`desktop/resources/workspace-template/` 留在本地。
 
-### 6. 提交源码（AI，用户要求时执行）
+### 7. 提交源码（AI，用户要求时执行）
 
 提交版本号、文档、changelog、`site.ts`、`latest.json`。提交说明写本版为什么发布。推送到源码仓 `origin`。
 
-### 7. 上传 Release（人）
+### 8. 上传 Release（人）
 
 1. Gitee `ftcs`：tag `V{version}`，上传**中文文件名**两个 exe（与 dist 产物同名）。
 2. GitHub `ftcs`：tag `{version}`，上传前把文件改名为 `foreign-trade-Setup-{version}.exe` 与 `foreign-trade-Portable-{version}.exe`。
 3. 打开 `site.ts` 里四条下载链接，确认能下。
 
-### 8. 发布官网（人）
+### 9. 发布官网（人）
 
 源码推到 `origin` 之后，提醒人去 **阿里云流水线** 执行官网发布。AI 不在本地 `npm run build` 官网，也不拷 `website/dist/`。
 
-流水线跑完后，桌面端才能读到新的 `latest.json`。下载链接抽查可与第 7 步一起做。
+流水线跑完后，桌面端才能读到新的 `latest.json`。下载链接抽查可与第 8 步一起做。
