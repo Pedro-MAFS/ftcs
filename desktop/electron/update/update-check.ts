@@ -4,6 +4,8 @@ import {
   getUpdateManifestUrl,
 } from '../config/site-origins'
 import { readUserPrefs, writeUserPrefs } from '../config/user-prefs'
+import { beginUpdateDownload } from './update-download'
+import { formatUpdateCheckMessage } from './update-check-message'
 import { isNewerVersion } from './semver'
 
 const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000
@@ -16,6 +18,12 @@ export interface UpdateManifest {
   title?: string
   notes?: string[]
   downloadPage?: string
+  /** 有则替换 Gitee 默认安装包地址 */
+  setupUrl?: string
+  /** 有则替换 GitHub 默认安装包地址 */
+  setupUrlFallback?: string
+  /** 有则下载完成后做 SHA-256；没有则不校验 */
+  setupSha256?: string
 }
 
 export interface UpdateCheckResult {
@@ -24,9 +32,9 @@ export interface UpdateCheckResult {
   currentVersion: string
   latestVersion: string | null
   hasUpdate: boolean
-  /** 是否应展示提醒（已忽略或稍后则 false；手动检查可 forceNotify） */
+  /** 有更新则为 true。忽略此版本 / 7 天稍后不再把这里压成 false。 */
   shouldNotify: boolean
-  /** 当前版本低于 minVersion：强提示 */
+  /** 当前版本低于 minVersion：只作标记，不因此静默安装，也不藏起「稍后」 */
   mandatory: boolean
   title: string
   notes: string[]
@@ -39,7 +47,10 @@ export interface UpdateCheckResult {
 interface UpdatePrefs {
   dismissedVersion?: string
   snoozeUntil?: string
+  lastCheckedAt?: string
 }
+
+let inflight: Promise<UpdateCheckResult> | null = null
 
 function readUpdatePrefs(): UpdatePrefs {
   return readUserPrefs().update ?? {}
@@ -57,6 +68,12 @@ function getCurrentVersion(): string {
   } catch {
     return '0.0.0'
   }
+}
+
+function optionalTrimmed(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed || undefined
 }
 
 async function fetchManifest(url: string): Promise<UpdateManifest> {
@@ -92,62 +109,47 @@ async function fetchManifest(url: string): Promise<UpdateManifest> {
   }
 }
 
-function shouldShowNotify(
-  latestVersion: string,
-  prefs: UpdatePrefs,
-  forceNotify: boolean,
-): boolean {
-  if (forceNotify) return true
-  if (prefs.dismissedVersion && prefs.dismissedVersion === latestVersion) {
-    return false
-  }
-  if (prefs.snoozeUntil) {
-    const until = Date.parse(prefs.snoozeUntil)
-    if (Number.isFinite(until) && Date.now() < until) return false
-  }
-  return true
-}
-
-/**
- * 拉取官网版本清单并与本地版本比较。
- * @param forceNotify 手动「检查更新」时为 true，忽略稍后/忽略此版本
- */
-export async function checkForAppUpdate(options?: {
-  forceNotify?: boolean
-}): Promise<UpdateCheckResult> {
+async function performCheck(): Promise<UpdateCheckResult> {
   const currentVersion = getCurrentVersion()
-  const checkedAt = new Date().toISOString()
-  const forceNotify = Boolean(options?.forceNotify)
-  const prefs = readUpdatePrefs()
-
+  const manifestUrl = getUpdateManifestUrl()
   try {
-    const manifestUrl = getUpdateManifestUrl()
     const defaultDownloadPage = getDownloadPageUrl()
     const manifest = await fetchManifest(manifestUrl)
     const latestVersion = manifest.version.trim()
     const hasUpdate = isNewerVersion(latestVersion, currentVersion)
     const minVersion = manifest.minVersion?.trim()
-    // current < minVersion → 必须升级
     const mandatory = Boolean(minVersion) && isNewerVersion(minVersion!, currentVersion)
-
     const notes = Array.isArray(manifest.notes)
       ? manifest.notes.map((n) => String(n)).filter(Boolean)
       : []
     const downloadPage =
       (manifest.downloadPage && String(manifest.downloadPage).trim()) ||
       defaultDownloadPage
+    const checkedAt = new Date().toISOString()
+    writeUpdatePrefs({ lastCheckedAt: checkedAt })
+
+    if (hasUpdate && process.platform === 'win32') {
+      beginUpdateDownload({
+        version: latestVersion,
+        setupUrl: optionalTrimmed(manifest.setupUrl),
+        setupUrlFallback: optionalTrimmed(manifest.setupUrlFallback),
+        setupSha256: optionalTrimmed(manifest.setupSha256),
+        downloadPage,
+      })
+    }
 
     return {
       ok: true,
-      message: hasUpdate
-        ? `发现新版本 ${latestVersion}`
-        : `已是最新版本（${currentVersion}）`,
+      message: formatUpdateCheckMessage({
+        ok: true,
+        hasUpdate,
+        currentVersion,
+        latestVersion,
+      }),
       currentVersion,
       latestVersion,
       hasUpdate,
-      shouldNotify:
-        hasUpdate &&
-        (mandatory || shouldShowNotify(latestVersion, prefs, forceNotify)),
+      shouldNotify: hasUpdate,
       mandatory: mandatory && hasUpdate,
       title: manifest.title?.trim() || `FTCS Desktop ${latestVersion}`,
       notes,
@@ -157,10 +159,16 @@ export async function checkForAppUpdate(options?: {
       manifestUrl,
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const errorMessage = err instanceof Error ? err.message : String(err)
     return {
       ok: false,
-      message: `检查更新失败：${message}`,
+      message: formatUpdateCheckMessage({
+        ok: false,
+        hasUpdate: false,
+        currentVersion,
+        latestVersion: null,
+        errorMessage,
+      }),
       currentVersion,
       latestVersion: null,
       hasUpdate: false,
@@ -170,10 +178,26 @@ export async function checkForAppUpdate(options?: {
       notes: [],
       downloadPage: getDownloadPageUrl(),
       releasedAt: null,
-      checkedAt,
-      manifestUrl: getUpdateManifestUrl(),
+      checkedAt: new Date().toISOString(),
+      manifestUrl,
     }
   }
+}
+
+/**
+ * 拉取官网版本清单并与本地版本比较。
+ * 同一时刻只飞一次；后来的调用（含手动检查）等待这一次的结果。
+ * `forceNotify` 仍保留在入参里，兼容现有 IPC。忽略此版本和 7 天稍后不再改变结果，也不挡住下载。
+ */
+export function checkForAppUpdate(options?: {
+  forceNotify?: boolean
+}): Promise<UpdateCheckResult> {
+  void options
+  if (inflight) return inflight
+  inflight = performCheck().finally(() => {
+    inflight = null
+  })
+  return inflight
 }
 
 export function snoozeAppUpdate(): UpdatePrefs {

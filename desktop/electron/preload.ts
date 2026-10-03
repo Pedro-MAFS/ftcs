@@ -69,6 +69,7 @@ import type {
   OfficeCliInstallResult,
   OfficeCliReadyResult,
   UpdateCheckResult,
+  UpdateDownloadState,
   WorkflowDeletePlanResult,
   WorkflowListPlansResult,
   WorkflowPlanSaveInput,
@@ -202,6 +203,29 @@ const api = {
   snoozeUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.UPDATE_SNOOZE),
   dismissUpdate: (version: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.UPDATE_DISMISS, version),
+  getUpdateState: (): Promise<UpdateDownloadState> => ipcRenderer.invoke(IPC.UPDATE_STATE),
+  onUpdateProgress: (handler: (state: UpdateDownloadState) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: UpdateDownloadState) => {
+      handler(state)
+    }
+    ipcRenderer.on(IPC.UPDATE_PROGRESS, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.UPDATE_PROGRESS, listener)
+    }
+  },
+  onUpdateChecked: (handler: (result: UpdateCheckResult) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, result: UpdateCheckResult) => {
+      handler(result)
+    }
+    ipcRenderer.on(IPC.UPDATE_CHECKED, listener)
+    return () => {
+      ipcRenderer.removeListener(IPC.UPDATE_CHECKED, listener)
+    }
+  },
+  retryUpdateDownload: (): Promise<UpdateDownloadState> => ipcRenderer.invoke(IPC.UPDATE_RETRY),
+  installUpdate: (): Promise<{ ok: boolean; message: string }> =>
+    ipcRenderer.invoke(IPC.UPDATE_INSTALL),
+  deferUpdate: (): Promise<UpdateDownloadState> => ipcRenderer.invoke(IPC.UPDATE_DEFER),
   setWorkflowNotifySuppressed: (suppressed: boolean): Promise<void> =>
     ipcRenderer.invoke(IPC.NOTIFY_SET_WORKFLOW_SUPPRESSED, suppressed),
   showTaskDoneNotification: (input: {
