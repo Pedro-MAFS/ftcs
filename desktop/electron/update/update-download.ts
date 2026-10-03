@@ -89,7 +89,9 @@ const MAX_REDIRECTS = 5
 /**
  * 安装包下载不用 net.fetch。Gitee 跳转后的 Content-Disposition 含中文文件名，
  * net.fetch 会把它写进只接受 Latin-1 的 Headers，并在响应回调里抛未捕获异常。
- * 这里用 net.request 只读状态码、Location 和正文，中文文件名不影响 Gitee 下载成功。
+ * 这里用 net.request 读取状态码和正文，中文文件名留在原始响应头里。
+ * redirect 必须是 follow。Gitee Release 地址会 302 到附件，再 302 到带临时 token 的存储地址。
+ * manual 模式下若没有在 redirect 事件里同步调用 followRedirect()，Electron 会取消请求并抛出 Redirect was cancelled。
  */
 export async function downloadUrlToFile(
   url: string,
@@ -156,7 +158,7 @@ function electronGet(url: string, signal: AbortSignal): Promise<ElectronDownload
     const request = net.request({
       method: 'GET',
       url,
-      redirect: 'manual',
+      redirect: 'follow',
     })
     const onAbort = () => {
       request.abort()
