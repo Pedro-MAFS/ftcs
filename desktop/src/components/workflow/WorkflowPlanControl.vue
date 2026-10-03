@@ -2,10 +2,6 @@
 import { computed, onMounted, watch } from 'vue'
 import Icon from '../shared/Icon.vue'
 import { useWorkflowPlanSelection } from '../../composables/useWorkflowPlanSelection'
-import { useWorkspace } from '../../composables/useWorkspace'
-import { useExploreStart } from '../../composables/useExploreStart'
-import { parseCompanyDomain } from '../../utils/parse-company-domain'
-import type { WorkflowNodeId } from '../../types/electron'
 
 const props = withDefaults(
   defineProps<{
@@ -41,72 +37,6 @@ const {
   onSelectedPlanIdChange: (planId) => emit('update:selectedPlanId', planId),
 })
 
-const {
-  activeProductId,
-  currentProfile,
-  leadsSnapshot,
-  emailDraftsSnapshot,
-  generating,
-} = useWorkspace()
-
-const explore = useExploreStart()
-
-function assertStepReadyInline(nodeId: WorkflowNodeId): string | null {
-  if (!activeProductId.value) return '请先在侧栏选择产品'
-  if (generating.value) return '已有任务在运行'
-
-  switch (nodeId) {
-    case 'expand-keywords':
-      if (currentProfile.value?.status !== 'ready') {
-        return '画像未就绪，请补全必填字段后再执行'
-      }
-      return null
-    case 'discover-r1':
-      if (!explore.canStartR1.value) return explore.startR1DisabledReason.value || '无法开始 R1 探索'
-      return null
-    case 'discover-r2':
-      if (!explore.canStartR2.value) return explore.startR2DisabledReason.value || '无法开始 R2 探索'
-      return null
-    case 'discover-r3':
-      if (!explore.canStartR3.value) return explore.startR3DisabledReason.value || '无法开始 R3 探索'
-      return null
-    case 'score-and-dedupe': {
-      const raw = leadsSnapshot.value?.stats.raw ?? 0
-      if (raw <= 0) return '暂无未评分原始线索，请先完成探索'
-      return null
-    }
-    case 'draft-outreach-email': {
-      const pending = emailDraftsSnapshot.value?.pendingHighLeadIds.length ?? 0
-      if (pending <= 0) return '暂无待起草的已评分线索'
-      return null
-    }
-    case 'enrich-lead-contacts': {
-      const pending = (leadsSnapshot.value?.rows ?? []).filter(
-        (row) =>
-          row.phase === 'scored' &&
-          Boolean(parseCompanyDomain(row.company?.website || row.domain)) &&
-          (!row.people || row.people.length === 0),
-      ).length
-      if (pending <= 0) {
-        return '暂无待补全线索（需已评分、有官网域名、且尚未有关键联系人）'
-      }
-      return null
-    }
-    default:
-      return null
-  }
-}
-
-const preExecuteReason = computed(() => {
-  const plan = selectedPlan.value
-  if (!plan) return ''
-  for (const step of plan.steps) {
-    const reason = assertStepReadyInline(step.nodeId)
-    if (reason) return reason
-  }
-  return ''
-})
-
 const selectDisabled = computed(() => loading.value || props.executing)
 
 const runDisabled = computed(
@@ -116,8 +46,7 @@ const runDisabled = computed(
     props.disabled ||
     plans.value.length === 0 ||
     Boolean(loadError.value) ||
-    !selectedPlanId.value ||
-    Boolean(preExecuteReason.value),
+    !selectedPlanId.value,
 )
 
 const runLabel = computed(() => (props.executing ? '执行中…' : '执行'))
@@ -125,7 +54,6 @@ const runLabel = computed(() => (props.executing ? '执行中…' : '执行'))
 const runTitle = computed(() => {
   if (loadError.value) return loadError.value
   if (props.executing) return '方案执行中'
-  if (preExecuteReason.value) return preExecuteReason.value
   if (props.disabled && props.disabledReason) return props.disabledReason
   if (selectedPlan.value) return `执行方案「${selectedPlan.value.name}」`
   return '执行'

@@ -161,23 +161,10 @@ export function useWorkflowExecute(options?: {
       case 'discover-r3':
         if (!explore.canStartR3.value) return explore.startR3DisabledReason.value || '无法开始 R3 探索'
         return null
-      case 'score-and-dedupe': {
-        const raw = leadsSnapshot.value?.stats.raw ?? 0
-        if (raw <= 0) return '暂无未评分原始线索，请先完成探索'
+      case 'score-and-dedupe':
+      case 'draft-outreach-email':
+      case 'enrich-lead-contacts':
         return null
-      }
-      case 'draft-outreach-email': {
-        const pending = emailDraftsSnapshot.value?.pendingHighLeadIds.length ?? 0
-        if (pending <= 0) return '暂无待起草的已评分线索'
-        return null
-      }
-      case 'enrich-lead-contacts': {
-        const pending = countPendingEnrich(leadsSnapshot.value?.rows)
-        if (pending <= 0) {
-          return '暂无待补全线索（需已评分、有官网域名、且尚未有关键联系人）'
-        }
-        return null
-      }
       default:
         return `未知步骤：${nodeId}`
     }
