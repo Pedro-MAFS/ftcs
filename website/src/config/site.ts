@@ -41,6 +41,8 @@ export interface SiteConfig {
   phone?: string
   /** 页脚联系邮箱 */
   email?: string
+  /** 进度与问题：GitHub Issues */
+  issuesUrl: string
   /** 下载页顶部提示（可选） */
   downloadTip?: string
   /** Microsoft Clarity 项目 ID；留空则不加载统计脚本 */
@@ -58,7 +60,7 @@ export const siteConfig: SiteConfig = {
   productFullName: '外贸获客系统',
   agentName: '外贸获客智能体',
   tagline: '把产品信息变成可行动的外贸线索与开发信草稿',
-  version: '0.5.6',
+  version: '0.5.7',
   siteUrl: 'https://ftcs.ai-utills.com',
   brandSiteUrl: 'https://ai-utills.com',
   brandSiteName: 'AI-Utills',
@@ -72,6 +74,7 @@ export const siteConfig: SiteConfig = {
   ],
   phone: '+8617852032649',
   email: 'mfs1998@qq.com',
+  issuesUrl: 'https://github.com/Pedro-MAFS/ftcs/issues',
   downloadTip:
     '国内用户建议优先使用 Gitee 下载，速度通常明显更快；海外或 Gitee 不可用时可改用 GitHub。',
   // 在 https://clarity.microsoft.com/ 创建项目后，把项目 ID 填到这里即可启用
@@ -80,7 +83,7 @@ export const siteConfig: SiteConfig = {
     {
       id: 'setup',
       label: 'Windows 安装包',
-      filename: '外贸获客-Setup-0.5.6.exe',
+      filename: '外贸获客-Setup-0.5.7.exe',
       note: 'NSIS 安装程序',
       mirrors: [
         {
@@ -88,19 +91,19 @@ export const siteConfig: SiteConfig = {
           label: 'Gitee 下载',
           badge: '国内更快',
           primary: true,
-          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.6/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Setup-0.5.6.exe',
+          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.7/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Setup-0.5.7.exe',
         },
         {
           id: 'github',
           label: 'GitHub 下载',
-          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.6/foreign-trade-Setup-0.5.6.exe',
+          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.7/foreign-trade-Setup-0.5.7.exe',
         },
       ],
     },
     {
       id: 'portable',
       label: 'Windows 便携版',
-      filename: '外贸获客-Portable-0.5.6.exe',
+      filename: '外贸获客-Portable-0.5.7.exe',
       note: '解压即用，无需安装',
       hidden: true,
       mirrors: [
@@ -109,12 +112,12 @@ export const siteConfig: SiteConfig = {
           label: 'Gitee 下载',
           badge: '国内更快',
           primary: true,
-          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.6/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Portable-0.5.6.exe',
+          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.5.7/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Portable-0.5.7.exe',
         },
         {
           id: 'github',
           label: 'GitHub 下载',
-          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.6/foreign-trade-Portable-0.5.6.exe',
+          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.5.7/foreign-trade-Portable-0.5.7.exe',
         },
       ],
     },
@@ -144,12 +147,6 @@ export const seoCopy = {
     title: '发布日志',
     description: `查看 FTCS 外贸获客系统各版本更新说明。发布日志自 0.5.0 起记录。`,
     path: '/changelog',
-  },
-  supportPlan: {
-    title: '支持计划 | FTCS 外贸获客系统',
-    description:
-      '查看 FTCS 已纳入计划的功能方向：优先级、开发中与规划中状态。欢迎通过桌面版意见反馈参与。',
-    path: '/plan',
   },
 } as const
 

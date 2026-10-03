@@ -24,7 +24,14 @@ import { siteConfig } from '../config/site'
         <RouterLink :to="{ path: '/', hash: '#pipeline' }">功能</RouterLink>
         <RouterLink :to="{ path: '/', hash: '#fit' }">场景</RouterLink>
         <RouterLink class="nav--page" to="/docs">帮助</RouterLink>
-        <RouterLink class="nav--page" to="/plan">支持计划</RouterLink>
+        <a
+          class="nav--page"
+          :href="siteConfig.issuesUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          进度
+        </a>
         <a
           :href="siteConfig.brandSiteUrl"
           target="_blank"

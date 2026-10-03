@@ -1,7 +1,7 @@
 # 25 - 需求:桌面端右侧 Agent · think / 正文增量流式输出
 
 > **文档类型**:本期需求 + 用户故事(**US-ST**,STream)  
-> **状态**:**v0.5.7 进行中（US-ST-01/02 详设已确认待开发）**  
+> **状态**:**v0.5.7 已交付（2026-10-04）**  
 > **基线**:桌面端 **v0.5.6+**(OpenCode 事件时间线、右侧 Agent 面板已落地)  
 > **对齐**:GitHub Issue [#17](https://github.com/Pedro-MAFS/ftcs/issues/17);计划项建议 ID `agent-stream-think-reply`  
 > **关联**:[08-产品架构决策-Electron-OpenCode.md](08-产品架构决策-Electron-OpenCode.md)
