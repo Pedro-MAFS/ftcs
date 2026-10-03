@@ -605,6 +605,11 @@ onUnmounted(() => {
               type="button"
               class="btn-primary btn-secondary--sm"
               :disabled="generating || isScoring"
+              :title="
+                generating || isScoring
+                  ? '已有任务在运行'
+                  : `对 ${task.leadsFound} 条原始线索执行 score-and-dedupe`
+              "
               @click="startScoreAndDedupe(task)"
             >
               <Icon name="sparkles" :size="11" />

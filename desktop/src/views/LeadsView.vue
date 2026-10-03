@@ -596,6 +596,9 @@ function onDraftLead(lead: LeadRowDto): void {
 }
 
 function enrichTitle(lead: LeadRowDto): string {
+  if (isDrafting.value || isEnriching.value || generating.value) {
+    return '已有任务在运行'
+  }
   if (lead.phase !== 'scored') return '仅已评分线索可补全联系人'
   if (!parseCompanyDomain(lead.company.website || lead.domain)) {
     return '请先填写有效官网域名'
@@ -857,11 +860,13 @@ onUnmounted(() => {
           class="btn-secondary"
           :disabled="!canBatchEnrich"
           :title="
-            !hunterKeySet
-              ? '请先在设置 → 集成配置 Hunter API Key'
-              : pendingEnrichIds.length > 0
-                ? `为 ${pendingEnrichIds.length} 条尚无 people 的已评分线索批量补全`
-                : '暂无待补全线索（需已评分、有官网域名、且尚未有关键联系人）'
+            (generating || isScoring || isDrafting || isEnriching || isWorkflowRunning)
+              ? '已有任务在运行'
+              : !hunterKeySet
+                ? '请先在设置 → 集成配置 Hunter API Key'
+                : pendingEnrichIds.length > 0
+                  ? `为 ${pendingEnrichIds.length} 条尚无 people 的已评分线索批量补全`
+                  : '暂无待补全线索（需已评分、有官网域名、且尚未有关键联系人）'
           "
           @click="onBatchEnrichClick"
         >
@@ -876,9 +881,11 @@ onUnmounted(() => {
           class="btn-secondary"
           :disabled="!canBatchDraft"
           :title="
-            pendingHighIds.length > 0
-              ? `为 ${pendingHighIds.length} 条线索批量起草（每条 1+N 封，Agent 撰写）`
-              : '暂无待起草的已评分线索'
+            (generating || isDrafting || isScoring || isEnriching || isWorkflowRunning)
+              ? '已有任务在运行'
+              : pendingHighIds.length > 0
+                ? `为 ${pendingHighIds.length} 条线索批量起草（每条 1+N 封，Agent 撰写）`
+                : '暂无待起草的已评分线索'
           "
           @click="onBatchDraftClick"
         >
@@ -889,9 +896,11 @@ onUnmounted(() => {
           class="btn-primary"
           :disabled="!canScore"
           :title="
-            stats.raw > 0
-              ? '对原始线索执行 score-and-dedupe'
-              : '需要先有未评分的原始线索'
+            (generating || isScoring || isDrafting || isEnriching || isWorkflowRunning)
+              ? '已有任务在运行'
+              : stats.raw > 0
+                ? '对原始线索执行 score-and-dedupe'
+                : '需要先有未评分的原始线索'
           "
           @click="onScoreClick"
         >
@@ -1142,7 +1151,13 @@ onUnmounted(() => {
                 type="button"
                 class="leads-table__action"
                 :disabled="isDrafting || generating || isEnriching"
-                :title="hasDrafted(row) ? '重新生成开发信草稿' : '生成开发信草稿'"
+                :title="
+                  (isDrafting || generating || isEnriching)
+                    ? '已有任务在运行'
+                    : hasDrafted(row)
+                      ? '重新生成开发信草稿'
+                      : '生成开发信草稿'
+                "
                 @click.stop="onDraftLead(row)"
               >
                 {{ hasDrafted(row) ? '重写邮件' : '写邮件' }}
