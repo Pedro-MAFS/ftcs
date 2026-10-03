@@ -81,6 +81,22 @@ message.part.updated（text | reasoning）
 
 **`field`**：实现时对照 SDK；仅当 `field` 指向文本正文（现网 text/reasoning 的 `text`）时追加；未知 `field` 忽略并打 debug 日志，不猜。
 
+### 3.1 空起始事件与增量重放（2026-10-03 手测修正）
+
+OpenCode 1.18.4 实测事件顺序：reasoning-start / text-start 发出**空 `part.text`** 的 `message.part.updated`；输出期间仅 `message.part.delta`（`field` 为 `"text"`）；reasoning-end / text-end 发出带全文的 `updated`。**增量可先于该 part 的首次 `updated` 到达**。
+
+**强制规则**：
+
+1. **空起始 `updated` 记录类型但不建卡**：`part.text === ''` 时仍将 `part.type`（text / reasoning）写入 `partID → kind` 缓存，但**不得**创建卡片、**不得**覆盖已有 body。用户回声过滤（user 角色 text）仅对**非空** text 生效。
+
+2. **角色与类型确认后重放缓冲**：一旦已知某 `partID` 的类型（text / reasoning）且 `messageID` 的角色为 `assistant`，立即将该 part 的缓冲增量**按序回放追加**到对应卡片（`assistant-${partID}` / `reasoning-${partID}`），**然后**清空该 part 的缓冲。**删除缓冲而不回放是错误行为**。`message.updated` 确认角色后的回放必须真正 append。缓冲必须可通过 `messageID` + `partID` 查找。
+
+3. **非空终态 `updated` 仍覆盖全文并清缓冲**：后续带完整 `part.text` 的 `updated` 继续以全文覆盖同 id 卡片，并清除该 part 的缓冲，避免重复追加。
+
+4. **工具 part 仅全量快照**：tool 类型 part 仍只处理 `message.part.updated`；忽略针对 tool 的 delta（若有）。
+
+5. **流式期间 reasoning 展开**：流式进行中（body 正在增长）的 reasoning 卡强制 `collapsed: false`；收到非空终态 `updated` 后，恢复现有按长度折叠逻辑（超长可折叠）。
+
 ---
 
 ## 4. 事件桥改动要点
@@ -164,4 +180,5 @@ case 'message.part.delta': {
 
 | 日期 | 说明 |
 |------|------|
+| 2026-10-03 | 补充 §3.1：空起始 updated 不建卡但记类型；角色/类型确认后按序重放缓冲；非空 updated 覆盖并清缓冲；工具仅快照；流式中 reasoning 不折叠 |
 | 2026-10-01 | 已确认待开发：接通 message.part.delta；ST6 与 updated 整合；O1=新接通 |

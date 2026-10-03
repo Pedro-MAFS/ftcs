@@ -45,7 +45,7 @@
 |----|------|
 | **Q1 数据源** | 仅 ST-01 发出的 `timeline` 快照；渲染进程不订 SSE |
 | **Q2 节流** | 主进程对 **delta 触发的 flush** 做 ≤ **50ms** 合并（`scheduleFlush`）；`updated` / error / removed / 任务结束 **立即 flush** |
-| **Q3 流式中 reasoning** | 该卡 `body` 正在增长时强制视为展开（或忽略 collapsed 预览），避免只看到 160 字 preview 像卡住；`updated` 终态后若 `length > COLLAPSE_BODY_CHARS` 可再按现网折叠 |
+| **Q3 流式中 reasoning** | 该卡 `body` 正在增长时强制视为展开（或忽略 collapsed 预览），避免只看到 160 字 preview 像卡住；`updated` 终态后若 `length > COLLAPSE_BODY_CHARS` 可再按现网折叠。**注**：2026-10-03 明确规则移至 **US-ST-01 §3.1.5** |
 | **Q4 贴底** | 保持现网 `pinToBottom`：用户未上滚时跟滚 |
 | **Q5 Markdown** | 继续纯文本 `<pre>`；O2 关闭 |
 | **Q6 进行中态** | 不强制新 UI 控件；验收以文本持续变化为准。若节流后仍「看起来死」：在会话 busy 且最近 1s 有 delta 时给对应卡加轻量 `status: 'streaming'`（可选，实现时可先不做） |
@@ -112,4 +112,5 @@ delta / updated（ST-01）
 
 | 日期 | 说明 |
 |------|------|
+| 2026-10-03 | Q3 流式中 reasoning 折叠规则明确移至 US-ST-01 §3.1.5 |
 | 2026-10-01 | 已确认待开发：消费 ST-01；50ms 节流；流式中展开 reasoning；纯文本 |
