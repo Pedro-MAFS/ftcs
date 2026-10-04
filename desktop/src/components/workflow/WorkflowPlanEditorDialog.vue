@@ -4,16 +4,18 @@ import { WORKFLOW_NODE_OPTIONS } from '../../constants/workflow-node-labels'
 import {
   addEditorStep,
   createDefaultEditorDraft,
+  editorModeProducesSaveInput,
   moveEditorStep,
   planToEditorDraft,
   removeEditorStep,
-  toSaveInput,
+  saveInputForEditorMode,
   validateWorkflowPlanDraft,
   WORKFLOW_PLAN_MAX_STEPS,
   type WorkflowPlanEditorMode,
   type WorkflowPlanEditorStepDraft,
 } from '../../composables/useWorkflowPlanEditor'
 import type { WorkflowNodeId, WorkflowPlan } from '../../types/electron'
+import Icon from '../shared/Icon.vue'
 
 const props = defineProps<{
   open: boolean
@@ -32,7 +34,17 @@ const steps = ref<WorkflowPlanEditorStepDraft[]>([])
 const error = ref('')
 const saving = ref(false)
 
-const title = computed(() => (props.mode === 'create' ? '新建方案' : '编辑方案'))
+const isView = computed(() => props.mode === 'view')
+const title = computed(() => {
+  if (props.mode === 'create') return '新建方案'
+  if (props.mode === 'view') return '查看方案'
+  return '编辑方案'
+})
+const hint = computed(() =>
+  isView.value
+    ? '步骤按该方案的顺序执行'
+    : `步骤将按顺序执行；最多 ${WORKFLOW_PLAN_MAX_STEPS} 步`,
+)
 const editingId = computed(() =>
   props.mode === 'edit' ? props.initialPlan?.id : undefined,
 )
@@ -41,7 +53,12 @@ const canAddStep = computed(() => steps.value.length < WORKFLOW_PLAN_MAX_STEPS)
 function resetForm(): void {
   error.value = ''
   saving.value = false
-  if (props.mode === 'edit' && props.initialPlan) {
+  if (props.mode === 'edit' || props.mode === 'view') {
+    if (!props.initialPlan) {
+      name.value = ''
+      steps.value = []
+      return
+    }
     const draft = planToEditorDraft(props.initialPlan)
     name.value = draft.name
     steps.value = draft.steps
@@ -53,18 +70,22 @@ function resetForm(): void {
 }
 
 function onAddStep(): void {
+  if (isView.value) return
   steps.value = addEditorStep(steps.value)
 }
 
 function onRemoveStep(index: number): void {
+  if (isView.value) return
   steps.value = removeEditorStep(steps.value, index)
 }
 
 function onMoveStep(index: number, direction: 'up' | 'down'): void {
+  if (isView.value) return
   steps.value = moveEditorStep(steps.value, index, direction)
 }
 
 function onNodeChange(index: number, event: Event): void {
+  if (isView.value) return
   const value = (event.target as HTMLSelectElement).value as WorkflowNodeId
   steps.value = steps.value.map((step, i) =>
     i === index ? { ...step, nodeId: value } : step,
@@ -72,11 +93,12 @@ function onNodeChange(index: number, event: Event): void {
 }
 
 function requestClose(): void {
-  if (saving.value) return
+  if (saving.value && !isView.value) return
   emit('close')
 }
 
 async function onSave(): Promise<void> {
+  if (!editorModeProducesSaveInput(props.mode)) return
   if (saving.value || !window.ftcs?.saveWorkflowPlan) return
 
   const validationError = validateWorkflowPlanDraft({
@@ -90,16 +112,17 @@ async function onSave(): Promise<void> {
     return
   }
 
+  const input = saveInputForEditorMode(props.mode, {
+    name: name.value,
+    steps: steps.value,
+    editingId: editingId.value,
+  })
+  if (!input) return
+
   saving.value = true
   error.value = ''
   try {
-    const res = await window.ftcs.saveWorkflowPlan(
-      toSaveInput({
-        name: name.value,
-        steps: steps.value,
-        editingId: editingId.value,
-      }),
-    )
+    const res = await window.ftcs.saveWorkflowPlan(input)
     if (!res.ok || !res.plan) {
       error.value = res.message ?? '保存失败'
       return
@@ -113,7 +136,8 @@ async function onSave(): Promise<void> {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  if (!props.open || saving.value) return
+  if (!props.open) return
+  if (saving.value && !isView.value) return
   if (event.key === 'Escape') {
     event.preventDefault()
     requestClose()
@@ -150,6 +174,7 @@ onUnmounted(() => {
     <div
       v-if="open"
       class="workflow-plan-editor"
+      :class="{ 'workflow-plan-editor--view': isView }"
       role="dialog"
       aria-modal="true"
       :aria-label="title"
@@ -158,15 +183,24 @@ onUnmounted(() => {
         type="button"
         class="workflow-plan-editor__backdrop"
         aria-label="关闭"
-        :disabled="saving"
+        :disabled="saving && !isView"
         @click="requestClose"
       />
       <div class="workflow-plan-editor__panel">
         <header class="workflow-plan-editor__head">
           <div>
             <h2>{{ title }}</h2>
-            <p>步骤将按顺序执行；最多 {{ WORKFLOW_PLAN_MAX_STEPS }} 步</p>
+            <p>{{ hint }}</p>
           </div>
+          <button
+            v-if="isView"
+            type="button"
+            class="workflow-plan-editor__close"
+            aria-label="关闭"
+            @click="requestClose"
+          >
+            <Icon name="x" :size="14" />
+          </button>
         </header>
 
         <label class="workflow-plan-editor__field">
@@ -177,7 +211,8 @@ onUnmounted(() => {
             type="text"
             maxlength="40"
             placeholder="例如：仅 R1 探索"
-            :disabled="saving"
+            :readonly="isView"
+            :disabled="!isView && saving"
           />
         </label>
 
@@ -189,14 +224,14 @@ onUnmounted(() => {
               <select
                 class="text-input workflow-plan-editor__node"
                 :value="step.nodeId"
-                :disabled="saving"
+                :disabled="isView || saving"
                 @change="onNodeChange(index, $event)"
               >
                 <option v-for="opt in WORKFLOW_NODE_OPTIONS" :key="opt.id" :value="opt.id">
                   {{ opt.label }}
                 </option>
               </select>
-              <div class="workflow-plan-editor__row-actions">
+              <div v-if="!isView" class="workflow-plan-editor__row-actions">
                 <button
                   type="button"
                   class="btn-secondary btn-secondary--sm"
@@ -228,6 +263,7 @@ onUnmounted(() => {
             </li>
           </ul>
           <button
+            v-if="!isView"
             type="button"
             class="btn-secondary workflow-plan-editor__add"
             :disabled="saving || !canAddStep"
@@ -240,12 +276,17 @@ onUnmounted(() => {
         <p v-if="error" class="workflow-plan-editor__error">{{ error }}</p>
 
         <footer class="workflow-plan-editor__foot">
-          <button type="button" class="btn-secondary" :disabled="saving" @click="requestClose">
-            取消
+          <button v-if="isView" type="button" class="btn-secondary" @click="requestClose">
+            关闭
           </button>
-          <button type="button" class="btn-primary" :disabled="saving" @click="onSave">
-            {{ saving ? '保存中…' : '保存' }}
-          </button>
+          <template v-else>
+            <button type="button" class="btn-secondary" :disabled="saving" @click="requestClose">
+              取消
+            </button>
+            <button type="button" class="btn-primary" :disabled="saving" @click="onSave">
+              {{ saving ? '保存中…' : '保存' }}
+            </button>
+          </template>
         </footer>
       </div>
     </div>
