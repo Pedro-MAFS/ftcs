@@ -6,6 +6,10 @@ import { useWorkspace } from '../composables/useWorkspace'
 import { useWorkflowExecute } from '../composables/useWorkflowExecute'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import { showToast } from '../composables/useToast'
+import {
+  canViewBuiltinWorkflowPlan,
+  type WorkflowPlanEditorMode,
+} from '../composables/useWorkflowPlanEditor'
 import Icon from '../components/shared/Icon.vue'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import WorkflowPlanControl from '../components/workflow/WorkflowPlanControl.vue'
@@ -438,7 +442,7 @@ async function onWorkflowExecute(planId: string): Promise<void> {
 
 const workflowPlanRef = ref<InstanceType<typeof WorkflowPlanControl> | null>(null)
 const editorOpen = ref(false)
-const editorMode = ref<'create' | 'edit'>('create')
+const editorMode = ref<WorkflowPlanEditorMode>('create')
 const deleteConfirmOpen = ref(false)
 const deleteBusy = ref(false)
 
@@ -449,6 +453,10 @@ const canManageSelectedPlan = computed(() => {
   const plan = selectedWorkflowPlan.value
   return !!plan && !plan.builtin
 })
+
+const canViewSelectedPlan = computed(() =>
+  canViewBuiltinWorkflowPlan(selectedWorkflowPlan.value?.id),
+)
 
 const workflowMenuDisabled = computed(
   () => isWorkflowRunning.value || generating.value,
@@ -474,6 +482,12 @@ function openCreateEditor(): void {
 function openEditEditor(): void {
   if (!canManageSelectedPlan.value) return
   editorMode.value = 'edit'
+  editorOpen.value = true
+}
+
+function openViewEditor(): void {
+  if (!canViewSelectedPlan.value || !selectedWorkflowPlan.value) return
+  editorMode.value = 'view'
   editorOpen.value = true
 }
 
@@ -918,7 +932,9 @@ onUnmounted(() => {
               :disabled-reason="workflowMenuDisabledReason"
               :can-edit="canManageSelectedPlan"
               :can-delete="canManageSelectedPlan"
+              :can-view="canViewSelectedPlan"
               @create="openCreateEditor"
+              @view="openViewEditor"
               @edit="openEditEditor"
               @delete="deleteConfirmOpen = true"
             />
@@ -934,7 +950,9 @@ onUnmounted(() => {
     <WorkflowPlanEditorDialog
       :open="editorOpen"
       :mode="editorMode"
-      :initial-plan="editorMode === 'edit' ? selectedWorkflowPlan : undefined"
+      :initial-plan="
+        editorMode === 'edit' || editorMode === 'view' ? selectedWorkflowPlan : undefined
+      "
       :existing-plans="workflowPlans"
       @close="editorOpen = false"
       @saved="onPlanSaved"

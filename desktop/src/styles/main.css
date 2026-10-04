@@ -4835,6 +4835,33 @@ textarea.text-input {
   box-shadow: 0 16px 48px rgb(0 0 0 / 45%);
 }
 
+.workflow-plan-editor--view .workflow-plan-editor__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-plan-editor__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.workflow-plan-editor__close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
 .workflow-plan-editor__head h2 {
   margin: 0;
   font-size: 16px;
