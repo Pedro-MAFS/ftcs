@@ -51,6 +51,7 @@ export const IPC = {
   EXPLORATION_SET_R2_SITE_ENABLED: 'exploration:set-r2-site-enabled',
   LEADS_LIST: 'leads:list',
   LEADS_SAVE_RAW: 'leads:save-raw',
+  LEADS_SAVE_ICEBREAK: 'leads:save-icebreak',
   LEADS_SAVE_PEOPLE: 'leads:save-people',
   LEADS_VERIFY_PERSON_EMAIL: 'leads:verify-person-email',
   LEADS_EXPORT_CSV: 'leads:export-csv',
@@ -578,6 +579,21 @@ export interface LeadScoreBreakdownDto {
   competition: number
 }
 
+export type CompanyIntelligenceStatusDto = 'pending' | 'ready' | 'failed'
+
+export interface CompanyIntelligenceDto {
+  businessModel: string
+  productsBrands: string
+  targetMarket: string
+  supplyChain: string
+  industryPosition: string
+  collabOpportunity: string
+  icebreak: string
+  status: CompanyIntelligenceStatusDto
+  errorMessage?: string
+  updatedAt?: string
+}
+
 export interface LeadRowDto {
   id: string
   productId: string
@@ -607,6 +623,7 @@ export interface LeadRowDto {
   contactLabel: string
   people: LeadPersonDto[]
   peopleLabel: string
+  companyIntelligence?: CompanyIntelligenceDto
   record: Record<string, unknown>
 }
 
@@ -911,6 +928,18 @@ export interface RawLeadSaveInput {
 }
 
 export interface RawLeadSaveResult {
+  ok: boolean
+  message: string
+  lead?: LeadRowDto
+}
+
+export interface SaveLeadIcebreakInput {
+  productId: string
+  leadId: string
+  icebreak: string
+}
+
+export interface SaveLeadIcebreakResult {
   ok: boolean
   message: string
   lead?: LeadRowDto

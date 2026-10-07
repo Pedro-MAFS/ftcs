@@ -75,6 +75,11 @@ const editing = ref(false)
 const editingPeople = ref(false)
 const saving = ref(false)
 const savingPeople = ref(false)
+const savingIcebreak = ref(false)
+const icebreakDraft = ref('')
+const icebreakSynced = ref('')
+const icebreakNotice = ref('')
+const icebreakNoticeError = ref(false)
 const verifyingPersonId = ref('')
 const expandedSources = ref<Record<string, boolean>>({})
 const saveMessage = ref('')
@@ -194,6 +199,49 @@ function displayOrDash(value?: string | null): string {
   if (value == null) return '—'
   const text = String(value).trim()
   return text || '—'
+}
+
+const PORTRAIT_FIELDS = [
+  { key: 'businessModel', label: '商业模式与体量' },
+  { key: 'productsBrands', label: '主营产品与品牌' },
+  { key: 'targetMarket', label: '目标市场与客户' },
+  { key: 'supplyChain', label: '供应链与采购倾向' },
+  { key: 'industryPosition', label: '行业地位与优势' },
+  { key: 'collabOpportunity', label: '合作机会与跟进建议' },
+] as const
+
+const portraitKind = computed(() => {
+  const status = props.lead?.companyIntelligence?.status
+  if (!props.lead?.companyIntelligence || !status) return 'empty' as const
+  if (status === 'pending') return 'pending' as const
+  if (status === 'failed') return 'failed' as const
+  if (status === 'ready') return 'ready' as const
+  return 'empty' as const
+})
+
+const portraitRows = computed(() => {
+  const intel = props.lead?.companyIntelligence
+  return PORTRAIT_FIELDS.map((field) => ({
+    key: field.key,
+    label: field.label,
+    text: displayOrDash(intel?.[field.key]),
+  }))
+})
+
+const canEditIcebreak = computed(() => {
+  const intel = props.lead?.companyIntelligence
+  if (!intel) return false
+  if (intel.status === 'ready') return true
+  if (intel.status === 'failed') return intel.icebreak.trim().length > 0
+  return false
+})
+
+function syncIcebreak(lead: LeadRowDto, force: boolean): void {
+  const next = lead.companyIntelligence?.icebreak ?? ''
+  if (force || icebreakDraft.value === icebreakSynced.value) {
+    icebreakDraft.value = next
+    icebreakSynced.value = next
+  }
 }
 
 function syncDraftFromLead(lead: LeadRowDto): void {
@@ -508,9 +556,13 @@ function resetEditorState(): void {
   saveMessage.value = ''
   saveError.value = false
   showRawJson.value = false
+  savingIcebreak.value = false
+  icebreakNotice.value = ''
+  icebreakNoticeError.value = false
   if (props.lead) {
     syncDraftFromLead(props.lead)
     syncPeopleDraftFromLead(props.lead)
+    syncIcebreak(props.lead, true)
   }
 }
 
@@ -529,6 +581,53 @@ watch(
     resetEditorState()
   },
 )
+
+watch(
+  () => props.lead?.companyIntelligence?.icebreak,
+  () => {
+    if (!props.lead) return
+    syncIcebreak(props.lead, false)
+  },
+)
+
+async function saveIcebreak(): Promise<void> {
+  const lead = props.lead
+  if (!lead || savingIcebreak.value || !canEditIcebreak.value) return
+  const leadId = lead.id
+  if (!window.ftcs?.saveLeadIcebreak) {
+    icebreakNoticeError.value = true
+    icebreakNotice.value = '当前环境不能保存破冰'
+    return
+  }
+  savingIcebreak.value = true
+  icebreakNotice.value = ''
+  icebreakNoticeError.value = false
+  try {
+    const res = await window.ftcs.saveLeadIcebreak({
+      productId: lead.productId,
+      leadId,
+      icebreak: icebreakDraft.value,
+    })
+    if (props.lead?.id !== leadId) return
+    if (!res.ok) {
+      icebreakNoticeError.value = true
+      icebreakNotice.value = res.message
+      return
+    }
+    const saved = res.lead?.companyIntelligence?.icebreak ?? icebreakDraft.value.trim()
+    icebreakDraft.value = saved
+    icebreakSynced.value = saved
+    icebreakNoticeError.value = false
+    icebreakNotice.value = '已保存破冰'
+    if (res.lead) emit('saved', res.lead)
+  } catch (err) {
+    if (props.lead?.id !== leadId) return
+    icebreakNoticeError.value = true
+    icebreakNotice.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    if (props.lead?.id === leadId) savingIcebreak.value = false
+  }
+}
 
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
@@ -865,6 +964,61 @@ onUnmounted(() => {
                   </dd>
                 </div>
               </dl>
+            </section>
+
+            <section class="lead-drawer__section">
+              <h4>目标公司画像</h4>
+              <p v-if="portraitKind === 'empty'" class="lead-drawer__empty">
+                探索落库后会写入；本版不补旧线索。
+              </p>
+              <p v-else-if="portraitKind === 'pending'" class="lead-drawer__empty">
+                画像状态异常
+              </p>
+              <template v-else>
+                <p
+                  v-if="portraitKind === 'failed' && lead.companyIntelligence?.errorMessage"
+                  class="lead-drawer__banner is-error"
+                >
+                  {{ lead.companyIntelligence.errorMessage }}
+                </p>
+                <dl class="lead-drawer__fields">
+                  <div
+                    v-for="row in portraitRows"
+                    :key="row.key"
+                    class="lead-drawer__field lead-drawer__field--block"
+                  >
+                    <dt>{{ row.label }}</dt>
+                    <dd class="lead-drawer__multiline">{{ row.text }}</dd>
+                  </div>
+                </dl>
+                <div v-if="canEditIcebreak" class="lead-drawer__form lead-drawer__icebreak">
+                  <label class="is-block">
+                    <span>破冰话术</span>
+                    <textarea
+                      v-model="icebreakDraft"
+                      class="text-input"
+                      rows="5"
+                    />
+                  </label>
+                  <div>
+                    <button
+                      type="button"
+                      class="btn-secondary btn-sm"
+                      :disabled="savingIcebreak"
+                      @click="saveIcebreak"
+                    >
+                      {{ savingIcebreak ? '保存中…' : '保存破冰' }}
+                    </button>
+                  </div>
+                  <p
+                    v-if="icebreakNotice"
+                    class="lead-drawer__banner"
+                    :class="{ 'is-error': icebreakNoticeError }"
+                  >
+                    {{ icebreakNotice }}
+                  </p>
+                </div>
+              </template>
             </section>
 
             <section class="lead-drawer__section">

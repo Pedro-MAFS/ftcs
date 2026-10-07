@@ -15,6 +15,8 @@ import type {
   LeadsSnapshotDto,
   RawLeadSaveInput,
   RawLeadSaveResult,
+  SaveLeadIcebreakInput,
+  SaveLeadIcebreakResult,
   ExportLeadsCsvInput,
   ExportLeadsCsvResult,
   ScoreAndDedupeResult,
@@ -374,6 +376,8 @@ const api = {
     ipcRenderer.invoke(IPC.LEADS_LIST, productId),
   saveRawLead: (input: RawLeadSaveInput): Promise<RawLeadSaveResult> =>
     ipcRenderer.invoke(IPC.LEADS_SAVE_RAW, input),
+  saveLeadIcebreak: (input: SaveLeadIcebreakInput): Promise<SaveLeadIcebreakResult> =>
+    ipcRenderer.invoke(IPC.LEADS_SAVE_ICEBREAK, input),
   saveScoredPeople: (
     input: import('./ipc/types').SaveScoredPeopleInput,
   ): Promise<import('./ipc/types').SaveScoredPeopleResult> =>

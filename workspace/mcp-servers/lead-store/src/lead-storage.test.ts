@@ -5,16 +5,25 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   appendRawLead,
+  appendRawLeadFromTool,
   createExplorationRun,
   listRawLeads,
   loadExplorationRun,
   patchScoredLead,
   scoreAndDedupeLeads,
   loadScoredLeads,
+  saveScoredLeads,
+  setLeadCompanyIntelligence,
   updateExplorationRun,
 } from "./lead-storage.js";
 import { saveProfile } from "./storage.js";
 import type { PersonInput } from "./person-types.js";
+import {
+  COMPANY_INTELLIGENCE_INVALID_MESSAGE,
+  validateCompanyIntelligenceInput,
+  type CompanyIntelligenceTexts,
+  type RawLeadInput,
+} from "./lead-types.js";
 
 function createTempProject(): string {
   const dir = mkdtempSync(join(tmpdir(), "ftcs-lead-storage-"));
@@ -270,6 +279,284 @@ test("patchScoredLead adds and updates people, preserves on re-score", () => {
     assert.ok(
       leadManual.people.some((p) => p.email === "alice.manual@pantron.com" && p.provider === "manual"),
     );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function portraitTexts(overrides: Partial<CompanyIntelligenceTexts> = {}): CompanyIntelligenceTexts {
+  return {
+    businessModel: "区域经销，团队约二十人",
+    productsBrands: "暂无公开信息",
+    targetMarket: "德国园林与建材零售",
+    supplyChain: "倾向向工厂直接采购",
+    industryPosition: "当地户外地面材料分销",
+    collabOpportunity: "可寄样并跟进季度订单",
+    icebreak: "你好，看到你们在做户外地面，我们供应共挤地板。",
+    ...overrides,
+  };
+}
+
+function rawInput(productId: string, name = "ABC Decking"): RawLeadInput {
+  return {
+    product_id: productId,
+    round: "R1",
+    query_id: "q_ci",
+    company: {
+      name,
+      website: "https://abc-decking.de",
+      country: "DE",
+    },
+    source: {
+      url: "https://abc-decking.de/products",
+      type: "tavily_search",
+      snippet: "WPC decking distributor",
+    },
+    match_reason: "德国户外地板经销商",
+    contacts: [{ type: "email", value: "sales@abc-decking.de", confidence: "medium" }],
+  };
+}
+
+test("company intelligence validates seven strings and appends only when ready", () => {
+  const texts = portraitTexts();
+  const ok = validateCompanyIntelligenceInput(texts);
+  assert.equal(ok.ok, true);
+  if (ok.ok) {
+    assert.equal(ok.texts.productsBrands, "暂无公开信息");
+  }
+
+  const missing = { ...texts } as Record<string, string>;
+  delete missing.supplyChain;
+  assert.equal(validateCompanyIntelligenceInput(missing).ok, false);
+  assert.equal(validateCompanyIntelligenceInput({ ...texts, icebreak: 12 }).ok, false);
+  assert.equal(validateCompanyIntelligenceInput({ ...texts, markdown: "# portrait" }).ok, false);
+  assert.equal(validateCompanyIntelligenceInput({ ...texts, status: "ready" }).ok, false);
+  assert.equal(
+    validateCompanyIntelligenceInput({ ...texts, businessModel: "a".repeat(4001) }).ok,
+    false,
+  );
+  assert.equal(validateCompanyIntelligenceInput({ ...texts, icebreak: "   " }).ok, false);
+  assert.equal(
+    validateCompanyIntelligenceInput({ ...texts, industryPosition: "a".repeat(4000) }).ok,
+    true,
+  );
+
+  const root = createTempProject();
+  const productId = "prod_ci_append";
+  try {
+    const rejected = appendRawLeadFromTool(root, productId, "R1", rawInput(productId), {
+      ...texts,
+      markdown: "# no",
+    });
+    assert.equal(rejected.ok, false);
+    assert.equal(listRawLeads(root, productId).length, 0);
+
+    const saved = appendRawLeadFromTool(root, productId, "R1", rawInput(productId), {
+      ...texts,
+      businessModel: "  区域经销  ",
+    });
+    assert.equal(saved.ok, true);
+    if (!saved.ok) return;
+    assert.equal(saved.lead.companyIntelligence?.status, "ready");
+    assert.equal(saved.lead.companyIntelligence?.businessModel, "区域经销");
+    assert.equal(saved.lead.companyIntelligence?.productsBrands, "暂无公开信息");
+    assert.equal(saved.lead.companyIntelligence?.errorMessage, undefined);
+    assert.ok(saved.lead.companyIntelligence?.updatedAt);
+    assert.equal(listRawLeads(root, productId).length, 1);
+    assert.equal(JSON.stringify(saved.lead).includes("markdown"), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("score keeps company intelligence, people, and lifecycle status", () => {
+  const root = createTempProject();
+  const productId = "prod_ci_score";
+  try {
+    saveProfile(
+      root,
+      {
+        company: { name: "ACME", website: "https://acme.test" },
+        products: [{ name: "Deck", name_en: "WPC Decking", use_cases: ["outdoor"] }],
+        buyer_personas: [{ company_types: ["distributor"] }],
+        target_markets: { regions: ["EU"] },
+      },
+      productId,
+    );
+    const texts = portraitTexts();
+    const saved = appendRawLeadFromTool(root, productId, "R1", rawInput(productId), texts);
+    assert.equal(saved.ok, true);
+    if (!saved.ok) return;
+
+    scoreAndDedupeLeads(root, productId);
+    const scored = loadScoredLeads(root, productId)!;
+    const lead = scored.leads.find((item) => item.id === saved.lead.id)!;
+    assert.deepEqual(lead.companyIntelligence, saved.lead.companyIntelligence);
+
+    lead.status = "reviewed";
+    saveScoredLeads(root, scored);
+    patchScoredLead(root, productId, saved.lead.id, [
+      {
+        name: "Ann",
+        first_name: "Ann",
+        last_name: null,
+        title: null,
+        role_match: null,
+        match_reason: "采购",
+        email: "ann@abc-decking.de",
+        email_status: "hunter_unverified",
+        confidence: 70,
+        sources: [
+          {
+            domain: "abc-decking.de",
+            uri: "https://abc-decking.de",
+            extracted_on: "2026-10-01",
+            last_seen_on: "2026-10-01",
+            still_on_page: true,
+          },
+        ],
+        provider: "hunter",
+      },
+    ]);
+
+    scoreAndDedupeLeads(root, productId);
+    const again = loadScoredLeads(root, productId)!;
+    const kept = again.leads.find((item) => item.id === saved.lead.id)!;
+    assert.deepEqual(kept.companyIntelligence, saved.lead.companyIntelligence);
+    assert.equal(kept.status, "reviewed");
+    assert.equal(kept.people.length, 1);
+    assert.equal(kept.people[0]?.email, "ann@abc-decking.de");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("re-score keeps scored company intelligence when raw has none", () => {
+  const root = createTempProject();
+  const productId = "prod_ci_preserve";
+  try {
+    saveProfile(
+      root,
+      {
+        company: { name: "ACME", website: "https://acme.test" },
+        products: [{ name: "Deck", name_en: "WPC Decking", use_cases: ["outdoor"] }],
+        buyer_personas: [{ company_types: ["distributor"] }],
+        target_markets: { regions: ["EU"] },
+      },
+      productId,
+    );
+    appendRawLead(root, productId, "R1", rawInput(productId));
+    scoreAndDedupeLeads(root, productId);
+    const scored = loadScoredLeads(root, productId)!;
+    const intel = {
+      ...portraitTexts(),
+      status: "ready" as const,
+      updatedAt: "2026-10-07T00:00:00.000Z",
+      icebreak: "保留的破冰",
+    };
+    scored.leads[0]!.companyIntelligence = intel;
+    saveScoredLeads(root, scored);
+
+    scoreAndDedupeLeads(root, productId);
+    const again = loadScoredLeads(root, productId)!;
+    assert.equal(again.leads[0]?.companyIntelligence?.icebreak, "保留的破冰");
+    assert.equal(again.leads[0]?.companyIntelligence?.status, "ready");
+    assert.equal(listRawLeads(root, productId)[0]?.companyIntelligence, undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("set company intelligence overwrites portrait and restores text on failure", () => {
+  const root = createTempProject();
+  const productId = "prod_ci_set";
+  try {
+    saveProfile(
+      root,
+      {
+        company: { name: "ACME", website: "https://acme.test" },
+        products: [{ name: "Deck", name_en: "WPC Decking", use_cases: ["outdoor"] }],
+        buyer_personas: [{ company_types: ["distributor"] }],
+        target_markets: { regions: ["EU"] },
+      },
+      productId,
+    );
+    const saved = appendRawLeadFromTool(
+      root,
+      productId,
+      "R1",
+      rawInput(productId),
+      portraitTexts({ icebreak: "用户改过的破冰" }),
+    );
+    assert.equal(saved.ok, true);
+    if (!saved.ok) return;
+    scoreAndDedupeLeads(root, productId);
+    const beforeIds = listRawLeads(root, productId).map((lead) => lead.id);
+
+    const scored = loadScoredLeads(root, productId)!;
+    const sibling = {
+      ...scored.leads[0]!,
+      id: "lead_sibling",
+      companyIntelligence: {
+        ...scored.leads[0]!.companyIntelligence!,
+        icebreak: "另一行旧破冰",
+      },
+    };
+    scored.leads.push(sibling);
+    saveScoredLeads(root, scored);
+
+    const next = portraitTexts({
+      businessModel: "新的商业模式",
+      icebreak: "新的破冰",
+    });
+    const updated = setLeadCompanyIntelligence(root, productId, saved.lead.id, next);
+    assert.equal(updated.ok, true);
+    assert.deepEqual(listRawLeads(root, productId).map((lead) => lead.id), beforeIds);
+
+    const raw = listRawLeads(root, productId)[0]!;
+    assert.equal(raw.companyIntelligence?.status, "ready");
+    assert.equal(raw.companyIntelligence?.businessModel, "新的商业模式");
+    assert.equal(raw.companyIntelligence?.icebreak, "新的破冰");
+    assert.equal(raw.companyIntelligence?.errorMessage, undefined);
+    assert.equal(raw.company.name, "ABC Decking");
+    assert.equal(raw.company.website, "https://abc-decking.de");
+
+    const afterScore = loadScoredLeads(root, productId)!;
+    const same = afterScore.leads.find((lead) => lead.id === saved.lead.id)!;
+    const other = afterScore.leads.find((lead) => lead.id === "lead_sibling")!;
+    assert.equal(same.companyIntelligence?.icebreak, "新的破冰");
+    assert.equal(other.companyIntelligence?.icebreak, "新的破冰");
+    assert.equal(other.companyIntelligence?.businessModel, "新的商业模式");
+    assert.equal(same.contacts[0]?.value, "sales@abc-decking.de");
+
+    const failed = setLeadCompanyIntelligence(root, productId, saved.lead.id, {
+      businessModel: "缺了其它字段",
+    });
+    assert.equal(failed.ok, false);
+    if (!failed.ok) {
+      assert.equal(failed.message, COMPANY_INTELLIGENCE_INVALID_MESSAGE);
+    }
+    const restored = listRawLeads(root, productId)[0]!;
+    assert.equal(restored.companyIntelligence?.status, "failed");
+    assert.equal(restored.companyIntelligence?.errorMessage, COMPANY_INTELLIGENCE_INVALID_MESSAGE);
+    assert.equal(restored.companyIntelligence?.icebreak, "新的破冰");
+    assert.equal(restored.companyIntelligence?.businessModel, "新的商业模式");
+    assert.equal(restored.company.name, "ABC Decking");
+    assert.equal(restored.company.website, "https://abc-decking.de");
+    assert.equal(restored.contacts[0]?.value, "sales@abc-decking.de");
+    const failedScored = loadScoredLeads(root, productId)!;
+    assert.equal(
+      failedScored.leads.find((lead) => lead.id === saved.lead.id)?.companyIntelligence?.status,
+      "failed",
+    );
+    assert.equal(
+      failedScored.leads.find((lead) => lead.id === saved.lead.id)?.companyIntelligence?.icebreak,
+      "新的破冰",
+    );
+
+    const missing = setLeadCompanyIntelligence(root, productId, "lead_missing", next);
+    assert.equal(missing.ok, false);
+    assert.equal(listRawLeads(root, productId).length, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

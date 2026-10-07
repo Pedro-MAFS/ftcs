@@ -388,7 +388,7 @@ export function rawLeadToScoredLead(
 ): ScoredLead {
   const { score, score_breakdown, tier } = scoreRawLead(profile, lead, config);
 
-  return {
+  const scored: ScoredLead = {
     id: lead.id,
     company: {
       name: lead.company.name,
@@ -410,6 +410,11 @@ export function rawLeadToScoredLead(
     run_id: lead.run_id,
     discovered_at: lead.discovered_at,
   };
+
+  if (lead.companyIntelligence) {
+    scored.companyIntelligence = { ...lead.companyIntelligence };
+  }
+  return scored;
 }
 
 export function buildScoredStats(leads: ScoredLead[]): ScoredLeadsFile["stats"] {
