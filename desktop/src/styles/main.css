@@ -1981,7 +1981,7 @@ button:focus-visible {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  width: min(480px, 100%);
+  width: min(960px, 100%);
   height: 100%;
   background: var(--bg-elevated);
   border-left: 1px solid var(--border);
