@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type {
+  CompanyIntelligence,
   DiscardedLead,
   DiscardedLeadsFile,
   ExplorationRun,
@@ -10,10 +11,13 @@ import type {
   ScoredLeadsFile,
 } from "./lead-types.js";
 import {
+  buildFailedCompanyIntelligence,
+  buildReadyCompanyIntelligence,
   DiscardedLeadsFileSchema,
   ExplorationRunSchema,
   RawLeadSchema,
   ScoredLeadsFileSchema,
+  validateCompanyIntelligenceInput,
 } from "./lead-types.js";
 import { generateLeadId, generateRunId, normalizeDomain } from "./lead-id.js";
 import { createPersonIdAllocator } from "./person-id.js";
@@ -57,6 +61,35 @@ export function appendRawLead(
   mkdirSync(dirname(rawPath), { recursive: true });
   appendFileSync(rawPath, `${JSON.stringify(lead)}\n`, "utf8");
   return lead;
+}
+
+/**
+ * 探索会话调用 lead_append_raw 的落库入口。
+ * 七段校验通过才追加整行；失败不写 jsonl。
+ */
+export function appendRawLeadFromTool(
+  root: string,
+  productId: string,
+  round: RawLead["round"],
+  input: RawLeadInput,
+  companyIntelligenceInput: unknown = input.companyIntelligence,
+): { ok: true; lead: RawLead } | { ok: false; message: string } {
+  const check = validateCompanyIntelligenceInput(companyIntelligenceInput);
+  if (!check.ok) {
+    return { ok: false, message: check.message };
+  }
+  try {
+    const lead = appendRawLead(root, productId, round, {
+      ...input,
+      product_id: productId,
+      round,
+      companyIntelligence: buildReadyCompanyIntelligence(check.texts),
+    });
+    return { ok: true, lead };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, message };
+  }
 }
 
 export function listRawLeads(
@@ -276,11 +309,17 @@ export function scoreAndDedupeLeads(root: string, productId: string): {
   const preservedStatusByKey = new Map<string, ScoredLead["status"]>();
   const preservedStatusById = new Map<string, ScoredLead["status"]>();
   const preservedPeopleByKey = new Map<string, ScoredLead["people"]>();
+  const preservedIntelById = new Map<string, CompanyIntelligence>();
+  const preservedIntelByKey = new Map<string, CompanyIntelligence>();
   for (const lead of existing?.leads ?? []) {
     preservedStatusByKey.set(lead.dedupe_key, lead.status);
     preservedStatusById.set(lead.id, lead.status);
     if (lead.people && lead.people.length > 0) {
       preservedPeopleByKey.set(lead.dedupe_key, lead.people);
+    }
+    if (lead.companyIntelligence) {
+      preservedIntelById.set(lead.id, lead.companyIntelligence);
+      preservedIntelByKey.set(lead.dedupe_key, lead.companyIntelligence);
     }
   }
 
@@ -292,6 +331,12 @@ export function scoreAndDedupeLeads(root: string, productId: string): {
         preservedStatusByKey.get(dedupeKey);
       const scored = rawLeadToScoredLead(profile, lead, config, preserved);
       scored.people = preservedPeopleByKey.get(dedupeKey) ?? [];
+      if (!scored.companyIntelligence) {
+        const kept = preservedIntelById.get(lead.id) ?? preservedIntelByKey.get(dedupeKey);
+        if (kept) {
+          scored.companyIntelligence = { ...kept };
+        }
+      }
       return scored;
     })
   );
@@ -439,4 +484,93 @@ export function patchScoredLead(
     people_total: sortedPeople.length,
     contacts_appended: contactsAppended,
   };
+}
+
+function replaceRawLeadCompanyIntelligence(
+  root: string,
+  productId: string,
+  leadId: string,
+  companyIntelligence: CompanyIntelligence,
+): RawLead | null {
+  const rounds: RawLead["round"][] = ["R1", "R2", "R3", "R4"];
+  for (const round of rounds) {
+    const rawPath = getRawLeadsPath(root, productId, round);
+    if (!existsSync(rawPath)) {
+      continue;
+    }
+    const lines = readFileSync(rawPath, "utf8").split("\n");
+    let found: RawLead | null = null;
+    const rewritten: string[] = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+      let parsed: RawLead;
+      try {
+        parsed = RawLeadSchema.parse(JSON.parse(trimmed));
+      } catch {
+        rewritten.push(trimmed);
+        continue;
+      }
+      if (parsed.id !== leadId) {
+        rewritten.push(trimmed);
+        continue;
+      }
+      const updated: RawLead = { ...parsed, companyIntelligence };
+      found = updated;
+      rewritten.push(JSON.stringify(updated));
+    }
+    if (found) {
+      writeFileSync(rawPath, `${rewritten.join("\n")}\n`, "utf8");
+      return found;
+    }
+  }
+  return null;
+}
+
+/** 同域名再次命中：不新建线索，同步覆盖 raw 与同 id / 同 dedupe_key 的 scored。 */
+export function setLeadCompanyIntelligence(
+  root: string,
+  productId: string,
+  leadId: string,
+  input: unknown,
+): { ok: true; leadId: string } | { ok: false; message: string } {
+  const existing = listRawLeads(root, productId).find((lead) => lead.id === leadId);
+  if (!existing) {
+    return { ok: false, message: "未找到线索" };
+  }
+
+  const check = validateCompanyIntelligenceInput(input);
+  const updatedAt = nowIso();
+  const ready = check.ok ? buildReadyCompanyIntelligence(check.texts, updatedAt) : null;
+  const dedupeKey = getDedupeKey(existing);
+  const rawNext = ready ?? buildFailedCompanyIntelligence(existing.companyIntelligence, updatedAt);
+  const updated = replaceRawLeadCompanyIntelligence(root, productId, leadId, rawNext);
+  if (!updated) {
+    return { ok: false, message: "未找到线索" };
+  }
+
+  const scored = loadScoredLeads(root, productId);
+  if (scored) {
+    let changed = false;
+    for (const lead of scored.leads) {
+      if (lead.id !== leadId && lead.dedupe_key !== dedupeKey) {
+        continue;
+      }
+      lead.companyIntelligence = ready
+        ? { ...ready }
+        : buildFailedCompanyIntelligence(lead.companyIntelligence, updatedAt);
+      changed = true;
+    }
+    if (changed) {
+      scored.updated_at = updatedAt;
+      saveScoredLeads(root, scored);
+    }
+  }
+
+  if (!check.ok) {
+    return { ok: false, message: check.message };
+  }
+  return { ok: true, leadId: updated.id };
 }

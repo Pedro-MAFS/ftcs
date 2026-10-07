@@ -2384,6 +2384,15 @@ button:focus-visible {
   color: var(--text-muted);
 }
 
+.lead-drawer__icebreak {
+  margin-top: 12px;
+}
+
+.lead-drawer__icebreak > .lead-drawer__banner,
+.lead-drawer__icebreak > div {
+  grid-column: 1 / -1;
+}
+
 .lead-drawer__breakdown {
   margin-top: 10px;
   display: flex;

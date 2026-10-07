@@ -25,7 +25,7 @@ import { KeywordExpansionInputSchema } from "./keyword-types.js";
 import { RawLeadInputSchema } from "./lead-types.js";
 import { PersonInputSchema } from "./person-types.js";
 import {
-  appendRawLead,
+  appendRawLeadFromTool,
   countUniqueLeadDomains,
   createExplorationRun,
   listExplorationRuns,
@@ -34,6 +34,7 @@ import {
   loadScoredLeads,
   patchScoredLead,
   scoreAndDedupeLeads,
+  setLeadCompanyIntelligence,
   updateExplorationRun,
 } from "./lead-storage.js";
 import { generateLeadId } from "./lead-id.js";
@@ -366,11 +367,21 @@ server.tool(
 
 server.tool(
   "lead_append_raw",
-  "Append a raw lead to data/leads/{product_id}/raw/{round}.jsonl. Include run_id from exploration_start so leads can be filtered by exploration task.",
+  "Append one raw lead with company base fields and companyIntelligence (six portrait strings plus icebreak) in the same call. Validation failure does not write the row. Include run_id from exploration_start. Do not pass status, errorMessage, or markdown; the server sets status=ready.",
   {
     product_id: z.string(),
     round: z.enum(["R1", "R2", "R3", "R4"]),
-    lead: RawLeadInputSchema.omit({ product_id: true, round: true }),
+    lead: RawLeadInputSchema.omit({
+      product_id: true,
+      round: true,
+      companyIntelligence: true,
+    }).extend({
+      companyIntelligence: z
+        .unknown()
+        .describe(
+          "Exactly these non-empty string keys: businessModel, productsBrands, targetMarket, supplyChain, industryPosition, collabOpportunity, icebreak. Use 暂无公开信息 when a fact is not public. Extra keys fail the call and nothing is stored.",
+        ),
+    }),
   },
   async ({ product_id, round, lead }) => {
     const root = getProjectRoot();
@@ -391,11 +402,29 @@ server.tool(
       };
     }
 
-    const saved = appendRawLead(root, product_id, round, {
-      ...lead,
+    const { companyIntelligence, ...rest } = lead;
+    const saved = appendRawLeadFromTool(
+      root,
       product_id,
       round,
-    });
+      { ...rest, product_id, round },
+      companyIntelligence,
+    );
+    if (!saved.ok) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              code: "INVALID_COMPANY_INTELLIGENCE",
+              message: saved.message,
+            }),
+          },
+        ],
+      };
+    }
 
     return {
       content: [
@@ -404,8 +433,76 @@ server.tool(
           text: JSON.stringify(
             {
               success: true,
-              lead_id: saved.id,
+              lead_id: saved.lead.id,
               raw_path: `data/leads/${product_id}/raw/${round}.jsonl`,
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  "lead_set_company_intelligence",
+  "Overwrite companyIntelligence on an existing lead from the current explore session. Does not create a lead, does not call a model, and does not change company, contacts, people, score, or lifecycle status. Same-domain re-hit only. Invalid fields set status=failed, restore the previous portrait text, and return an error.",
+  {
+    product_id: z.string(),
+    lead_id: z.string(),
+    businessModel: z.unknown().optional(),
+    productsBrands: z.unknown().optional(),
+    targetMarket: z.unknown().optional(),
+    supplyChain: z.unknown().optional(),
+    industryPosition: z.unknown().optional(),
+    collabOpportunity: z.unknown().optional(),
+    icebreak: z.unknown().optional(),
+  },
+  async ({
+    product_id,
+    lead_id,
+    businessModel,
+    productsBrands,
+    targetMarket,
+    supplyChain,
+    industryPosition,
+    collabOpportunity,
+    icebreak,
+  }) => {
+    const root = getProjectRoot();
+    const result = setLeadCompanyIntelligence(root, product_id, lead_id, {
+      businessModel,
+      productsBrands,
+      targetMarket,
+      supplyChain,
+      industryPosition,
+      collabOpportunity,
+      icebreak,
+    });
+    if (!result.ok) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              error: true,
+              code: result.message === "未找到线索" ? "NOT_FOUND" : "INVALID_COMPANY_INTELLIGENCE",
+              message: result.message,
+            }),
+          },
+        ],
+      };
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              success: true,
+              lead_id: result.leadId,
             },
             null,
             2

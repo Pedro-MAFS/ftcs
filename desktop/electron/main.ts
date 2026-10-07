@@ -90,7 +90,7 @@ import {
   saveUserWorkflowPlan,
 } from './workflow/workflow-plans'
 import { listLeadsSnapshot } from './leads/leads-reader'
-import { saveRawLead } from './leads/lead-writer'
+import { saveLeadIcebreak, saveRawLead } from './leads/lead-writer'
 import { saveScoredPeople } from './leads/save-scored-people'
 import { verifyPersonEmail } from './leads/verify-person-email'
 import { saveCsvWithDialog } from './leads/export-csv'
@@ -1202,6 +1202,17 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.LEADS_SAVE_RAW, (_event, input: RawLeadSaveInput) => {
     try {
       return saveRawLead(input)
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.LEADS_SAVE_ICEBREAK, (_event, input) => {
+    try {
+      return saveLeadIcebreak(input)
     } catch (err) {
       return {
         ok: false,

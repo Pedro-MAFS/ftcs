@@ -21,7 +21,7 @@ outputs:
 
 # discover-leads
 
-基于关键词扩展结果执行**获客探索**：Tavily 搜索 → 打开候选页面 → 判断是否目标客户 → 写入原始线索。
+基于关键词扩展结果执行**获客探索**：Tavily 搜索 → 打开候选页面 → 判断是否目标客户 → 在同一次写入里带上六段画像与破冰。画像在**本探索会话**内完成，不要另开会话。
 
 Phase 1 默认执行 **R1 广撒网**。
 
@@ -90,7 +90,8 @@ search-api.search_web({
 1. **跳过**以下站点（非目标客户来源）：
    - 新闻/博客/论坛/百科/社交媒体/纯聚合搜索页
    - 与产品无关的 B2B 平台 listing 页（无具体公司信息）
-   - 已在本次/历史探索中出现过的同域名站点（调用 `lead_list_raw` 去重）
+
+   同域名不要在打开前跳过。写入前调用 `lead_list_raw`：域名尚未出现才 `lead_append_raw`；已经出现则不要再追加。若本次仍判定为目标客户，调用 `lead_set_company_intelligence`。
 
 2. 使用 **chrome-devtools-mcp**：
    ```
@@ -112,7 +113,11 @@ search-api.search_web({
    - 明显是中国同类出口商（竞品而非客户）
    - 无法识别为公司网站
 
-4. **若为目标客户** → 写入线索：
+4. **若为目标客户** → 在本探索会话里，用本轮已经拿到的搜索摘要、官网公开页和 `product_get` 写好六段与破冰，再调用工具。某一段没有公开信息就写「暂无公开信息」。不要把 Markdown 正文另存成画像，不要为画像再开一轮搜索。不是目标客户：两个工具都不调用。
+
+   - `lead_list_raw` 里还没有同域名：调用 `lead_append_raw`。`companyIntelligence` 只含下面七个字符串，不要传 `status`。校验失败则该次工具失败，不要改成先只写公司。
+   - 同域名已有线索，且本次仍是目标客户：不要调用 `lead_append_raw`。调用 `lead_set_company_intelligence`，`lead_id` 用已有那条。
+   - 单条工具失败只重试这一家的字段，不要把整次探索标成 failed，也不要因此停止下一家。
 
 ```
 lead-store.lead_append_raw({
@@ -134,13 +139,39 @@ lead-store.lead_append_raw({
     },
     match_reason: "德国 WPC 地板经销商，网站展示 outdoor decking 产品线，与目标市场匹配",
     contacts: [{ type: "email", value: "sales@...", confidence: "medium" }],
-    raw_score: 70
+    raw_score: 70,
+    companyIntelligence: {
+      businessModel: "商业模式与体量",
+      productsBrands: "主营产品与品牌",
+      targetMarket: "目标市场与客户",
+      supplyChain: "供应链与采购倾向",
+      industryPosition: "行业地位与优势",
+      collabOpportunity: "合作机会与跟进建议（只对照本次已读的 product_get）",
+      icebreak: "破冰话术"
+    }
   }
 })
 ```
 
+同域名再次命中且仍是目标客户：
+
+```
+lead-store.lead_set_company_intelligence({
+  product_id,
+  lead_id,   // lead_list_raw 里已有的那条
+  businessModel: "...",
+  productsBrands: "...",
+  targetMarket: "...",
+  supplyChain: "...",
+  industryPosition: "...",
+  collabOpportunity: "...",
+  icebreak: "..."
+})
+```
+
 `run_id` **必须**与本次 `exploration_start` 返回值一致。  
-`match_reason` **必须具体**，说明为何判断为目标客户（引用网站上的产品/业务证据）。
+`match_reason` **必须具体**，说明为何判断为目标客户（引用网站上的产品/业务证据）。  
+邮箱和电话仍只放在 `contacts`，不要写进 `companyIntelligence`。
 
 5. 记录 `crawl_pages` +1
 
@@ -211,6 +242,7 @@ lead-store.exploration_finish({
 | `match_reason` | 具体判断依据（禁止空泛） |
 | `query_id` / `round` | 来自搜索词 |
 | `run_id` | 本次探索运行 ID（新写入必填；历史可为空） |
+| `companyIntelligence` | 新写入必填。恰好七个字符串：`businessModel`、`productsBrands`、`targetMarket`、`supplyChain`、`industryPosition`、`collabOpportunity`、`icebreak`。由工具写成 `status=ready`。不要自拟 Markdown 字段 |
 
 可选：`company.country`、`company.description`、`contacts[]`、`raw_score`（0–100 初判）。
 

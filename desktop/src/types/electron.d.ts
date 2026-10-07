@@ -377,6 +377,21 @@ export interface LeadScoreBreakdownDto {
   competition: number
 }
 
+export type CompanyIntelligenceStatusDto = 'pending' | 'ready' | 'failed'
+
+export interface CompanyIntelligenceDto {
+  businessModel: string
+  productsBrands: string
+  targetMarket: string
+  supplyChain: string
+  industryPosition: string
+  collabOpportunity: string
+  icebreak: string
+  status: CompanyIntelligenceStatusDto
+  errorMessage?: string
+  updatedAt?: string
+}
+
 export interface LeadRowDto {
   id: string
   productId: string
@@ -406,6 +421,7 @@ export interface LeadRowDto {
   contactLabel: string
   people: LeadPersonDto[]
   peopleLabel: string
+  companyIntelligence?: CompanyIntelligenceDto
   record: Record<string, unknown>
 }
 
@@ -724,6 +740,18 @@ export interface RawLeadSaveResult {
   lead?: LeadRowDto
 }
 
+export interface SaveLeadIcebreakInput {
+  productId: string
+  leadId: string
+  icebreak: string
+}
+
+export interface SaveLeadIcebreakResult {
+  ok: boolean
+  message: string
+  lead?: LeadRowDto
+}
+
 export interface SaveScoredPeoplePersonInput {
   id?: string
   name: string
@@ -961,6 +989,7 @@ declare global {
       startExploreR3: (input: DiscoverLeadsInput) => Promise<DiscoverLeadsResult>
       listLeads: (productId: string) => Promise<LeadsSnapshotDto>
       saveRawLead: (input: RawLeadSaveInput) => Promise<RawLeadSaveResult>
+      saveLeadIcebreak: (input: SaveLeadIcebreakInput) => Promise<SaveLeadIcebreakResult>
       saveScoredPeople: (input: SaveScoredPeopleInput) => Promise<SaveScoredPeopleResult>
       verifyPersonEmail: (
         input: VerifyPersonEmailInput,

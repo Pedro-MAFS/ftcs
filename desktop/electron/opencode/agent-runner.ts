@@ -330,6 +330,14 @@ function buildEnrichLeadContactsPrompt(
   ].join('\n')
 }
 
+const DISCOVER_COMPANY_INTELLIGENCE_RULES = [
+  '画像与破冰在本探索会话内完成，不要另开会话，也不要先落一条没有画像的线索。',
+  '判为目标客户且 lead_list_raw 尚无同域名：先写好六段和破冰，再 lead_append_raw。lead.companyIntelligence 必须同时带上 businessModel、productsBrands、targetMarket、supplyChain、industryPosition、collabOpportunity、icebreak 七个非空字符串；没有公开信息的段写「暂无公开信息」。不要传入 status、errorMessage 或 Markdown 字段。',
+  '同域名已在 lead_list_raw 且本次仍是目标客户：不要 lead_append_raw，调用 lead_set_company_intelligence（product_id、已有 lead_id，以及同样的七个字符串）。',
+  '不是目标客户：lead_append_raw 和 lead_set_company_intelligence 都不调用。',
+  '单条工具校验失败时改字段再试这一家，不要把整次探索标成 failed，也不要因此停下一家。',
+].join('\n')
+
 function buildDiscoverLeadsR3Prompt(
   productId: string,
   maxQueries: number,
@@ -352,9 +360,11 @@ function buildDiscoverLeadsR3Prompt(
     '2. search-api.search_usage 确认当日配额未用尽（官方通道以余额为准）。',
     '3. lead-store.exploration_start({ product_id, rounds: ["R3"] })，记住 run_id。',
     '4. 只跑 round=R3 且无 site_id 的词，按 priority 取前 max_queries 条。',
-    '5. 对每个词：places_text_search 的 pageSize 用下述 places_result_limit，一次调用即可；过滤后 place_details 不超过 floor(本次实际返回×0.75)。无官网则 Tavily search_web 补搜；chrome 只打开公司官网，对照画像判断是否目标客户，通过才 lead_append_raw（round=R3，run_id 必填，snippet 以「发现：place_id=」开头）。禁止打开 Google 地图，禁止自己翻页。',
+    '5. 对每个词：places_text_search 的 pageSize 用下述 places_result_limit，一次调用即可；过滤后 place_details 不超过 floor(本次实际返回×0.75)。无官网则 Tavily search_web 补搜；chrome 只打开公司官网，对照画像判断是否目标客户。新域名且通过才 lead_append_raw（round=R3，run_id 必填，snippet 以「发现：place_id=」开头，并带 companyIntelligence）；同域名已有且本次仍通过则 lead_set_company_intelligence，不要再追加。禁止打开 Google 地图，禁止自己翻页。',
     '6. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。全程未通过官网判断也允许 completed 且 0 条线索。',
     '7. 用简短中文汇报：run_id、R3 词数、Places Search/Details 次数、Tavily 补搜/官网打开次数、线索数、跳过原因、3～5 条样例或「无新线索」、下一步 score-and-dedupe。',
+    '',
+    DISCOVER_COMPANY_INTELLIGENCE_RULES,
     '',
     `线索输出：data/leads/${productId}/raw/R3.jsonl`,
     `运行记录：data/exploration/${productId}/runs/`,
@@ -384,9 +394,11 @@ function buildDiscoverLeadsR2Prompt(
     '3. search-api.search_usage 确认当日配额未用尽（官方通道以余额为准）。',
     '4. lead-store.exploration_start({ product_id, rounds: ["R2"] })，记住 run_id。',
     '5. 只跑 round=R2 且带 site_id 的词，按 priority 取前 max_queries 条。无 site_id 的旧 R2 跳过。',
-    '6. 对每个词：search_web 必须带该 site_id 对应的 include_domains；不要打开社媒 URL。抽出公司并解析官网后，chrome 只打开官网，按 R1 口径判断，通过才 lead_append_raw（round=R2，run_id 必填，snippet 以「发现：」+ 社媒 URL 开头）。',
+    '6. 对每个词：search_web 必须带该 site_id 对应的 include_domains；不要打开社媒 URL。抽出公司并解析官网后，chrome 只打开官网，按 R1 口径判断。新域名且通过才 lead_append_raw（round=R2，run_id 必填，snippet 以「发现：」+ 社媒 URL 开头，并带 companyIntelligence）；同域名已有且本次仍通过则 lead_set_company_intelligence，不要再追加。',
     '7. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。全程未通过官网判断也允许 completed 且 0 条线索。',
     '8. 用简短中文汇报：run_id、R2 词数、社媒/二次搜索/官网打开次数、线索数、跳过原因、3～5 条样例或「无新线索」、下一步 score-and-dedupe。',
+    '',
+    DISCOVER_COMPANY_INTELLIGENCE_RULES,
     '',
     `线索输出：data/leads/${productId}/raw/R2.jsonl`,
     `运行记录：data/exploration/${productId}/runs/`,
@@ -417,9 +429,11 @@ function buildDiscoverLeadsPrompt(
     '2. search-api.search_usage 确认当日配额未用尽。',
     '3. lead-store.exploration_start 创建运行记录，记住 run_id。',
     '4. 从 search_queries 筛选指定 rounds，按 priority（high→medium→low）排序，取前 max_queries 条。',
-    '5. 对每个搜索词：search-api.search_web → chrome-devtools 打开候选页 → 判断是否目标客户 → 是则 lead_append_raw（lead 内必须带本次 run_id）。',
+    '5. 对每个搜索词：search-api.search_web → chrome-devtools 打开候选页 → 判断是否目标客户。新域名且是目标客户则 lead_append_raw（lead 内必须带本次 run_id 和 companyIntelligence）；同域名已有且本次仍是目标客户则 lead_set_company_intelligence，不要再追加。',
     '6. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。',
     '7. 用简短中文汇报：run_id、执行词数、线索数、API 用量、3～5 条代表性线索、下一步 score-and-dedupe。',
+    '',
+    DISCOVER_COMPANY_INTELLIGENCE_RULES,
     '',
     `线索输出：data/leads/${productId}/raw/`,
     `运行记录：data/exploration/${productId}/runs/`,

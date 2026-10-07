@@ -18,10 +18,10 @@ outputs:
 
 # discover-leads-r3
 
-**R3 地图发现**：用 expansion 里的地图发现词，经 **Google Places API** 找本地商户 → 解析或补全 **公司官网** → **chrome 打开官网** 对照产品画像判断是否目标客户 → 通过才写入 `raw/R3.jsonl`。
+**R3 地图发现**：用 expansion 里的地图发现词，经 **Google Places API** 找本地商户 → 解析或补全 **公司官网** → **chrome 打开官网** 对照产品画像判断是否目标客户 → 在本探索会话里把六段画像与破冰和公司字段一次写入 `raw/R3.jsonl`。同域名不再追加，改为覆盖画像。
 
 ```text
-R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过滤 → Details（不超过 floor(实际返回×0.75)）→ 官网? → [无则 Tavily 补搜] → chrome 官网 → 判断 → lead_append_raw
+R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过滤 → Details（不超过 floor(实际返回×0.75)）→ 官网? → [无则 Tavily 补搜] → chrome 官网 → 判断 → 新域名 lead_append_raw / 同域名 lead_set_company_intelligence
 ```
 
 发现层 **只用 Places**；补官网用 Tavily `search_web`（不带 `include_domains`）。**不**打开 Google 地图页面。
@@ -96,7 +96,7 @@ R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过�
 | 每词 Tavily 补官网 | `floor(本词 places_text_search 实际返回条数 × 0.75)`。已有官网的不补搜、不占次数。分母是 Search 返回的地点条数，不是 Details 条数 |
 | 补官网 `num_results` | 任务指令中的 `search_num_results` |
 
-先按 `max_queries` 截词，再套上表。已解析出的公司官网都打开并判断；同域名已有线索则跳过。不设每词、每轮的官网打开次数上限。
+先按 `max_queries` 截词，再套上表。已解析出的公司官网都打开并判断。同域名已在 `lead_list_raw` 时不要 `lead_append_raw`；若本次仍是目标客户，调用 `lead_set_company_intelligence`。不设每词、每轮的官网打开次数上限。
 
 Tavily `DAILY_LIMIT_EXCEEDED` 或官方通道 402 → 立即停止并 `exploration_finish`。
 
@@ -235,16 +235,18 @@ search-api.search_web({
 
 有 `website_url` 时：
 
-1. `lead-store.lead_list_raw` — 按 **官网域名** 去重，该产品 raw 已有同域则跳过
+1. `lead-store.lead_list_raw` — 按 **官网域名** 记下已有 `lead_id`。该产品 raw 已有同域时仍打开官网并判断，不要 `lead_append_raw`
 
 ```
 chrome-devtools: new_page(url) 或 navigate_page → website_url
 take_snapshot（必要时 evaluate_script）
 ```
 
-`crawl_pages` +1。按 [目标客户判断](#目标客户判断打开官网后) 决策。否或打不开 → 不写 Lead。chrome 不可用 → 停止并提示启用 MCP。
+`crawl_pages` +1。按 [目标客户判断](#目标客户判断打开官网后) 决策。否或打不开 → 不写 Lead，也不调用 `lead_set_company_intelligence`。chrome 不可用 → 停止并提示启用 MCP。
 
 ### Step 5：写入（仅判断为「是」）
+
+在本探索会话里先写好六段和破冰（材料只用本轮 Places/搜索摘要、已打开的官网和 `product_get`；没有公开信息的段写「暂无公开信息」）。不要另开会话，不要把 Markdown 另存成画像。域名尚未出现才 `lead_append_raw`；同域名已有则 `lead_set_company_intelligence`，`lead_id` 用已有那条。单条校验失败不要把整次运行标成 failed。
 
 ```
 lead-store.lead_append_raw({
@@ -266,8 +268,33 @@ lead-store.lead_append_raw({
     },
     match_reason: "<须具体：Places 如何发现 + 官网业务证据，禁止空泛>",
     contacts: [],
-    raw_score: 70
+    raw_score: 70,
+    companyIntelligence: {
+      businessModel: "商业模式与体量",
+      productsBrands: "主营产品与品牌",
+      targetMarket: "目标市场与客户",
+      supplyChain: "供应链与采购倾向",
+      industryPosition: "行业地位与优势",
+      collabOpportunity: "合作机会与跟进建议",
+      icebreak: "破冰话术"
+    }
   }
+})
+```
+
+同域名再次命中且仍是目标客户时改为：
+
+```
+lead-store.lead_set_company_intelligence({
+  product_id,
+  lead_id: "<lead_list_raw 已有 id>",
+  businessModel: "...",
+  productsBrands: "...",
+  targetMarket: "...",
+  supplyChain: "...",
+  industryPosition: "...",
+  collabOpportunity: "...",
+  icebreak: "..."
 })
 ```
 
@@ -275,7 +302,8 @@ lead-store.lead_append_raw({
 - `source.snippet` **必须**以 `发现：place_id=` 开头
 - `company.website` / `source.url` 为 **chrome 打开过的官网**，不是地图链
 - `source.type` 固定 `tavily_search`
-- `leads_found` +1
+- `companyIntelligence` 只含上面七个字符串，不要传 `status` 或 Markdown 字段。邮箱和电话不要写进画像
+- 新公司 `lead_append_raw` 成功时 `leads_found` +1；同域名覆盖不加这一条
 
 ### Step 6：每词进度
 
