@@ -3,7 +3,7 @@
 > **用户故事**：[../30-需求-Places官方通道按用户下发APIKey.md](../30-需求-Places官方通道按用户下发APIKey.md) · US-PK-C-03 · Issue #21  
 > **状态**：**待评审**（本文件只定设计；业务代码尚未按本文改动）  
 > **范围**：官方通道可用时，不填自备 Key 也能跑 R3；Places 请求仍由 `places-api` 直连 Google；线索字段来自官网核实  
-> **依赖**：[US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md) 的本机官方 Key；[US-PK-C-04](US-PK-C-04-与BYOK并存及停用提示.md) 选出的「当前生效 Key」；现网 `discover-leads-r3`、US-E-07 FieldMask、US-E-08 管道  
+> **依赖**：[US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md) 当次运行内存中的 Key；[US-PK-C-04](US-PK-C-04-与BYOK并存及停用提示.md) 选出的来源；现网 `discover-leads-r3`、US-E-07 FieldMask、US-E-08 管道
 > **不做**：`PLACES_PROVIDER=gateway` 代调；新的 Places SKU；把 Places 商家字段写进线索库；解决本机访问不了 Google 的问题  
 > **文档位置**：`docs/design/`
 
@@ -15,7 +15,7 @@
 
 | 现网 | **本期（US-PK-C-03）** |
 |------|------------------------|
-| `runtime.ts` 把 `GOOGLE_PLACES_API_KEY` 原样注入 `places-api` | 注入的仍是这个**环境变量名**（MCP 不改读键名）。值改为 C-04 选出的那一把：官方或自备。两把不要同时注入 |
+| `runtime.ts` 把工作区 `.env` 里的 `GOOGLE_PLACES_API_KEY` 注入 `places-api` | 来源是自备时仍注入这一把。来源是官方时，注入 C-02 **当次内存**里的 Key，环境变量名仍是 `GOOGLE_PLACES_API_KEY`，但不写回 `.env`。两把不要同时注入 |
 | `PLACES_PROVIDER=gateway` 时 MCP 返回 `PLACES_GATEWAY_NOT_READY`，文案指向 US-E-10 | provider **保持** `custom`。若环境被误设成 `gateway`，仍返回该错误码，文案改为「Places 不经服务器代调，请使用直连」 |
 | `isPlacesGatewayReady()` 恒 `false` | **保持恒 false**。官方 Key 已开通也不要把这个函数改成 true |
 | `places_text_search` / `place_details` 直连 `places.googleapis.com`，FieldMask 见 `field-masks.ts` | 工具名、URL、FieldMask、24h 缓存不变。官方 Key 与 BYOK 走同一条 `custom.ts` |
@@ -57,7 +57,7 @@ flowchart LR
 
 | 项 | 决定 |
 |----|------|
-| **无自备 Key 也能跑** | C-04 认定生效来源是官方且本机有官方 Key 时，Preflight 的 Places 项通过。用户不必填写 `GOOGLE_PLACES_API_KEY` |
+| **无自备 Key 也能跑** | C-04 认定来源是官方且 US-PK-G-02 取 Key 成功时，Preflight 通过。用户不必填写 `GOOGLE_PLACES_API_KEY`，也不从磁盘读官方 Key（PK12） |
 | **直连** | HTTP 仍是 `custom.ts` 里的 `places.googleapis.com`。`X-Goog-Api-Key` 用注入的那一把 |
 | **provider** | 成功路径的 `provider` 字段仍是 `custom`。不用 `gateway` 表示「这把 Key 来自官方」 |
 | **只发现** | Places 的 `displayName`、`formattedAddress`、`types`、`businessStatus`、`websiteUri`、`placeId` 只在当次会话里用来找候选、打开官网。落库的公司名、官网、电话、地址以 **chrome 打开后的页面**为准 |
@@ -67,19 +67,33 @@ flowchart LR
 
 ---
 
-## 3. 注入
+## 3. 注入与轮换后重取一次
 
-`desktop/electron/opencode/runtime.ts` 的 `placesEnv`：
+`desktop/electron/opencode/runtime.ts` 的 `placesEnv` 只描述**这一次运行**要交给子进程的环境，不把官方 Key 写进工作区 `.env` 或 OpenCode 配置文件。
 
-1. 调用 C-04 的纯函数，得到 `{ source: 'official' | 'byok' | 'none', apiKey: string }`。`apiKey` 只存在于主进程。
-2. `source === 'none'`：不注入 `GOOGLE_PLACES_API_KEY`。
-3. 否则只注入这一把，环境变量名仍是 `GOOGLE_PLACES_API_KEY`。
-4. `PLACES_PROVIDER` 固定写 `custom`，忽略 `.env` 里残留的 `gateway`。
-5. 现网 `buildGoogleProxyEnvVars` 不变。官方 Key 与 BYOK 共用「Google 出站代理」设置。代理不表示、也不实现服务器代调。
+1. 调用 C-04，得到来源 `official` | `byok` | `none`。纯函数里没有 `apiKey`。
+2. `none`：不注入 `GOOGLE_PLACES_API_KEY`。
+3. `byok`：注入 `.env` 里的自备 Key。
+4. `official`：调用 C-02 的 `getCurrent`。成功则把返回的 `apiKey` 放进内存，再注入子进程，变量名仍是 `GOOGLE_PLACES_API_KEY`。失败则本次运行不启动，文案见 C-04，不改用自备 Key。
+5. `PLACES_PROVIDER` 固定 `custom`。现网 Google 出站代理照旧，只影响本机直连，不是代调。
 
-`places-api` 的 `getGooglePlacesApiKey()` 继续读 `GOOGLE_PLACES_API_KEY`。不在 MCP 里增加 `FTCS_PLACES_OFFICIAL_API_KEY`，避免两把 Key 同时留在子进程环境里。
+`places-api` 继续只读 `GOOGLE_PLACES_API_KEY`。不增加 `FTCS_PLACES_OFFICIAL_API_KEY`。
 
-Key 从官方换成自备、或材料轮换之后，C-02 已经重启 OpenCode。注入发生在重启后的下一次会话。
+运行结束、失败或用户停止：C-02 `clear()`，并重启 `places-api`，使子进程里的那把 Key 消失。
+
+### 3.1 运行中途旧 Key 被 Google 拒绝（PK12，只重试一次）
+
+官方来源下，`places-api` 对 Google 返回 HTTP 401 或 403 时，工具结果使用现有 `PLACES_HTTP_ERROR`，并带上 `http_status`。主进程看到**这一次 R3 会话**里的该错误后：
+
+1. 丢掉内存中的 Key。
+2. **再调用一次** US-PK-G-02 取当前 Key（计入 O14 的额度）。
+3. 取到新 Key 后，重启 `places-api` 并注入新值，不写盘。
+4. 向当前会话追加一句：用新 Key 重试刚才失败的那一次 Places 调用，只此一次。
+5. 若再次 401/403，或第二次取 Key 失败：停止并按 C-04 提示。不再取第三次，也不改用 BYOK。
+
+自备 Key 的 401/403 不走这 5 步，仍按现网「Key 无效或未启用 Places API (New)」停止。
+
+定时轮换或运营立即轮换（US-PK-AK-02）之后，下一次 `getCurrent` 自然是新 Key。正在跑的旧 Key 若被 Google 拒绝，只靠上面这一次重取，不在客户端保存两把 Key。新旧是否短暂并存见待确认 **O13**，客户端逻辑不变。
 
 ---
 
@@ -142,7 +156,8 @@ Key 从官方换成自备、或材料轮换之后，C-02 已经重启 OpenCode�
 |------|------|
 | 未注入 Key | MCP `MISSING_PLACES_API_KEY`。文案：「当前没有可用的 Places Key。请打开设置 → 探索，申请官方 Places Key 或填写自备 Key。」 |
 | 误设 `PLACES_PROVIDER=gateway` | `PLACES_GATEWAY_NOT_READY`。文案：「Places 不经服务器代调。请使用直连（PLACES_PROVIDER=custom），并配置官方下发 Key 或自备 Key。」 |
-| HTTP 401/403 | 现网：停止并说明 Key 无效或未启用 Places API (New)。官方 Key 与自备 Key 同一句，不说成「网关拒绝代调」 |
+| HTTP 401/403，来源是官方 | 按 §3.1 重取一次再试。第二次仍失败则停止，说明官方 Key 已被拒绝。不说成「网关已代查」 |
+| HTTP 401/403，来源是自备 | 现网：停止并说明 Key 无效或未启用 Places API (New) |
 | 超时、DNS、连接失败 | 停止该次 R3，说明本机访问 Google Places 失败。不创建「已成功」的空线索来掩盖 |
 | 官网打不开或判断为否 | 现网：不调用 `lead_append_raw` |
 
@@ -169,7 +184,7 @@ Preflight 在发会话之前就该拦住「没有生效 Key」。MCP 错误是�
 
 | # | 用例 | 期望 |
 |---|------|------|
-| T1 | 生效来源为官方 | 注入的 `GOOGLE_PLACES_API_KEY` 等于官方键，环境里没有第二把 |
+| T1 | 生效来源为官方 | 注入值等于当次 `getCurrent` 的 `apiKey`。工作区 `.env` 不因此增加官方 Key |
 | T2 | 生效来源为自备 | 注入值等于 BYOK，官方键不进 MCP 环境 |
 | T3 | `.env` 里 `PLACES_PROVIDER=gateway` | 注入结果仍是 `custom` |
 | T4 | 提示词字符串 | 含「经官网核实」，不含 `place_id=` |
@@ -182,7 +197,7 @@ Preflight 在发会话之前就该拦住「没有生效 Key」。MCP 错误是�
 
 | # | 需求 | 步骤 | 期望 |
 |---|------|------|------|
-| M1 | 无自备 Key | 官方 Key 已开通且 C-04 选中官方，清空 BYOK，开始 R3 | Preflight 的 Places 项通过。`detail` 写官方下发 Key、本机直连 |
+| M1 | 无自备 Key | 状态已开通、来源是官方、取 Key 成功，BYOK 为空，开始 R3 | Preflight 通过。`detail` 写官方下发 Key、本机直连。磁盘上没有官方 Key |
 | M2 | 直连 | 抓 `places-api` 出站 | 主机是 `places.googleapis.com`。没有发往 token-gateway 的 Places 检索 |
 | M3 | 只发现 | 跑通一条写进 `raw/R3.jsonl` 的线索 | `company.website` 是打开过的官网。`company.name` 不是未核实的 Places 店名。snippet 为 §4.2 那句。文件里没有 `place_id=`、没有整段 Places JSON |
 | M4 | 打不开官网 | 候选没有可打开的官网 | 不新增该线索 |
@@ -220,7 +235,7 @@ Preflight 在发会话之前就该拦住「没有生效 Key」。MCP 错误是�
 
 ## 10. 待确认
 
-无单独产品选项。O6（上线前法务）见[网关详设「待确认」](US-PK-token-gateway-接口与管理端.md)。开发按本文 §4 落库，文案不写「合规已通过」。
+O6（上线前法务）、**O12**（内存最长存放）、**O13**（轮换周期与过渡）见[网关详设「待确认」](US-PK-token-gateway-接口与管理端.md)。落库仍按本文 §4。O13 未定时，客户端只实现 §3.1 的一次重取。
 
 ---
 
@@ -229,3 +244,4 @@ Preflight 在发会话之前就该拦住「没有生效 Key」。MCP 错误是�
 | 日期 | 说明 |
 |------|------|
 | 2026-10-10 | 初稿：官方 Key 直连 R3，Places 只作发现入口，替换 snippet 中的 Places 商家字段 |
+| 2026-10-10 | Key 不落盘，改为实时获取 |

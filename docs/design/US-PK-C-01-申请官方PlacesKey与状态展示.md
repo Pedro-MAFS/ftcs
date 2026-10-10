@@ -3,12 +3,12 @@
 > **用户故事**：[../30-需求-Places官方通道按用户下发APIKey.md](../30-需求-Places官方通道按用户下发APIKey.md) · US-PK-C-01 · Issue #21  
 > **状态**：**待评审**（本文件只定设计；业务代码尚未按本文改动）  
 > **范围**：设置页申请官方 Places Key；展示未申请 / 申请中 / 已开通 / 失败 / 已停用；未登录只引导登录  
-> **依赖**：现网官方账号登录（`auth:login`）；[US-PK-token-gateway-接口与管理端.md](US-PK-token-gateway-接口与管理端.md) 的客户端接口「提交申请」「查询状态」；本地保存见 [US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md)  
+> **依赖**：现网官方账号登录（`auth:login`）；[US-PK-token-gateway-接口与管理端.md](US-PK-token-gateway-接口与管理端.md) 的「提交申请」「查询状态」；取 Key 见 [US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md)  
 > **不做**：开通、吊销、对账（管理端）；服务端代调 Places；在探索页或引导页直接提交申请  
 > **文档位置**：`docs/design/`  
 > **与旧详设**：取代「官方通道没有 Places、只能等 US-E-10 代调或自己填 BYOK」这层产品口径。旧文件保留不改，替换关系见 §0.1。
 
-申请入口与状态文案以本文为准。Key 落盘、注入 MCP、与 BYOK 的选用分别见 C-02、C-03、C-04。服务端路径、错误码以网关详设为准，本文不另写一套 URL。
+申请入口与状态文案以本文为准。官方 Key 不在申请或刷新时落到本机；用时再取见 C-02，注入与选用见 C-03、C-04。服务端路径、错误码以网关详设为准，本文不另写一套 URL。
 
 ---
 
@@ -145,7 +145,7 @@ function canApplyPlacesOfficialKey(input: {
 |------|--------|------------------------------------------------------|
 | `none` | 未申请 | 无 |
 | `pending` | 申请中 | 预计在受理后的下一自然日内开通。 |
-| `active` | 已开通 | 当前这把是官方下发 Key。 |
+| `active` | 已开通 | 官方 Places Key 已开通。每次使用时重新获取，不保存在这台电脑上。 |
 | `failed` | 开通失败 | 开通未成功。请看上方原因，或稍后刷新。 |
 | `suspended` + `overdue` | 已停用 | 官方余额不足或欠费，这把官方 Key 已停用。 |
 | `suspended` + 其它 | 已停用 | 这把官方 Key 已停用，不能再用来查询 Places。 |
@@ -192,7 +192,7 @@ function canApplyPlacesOfficialKey(input: {
 
 `preload.ts` 增加 `applyPlacesOfficialKey`、`refreshPlacesOfficialKey`。类型放在 `desktop/electron/ipc/types.ts` 与 `desktop/src/types/electron.d.ts`。
 
-申请或刷新若带回了新的 Key 材料，写盘与重启 OpenCode 由 C-02 在同一次主进程调用里完成，渲染层不单独再调保存。
+申请与刷新的响应里没有 `apiKey`。渲染层只更新状态。取 Key 不在这两个 IPC 里做。
 
 ---
 
@@ -217,7 +217,7 @@ sequenceDiagram
   end
 ```
 
-开始 R3 前的刷新是同一条 `places-official:refresh`，失败时不启动探索会话（与现网 Preflight 失败一致）。若本地上次已是 `active` 且刷新只是网络失败，是否仍允许用上次的 Key，见 C-02：允许，并在 Preflight 的 `detail` 里说明「暂时无法确认状态，仍使用上次下发的 Key」。
+开始 R3 前先刷新状态。状态刷新失败时不启动探索会话，也不沿用上一次看到的「已开通」。取 Key 是否成功由 C-02 / C-04 在同一次启动里判定；失败时不改用自备 Key。
 
 ---
 
@@ -297,3 +297,4 @@ sequenceDiagram
 | 日期 | 说明 |
 |------|------|
 | 2026-10-10 | 初稿：按 `docs/30` US-PK-C-01 写申请入口、五态展示与 IPC。不改业务代码，不改 `docs/30`，不删 US-E-10 |
+| 2026-10-10 | Key 不落盘，改为实时获取 |

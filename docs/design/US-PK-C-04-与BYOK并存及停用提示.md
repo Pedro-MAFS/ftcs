@@ -3,8 +3,8 @@
 > **用户故事**：[../30-需求-Places官方通道按用户下发APIKey.md](../30-需求-Places官方通道按用户下发APIKey.md) · US-PK-C-04 · Issue #21  
 > **状态**：**待评审**（本文件只定设计；业务代码尚未按本文改动）  
 > **范围**：官方 Key 与 US-E-07 自备 Key 同时存在时的选用；停用 / 吊销后的提示与改回 BYOK；Preflight 与「开始 R3」使用同一规则  
-> **依赖**：[US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md) 的两套存储；现网 `resolvePlacesStart`；探索页 `useExploreStart`  
-> **不做**：删除 BYOK；停用时静默改用另一把 Key；计费 BYOK；代调  
+> **依赖**：[US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md) 的实时取 Key；现网 `resolvePlacesStart`；探索页 `useExploreStart`  
+> **不做**：删除 BYOK；取 Key 失败或停用时自动改用 BYOK；计费 BYOK；代调
 > **文档位置**：`docs/design/`
 
 需求 O4（并存时的优先级）在本文定死，不进入待确认。
@@ -32,7 +32,7 @@
 | **US-PK-C-04** | 选用规则、切换 IPC、停用提示、`resolvePlacesStart` |
 | **US-E-07** | 自备 Key 的输入、掩码、清除、直连。不改字段含义 |
 | **US-PK-C-01** | 状态文案与申请按钮 |
-| **US-PK-C-02** | 两把 Key 分键保存。切换来源时不删官方材料，除非状态已不是 `active` |
+| **US-PK-C-02** | 官方 Key 只在当次运行的内存里。切换来源不涉及删官方 Key 文件 |
 | **US-PK-C-03** | 把本节选出的那一把注入 MCP |
 
 ---
@@ -42,15 +42,15 @@
 | 项 | 决定 |
 |----|------|
 | **O4 默认** | 用户还没有 `FTCS_PLACES_KEY_SOURCE` 时：只有自备 Key → 用自备；只有可用官方 Key → 用官方；**两把同时可用 → 用官方**，并在设置里写明当前是官方、自备 Key 仍保留。这是确定规则，不是随机 |
-| **何时把默认写进 `.env`** | 只在「刷新成功且官方 Key 变为可用、来源键仍为空」时写成 `official`。读设置、Preflight、渲染按钮都不写。在此之前，只有 BYOK 的用户与现网一致 |
+| **何时把默认写进 `.env`** | 只在「状态刷新为已开通、`FTCS_PLACES_KEY_SOURCE` 仍为空」时写成 `official`。写入的是来源名字，不是 Key。在此之前，只有 BYOK 的用户与现网一致 |
 | **用户切换** | 设置里两把都配置过时，显示二选一。点选立即写 `FTCS_PLACES_KEY_SOURCE` 并重启 OpenCode |
 | **选中的那把不可用** | **不**自动改成另一把。Preflight 失败，并给出按钮或说明去设置切换 |
-| **停用 / 吊销** | 状态是 `suspended` 时官方来源不可用。若 BYOK 仍在，设置状态区与 Preflight 都提示原因，并提供「改用自备 Key」。用户确认后把来源写成 `byok` |
+| **停用 / 吊销 / 取 Key 失败** | 官方来源不可用时明确提示（§3.1）。若 BYOK 已填写，只提供按钮「改用自备 Key」。用户没点之前来源保持 `official`，不用自备 Key 顶上（PK12） |
 | **未申请** | 不写 `official`。BYOK 行为与 US-E-07、现网 Preflight 一致 |
 | **识别当前 Key** | 设置「当前 R3 使用」一行（C-03）+ Preflight `detail`。两处用同一 `source` |
 | **gateway 标志** | `isPlacesGatewayReady` 继续恒为 `false`。选用官方 Key 时 `provider` 仍是 `custom` |
 
-「官方可用」= `placesOfficialStatus === 'active'` 且 `placesOfficialKeySet`。`pending` / `failed` / `suspended` / `none` 都不是可用。刷新网络失败但本机仍留着上一把官方 Key、且缓存状态仍是 `active`：视为**暂时可用**，`detail` 必须带 C-01 的那句无法确认状态的说明。
+「官方通道可尝试」= 最近一次状态查询为 `active`。本机没有官方 Key 文件，不能靠磁盘判断。`pending` / `failed` / `suspended` / `none`、状态刷新失败、以及 US-PK-G-02 取 Key 失败，都不能开始官方这条 R3。没有「沿用上一把 Key」的分支。
 
 ---
 
@@ -62,11 +62,9 @@ type PlacesKeySource = 'official' | 'byok'
 interface PlacesEffectiveKey {
   ok: boolean
   source: PlacesKeySource | 'none'
-  /** 仅主进程持有。Preflight 结果里不要带这个字段 */
-  apiKey: string
   detail: string
   /** 失败时，设置里可以执行的下一步。没有则为 null */
-  offer: 'switch-to-byok' | 'switch-to-official' | 'open-settings' | null
+  offer: 'switch-to-byok' | 'switch-to-official' | 'open-settings' | 'relogin' | null
 }
 ```
 
@@ -82,7 +80,7 @@ interface PlacesEffectiveKey {
 4. 若 `saved === 'official'`：官方可用则用官方；否则失败，`offer` 在 BYOK 可用时为 `switch-to-byok`，否则 `open-settings`。
 5. 若 `saved === 'byok'`：BYOK 可用则用 BYOK；否则失败，`offer` 在官方可用时为 `switch-to-official`，否则 `open-settings`。
 
-纯函数**不写盘**。唯一一次自动写入：官方 Key 刷新成功且变为可用、`FTCS_PLACES_KEY_SOURCE` 仍为空时，由刷新处理函数写成 `official`（两把都在时也写 `official`，与上表一致）。Preflight、设置快照、探索页按钮只调用纯函数。失败分支不改来源。用户切换走 §4 的 IPC。
+纯函数**不写盘**。唯一一次自动写入：状态变为已开通且来源键仍为空时，刷新处理函数把 `FTCS_PLACES_KEY_SOURCE` 写成 `official`（没有自备 Key、或两把通道都可用时都写这个名字）。不写任何 Key 材料。Preflight、设置快照、探索页按钮只调用纯函数。失败分支不改来源。用户切换走 §4 的 IPC。
 
 `resolvePlacesStart` 改为返回上述结果里的 `ok`、`detail`、`provider: 'custom'`（只要 `ok`）。现有调用方只看 `ok` 与 `detail` 的，保持能编译。`places-start.test.ts` 里「官方通道无 Key 则要求 BYOK」的用例改为：无官方申请、无 BYOK 时失败；有 BYOK 且来源为空时仍成功且 `detail` 含「自备」。
 
@@ -90,8 +88,13 @@ interface PlacesEffectiveKey {
 
 | 结果 | `detail` |
 |------|----------|
-| 用官方，同步正常 | 官方下发 Key（本机直连 Google） |
-| 用官方，上次同步失败 | 暂时无法确认官方 Key 状态，仍使用上次下发的 Key（本机直连 Google） |
+| 用官方，取 Key 成功 | 官方下发 Key（本机直连 Google） |
+| 取 Key 网络失败 | 暂时联系不上官方服务，未能获取 Places Key。请稍后重试。 |
+| 401 `need_login` | 请先登录后再使用官方 Places Key。 |
+| 401 `credential_revoked` | 登录凭证已吊销，不能获取官方 Places Key。请重新登录。 |
+| 欠费停用 | 官方余额不足或欠费，官方 Places Key 已停用。 |
+| 官方 Key 已吊销 | 官方 Places Key 已吊销，不能再用来查询 Places。 |
+| 429 限频（O14） | 获取官方 Places Key 过于频繁，请稍后再试。 |
 | 用自备 | 自备 Google Places API Key（本机直连） |
 | 来源是官方但申请中 / 失败 / 已停用 | C-01 §4.3 的三句之一。已停用时若 `offer === 'switch-to-byok'`，句末加上「自备 Key 仍可用，可在设置 → 探索改用自备 Key。」 |
 | 两边都没有 | 请在设置 → 探索申请官方 Places Key，或填写自备 Key（仅 R3 需要）。 |
@@ -109,13 +112,13 @@ interface PlacesEffectiveKey {
 |------|------|
 | 只有 BYOK，官方未申请或不可用 | 不显示二选一。只显示「当前 R3 使用：自备 Places Key」 |
 | 只有官方可用，用户没填过 BYOK | 不显示二选一。只显示「当前 R3 使用：官方下发 Key」 |
-| 官方材料曾经或当前存在，且 BYOK 已设置 | 二选一：「官方下发 Key」「自备 Places Key」。当前项选中 |
-| 来源是官方且状态为已停用，BYOK 已设置 | 状态区用 C-01 的停用文案，主按钮「改用自备 Key」 |
+| 状态曾查到已开通，且 BYOK 已设置 | 二选一：「官方下发 Key」「自备 Places Key」。当前项选中。官方一侧不表示本机存着 Key |
+| 来源是官方且取 Key 失败或已停用，BYOK 已设置 | 用 §3.1 的对应句子，主按钮「改用自备 Key」。凭证吊销时另给「去登录」（`offer` 含 `relogin`） |
 | 来源是自备，官方已开通 | 主按钮「改用官方下发 Key」 |
 
 二选一的说明句：
 
-> 两把 Key 都还在。R3 只会使用当前选中的这一把，本机直连 Google。
+> 自备 Key 仍在本机。官方 Key 在每次运行时重新获取，不写在这台电脑上。R3 只用当前选中的那一种，本机直连 Google。
 
 IPC：`places-official:set-source`，入参 `{ source: 'official' | 'byok' }`。
 
@@ -125,7 +128,7 @@ IPC：`places-official:set-source`，入参 `{ source: 'official' | 'byok' }`。
 | `byok` 但 BYOK 为空 | `{ ok: false, message: '请先填写自备 Places Key' }` |
 | 通过 | 写入 `FTCS_PLACES_KEY_SOURCE`，重启 OpenCode，返回新快照 |
 
-「改用自备 Key」就是 `source: 'byok'`。不删除官方 Key 文件里的历史状态；若服务状态已是 `suspended`，C-02 已经删过官方 Key 材料，切换只改来源。
+「改用自备 Key」就是用户点击后 `source: 'byok'`。取 Key 失败的代码路径里禁止写这个键。没有官方 Key 文件可删。
 
 探索页 `startR3DisabledReason`：生效 Key 不可用时，用 §3.1 的失败 `detail`，不再固定「请先配置 Google Places API Key」。R1/R2 的禁用理由不变。
 
@@ -178,7 +181,7 @@ flowchart TD
 | T2 | 无官方、有 BYOK、来源空 | `ok`，来源自备 |
 | T3 | 官方可用、有 BYOK、来源空 | `ok`，来源官方 |
 | T4 | 来源 `byok`，两把都可用 | `ok`，来源自备 |
-| T5 | 来源 `official`，状态 `suspended`，BYOK 可用 | `ok === false`，`offer === 'switch-to-byok'` |
+| T5 | 来源 `official`，取 Key 失败或 `suspended`，BYOK 可用 | `ok === false`，`offer` 含 `switch-to-byok`，来源键仍是 `official` |
 | T6 | 来源 `official`，状态 `pending`，无 BYOK | `ok === false`，不把状态改成自备 |
 | T7 | `isPlacesGatewayReady` 在官方已开通时 | `false` |
 
@@ -193,8 +196,8 @@ flowchart TD
 | M1 | 未申请时 BYOK 与现网一致 | 不申请官方，只填自备 Key，开始 R3 | 通过。`detail` 含自备、本机直连。自备 Key 的保存 / 清除与现网一致 |
 | M2 | 开通后 BYOK 还在 | 先填 BYOK，再把 mock 推到已开通 | `.env` 里自备 Key 原文还在。设置同时看得到两段标题 |
 | M3 | 默认不随机 | M2 之后不点切换，看「当前 R3 使用」并开始 R3 | 显示官方下发 Key。再跑一次仍是官方 |
-| M4 | 可以改回 | 点「自备 Places Key」后再开始 R3 | `detail` 改为自备。官方 Key 材料还在（若状态仍是已开通） |
-| M5 | 停用可感知 | mock 改为 `suspended` + `overdue`，来源仍是官方 | 开始 R3 失败。能看到停用原因。有 BYOK 时出现「改用自备 Key」 |
+| M4 | 可以改回 | 点「自备 Places Key」后再开始 R3 | `detail` 改为自备。不出现官方 Key 文件。再改回官方时重新取 Key |
+| M5 | 失败可感知且不回退 | mock 取 Key 分别返回网络错误、`credential_revoked`、`overdue`、429，来源仍是官方 | 开始 R3 失败。句子与 §3.1 一致。有 BYOK 时出现「改用自备 Key」，但来源仍是 `official`，本次不用自备 Key 发 Places 请求 |
 | M6 | 不静默改道 | M5 时不点按钮，直接再读来源 | 仍是 `official`，不会变成 `byok` |
 | M7 | 点了才改回 | 在 M5 点「改用自备 Key」 | 来源变为 `byok`，R3 可以开始，走自备 Key |
 | M8 | 方案里的 R3 | 高级获客或含 R3 的方案在 M5 的状态下执行 | Preflight 同样失败，文案与探索页一致 |
@@ -237,3 +240,4 @@ O4 已在 §2、§3 决定。其它未决项见[网关详设「待确认」](US-
 | 日期 | 说明 |
 |------|------|
 | 2026-10-10 | 初稿：并存时的默认来源、显式切换、停用后不静默改道 |
+| 2026-10-10 | Key 不落盘，改为实时获取 |

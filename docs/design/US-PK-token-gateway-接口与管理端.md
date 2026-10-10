@@ -1,10 +1,10 @@
 # US-PK token-gateway 接口与管理端
 
-> **用户故事**：[../30-需求-Places官方通道按用户下发APIKey.md](../30-需求-Places官方通道按用户下发APIKey.md) · US-PK-G-01～03、US-PK-AK-01～03、US-PK-AR-01～02 · Issue #21  
+> **用户故事**：[../30-需求-Places官方通道按用户下发APIKey.md](../30-需求-Places官方通道按用户下发APIKey.md) · US-PK-G-01～04、US-PK-AK-01～03、US-PK-AR-01～02 · Issue #21  
 > **状态**：**待评审**（只定接口与需求描述；不选框架、不写实现）  
 > **范围**：客户端与国内 token-gateway 服务之间的接口；服务与管理端之间的可替换操作；管理端 Key 管理页与对账页要做什么  
-> **依赖**：现网桌面官方账号 access token（与 `POST {base}/keys/rotate` 同一套）；客户端如何保存与使用 Key 见 US-PK-C-01～04  
-> **不做**：服务端代调 Google Places；token-gateway 服务调用 Google；在本文选定 O7–O11  
+> **依赖**：现网桌面官方账号 access token（与 `POST {base}/keys/rotate` 同一套，`safeStorage` 见 US-PK-C-02）；客户端实时取 Key 见 US-PK-C-02  
+> **不做**：服务端代调 Google Places；token-gateway 服务调用 Google；在本文选定 O7–O11、O12–O14  
 > **文档位置**：`docs/design/`  
 > **与旧详设**：旧「US-E-10 网关代调」作废关系见 §0.1。旧文件保留，本 PR 不改它们。
 
@@ -17,7 +17,7 @@
 | 现网 | **本期** |
 |------|----------|
 | token-gateway 为模型与官方搜索提供 `keys/rotate`、`models`、`usage/me`。桌面 base 为 `FTCS_TOKEN_GATEWAY_BASE_URL`，默认 `https://token.ai-utills.com/v1`（已含 `/v1`） | Places 官方 Key 的**客户端**路径挂在同一个 base 上，拼接规则与 `gateway-client.ts` 相同：去掉末尾 `/` 再接相对路径 |
-| 没有按用户下发 Google Places Key 的接口 | 新增 §4。只面向已登录的官方账号本人 |
+| 没有按用户下发 Google Places Key 的接口 | 新增 §4。状态查询不带 Key；取当前 Key 每次实时返回，供客户端只放内存（PK12） |
 | US-E-10 曾规划由网关转发 Places | **不新增** `/v1/places:searchText` 或任何把用户检索转到 Google 的路径 |
 | 管理端（Key 开通、账单）不在 ftcs 现网桌面里 | 页面与操作见 §6、§7。代码放哪见待确认 O8 |
 
@@ -79,10 +79,11 @@ stateDiagram-v2
   suspended --> active: 恢复条件满足后由管理端回写
 ```
 
-| 状态 | 对客户端下发 `apiKey` |
+| 状态 | 取当前 Key（§4.3） |
 |------|------------------------|
-| `none` / `pending` / `failed` / `suspended` | 必须为 null |
-| `active` | 非空，且只属于该官方账号 |
+| `none` / `pending` / `failed` / `suspended` | 不返回 `apiKey`（4xx，带原因） |
+| `active` 且凭证未吊销 | 返回本人当前有效 `apiKey` |
+| 凭证已按 US-PK-G-04 吊销 | 401 `credential_revoked`，即使通道仍是 `active` |
 
 一人一 Key（PK2）：同一官方账号在 `pending` 或 `active` 时，再次申请不创建第二条 Google Key，返回当前资源。
 
@@ -113,11 +114,11 @@ stateDiagram-v2
 
 ---
 
-## 4. 客户端接口（方向已锁定）
+## 4. 客户端与运营接口
 
-触发方都是 FTCS 客户端主进程。相对路径接在现网 gateway base 之后。
+客户端路径接在现网 gateway base 之后，调用方是桌面主进程，凭证是官方登录 access token。运营路径在服务内部源站 `{service}` 上，凭证是 O10，桌面 token 调不通。
 
-渲染进程看不到 §4 的响应原文。主进程按 US-PK-C-02 剥掉 `apiKey` 再做快照。
+渲染进程看不到这些响应。`apiKey` 只出现在 §4.3，并且只进主进程内存（US-PK-C-02）。申请和查状态的响应**没有** `apiKey` 字段。
 
 ### 4.1 提交申请 · US-PK-G-01
 
@@ -147,8 +148,8 @@ stateDiagram-v2
 | `updatedAt` | string \| null | |
 | `expectedReadyNote` | string \| null | 申请中的说明。O2 定下来之后由**服务**填好句子 |
 | `reapplyAllowed` | boolean | 按再次申请政策填写 |
-| `apiKey` | string \| null | 仅 `active` 且未停用时非空 |
-| `keyPrefix` | string \| null | 可展示的非秘密前缀 |
+
+本接口不返回 `apiKey`、`expiresAt`、`keyVersion`。日志不记录 `Authorization`。
 
 错误：
 
@@ -160,32 +161,104 @@ stateDiagram-v2
 | 429 | `rate_limited` | 稍后重试 |
 | 503 | `unavailable` | 服务暂不可用 |
 
-错误体：`{ "code", "message" }`。`message` 为中文短句。日志不记录 `Authorization` 和 `apiKey`。
+错误体：`{ "code", "message" }`。`message` 为中文短句。
 
 服务受理后只落自己的申请表，并让管理端能按 §5.1 取走。**本接口实现里不调用 Google。**
 
-### 4.2 查询状态并下发 Key · US-PK-G-02
+### 4.2 查询状态 · US-PK-G-02
 
 | 项 | 内容 |
 |----|------|
 | 方法 + 路径 | `GET {base}/places/official-key` |
-| 触发方 | 打开设置、刷新、开始 R3 之前 |
-| 鉴权 | §3 客户端凭证。只返回该凭证对应的账号 |
+| 触发方 | 打开设置、点刷新。不在这里取 Key |
+| 鉴权 | 官方登录 access token。只返回该凭证对应的账号 |
 | 幂等 | 只读 |
 
-无请求体。未申请也返回 **200**，`status = none`，不要用 404 表示未申请。
+无请求体。未申请返回 **200**，`status = none`。不要用 404 表示未申请。
 
-响应字段与 §4.1 相同。附加规则：
+响应字段与 §4.1 的状态字段相同，仍然没有 `apiKey`。凭证已被 US-PK-G-04 吊销时返回 401 `credential_revoked`，不要把状态伪装成 `none`。
 
-- `status !== active` 时，即使库里仍留着旧材料，`apiKey` 也必须是 null。
-- 轮换完成后，下一次 GET 返回新 `apiKey`。旧 Key 不再返回。
-- 不得因管理端尚未同步就返回另一名用户的 Key。
+### 4.3 取当前 Key · US-PK-G-02
 
-错误码与 §4.1 的 401 / 403 / 503 相同。本接口没有 409。
+| 项 | 内容 |
+|----|------|
+| 方法 + 路径 | `GET {base}/places/official-key/current` |
+| 触发方 | 客户端在一次 R3（或含 R3 的步骤）开始时，以及运行中 Google 拒绝后的那一次重试（US-PK-C-03） |
+| 鉴权 | 与 §4.2 相同。只返回本人当前有效的 Key |
+| 幂等 | 只读。轮换后下一次调用返回新 Key，不返回旧 Key |
+| 限频 | 见待确认 **O14**。超限 429，`code = rate_limited` |
 
-### 4.3 客户端没有的接口
+成功 **200**：
 
-不提供：客户端吊销、客户端上报用量、客户端拉取别人的申请、客户端访问 §5 的内部路径。余额数字仍走现网 `GET {base}/usage/me`（若 O1 确认 Places 扣的是同一官方余额）。Places 区不单独做一套余额公式。
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `apiKey` | string | 当前有效的 Google API Key。客户端不落盘 |
+| `expiresAt` | string \| null | ISO-8601。客户端内存能否留到这个时刻见 **O12**。服务可以返回 null |
+| `keyVersion` | string | 非秘密。轮换后必须变化。客户端可以写进日志，不能代替 `apiKey` |
+
+失败：
+
+| HTTP | `code` | 何时 |
+|------|--------|------|
+| 401 | `need_login` | 没有凭证或凭证过期且无法刷新 |
+| 401 | `credential_revoked` | 这一份登录凭证已被 §4.5 吊销 |
+| 403 | `not_active` | 状态不是 `active`。体里带 `status`、`reasonCode`、`reasonMessage`，例如欠费 `overdue`、Key 吊销 `abuse` |
+| 429 | `rate_limited` | 超过 O14。客户端提示稍后重试，不改用 BYOK |
+| 503 | `unavailable` | 服务异常 |
+
+响应和日志都不保留 `apiKey` 的副本到访问日志。不得返回他人的 Key。
+
+### 4.4 轮换 · US-PK-AK-02
+
+定时任务和运营点击「立即轮换」走**同一个**接口。周期不写在路径里，见待确认 **O13**。
+
+| 项 | 内容 |
+|----|------|
+| 方法 + 路径 | `POST {service}/internal/places/official-key/rotate` |
+| 触发方 | 管理端 · Key 管理。先在 Google 侧停用旧 Key 并建好新的仅 Places Key，再调用 |
+| 鉴权 | O10 凭证。桌面登录 token 调用得到 401 `credential_rejected` |
+| 幂等键 | `dispositionId`。重复提交不产生第三把 Key |
+
+| 字段 | 说明 |
+|------|------|
+| `dispositionId` | |
+| `accountId` | |
+| `googleKeyId` | 新 Key 的非秘密标识 |
+| `keyMaterial` | 与 §5.2 相同（`inline` 或 `retained_at_admin`） |
+| `reasonCode` | `manual`（立即轮换）或 `scheduled`（定时） |
+| `reasonMessage` | 可空。定时轮换不必给用户看一句「已轮换」 |
+| `previousKeyValidUntil` | ISO-8601 或 null。null 表示服务立刻只返回新 Key。非 null 的含义由 **O13** 的过渡选项决定，选定前两种都能填 |
+
+成功后通道保持 `active`。之后 §4.3 返回新 `apiKey` 与新 `keyVersion`。服务不调用 Google。
+
+### 4.5 吊销客户端身份凭证 · US-PK-G-04
+
+盗刷时切断「还能来取 Key 的那份登录」，与吊销 Google Key（§5.3 的 `revoke`）分开。不改变通道状态，不删除 Google Key。
+
+| 项 | 内容 |
+|----|------|
+| 方法 + 路径 | `POST {service}/internal/places/official-key/credentials/revoke` |
+| 触发方 | 管理端运营 |
+| 鉴权 | O10 凭证 |
+| 幂等键 | `revocationId` |
+
+| 字段 | 说明 |
+|------|------|
+| `revocationId` | |
+| `accountId` | 官方账号，对应登录 token 的 `sub` |
+| `credentialId` | 要作废的那一份凭证。见下方粒度 |
+| `reasonCode` | `abuse` 或 `manual` |
+| `reasonMessage` | 运营备注，不必展示给用户 |
+
+**粒度（详设决定，不再开放）**：一份登录会话，不是整个账号的所有设备。标识从 access token 里取**刷新 access token 时不变、重新登录会变**的声明，优先 `sid`，否则 `sub` + `auth_time`。服务只存这个标识是否已吊销，不存 token 原文。同一账号在另一台电脑上的另一份登录不受影响。
+
+吊销成功后，持该 `credentialId` 的 §4.2 / §4.3 立即 401 `credential_revoked`。用户在本机重新走现网登录后，新 token 的标识不同，可以再取 Key（通道仍须是 `active`）。重复的 `revocationId` 返回 200，不重复记一条。
+
+管理端用户 Key 页上的按钮文案：「吊销此客户端登录凭证」。旁边另有「吊销 Google Key」，两者不要合成一个按钮。
+
+### 4.6 客户端没有的接口
+
+桌面不调用 §4.4、§4.5 和 §5。不提供客户端上报用量。余额仍走现网 `GET {base}/usage/me`（若 O1 确认是同一官方余额）。
 
 ---
 
@@ -275,18 +348,16 @@ stateDiagram-v2
 |------|------|
 | `dispositionId` | |
 | `accountId` | |
-| `action` | `revoke`（吊销）、`rotate`（轮换）、`suspend`（停用） |
+| `action` | `revoke`（吊销 Google Key）、`suspend`（停用）。轮换不走这里，只走 §4.4 |
 | `reasonCode` | `abuse` 盗刷、`overdue` 欠费或余额不足、`account_closed` 用户注销、`manual` 手工、`quota` 配额 |
 | `reasonMessage` | 用户可见中文 |
 | `googleKeyId` | 被处置的那把 |
-| `keyMaterial` | **仅** `rotate` 需要把新 Key 交给服务时出现，形状与 §5.2 相同 |
 
 服务侧效果：
 
-| `action` | 用户状态 | 下发 |
-|----------|----------|------|
-| `revoke` 或 `suspend` | `suspended` | 清除可下发材料，之后 GET 的 `apiKey` 为 null |
-| `rotate` | 保持 `active` | 替换材料。旧材料不再下发 |
+| `action` | 用户状态 | 取 Key |
+|----------|----------|--------|
+| `revoke` 或 `suspend` | `suspended` | 清除可下发材料。之后 §4.3 返回 403 `not_active`，没有 `apiKey` |
 
 Google 侧「删除、禁用、新建」由管理端完成后再调用本操作。服务不调用 Google。重复的 `dispositionId` 返回 200，不第二次改状态。
 
@@ -359,8 +430,10 @@ Google 侧「删除、禁用、新建」由管理端完成后再调用本操作�
 |------|------|--------------------|
 | 待开通列表 | 查看账号、`appliedAt`。O2 未定前只展示 `appliedAt` 原文，不显示自算的「剩余小时」 | §5.1 |
 | 开通 | **半自动**：运营在 Google 创建仅 Places 的 Key 后，填写 `googleKeyId` 与材料模式，提交成功或失败。**全自动**：页面只读任务结果，仍走 §5.2。两套按钮哪一个出现，等 O2 | Google API Keys；§5.2 |
-| 用户 Key | 查看 `accountId`、`googleKeyId`、状态、原因、时间 | 管理端自己的绑定表，与 §5.2 / §5.3 的回写一致 |
-| 处置 | 吊销、轮换、停用。原因必选：盗刷、欠费、注销、手工、配额。提交前先完成 Google 侧动作 | Google；§5.3 |
+| 用户 Key | 查看 `accountId`、`googleKeyId`、`keyVersion`、状态、原因、时间 | 管理端绑定表，与 §5.2、§4.4 一致 |
+| 轮换 | 「立即轮换」调用 §4.4，`reasonCode=manual`。定时任务按 **O13** 调用同一接口，`reasonCode=scheduled`。O13 未定时，页面不写「每 N 天」 | Google；§4.4 |
+| 吊销登录凭证 | 「吊销此客户端登录凭证」调用 §4.5。不删除 Google Key | §4.5 |
+| 处置 | 吊销 Google Key、停用。原因必选：盗刷、欠费、注销、手工、配额。提交前先完成 Google 侧动作 | Google；§5.3 |
 | 配额与告警 | 展示项目级配额与预算告警，并能从一条告警点到 `googleKeyId`。阈值与通知渠道等待确认，页面先留「告警列表 + 跳到处置」 | Google 预算 / 配额；处置走 §5.3 |
 
 验收对应 US-PK-AK-01～03：一人一 Key、限制仅 Places（`placesOnly`）、T+1 内有结果回写（时限的日历见 O2）、吊销后服务状态变为 `suspended`、告警能定位到 Key。
@@ -386,9 +459,9 @@ BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 
 | 客户端行为 | 使用的接口 |
 |------------|------------|
-| 申请、刷新 | §4.1、§4.2 |
-| 已开通后写入 `FTCS_PLACES_OFFICIAL_API_KEY` | 只使用 §4.2 的 `apiKey` |
-| mock 自测 | 同一响应形状，见 [US-PK-C-02 §6](US-PK-C-02-接收并安全保存官方Key.md)。O8 未定前不阻塞桌面开发 |
+| 申请、刷新状态 | §4.1、§4.2（响应无 `apiKey`） |
+| 一次 R3 开始，以及 Google 拒绝后重取一次 | §4.3。结果只进内存，不写 `FTCS_PLACES_OFFICIAL_API_KEY` |
+| mock 自测 | mock 的是 §4.3，见 [US-PK-C-02 §6](US-PK-C-02-接收并安全保存官方Key.md) |
 | R3 直连 Google | **不经过**本章任何 URL |
 
 ---
@@ -412,10 +485,11 @@ BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 | # | 故事 | 期望 |
 |---|------|------|
 | G1 | G-01 | 无官方账号凭证的申请被拒绝。重复申请不产生第二把 Key。服务进程的出站里没有 Google |
-| G2 | G-02 | 本人 GET 在 `active` 时得到自己的 `apiKey`；`suspended` 时为 null。换凭证得不到上一名用户的 Key |
+| G2 | G-02 | `GET /places/official-key` 无 `apiKey`。`GET .../current` 在 `active` 时返回本人的 `apiKey`、`expiresAt`、`keyVersion`；停用时 403 `not_active` |
 | G3 | G-03 | 同一 `chargeId` 两次，余额只减一次。不足后状态为 `suspended`，客户端 GET 可见原因 |
 | A1 | AK-01 | 待开通能被取走；成功回写后状态为 `active`；`placesOnly !== true` 被拒绝 |
-| A2 | AK-02 | 单用户吊销、轮换、停用只影响该 `accountId`。轮换后 GET 得到新 Key |
+| A2 | AK-02 | 立即轮换与定时轮换都走 §4.4，只影响该账号。之后 `/current` 的 `keyVersion` 已变。吊销 Google Key 后 `/current` 为 403 |
+| G4 | G-04 | 吊销某 `credentialId` 后，旧登录 token 取 Key 为 401 `credential_revoked`。重新登录的新 token 可以再取。另一用户不受影响。Google Key 可以仍是 `active` |
 | A3 | AK-03 | 项目级配额与预算告警能在管理端看到，并能打开对应 `googleKeyId` 的处置 |
 | R1 | AR-01 | 按日归集后生成扣费；差异可在对账页查到；重跑不双扣 |
 | R2 | AR-02 | 欠费通知能被对账页看到；停用后的客户端状态为已停用 |
@@ -440,6 +514,8 @@ BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 
 下列每条都还要产品拍板。推荐只表示详设倾向，**接口按可替换方式书写，不把推荐实现成唯一路径**。O8 放在第一条。
 
+**O3 已由 PK12 关闭**，不在下面列选项。官方 Key 不落盘。本机身份凭证的保护已在 [US-PK-C-02 §4.2](US-PK-C-02-接收并安全保存官方Key.md) 定死：复用现网官方登录 token，文件 `oauth-tokens.bin`，Electron `safeStorage.encryptString` / `decryptString`（`token-store.ts`）。不把 Places Key 放进 safeStorage，也不用 `.env` 里的模型 sk 充当这份凭证。
+
 ### O8（优先）token-gateway 服务与管理端放在哪个仓库
 
 `docs/30` 不预设仓库，也不预设由谁运维。
@@ -452,7 +528,7 @@ BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 
 推荐 B，因为国内服务和可访问 Google 的管理端部署边界不同（PK11），拆仓与这个边界一致。若选 A 或 C，契约字段仍以本文为准，不另起一套 JSON。
 
-客户端在对方仓库可联调之前：使用 [US-PK-C-02 §6](US-PK-C-02-接收并安全保存官方Key.md) 的 `MockPlacesOfficialKeyClient`。开关 `FTCS_PLACES_OFFICIAL_KEY_MOCK=1` 且仅非打包构建生效。mock 的申请、五态、下发与停用都返回 §4 的同一形状，桌面不发 HTTP。打包后的安装包忽略该开关。
+客户端在对方仓库可联调之前：使用 [US-PK-C-02 §6](US-PK-C-02-接收并安全保存官方Key.md) 的 mock，只模拟 §4.3 取当前 Key。开关 `FTCS_PLACES_OFFICIAL_KEY_MOCK=1` 且仅非打包构建生效。成功结果不写磁盘。打包后的安装包忽略该开关。
 
 ### O7 管理端与服务之间是推还是拉
 
@@ -464,15 +540,17 @@ BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 
 推荐 C，因为服务在国内，管理端要能访问 Google，往往服务不能主动连到管理端。频率留给实现：半自动可以「打开页面时拉一次」。选定前 §5 的两列路径都保留。
 
-### O9 Key 材料放在哪
+### O9 Key 材料放在服务还是管理端
+
+PK12 已规定客户端不落盘。本条只决定 **§4.3 应答时，服务从哪里读出当前 Key**。两种 `keyMaterial.mode` 都留在字段表里。
 
 | 选项 | 内容 |
 |------|------|
-| A | 明文只留在管理端（`retained_at_admin`）。服务下发前再取。这与「只用绑定 P」不能同时成立，见 §5.2.1 |
-| B（推荐） | 开通结果以 `inline` 把 Key 交给国内服务，由服务下发给已鉴权的本人。管理端保留 Google 侧副本以便吊销。传输使用 O10 凭证。静态加密算法本文不指定 |
-| C | 服务和管理端都长期保存明文，且写进普通日志可及的库表 |
+| A | 明文只留在管理端（`retained_at_admin`）。每次取 Key 前服务再向管理端要。这与「只用绑定 P」不能同时成立，见 §5.2.1 |
+| B（推荐） | 开通或轮换时以 `inline` 把当前 Key 交给国内服务。服务用它回答 §4.3。管理端保留 Google 侧副本，以便吊销和轮换。客户端拿到后只放内存。静态加密算法本文不指定 |
+| C | 服务和管理端都长期保存明文，且写进普通日志能读到的库表 |
 
-推荐 B。客户端契约不变：`active` 时 §4 的 `apiKey` 非空。选定前两种 `keyMaterial.mode` 都留在字段表里。
+推荐 B。客户端不因为本条再增加本地文件。
 
 ### O10 服务与管理端如何互相认证
 
@@ -493,6 +571,40 @@ BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 | C | 与服务同一机房，经专线出境访问 Google |
 
 推荐 B，与 O7 的推荐（绑定 P）一致。接口里不出现具体云厂商、区域或防火墙规则。
+
+### O12 官方 Key 在客户端内存里最长放多久
+
+需求已锁定：不落盘、用完即弃。下面未锁定。
+
+| 选项 | 内容 |
+|------|------|
+| A | 每次 Places 请求前都调用 §4.3，用完立刻丢掉内存 |
+| B（推荐） | 一次 R3 运行开始时取一次。内存留到该次运行结束，或响应里的 `expiresAt`，以先到者为准。不跨运行。没有 `expiresAt` 时只留到运行结束 |
+| C | 跨运行按固定 10 分钟缓存 |
+
+推荐 B。US-PK-C-02 按这一行实现；若改选 A 或 C，只改持有时间，不改「不写磁盘」。
+
+### O13 定时轮换周期，以及新旧 Key 是否并存
+
+需求已锁定：要能定时轮换，也要能手工立即轮换；客户端在旧 Key 被 Google 拒绝时重取一次。
+
+| 选项 | 内容 |
+|------|------|
+| A | 不做定时，只有「立即轮换」。`previousKeyValidUntil` 总是 null，旧 Key 在 Google 侧马上失效 |
+| B（推荐） | 每 24 小时由管理端定时调用 §4.4 一次，页面另有「立即轮换」。两者都把 `previousKeyValidUntil` 设为 null，不设并存窗口 |
+| C | 每 7 天定时轮换，`previousKeyValidUntil` 为轮换后 1 小时，这段时间 Google 仍接受旧 Key |
+
+推荐 B。周期只配在管理端任务上，客户端不保存周期。无论选哪一项，桌面都只做 US-PK-C-03 的一次重取。
+
+### O14 取 Key 限频
+
+| 选项 | 内容 |
+|------|------|
+| A | 不限频 |
+| B（推荐） | 每个官方账号每小时 30 次，计入运行开始的那一次，也计入 Google 拒绝后的重取。超出则 §4.3 返回 429 `rate_limited`。客户端提示稍后重试，不改用 BYOK |
+| C | 按 `credentialId` 每分钟 10 次，超限同样 429 |
+
+推荐 B。申请接口 §4.1 的 429 与这条分开计。
 
 ### O1 SKU、加价、汇率、扣费展示
 
@@ -593,3 +705,4 @@ BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 | 日期 | 说明 |
 |------|------|
 | 2026-10-10 | 初稿：客户端接口、可替换的服务/管理端操作、管理端页面清单、待确认（O8 优先） |
+| 2026-10-10 | Key 不落盘，改为实时获取 |
