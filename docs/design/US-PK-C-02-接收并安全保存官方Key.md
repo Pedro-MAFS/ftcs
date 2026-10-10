@@ -3,7 +3,7 @@
 > **用户故事**：[../30-需求-Places官方通道按用户下发APIKey.md](../30-需求-Places官方通道按用户下发APIKey.md) · US-PK-C-02 · Issue #21  
 > **状态**：**待评审**（本文件只定设计；业务代码尚未按本文改动）  
 > **范围**：R3 要用 Places 时向 token-gateway 取当前 Key；Key 只留在主进程内存；本机持久化的只有现网官方登录凭证  
-> **依赖**：[US-PK-C-01](US-PK-C-01-申请官方PlacesKey与状态展示.md)；网关详设 US-PK-G-02（实时取 Key）、US-PK-G-04（吊销身份凭证）
+> **依赖**：[US-PK-C-01](US-PK-C-01-申请官方PlacesKey与状态展示.md)；网关详设 US-PK-G-02（查询状态与实时取 Key）、US-PK-G-04（吊销客户端身份凭证）
 > **不做**：把官方 Key 写入 `.env`、`FTCS_PLACES_OFFICIAL_API_KEY`、prefs、日志、钥匙串或导出文件；服务端代调 Places  
 > **文档位置**：`docs/design/`
 
@@ -45,7 +45,7 @@
 | **官方 Key 不落盘** | 不写工作区 `.env`，不写 `FTCS_PLACES_OFFICIAL_API_KEY`，不写 `data/prefs`、`ftcs-prefs.json`、钥匙串、OpenCode 配置文件、日志和快照，也不为它新增 safeStorage 条目。现有登录 token 仍用 safeStorage，见 §4.2 |
 | **何时取** | 来源是官方时，在该次 R3（或含 R3 的方案步骤）**开始时**取一次。设置页展示状态时只调状态接口，不取 Key |
 | **放哪** | 主进程变量。渲染进程、Preflight `detail`、设置快照都拿不到 `apiKey` |
-| **何时丢掉** | 该次运行结束、失败、用户停止、退出登录、取 Key 失败、或 Google 401/403 触发重取之前。丢掉后重启 `places-api`（或整个 OpenCode），使子进程环境里也不再留着这把 Key |
+| **何时丢掉** | 该次运行结束、失败、用户停止、退出登录、取 Key 失败，或运行中 Google 拒绝后准备去查状态时。丢掉后重启 `places-api`（或整个 OpenCode），使子进程环境里也不再留着这把 Key。不因为拒绝再取一把新 Key |
 | **短时缓存（O12）** | 按 O12 推荐：同一次 R3 运行内可留到 `expiresAt` 与运行结束中较早的时刻。不跨运行。O12 若改选「每次调用都取」或「固定 N 分钟」，只改本行 |
 | **身份凭证** | 复用现网官方登录 token，保护方式见 §4.2。US-PK-G-04 可单独吊销这一份凭证：旧 token 再取 Key 得 401 `credential_revoked`；用户重新登录拿到新凭证后可以再取。不自动改用 BYOK |
 | **与 BYOK** | 来源是自备时不调用取 Key，继续读 `GOOGLE_PLACES_API_KEY`。两条路径不互相写入 |
@@ -95,7 +95,7 @@ interface PlacesOfficialKeyMemory {
 }
 ```
 
-模块建议：`desktop/electron/gateway/places-official-key-memory.ts`。只提供 `hold`、`peek`、`clear`。`clear` 在运行结束、退出登录、以及 C-03 重取之前调用。禁止把这个对象放进 `SettingsSnapshot`。
+模块建议：`desktop/electron/gateway/places-official-key-memory.ts`。只提供 `hold`、`peek`、`clear`。`clear` 在运行结束、退出登录，以及 C-03 因 Google 拒绝而去查状态之前调用。禁止把这个对象放进 `SettingsSnapshot`。
 
 `keyVersion` 可以出现在主进程日志里。`apiKey` 不可以，包括 `maskSecret` 全文变体以外的调试打印；日志最多记 `keyVersion` 与长度。
 
@@ -151,7 +151,7 @@ export interface PlacesOfficialKeyClient {
 | 网络失败 | `network`。不启动 R3 |
 | 401 `need_login` | 去登录 |
 | 401 `credential_revoked` | 凭证已吊销 |
-| 403 + 状态欠费 / `overdue` | 已停用（欠费） |
+| 200 且 `status=suspended`、`reasonCode=insufficient_balance` | 已欠费。没有 `apiKey`。文案「已欠费，请充值」 |
 | 403 + 吊销类 `reasonCode` | 官方 Key 已吊销 |
 | 429 | 取 Key 过于频繁，稍后重试 |
 | 200 但通道不是 `active` | 不把空 Key 当成成功 |
@@ -168,8 +168,8 @@ mock 的是**取当前 Key**，不是往 `.env` 写一把假 Key。
 |----|------|
 | 开关 | `FTCS_PLACES_OFFICIAL_KEY_MOCK=1`，且 `app.isPackaged === false`。打包后忽略 |
 | 行为 | `getCurrent` 不发 HTTP。默认返回 `apiKey: "mock-places-key-not-real"`、`expiresAt` 为今后 1 小时的 ISO 时间、`keyVersion: "mock-1"` |
-| 失败夹具 | `FTCS_PLACES_OFFICIAL_KEY_MOCK_FIXTURE` 指向 JSON：`{ "error": "network" \| "need_login" \| "credential_revoked" \| "overdue" \| "revoked" \| "rate_limited" }` 或成功体 |
-| 轮换 | 测试导出 `debugSetMockMaterial`。下一次 `getCurrent` 返回新 `apiKey` 与 `keyVersion: "mock-2"`。断言本机没有 `FTCS_PLACES_OFFICIAL_API_KEY` |
+| 失败夹具 | `FTCS_PLACES_OFFICIAL_KEY_MOCK_FIXTURE` 指向 JSON：`{ "error": "network" \| "need_login" \| "credential_revoked" \| "insufficient_balance" \| "revoked" \| "rate_limited" }` 或成功体。`insufficient_balance` 时没有 `apiKey` |
+| 欠费重置 | 测试把 mock 设为欠费后，`getCurrent` 与状态查询都是 `suspended` + `insufficient_balance`。再设为已恢复后，下一次 `getCurrent` 才返回新的 `apiKey`。断言本机没有 `FTCS_PLACES_OFFICIAL_API_KEY` |
 | 禁止 | 仓库里不放真实 `AIza` 样例。mock 成功后也不写磁盘 |
 
 未登录时主进程仍先走登录闸门，不进 mock。
@@ -239,3 +239,4 @@ mock 的是**取当前 Key**，不是往 `.env` 写一把假 Key。
 |------|------|
 | 2026-10-10 | 初稿：官方 Key 与 BYOK 分键存放、失效与 mock。O3 按现网 `.env` 决定 |
 | 2026-10-10 | Key 不落盘，改为实时获取 |
+| 2026-10-10 | 取消轮换与重取，只在欠费时重置 |

@@ -92,7 +92,7 @@ interface PlacesEffectiveKey {
 | 取 Key 网络失败 | 暂时联系不上官方服务，未能获取 Places Key。请稍后重试。 |
 | 401 `need_login` | 请先登录后再使用官方 Places Key。 |
 | 401 `credential_revoked` | 登录凭证已吊销，不能获取官方 Places Key。请重新登录。 |
-| 欠费停用 | 官方余额不足或欠费，官方 Places Key 已停用。 |
+| 欠费停用（`insufficient_balance`） | 已欠费，请充值 |
 | 官方 Key 已吊销 | 官方 Places Key 已吊销，不能再用来查询 Places。 |
 | 429 限频（O14） | 获取官方 Places Key 过于频繁，请稍后再试。 |
 | 用自备 | 自备 Google Places API Key（本机直连） |
@@ -197,7 +197,7 @@ flowchart TD
 | M2 | 开通后 BYOK 还在 | 先填 BYOK，再把 mock 推到已开通 | `.env` 里自备 Key 原文还在。设置同时看得到两段标题 |
 | M3 | 默认不随机 | M2 之后不点切换，看「当前 R3 使用」并开始 R3 | 显示官方下发 Key。再跑一次仍是官方 |
 | M4 | 可以改回 | 点「自备 Places Key」后再开始 R3 | `detail` 改为自备。不出现官方 Key 文件。再改回官方时重新取 Key |
-| M5 | 失败可感知且不回退 | mock 取 Key 分别返回网络错误、`credential_revoked`、`overdue`、429，来源仍是官方 | 开始 R3 失败。句子与 §3.1 一致。有 BYOK 时出现「改用自备 Key」，但来源仍是 `official`，本次不用自备 Key 发 Places 请求 |
+| M5 | 失败可感知且不回退 | mock 取 Key 分别返回网络错误、`credential_revoked`、`insufficient_balance`、429，来源仍是官方 | 开始 R3 失败。欠费文案是「已欠费，请充值」。有 BYOK 时出现「改用自备 Key」，但来源仍是 `official`，本次不用自备 Key 发 Places 请求 |
 | M6 | 不静默改道 | M5 时不点按钮，直接再读来源 | 仍是 `official`，不会变成 `byok` |
 | M7 | 点了才改回 | 在 M5 点「改用自备 Key」 | 来源变为 `byok`，R3 可以开始，走自备 Key |
 | M8 | 方案里的 R3 | 高级获客或含 R3 的方案在 M5 的状态下执行 | Preflight 同样失败，文案与探索页一致 |
@@ -241,3 +241,4 @@ O4 已在 §2、§3 决定。其它未决项见[网关详设「待确认」](US-
 |------|------|
 | 2026-10-10 | 初稿：并存时的默认来源、显式切换、停用后不静默改道 |
 | 2026-10-10 | Key 不落盘，改为实时获取 |
+| 2026-10-10 | 取消轮换与重取，只在欠费时重置 |

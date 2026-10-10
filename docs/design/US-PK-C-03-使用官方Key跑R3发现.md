@@ -67,7 +67,7 @@ flowchart LR
 
 ---
 
-## 3. 注入与轮换后重取一次
+## 3. 注入
 
 `desktop/electron/opencode/runtime.ts` 的 `placesEnv` 只描述**这一次运行**要交给子进程的环境，不把官方 Key 写进工作区 `.env` 或 OpenCode 配置文件。
 
@@ -81,19 +81,23 @@ flowchart LR
 
 运行结束、失败或用户停止：C-02 `clear()`，并重启 `places-api`，使子进程里的那把 Key 消失。
 
-### 3.1 运行中途旧 Key 被 Google 拒绝（PK12，只重试一次）
+### 3.1 运行中途 Google 拒绝了 Key
 
-官方来源下，`places-api` 对 Google 返回 HTTP 401 或 403 时，工具结果使用现有 `PLACES_HTTP_ERROR`，并带上 `http_status`。主进程看到**这一次 R3 会话**里的该错误后：
+没有轮换，也没有「再取一把 Key 重试」。官方来源下，`places-api` 若从 Google 得到 **HTTP 401、403，或配额类错误**（`RESOURCE_EXHAUSTED` / 429，以及响应正文里能看出的 quota），主进程只做这些事：
 
-1. 丢掉内存中的 Key。
-2. **再调用一次** US-PK-G-02 取当前 Key（计入 O14 的额度）。
-3. 取到新 Key 后，重启 `places-api` 并注入新值，不写盘。
-4. 向当前会话追加一句：用新 Key 重试刚才失败的那一次 Places 调用，只此一次。
-5. 若再次 401/403，或第二次取 Key 失败：停止并按 C-04 提示。不再取第三次，也不改用 BYOK。
+1. 丢掉内存中的 Key，不再注入。
+2. **只调用一次**现有状态接口 `GET {base}/places/official-key`（§4.2）。不调用取 Key（§4.3）。
+3. 按查到的状态结束这次 R3，任务标失败。不重试 Places 调用，不改用 BYOK。
 
-自备 Key 的 401/403 不走这 5 步，仍按现网「Key 无效或未启用 Places API (New)」停止。
+| 状态查询结果 | 任务 | 用户看到的文案 |
+|--------------|------|----------------|
+| `status=suspended` 且 `reasonCode=insufficient_balance` | 失败 | **已欠费，请充值** |
+| 其它状态（含已开通、吊销、申请中） | 失败 | 原样呈现 Google 返回的错误（HTTP 状态与 `places-api` 已有的 `message`） |
+| 状态查询本身失败（网络、401、5xx、超时） | 失败 | 同样原样呈现 Google 的错误。不把查询失败说成欠费 |
 
-定时轮换或运营立即轮换（US-PK-AK-02）之后，下一次 `getCurrent` 自然是新 Key。正在跑的旧 Key 若被 Google 拒绝，只靠上面这一次重取，不在客户端保存两把 Key。新旧是否短暂并存见待确认 **O13**，客户端逻辑不变。
+自备 Key 遇到 401/403 不查官方状态，仍按现网说明 Key 无效或未启用 Places API (New)，然后停止。
+
+设置页若此时打开，欠费状态仍走 C-01：状态行「已停用」，并可走现有「去充值」。运行中的这一句就用上表，不另写一套。
 
 ---
 
@@ -156,8 +160,8 @@ flowchart LR
 |------|------|
 | 未注入 Key | MCP `MISSING_PLACES_API_KEY`。文案：「当前没有可用的 Places Key。请打开设置 → 探索，申请官方 Places Key 或填写自备 Key。」 |
 | 误设 `PLACES_PROVIDER=gateway` | `PLACES_GATEWAY_NOT_READY`。文案：「Places 不经服务器代调。请使用直连（PLACES_PROVIDER=custom），并配置官方下发 Key 或自备 Key。」 |
-| HTTP 401/403，来源是官方 | 按 §3.1 重取一次再试。第二次仍失败则停止，说明官方 Key 已被拒绝。不说成「网关已代查」 |
-| HTTP 401/403，来源是自备 | 现网：停止并说明 Key 无效或未启用 Places API (New) |
+| HTTP 401/403 或配额类错误，来源是官方 | 按 §3.1 只查一次状态。欠费则「已欠费，请充值」；否则原样报 Google 错误。不重取、不重试、不改用 BYOK |
+| HTTP 401/403，来源是自备 | 现网：停止并说明 Key 无效或未启用 Places API (New)。不查官方状态 |
 | 超时、DNS、连接失败 | 停止该次 R3，说明本机访问 Google Places 失败。不创建「已成功」的空线索来掩盖 |
 | 官网打不开或判断为否 | 现网：不调用 `lead_append_raw` |
 
@@ -188,6 +192,7 @@ Preflight 在发会话之前就该拦住「没有生效 Key」。MCP 错误是�
 | T2 | 生效来源为自备 | 注入值等于 BYOK，官方键不进 MCP 环境 |
 | T3 | `.env` 里 `PLACES_PROVIDER=gateway` | 注入结果仍是 `custom` |
 | T4 | 提示词字符串 | 含「经官网核实」，不含 `place_id=` |
+| T5 | 官方来源下 Google 401 之后 | 只调用一次状态接口，不调用取 Key |
 
 ---
 
@@ -205,6 +210,10 @@ Preflight 在发会话之前就该拦住「没有生效 Key」。MCP 错误是�
 | M6 | 设置标明来源 | 打开设置 → 探索 | 能看到当前 R3 使用的是官方还是自备 |
 | M7 | 代调占位 | 手工把 provider 设成 `gateway` 再调 MCP | `PLACES_GATEWAY_NOT_READY`，文案不再承诺等待 US-E-10 |
 | M8 | R1/R2 | 无任何 Places Key 时开始 R1 | 与现网一样不检查 Places |
+| M9 | 运行中欠费 | 官方来源的 R3 已开始，Google 返回 401。状态接口返回 `suspended` + `insufficient_balance` | 任务失败。文案是「已欠费，请充值」。没有第二次 Places 请求，没有第二次取 Key，来源没有改成自备 |
+| M10 | 运行中非欠费 | 同样 401 或配额错误，状态接口返回 `active` 或 `suspended` 且原因不是 `insufficient_balance` | 任务失败。文案是 Google 错误原文。不出现「已欠费，请充值」。不重试 |
+| M11 | 查状态失败 | Google 403 之后，状态接口超时或 5xx | 任务失败。文案仍是 Google 错误。不写成欠费，不重试 |
+| M12 | 自备 Key | BYOK 路径上 Google 401 | 不调用官方状态接口。现网无效 Key 提示 |
 
 ---
 
@@ -212,6 +221,7 @@ Preflight 在发会话之前就该拦住「没有生效 Key」。MCP 错误是�
 
 | 项 | 说明 |
 |----|------|
+| Google 拒绝后再取 Key 或重试 Places | §3.1 只查一次状态 |
 | 实现 gateway 分支或转发 Places | PK1。`isPlacesGatewayReady` 继续返回 false |
 | 为官方 Key 换一套 FieldMask 或工具名 | 与 BYOK 同一 MCP |
 | 把 24h 缓存升格为线索库 | 缓存仍只服务调用 |
@@ -235,7 +245,7 @@ Preflight 在发会话之前就该拦住「没有生效 Key」。MCP 错误是�
 
 ## 10. 待确认
 
-O6（上线前法务）、**O12**（内存最长存放）、**O13**（轮换周期与过渡）见[网关详设「待确认」](US-PK-token-gateway-接口与管理端.md)。落库仍按本文 §4。O13 未定时，客户端只实现 §3.1 的一次重取。
+O6（上线前法务）与 **O12**（内存最长存放）见[网关详设「待确认」](US-PK-token-gateway-接口与管理端.md)。**O13 已取消**（不再定时轮换）。落库仍按本文 §4。运行中 Google 拒绝时只查状态，见 §3.1。
 
 ---
 
@@ -245,3 +255,4 @@ O6（上线前法务）、**O12**（内存最长存放）、**O13**（轮换周�
 |------|------|
 | 2026-10-10 | 初稿：官方 Key 直连 R3，Places 只作发现入口，替换 snippet 中的 Places 商家字段 |
 | 2026-10-10 | Key 不落盘，改为实时获取 |
+| 2026-10-10 | 取消轮换与重取，只在欠费时重置 |

@@ -43,7 +43,7 @@ flowchart LR
   login[现网官方账号登录]
   c01[US-PK-C-01 申请与状态]
   gw[token-gateway 服务]
-  c02[US-PK-C-02 保存 Key]
+  c02[US-PK-C-02 实时取 Key 仅内存]
   c04[US-PK-C-04 选用与停用提示]
 
   login --> c01
@@ -56,7 +56,7 @@ flowchart LR
 | 模块 | 本期 |
 |------|------|
 | **US-PK-C-01** | 入口、登录闸门、状态枚举、文案、申请 / 刷新 IPC、渲染层不接触 Key 明文 |
-| **US-PK-C-02** | 把响应里的 Key 写入本机、失效、退出登录时清掉 |
+| **US-PK-C-02** | 实时获取官方 Key、仅内存使用。申请响应里没有 Key |
 | **US-PK-C-03** | 用生效 Key 直连 Google；Places 只发现 |
 | **US-PK-C-04** | 与 BYOK 的切换、停用后的「改用自备 Key」 |
 | **引导页** | 不增加申请。现有可选 BYOK 框保持 |
@@ -93,15 +93,14 @@ stateDiagram-v2
   pending --> pending: 重复申请
   pending --> active: 查询到已开通
   pending --> failed: 查询到失败
-  active --> active: 重复申请或轮换后仍已开通
-  active --> suspended: 查询到已停用
+  active --> suspended: 查询到已停用（含欠费重置）
   failed --> pending: 仅当 reapplyAllowed 且申请成功
   suspended --> active: 仅当服务再次返回已开通
 ```
 
 | `reasonCode`（`suspended` / `failed`） | 用户可见含义 |
 |----------------------------------------|----------------|
-| `overdue` | 欠费或官方余额不足 |
+| `insufficient_balance` | 欠费。运行中的任务用「已欠费，请充值」（C-03 §3.1） |
 | `abuse` | 已吊销（异常用量） |
 | `account_closed` | 已吊销（账号注销） |
 | `manual` | 已停用（运营处置） |
@@ -147,7 +146,7 @@ function canApplyPlacesOfficialKey(input: {
 | `pending` | 申请中 | 预计在受理后的下一自然日内开通。 |
 | `active` | 已开通 | 官方 Places Key 已开通。每次使用时重新获取，不保存在这台电脑上。 |
 | `failed` | 开通失败 | 开通未成功。请看上方原因，或稍后刷新。 |
-| `suspended` + `overdue` | 已停用 | 官方余额不足或欠费，这把官方 Key 已停用。 |
+| `suspended` + `insufficient_balance` | 已停用 | 已欠费，请充值 |
 | `suspended` + 其它 | 已停用 | 这把官方 Key 已停用，不能再用来查询 Places。 |
 
 有 `reasonMessage` 时，补充行用服务原文，不用上表兜底。  
@@ -248,7 +247,7 @@ sequenceDiagram
 | M2 | 申请入口 | 登录后，状态为未申请，点申请 | 状态变为「申请中」，并看到下一自然日的说明（或服务下发的 `expectedReadyNote`） |
 | M3 | 重复申请 | 申请中再点（若按钮仍在）或再次调用 IPC | 仍是申请中，不出现第二套状态 |
 | M4 | 已开通 / 失败 / 已停用 | 用 C-02 的 mock 分别返回这三态 | 状态行与 §4.2 一致；失败和停用能看到原因；停用不是空白 |
-| M5 | 欠费与吊销 | mock `suspended` + `overdue`，以及 `suspended` + `abuse` | 都显示「已停用」。欠费有「去充值」（现网充值入口可用时）；吊销没有充值链接 |
+| M5 | 欠费与吊销 | mock `suspended` + `insufficient_balance`，以及 `suspended` + `abuse` | 都显示「已停用」。欠费补充是「已欠费，请充值」，并有「去充值」（现网充值入口可用时）；吊销没有充值链接 |
 | M6 | 无代调承诺 | 通读该区块、Preflight 三句 | 有「本机直连 / 不经服务器代查」。没有「官方代调」「官方代为查询」 |
 | M7 | 探索页 | 申请中时在探索页开始 R3 | 没有申请按钮。Preflight 失败句指向设置 → 探索 |
 | M8 | 引导页 | 走一遍首次引导 | 仍只有可选的自备 Key，没有官方申请 |
@@ -298,3 +297,4 @@ sequenceDiagram
 |------|------|
 | 2026-10-10 | 初稿：按 `docs/30` US-PK-C-01 写申请入口、五态展示与 IPC。不改业务代码，不改 `docs/30`，不删 US-E-10 |
 | 2026-10-10 | Key 不落盘，改为实时获取 |
+| 2026-10-10 | 取消轮换与重取，只在欠费时重置 |
