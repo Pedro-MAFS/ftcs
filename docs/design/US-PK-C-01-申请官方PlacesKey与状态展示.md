@@ -73,12 +73,13 @@ flowchart LR
 | **引导页** | `OnboardingOverlay` 不增加申请按钮，避免未登录用户在引导里打到网关 |
 | **身份** | 只使用现网官方账号 access token（`ensureFreshTokens`，与 `POST /keys/rotate` 相同）。请求体**不**带 `userId`，防止替他人申请 |
 | **与模型通道的关系** | 申请不读取 `channelMode`，也不要求 `officialProvisioned`。若产品最终改成「仅官方模型通道可申请」，只改 §4.1 的 `canApplyPlacesOfficialKey` 一处。默认按[待确认](US-PK-token-gateway-接口与管理端.md)里的推荐：已登录即可 |
-| **状态** | 五个值，与需求 §6 / §7 一致：`none` 未申请、`pending` 申请中、`active` 已开通、`failed` 失败、`suspended` 已停用。欠费与吊销都是 `suspended`，用 `reasonCode` / `reasonMessage` 区分，不另造状态 |
+| **状态** | 五个值：`none` 未申请、`pending` 申请中、`active` 已开通、`failed` 失败、`suspended` 已停用。欠费与吊销都仍是 `suspended`，用 `reasonCode` / `reasonMessage` 区分。**不**新增「已吊销」状态，等需求 #61 定稿再改 |
 | **T+1 文案** | 优先展示服务返回的 `expectedReadyNote`。该字段为空时，用固定句：「预计在受理后的下一自然日内开通。」客户端不写死时区、不自己算截止时刻（O2 未定） |
 | **再次申请** | 按钮是否出现只看响应字段 `reapplyAllowed`。政策见待确认，客户端不写死「失败一定能再申请」 |
 | **代调文案** | 本区块说明句固定包含「Places 由本机直连 Google，不经 FTCS 服务器代查」。不出现「官方代调」 |
-| **刷新时机** | 打开设置页、用户点「刷新状态」、开始 R3 / 含 R3 的方案 Preflight 之前。不做后台轮询 |
-| **渲染进程** | 只拿状态、原因、掩码前缀、`reapplyAllowed`。IPC 结果里不得带 `apiKey` |
+| **设置页调哪个接口** | 只调状态接口 `GET {base}/places/official-key`。该响应只有状态和说明，没有 Key。设置页、申请、点「刷新状态」都不调用取 Key `GET .../current` |
+| **何时查状态** | 打开设置页一次；申请提交成功后再查一次；用户点「刷新状态」再查一次。同一次停留里不重复打。不轮询。开始 R3 **不**为刷新界面先查状态 |
+| **渲染进程** | 只拿状态、原因、`reapplyAllowed`。没有 Key，也没有掩码 |
 
 ---
 
@@ -216,7 +217,7 @@ sequenceDiagram
   end
 ```
 
-开始 R3 前先刷新状态。状态刷新失败时不启动探索会话，也不沿用上一次看到的「已开通」。取 Key 是否成功由 C-02 / C-04 在同一次启动里判定；失败时不改用自备 Key。
+开始 R3 时，来源若是官方，只调用取 Key（C-02），不先查状态。取 Key 失败则不启动，也不改用自备 Key。设置页上一次看到的状态可以先画出来，以 C-02 的本地状态缓存为准；真正开跑以取 Key 的结果为准。
 
 ---
 
@@ -251,7 +252,8 @@ sequenceDiagram
 | M6 | 无代调承诺 | 通读该区块、Preflight 三句 | 有「本机直连 / 不经服务器代查」。没有「官方代调」「官方代为查询」 |
 | M7 | 探索页 | 申请中时在探索页开始 R3 | 没有申请按钮。Preflight 失败句指向设置 → 探索 |
 | M8 | 引导页 | 走一遍首次引导 | 仍只有可选的自备 Key，没有官方申请 |
-| M9 | 渲染层无明文 | 申请与刷新后看渲染进程拿到的对象 | 无 `apiKey` 字段 |
+| M9 | 渲染层无明文 | 打开设置、提交申请、点刷新 | 抓包只有状态接口，没有 `GET .../current`。渲染进程对象无 `apiKey` |
+| M10 | 申请后再查一次 | 未申请时点申请，看随后的请求 | 先 `POST .../applications`，成功后再一次 `GET .../places/official-key`。没有取 Key |
 
 建议单测：`canApplyPlacesOfficialKey` 在未登录时为 false；`reapplyAllowed === false` 时不把失败态画成可申请。单测不发网络。
 
@@ -263,7 +265,7 @@ sequenceDiagram
 |----|------|
 | 探索页、引导页提交申请 | 入口只在设置 |
 | 用模型通道 `official` / `custom` 隐藏申请 | 默认不绑；若产品改口，只改 §4.1 |
-| 客户端轮询直到开通 | 用户打开设置或再次跑 R3 时再查 |
+| 客户端轮询直到开通 | 只在打开设置、申请成功、点「刷新状态」时查状态。跑 R3 不先查状态 |
 | 客户端调用管理端或 Google Cloud 建 Key | PK11 |
 | 在界面展示 Key 全文 | C-02 |
 | 改 `docs/30`、改旧 US-E-10 / US-E-09 正文 | 替换关系写在本文件与网关详设 |
@@ -299,3 +301,4 @@ sequenceDiagram
 | 2026-10-10 | Key 不落盘，改为实时获取 |
 | 2026-10-10 | 取消轮换与重取，只在欠费时重置 |
 | 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
+| 2026-10-11 | 设置页只查状态不取 Key |

@@ -43,7 +43,7 @@
 | 项 | 决定 |
 |----|------|
 | **官方 Key 不落盘** | 不写工作区 `.env`，不写 `FTCS_PLACES_OFFICIAL_API_KEY`，不写 `data/prefs`、`ftcs-prefs.json`、钥匙串、OpenCode 配置文件、日志和快照，也不为它新增 safeStorage 条目。现有登录 token 仍用 safeStorage，见 §4.2 |
-| **何时取** | 来源是官方时，在该次 R3（或含 R3 的方案步骤）**开始时**取一次。设置页展示状态时只调状态接口，不取 Key |
+| **何时取** | 只有实际跑 Places 时：该次 R3（或含 R3 的方案步骤）**开跑**调用一次取 Key。设置页不调用取 Key |
 | **放哪** | 主进程变量。渲染进程、Preflight `detail`、设置快照都拿不到 `apiKey` |
 | **何时丢掉** | 该次运行结束、失败、用户停止、退出登录、取 Key 失败，或运行中 Google 拒绝后准备去查状态时。丢掉后重启 `places-api`（或整个 OpenCode），使子进程环境里也不再留着这把 Key。不因为拒绝再取一把新 Key |
 | **短时缓存（O12）** | 按 O12 推荐：同一次 R3 运行内可留到 `expiresAt` 与运行结束中较早的时刻。不跨运行。O12 若改选「每次调用都取」或「固定 N 分钟」，只改本行 |
@@ -109,18 +109,30 @@ interface PlacesOfficialKeyMemory {
 | 放哪 | `app.getPath('userData')/oauth-tokens.bin`（`desktop/electron/auth/token-store.ts`） |
 | 怎么加密 | 调用 Electron `safeStorage`：`safeStorage.isEncryptionAvailable()` 时 `encryptString` / `decryptString`，与现网登录 token 同一条路径。不可用时现网会退回明文写入该文件；本故事不另起一套加密，避免两套登录态 |
 | 怎么用 | `ensureFreshTokens()`。取 Key、申请、查状态的请求头都是 `Authorization: Bearer` + access token，与现网 `POST {base}/keys/rotate` 相同 |
-| 用户退出 | 现网 `logout()`：IdP `POST {issuer}/oauth2/revoke`，然后 `clearTokenBundle()`。同时 `clear()` 内存中的 Places Key |
+| 用户退出 | 现网 `logout()`：IdP `POST {issuer}/oauth2/revoke`，然后 `clearTokenBundle()`。同时 `clear()` 内存中的 Places Key，并删除 `data/prefs/places-official-status.json` |
 | 网关吊销（US-PK-G-04） | 吊销的是**这一份**登录凭证，不是 Google Key，也不是别的用户或别的设备上的登录。本机文件可能还在，但用旧 token 取 Key 得到 401 `credential_revoked`。提示「登录凭证已吊销，请重新登录」。用户走现有「去登录」拿到新 token 后可以再取。有 BYOK 时另外显示「改用自备 Key」，来源不自动改 |
 
 渲染进程不读 `oauth-tokens.bin`，也不接收 `apiKey`。
 
-### 4.3 快照里可以有的
+### 4.3 状态可以落在本地，Key 不行
 
-状态来自 C-01 的状态接口，且只留在当前进程内存里供界面使用，不写 `places-official-key.json`：
+状态不是密钥。查状态成功后写入工作区 `data/prefs/places-official-status.json`，字段只有：
 
-`placesOfficialStatus`、`reasonCode`、`reasonMessage`、`expectedReadyNote`、`reapplyAllowed`、`placesKeySource`。
+`status`、`reasonCode`、`reasonMessage`、`expectedReadyNote`、`reapplyAllowed`、`appliedAt`、`updatedAt`、`syncedAt`。
 
-没有 `placesOfficialKeySet`，也没有官方 Key 掩码。界面用状态行表示「已开通」，不用「本机已保存 Key」。
+禁止写入 `apiKey`、`expiresAt`、`keyVersion`。退出登录时删掉这个文件，并 `clear()` 内存中的 Key。
+
+| 何时覆盖这份缓存 | 打哪一个接口 |
+|------------------|--------------|
+| 打开设置页，一次 | 只查状态 |
+| 申请提交成功之后，一次 | 只查状态 |
+| 用户点「刷新状态」 | 只查状态 |
+| R3 开跑 | **不**为了刷新缓存先查状态。只取 Key。若取 Key 的失败体已带 `status`（例如欠费），用该体覆盖缓存，不再多打一次状态接口 |
+| 运行中 Google 拒绝后的那一次查询（C-03） | 只查状态，并覆盖缓存 |
+
+打开设置页时先用这份文件画出上次的状态，同时仍按上表打一次状态接口，返回后覆盖。不轮询。
+
+快照给渲染进程的字段来自该文件：`placesOfficialStatus`、`reasonCode`、`reasonMessage`、`expectedReadyNote`、`reapplyAllowed`、`placesKeySource`。没有 `placesOfficialKeySet`，也没有官方 Key 掩码。界面用状态行表示「已开通」，不用「本机已保存 Key」。
 
 `placesKeySource`（`official` | `byok`）是用户选的来源，不是 Key。它可以写在 `.env` 的 `FTCS_PLACES_KEY_SOURCE`（C-04）。这个键的值只有来源名字。
 
@@ -181,7 +193,8 @@ export interface PlacesOfficialKeyClient {
 | 文件 | 预期动作 |
 |------|----------|
 | `desktop/electron/gateway/places-official-key-client.ts` | 只实现 HTTP `getCurrent`。不实现 mock 客户端，不读 mock 环境变量 |
-| `desktop/electron/gateway/places-official-key-memory.ts` | 内存 hold / clear。无磁盘 IO |
+| `desktop/electron/gateway/places-official-key-memory.ts` | Key 只在内存 hold / clear，不写盘 |
+| `desktop/electron/gateway/places-official-status-cache.ts` | 读写 §4.3 的状态 json。写入前断言对象里没有 `apiKey` |
 | `desktop/electron/auth/oauth-service.ts` | `logout` 成功路径调用 `clear()`。不改 OAuth 文件格式 |
 | `desktop/electron/settings/settings-service.ts` | **不**增加官方 Key 环境变量。`saveSettings` 继续只处理 BYOK 的 `GOOGLE_PLACES_API_KEY` |
 
@@ -239,3 +252,4 @@ export interface PlacesOfficialKeyClient {
 | 2026-10-10 | Key 不落盘，改为实时获取 |
 | 2026-10-10 | 取消轮换与重取，只在欠费时重置 |
 | 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
+| 2026-10-11 | 设置页只查状态不取 Key |

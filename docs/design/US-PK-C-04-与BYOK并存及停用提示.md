@@ -50,7 +50,7 @@
 | **识别当前 Key** | 设置「当前 R3 使用」一行（C-03）+ Preflight `detail`。两处用同一 `source` |
 | **gateway 标志** | `isPlacesGatewayReady` 继续恒为 `false`。选用官方 Key 时 `provider` 仍是 `custom` |
 
-「官方通道可尝试」= 最近一次状态查询为 `active`。本机没有官方 Key 文件，不能靠磁盘判断。`pending` / `failed` / `suspended` / `none`、状态刷新失败、以及 US-PK-G-02 取 Key 失败，都不能开始官方这条 R3。没有「沿用上一把 Key」的分支。
+设置上的「官方通道可尝试」看 C-02 的状态缓存是否为 `active`。本机没有官方 Key 文件。真正开跑时不先查状态，只取 Key；取 Key 失败就不能开始，也不沿用任何上一把 Key。
 
 ---
 
@@ -138,16 +138,14 @@ IPC：`places-official:set-source`，入参 `{ source: 'official' | 'byok' }`。
 
 ```mermaid
 flowchart TD
-  start[开始 R3 或打开设置]
-  refresh[刷新官方状态]
-  pick[按来源选出唯一一把]
+  start[开始 R3]
+  pick[按缓存状态与来源选出]
   ok{可用?}
   run[Preflight 通过并注入该 Key]
   block[Preflight 失败并展示 detail]
   switch[用户在设置里改来源]
 
-  start --> refresh
-  refresh --> pick
+  start --> pick
   pick --> ok
   ok -->|是| run
   ok -->|否| block
@@ -155,7 +153,7 @@ flowchart TD
   switch --> pick
 ```
 
-刷新失败时的「暂时可用」只发生在进入 `pick` 之前官方缓存仍是 `active` 且本机官方键还在。用户没有点切换时，不会从官方跳到自备。
+开跑不先查状态。状态缓存不是 Key；缓存为 `active` 时才去取 Key，取不到就失败，不改用自备 Key。
 
 ---
 
@@ -243,3 +241,4 @@ O4 已在 §2、§3 决定。其它未决项见[网关详设「待确认」](US-
 | 2026-10-10 | Key 不落盘，改为实时获取 |
 | 2026-10-10 | 取消轮换与重取，只在欠费时重置 |
 | 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
+| 2026-10-11 | 设置页只查状态不取 Key |

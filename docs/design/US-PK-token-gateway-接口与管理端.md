@@ -190,20 +190,20 @@ stateDiagram-v2
 | 项 | 内容 |
 |----|------|
 | 方法 + 路径 | `GET {base}/places/official-key` |
-| 触发方 | 打开设置、点刷新；以及 R3 运行中 Google 拒绝 Key 时的那一次查询（US-PK-C-03）。不在这里取 Key |
+| 触发方 | 打开设置页一次；申请提交成功后再一次；用户点「刷新状态」；以及 R3 运行中 Google 拒绝 Key 时的那一次查询（US-PK-C-03）。这些调用都不取 Key。R3 开跑不先调本接口 |
 | 鉴权 | 官方登录 access token。只返回该凭证对应的账号 |
 | 幂等 | 只读 |
 
 无请求体。未申请返回 **200**，`status = none`。不要用 404 表示未申请。
 
-响应字段与 §4.1 的状态字段相同，仍然没有 `apiKey`。欠费时 **200**，`status=suspended`，`reasonCode=insufficient_balance`。凭证已被 US-PK-G-04 吊销时返回 401 `credential_revoked`，不要把状态伪装成 `none`。
+响应只有状态和说明，字段与 §4.1 的状态字段相同。**没有** `apiKey`、`expiresAt`、`keyVersion`。客户端把这次结果写入 `data/prefs/places-official-status.json`（US-PK-C-02 §4.3）。欠费时 **200**，`status=suspended`，`reasonCode=insufficient_balance`。不增加「已吊销」这个状态值；吊销仍是 `suspended` 加原因。凭证已被 US-PK-G-04 吊销时返回 401 `credential_revoked`，不要把状态伪装成 `none`。
 
 ### 4.3 取当前 Key · US-PK-G-02　查询状态与实时取 Key
 
 | 项 | 内容 |
 |----|------|
 | 方法 + 路径 | `GET {base}/places/official-key/current` |
-| 触发方 | 客户端在一次 R3（或含 R3 的步骤）开始时。运行中 Google 拒绝时**不**再调本接口 |
+| 触发方 | 只有实际跑 Places：一次 R3（或含 R3 的步骤）开跑时。设置页不调本接口。运行中 Google 拒绝时也不再调本接口 |
 | 鉴权 | 与 §4.2 相同。只返回本人当前有效的 Key |
 | 幂等 | 只读。欠费重置后、恢复之前，重复调用仍不返回 Key |
 | 限频 | 见待确认 **O14**。超限 429，`code = rate_limited`。运行中的状态查询不计入本接口 |
@@ -494,11 +494,11 @@ BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 
 | # | 覆盖 | 步骤 | 期望 | 管理端 |
 |---|------|------|------|--------|
-| J1 | 未申请 | 新登录的测试账号打开设置 → 探索 | 状态「未申请」。没有官方 Key 文件 | 不需要 |
-| J2 | 申请中 | 点「申请官方 Places Key」 | 「申请中」，并有下一自然日或 `expectedReadyNote`。抓包是 `POST .../applications`，响应无 `apiKey` | 不需要 |
-| J3 | 已开通，取 Key | 管理端完成 T+1 开通后，桌面刷新，再开始 R3 | 「已开通」。`GET .../current` 返回 `apiKey` 与 `keyVersion`，只在内存。Places 请求发往 `places.googleapis.com`。磁盘上没有这把 Key | **需要**。US-PK-AK-01 开通并同步 |
-| J4 | 失败 | 另用一个申请，管理端回传开通失败 | 「开通失败」，能看到原因。取 Key 不返回 `apiKey` | **需要**。回传失败 |
-| J5 | 欠费重置 | 已开通账号由对账触发 `arrears_reset`，桌面再查状态并取 Key | 两边都是 `suspended` + `reasonCode=insufficient_balance`，没有 `apiKey`。文案「已欠费，请充值」。不改用 BYOK | **需要**。US-PK-AR-02 → US-PK-AK-02 |
+| J1 | 未申请 | 新登录的测试账号打开设置 → 探索 | 状态「未申请」。抓包只有一次状态查询，没有 `GET .../current`。没有官方 Key 文件。`places-official-status.json` 里也没有 `apiKey` | 不需要 |
+| J2 | 申请中 | 点「申请官方 Places Key」 | 先申请，成功后再一次状态查询。「申请中」，并有下一自然日或 `expectedReadyNote`。两次响应都无 `apiKey`，且没有取 Key 请求 | 不需要 |
+| J3 | 已开通，取 Key | 管理端完成开通后，只打开设置；确认没有取 Key 请求后再开始 R3 | 设置页只有状态查询，显示「已开通」。开始 R3 才出现 `GET .../current`，返回 `apiKey` 与 `keyVersion`，只在内存。Places 请求发往 `places.googleapis.com`。状态 json 与 `.env` 都没有这把 Key | **需要**。US-PK-AK-01 开通并同步 |
+| J4 | 失败 | 另用一个申请，管理端回传开通失败，桌面打开设置或点刷新 | 「开通失败」，能看到原因。只有状态查询，没有取 Key | **需要**。回传失败 |
+| J5 | 欠费重置 | 已开通账号由对账触发 `arrears_reset`。先只打开设置，再开始 R3 | 打开设置：状态查询为 `suspended` + `insufficient_balance`，无取 Key。开始 R3：取 Key 同样没有 `apiKey`，文案「已欠费，请充值」。不改用 BYOK | **需要**。US-PK-AR-02 → US-PK-AK-02 |
 | J6 | 充值恢复 | J5 之后入账并 `arrears_restore`，再取 Key | 状态回到已开通。`keyVersion` 与重置前不同。可以再跑 R3 | **需要**。同一条恢复 |
 | J7 | Google 拒绝且是欠费 | R3 已持有内存中的 Key 后，管理端做欠费重置并让 Google 拒绝这把 Key | 任务失败。文案「已欠费，请充值」。这次失败只调用一次状态接口，不再调用取 Key，不重试 Places | **需要**。欠费重置，并让 Google 拒绝旧 Key |
 | J8 | Google 拒绝但不是欠费 | 运行中由管理端吊销 Google Key（原因不是欠费），使 Google 返回 401/403 或配额错误 | 任务失败。文案是 Google 错误原文，不是「已欠费，请充值」。仍然只查一次状态，不取 Key，不重试 | **需要**。US-PK-AK-02 吊销，不走欠费重置 |
@@ -727,3 +727,4 @@ PK12 已规定客户端不落盘。本条只决定 **§4.3 应答时，服务从
 | 2026-10-10 | Key 不落盘，改为实时获取 |
 | 2026-10-10 | 取消轮换与重取，只在欠费时重置 |
 | 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
+| 2026-10-11 | 设置页只查状态不取 Key |
