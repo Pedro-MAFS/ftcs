@@ -1,10 +1,10 @@
-# US-PK-C-04 与 BYOK 并存及停用提示
+# US-PK-C-04 与 BYOK 并存及欠费 / 已吊销提示
 
 > **用户故事**：[../30-需求-Places官方通道按用户下发APIKey.md](../30-需求-Places官方通道按用户下发APIKey.md) · US-PK-C-04 · Issue #21  
 > **状态**：**待评审**（本文件只定设计；业务代码尚未按本文改动）  
-> **范围**：官方 Key 与 US-E-07 自备 Key 同时存在时的选用；停用 / 吊销后的提示与改回 BYOK；Preflight 与「开始 R3」使用同一规则  
+> **范围**：官方 Key 与 US-E-07 自备 Key 同时存在时的选用；欠费 / 已吊销后的提示与改回 BYOK；Preflight 与「开始 R3」使用同一规则  
 > **依赖**：[US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md) 的实时取 Key；现网 `resolvePlacesStart`；探索页 `useExploreStart`  
-> **不做**：删除 BYOK；取 Key 失败或停用时自动改用 BYOK；计费 BYOK；代调
+> **不做**：删除 BYOK；取 Key 失败、欠费或已吊销时自动改用 BYOK；计费 BYOK；代调
 > **文档位置**：`docs/design/`
 
 需求 O4（并存时的优先级）在本文定死，不进入待确认。
@@ -29,7 +29,7 @@
 
 | 模块 | 本期 |
 |------|------|
-| **US-PK-C-04** | 选用规则、切换 IPC、停用提示、`resolvePlacesStart` |
+| **US-PK-C-04** | 选用规则、切换 IPC、欠费与已吊销提示、`resolvePlacesStart` |
 | **US-E-07** | 自备 Key 的输入、掩码、清除、直连。不改字段含义 |
 | **US-PK-C-01** | 状态文案与申请按钮 |
 | **US-PK-C-02** | 官方 Key 只在当次运行的内存里。切换来源不涉及删官方 Key 文件 |
@@ -45,7 +45,7 @@
 | **何时把默认写进 `.env`** | 只在「状态刷新为已开通、`FTCS_PLACES_KEY_SOURCE` 仍为空」时写成 `official`。写入的是来源名字，不是 Key。在此之前，只有 BYOK 的用户与现网一致 |
 | **用户切换** | 设置里两把都配置过时，显示二选一。点选立即写 `FTCS_PLACES_KEY_SOURCE` 并重启 OpenCode |
 | **选中的那把不可用** | **不**自动改成另一把。Preflight 失败，并给出按钮或说明去设置切换 |
-| **停用 / 吊销 / 取 Key 失败** | 官方来源不可用时明确提示（§3.1）。若 BYOK 已填写，只提供按钮「改用自备 Key」。用户没点之前来源保持 `official`，不用自备 Key 顶上（PK12） |
+| **欠费 / 已吊销 / 取 Key 失败** | 官方来源不可用时明确提示（§3.1）。若 BYOK 已填写，只提供按钮「改用自备 Key」。用户没点之前来源保持 `official`，不用自备 Key 顶上（PK12）。已吊销不能再次申请 |
 | **未申请** | 不写 `official`。BYOK 行为与 US-E-07、现网 Preflight 一致 |
 | **识别当前 Key** | 设置「当前 R3 使用」一行（C-03）+ Preflight `detail`。两处用同一 `source` |
 | **gateway 标志** | `isPlacesGatewayReady` 继续恒为 `false`。选用官方 Key 时 `provider` 仍是 `custom` |
@@ -92,11 +92,12 @@ interface PlacesEffectiveKey {
 | 取 Key 网络失败 | 暂时联系不上官方服务，未能获取 Places Key。请稍后重试。 |
 | 401 `need_login` | 请先登录后再使用官方 Places Key。 |
 | 401 `credential_revoked` | 登录凭证已吊销，不能获取官方 Places Key。请重新登录。 |
-| 欠费停用（`insufficient_balance`） | 已欠费，请充值 |
+| `arrears` | 已欠费，请充值 |
+| `revoked` | 请联系客服 |
 | 官方 Key 已吊销 | 官方 Places Key 已吊销，不能再用来查询 Places。 |
 | 429 限频（O14） | 获取官方 Places Key 过于频繁，请稍后再试。 |
 | 用自备 | 自备 Google Places API Key（本机直连） |
-| 来源是官方但申请中 / 失败 / 已停用 | C-01 §4.3 的三句之一。已停用时若 `offer === 'switch-to-byok'`，句末加上「自备 Key 仍可用，可在设置 → 探索改用自备 Key。」 |
+| 来源是官方但申请中 / 开通失败 / 欠费 / 已吊销 | C-01 §4.3 的对应句。欠费与已吊销时若 BYOK 已填写，句末加上「自备 Key 仍可用，可在设置 → 探索改用自备 Key。」已吊销不提供再次申请 |
 | 两边都没有 | 请在设置 → 探索申请官方 Places Key，或填写自备 Key（仅 R3 需要）。 |
 | 来源是自备但自备已被清空，官方仍可用 | 当前选择的是自备 Key，但尚未填写。可在设置 → 探索改用官方下发 Key，或重新填写自备 Key。 |
 
@@ -113,7 +114,7 @@ interface PlacesEffectiveKey {
 | 只有 BYOK，官方未申请或不可用 | 不显示二选一。只显示「当前 R3 使用：自备 Places Key」 |
 | 只有官方可用，用户没填过 BYOK | 不显示二选一。只显示「当前 R3 使用：官方下发 Key」 |
 | 状态曾查到已开通，且 BYOK 已设置 | 二选一：「官方下发 Key」「自备 Places Key」。当前项选中。官方一侧不表示本机存着 Key |
-| 来源是官方且取 Key 失败或已停用，BYOK 已设置 | 用 §3.1 的对应句子，主按钮「改用自备 Key」。凭证吊销时另给「去登录」（`offer` 含 `relogin`） |
+| 来源是官方且取 Key 失败、欠费或已吊销，BYOK 已设置 | 用 §3.1 的对应句子，主按钮「改用自备 Key」。身份凭证被吊销时另给「去登录」（`offer` 含 `relogin`），这不改变 Key 状态 |
 | 来源是自备，官方已开通 | 主按钮「改用官方下发 Key」 |
 
 二选一的说明句：
@@ -164,7 +165,7 @@ flowchart TD
 | 文件 | 预期动作 |
 |------|----------|
 | `desktop/electron/preflight/places-start.ts` | §3 纯函数；`isPlacesGatewayReady` 保持 `return false` |
-| `desktop/electron/preflight/places-start.test.ts` | 改写「无 Key 必须 BYOK / gateway 恒 false」，补上两把都在、停用不自动改道 |
+| `desktop/electron/preflight/places-start.test.ts` | 改写「无 Key 必须 BYOK / gateway 恒 false」，补上欠费与已吊销不自动改道 |
 | `desktop/electron/preflight/agent-preflight.ts` | 继续调用 `resolvePlacesStart`，不另写一份判断 |
 | `desktop/src/composables/useExploreStart.ts` | R3 是否可点改为生效 Key |
 | `desktop/src/views/SettingsView.vue` | 二选一与「改用自备 Key」 |
@@ -179,7 +180,7 @@ flowchart TD
 | T2 | 无官方、有 BYOK、来源空 | `ok`，来源自备 |
 | T3 | 官方可用、有 BYOK、来源空 | `ok`，来源官方 |
 | T4 | 来源 `byok`，两把都可用 | `ok`，来源自备 |
-| T5 | 来源 `official`，取 Key 失败或 `suspended`，BYOK 可用 | `ok === false`，`offer` 含 `switch-to-byok`，来源键仍是 `official` |
+| T5 | 来源 `official`，状态为 `arrears` 或 `revoked`，BYOK 可用 | `ok === false`，`offer` 含 `switch-to-byok`，来源键仍是 `official` |
 | T6 | 来源 `official`，状态 `pending`，无 BYOK | `ok === false`，不把状态改成自备 |
 | T7 | `isPlacesGatewayReady` 在官方已开通时 | `false` |
 
@@ -207,7 +208,7 @@ flowchart TD
 
 | 项 | 说明 |
 |----|------|
-| 停用后自动改用 BYOK | 必须用户点「改用自备 Key」 |
+| 欠费或已吊销后自动改用 BYOK | 必须用户点「改用自备 Key」 |
 | 两把都注入 MCP，让工具自己挑 | C-03 只注入一把 |
 | 删掉设置里的自备 Key 输入框 | PK7 |
 | 给 BYOK 扣官方余额 | 需求明确不做 |
@@ -222,14 +223,14 @@ flowchart TD
 |------|------|
 | 官方刚开通就把长期使用 BYOK 的用户改到官方 | 这是「申请并开通」后的默认，设置里同时写明，且一步可以改回。未申请的用户不写来源键（T2） |
 | 探索页按钮看 `placesApiKeySet`、Preflight 看官方，两处不一致 | 都改为 `resolvePlacesStart`；M8 |
-| 停用后旧测试仍期望「请填 BYOK」整句 | 更新 `places-start.test.ts`，避免文案又写回代调 |
+| 旧测试仍期望「请填 BYOK」或「已停用」整句 | 更新 `places-start.test.ts`，欠费用「已欠费，请充值」，已吊销用「请联系客服」 |
 | 切换来源忘记重启 OpenCode | `set-source` 成功路径与设置保存一样 `runtime.restart()` |
 
 ---
 
 ## 10. 待确认
 
-O4 已在 §2、§3 决定。其它未决项见[网关详设「待确认」](US-PK-token-gateway-接口与管理端.md)。其中「欠费后是否立刻删 Google Key」不影响本节：无论 Google 侧删或不删，客户端都只认服务返回的 `suspended`，并按 §3 停止官方来源。
+O4 已在 §2、§3 决定。其它未决项见[网关详设「待确认」](US-PK-token-gateway-接口与管理端.md)。客户端只认 `arrears` 与 `revoked`，并按 §3 停止官方来源。欠费可在充值后恢复；已吊销只能客服在管理端恢复。
 
 ---
 
@@ -242,3 +243,4 @@ O4 已在 §2、§3 决定。其它未决项见[网关详设「待确认」](US-
 | 2026-10-10 | 取消轮换与重取，只在欠费时重置 |
 | 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
 | 2026-10-11 | 设置页只查状态不取 Key |
+| 2026-10-11 | 按 PK13 六态与已吊销对齐 |

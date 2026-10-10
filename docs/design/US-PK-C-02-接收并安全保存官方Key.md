@@ -118,7 +118,7 @@ interface PlacesOfficialKeyMemory {
 
 状态不是密钥。查状态成功后写入工作区 `data/prefs/places-official-status.json`，字段只有：
 
-`status`、`reasonCode`、`reasonMessage`、`expectedReadyNote`、`reapplyAllowed`、`appliedAt`、`updatedAt`、`syncedAt`。
+`status`、`reasonMessage`、`expectedReadyNote`、`appliedAt`、`updatedAt`、`syncedAt`。`status` 只允许 PK13 六值。
 
 禁止写入 `apiKey`、`expiresAt`、`keyVersion`。退出登录时删掉这个文件，并 `clear()` 内存中的 Key。
 
@@ -132,7 +132,7 @@ interface PlacesOfficialKeyMemory {
 
 打开设置页时先用这份文件画出上次的状态，同时仍按上表打一次状态接口，返回后覆盖。不轮询。
 
-快照给渲染进程的字段来自该文件：`placesOfficialStatus`、`reasonCode`、`reasonMessage`、`expectedReadyNote`、`reapplyAllowed`、`placesKeySource`。没有 `placesOfficialKeySet`，也没有官方 Key 掩码。界面用状态行表示「已开通」，不用「本机已保存 Key」。
+快照给渲染进程的字段来自该文件：`placesOfficialStatus`、`reasonMessage`、`expectedReadyNote`、`placesKeySource`。没有 `placesOfficialKeySet`，也没有官方 Key 掩码。界面用状态行表示「已开通」，不用「本机已保存 Key」。
 
 `placesKeySource`（`official` | `byok`）是用户选的来源，不是 Key。它可以写在 `.env` 的 `FTCS_PLACES_KEY_SOURCE`（C-04）。这个键的值只有来源名字。
 
@@ -163,7 +163,8 @@ export interface PlacesOfficialKeyClient {
 | 网络失败 | `network`。不启动 R3 |
 | 401 `need_login` | 去登录 |
 | 401 `credential_revoked` | 凭证已吊销 |
-| 200 且 `status=suspended`、`reasonCode=insufficient_balance` | 已欠费。没有 `apiKey`。文案「已欠费，请充值」 |
+| 200 且 `status=arrears` | 欠费。没有 `apiKey`。文案「已欠费，请充值」 |
+| 200 且 `status=revoked` | 已吊销。没有 `apiKey`。文案「请联系客服」。不提供再次申请 |
 | 403 + 吊销类 `reasonCode` | 官方 Key 已吊销 |
 | 429 | 取 Key 过于频繁，稍后重试 |
 | 200 但通道不是 `active` | 不把空 Key 当成成功 |
@@ -180,7 +181,7 @@ export interface PlacesOfficialKeyClient {
 |----|------|
 | 地址 | 工作区 `.env` 的 `FTCS_TOKEN_GATEWAY_BASE_URL`。解析与现网官方通道相同：工作区 `.env` → 进程环境 → 默认 `https://token.ai-utills.com/v1`。值须已含 `/v1`；代码只去掉末尾 `/`，不再拼接 `/v1`。申请、查状态、取 Key 都接在这个 base 上。不另设 Places 专用地址 |
 | 账号 | 桌面现有「去登录」（官方账号 OAuth，`ensureFreshTokens`）。测试账号由 gateway / 运营开通后交给测试人员。仓库不放账号、密码或 Key |
-| 手测 | 五态、取 Key、欠费重置与恢复、Google 拒绝后只查一次状态、吊销凭证，见网关详设「联调手测」。本文件只核对：取到的 Key 不落盘 |
+| 手测 | 六态、取 Key、欠费重置与恢复、已吊销、非法状态申请被拒、Google 拒绝后只查一次状态、凭证吊销后重登，见网关详设「联调手测」。本文件只核对：取到的 Key 不落盘 |
 
 取 Key 成功后检查工作区 `.env`、`data/`、`userData`：除原有 `oauth-tokens.bin` 外，没有把本次 `apiKey` 写进任何文件。日志可以有 `keyVersion`，没有 Key 全文。
 
@@ -253,3 +254,4 @@ export interface PlacesOfficialKeyClient {
 | 2026-10-10 | 取消轮换与重取，只在欠费时重置 |
 | 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
 | 2026-10-11 | 设置页只查状态不取 Key |
+| 2026-10-11 | 按 PK13 六态与已吊销对齐 |

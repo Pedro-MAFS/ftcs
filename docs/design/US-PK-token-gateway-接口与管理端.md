@@ -65,43 +65,45 @@ flowchart LR
 
 ### 2.1 用户的官方 Places 通道
 
-与客户端五态一致。管理端不直接改客户端本地文件，只改服务上的这份状态；客户端下次查询能看见。
+与 PK13 六态一致：`none` / `pending` / `active` / `provision_failed` / `arrears` / `revoked`。管理端不直接改客户端本地文件，只改服务上的这份状态；客户端下次查询能看见。
 
 ```mermaid
 stateDiagram-v2
   [*] --> none
   none --> pending: 受理申请
   pending --> active: 开通成功并有可下发材料
-  pending --> failed: 开通失败
-  active --> suspended: 对账认定欠费并重置 Key，或吊销、停用
-  failed --> pending: 仅当再次申请被接受
-  suspended --> active: 充值到账后恢复，此后才能取到新 Key
+  pending --> provision_failed: 开通失败
+  provision_failed --> pending: 再次申请被接受
+  active --> arrears: 对账认定欠费并重置 Key
+  arrears --> active: 充值到账后自动恢复
+  active --> revoked: 客服吊销 Key
+  revoked --> active: 仅客服在管理端恢复
 ```
 
 | 状态 | 取当前 Key（§4.3） |
 |------|------------------------|
-| `none` / `pending` / `failed` / `suspended` | 不返回 `apiKey`（4xx，带原因） |
-| `active` 且凭证未吊销 | 返回本人当前有效 `apiKey` |
-| 凭证已按 US-PK-G-04 吊销 | 401 `credential_revoked`，即使通道仍是 `active` |
+| `none` / `pending` / `provision_failed` / `arrears` / `revoked` | 不返回 `apiKey` |
+| `active` 且登录凭证有效 | 返回本人当前有效 `apiKey` |
+| 登录凭证已按 US-PK-G-04 吊销 | 401 `credential_revoked`。Places 状态不变 |
 
 一人一 Key（PK2）：同一官方账号在 `pending` 或 `active` 时，再次申请不创建第二条 Google Key，返回当前资源。
 
 ### 2.3 欠费重置与充值恢复
 
-没有定时轮换，也没有管理端「立即轮换」。Key 只在 **US-PK-AR-02**（欠费 / 余额不足触发停用 / 吊销）触发 **US-PK-AK-02**（吊销 / 欠费重置 / 停用单用户 Key）时被换掉。服务不调用 Google；Google 侧停用旧 Key、建新 Key 由管理端做完，再把结果交给服务。
+没有定时轮换，也没有管理端「立即轮换」。欠费换 Key 只在 **US-PK-AR-02**（欠费 / 余额不足置「欠费」并重置 Key）触发 **US-PK-AK-02**（吊销 / 欠费重置单用户 Key）的 `arrears_reset` 时发生。充值入账后同一条流程 `arrears_restore`，状态回到 `active`。已吊销不是这条流程：客服吊销后状态为 `revoked`，只有客服点「恢复」才回到 `active`。服务不调用 Google。
 
 ```mermaid
 stateDiagram-v2
   [*] --> active: 已开通
-  active --> suspended: 对账发现欠费，重置
-  suspended --> active: 充值到账后恢复
+  active --> arrears: 对账发现欠费，重置
+  arrears --> active: 充值到账后自动恢复
 ```
 
 | 步骤 | 谁 | 结果 |
 |------|----|------|
-| 按日对账写出扣费，入账后余额不足 | 管理端对账 → 服务 §5.4 | 服务把该用户置为 `suspended`，`reasonCode=insufficient_balance`，清掉可下发的 Key 材料。这就是重置 |
-| 同步 Google 侧 | 管理端 | 停用或删除当前这把 Google Key。不单独做「轮换」按钮 |
-| 客户端查状态 §4.2 或取 Key §4.3 | 客户端 | 都只得到 `status=suspended`、`reasonCode=insufficient_balance` 和可展示的 `reasonMessage`。**没有** `apiKey` |
+| 按日对账写出扣费，入账后余额不足 | 管理端对账 → 服务 §5.4 | 服务把该用户置为 `arrears`，清掉可下发的 Key 材料。这就是重置 |
+| 同步 Google 侧 | 管理端 | 使当前这把 Google Key 失效。不单独做「轮换」按钮 |
+| 客户端查状态 §4.2 或取 Key §4.3 | 客户端 | 都只得到 `status=arrears`。**没有** `apiKey` |
 | 充值到账 | 管理端对账 / 恢复 | 建一把新的仅 Places Key，把材料交回服务，状态改回 `active` |
 | 恢复之后的取 Key | 客户端 | §4.3 才返回新 `apiKey` 与新 `keyVersion` |
 
@@ -115,7 +117,7 @@ stateDiagram-v2
   待对账 --> 已生成扣费: 对账任务写出 chargeId
   已生成扣费 --> 已入账: 服务第一次接受该 chargeId
   已入账 --> 已入账: 同一 chargeId 再次提交
-  已入账 --> 通道已停用: 入账后官方余额不足以继续使用
+  已入账 --> arrears: 入账后官方余额不足，状态改为欠费
 ```
 
 同一 `chargeId` 第二次及以后：HTTP 200，余额不变。补账用新的 `chargeId`，`kind = adjustment`，不覆盖旧记录。金额怎么从 Google SKU 算出来见待确认 O1，服务不重算。
@@ -154,20 +156,20 @@ stateDiagram-v2
 | 当前状态 | HTTP | 行为 |
 |----------|------|------|
 | `none` | 201 | 新建申请，状态变为 `pending`，记下 `appliedAt`（服务时钟，ISO-8601） |
-| `pending` 或 `active` | 200 | 返回当前资源，`appliedAt` 不变 |
-| `failed` 或 `suspended` | 200 或 409 | 若待确认「再次申请」允许：200，状态回到 `pending`，更新 `appliedAt`。若不允许：409，`code = reapply_blocked`，状态不变 |
+| `provision_failed` | 201 | 再次受理，状态回到 `pending`，更新 `appliedAt`。不产生第二把 Key |
+| `pending` / `active` / `arrears` / `revoked` | 409 | 拒绝。不改状态。错误码见下表 |
 
 响应体（201 与 200 相同形状）：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `status` | string | `pending` / `active` / `failed` / `suspended` / `none` |
+| `status` | string | `none` 未申请 / `pending` 申请中 / `active` 已开通 / `provision_failed` 开通失败 / `arrears` 欠费 / `revoked` 已吊销 |
 | `reasonCode` | string \| null | 见 §2.1 与 §5.3 的原因枚举 |
 | `reasonMessage` | string \| null | 给用户看的中文。客户端有则原样展示 |
 | `appliedAt` | string \| null | T+1 的起算时刻。时区含义见待确认 O2，客户端不解析截止日 |
 | `updatedAt` | string \| null | |
 | `expectedReadyNote` | string \| null | 申请中的说明。O2 定下来之后由**服务**填好句子 |
-| `reapplyAllowed` | boolean | 按再次申请政策填写 |
+| `reapplyAllowed` | boolean | 不再作为申请按钮依据。按钮只看 `status` 是否为 `none` 或 `provision_failed` |
 
 本接口不返回 `apiKey`、`expiresAt`、`keyVersion`。日志不记录 `Authorization`。
 
@@ -177,7 +179,10 @@ stateDiagram-v2
 |------|--------|------|
 | 401 | `need_login` | 凭证无效或过期 |
 | 403 | `forbidden` | 账号不可用 |
-| 409 | `reapply_blocked` | 当前状态不允许再申请 |
+| 409 | `apply_while_pending` | 申请中。客户端文案：「申请处理中，请等待开通」 |
+| 409 | `apply_while_active` | 已开通。客户端文案：「已开通，无需再次申请」 |
+| 409 | `apply_while_arrears` | 欠费。客户端文案：「已欠费，请充值」 |
+| 409 | `apply_while_revoked` | 已吊销。客户端文案：「请联系客服」 |
 | 429 | `rate_limited` | 稍后重试 |
 | 503 | `unavailable` | 服务暂不可用 |
 
@@ -196,7 +201,7 @@ stateDiagram-v2
 
 无请求体。未申请返回 **200**，`status = none`。不要用 404 表示未申请。
 
-响应只有状态和说明，字段与 §4.1 的状态字段相同。**没有** `apiKey`、`expiresAt`、`keyVersion`。客户端把这次结果写入 `data/prefs/places-official-status.json`（US-PK-C-02 §4.3）。欠费时 **200**，`status=suspended`，`reasonCode=insufficient_balance`。不增加「已吊销」这个状态值；吊销仍是 `suspended` 加原因。凭证已被 US-PK-G-04 吊销时返回 401 `credential_revoked`，不要把状态伪装成 `none`。
+响应只有状态和说明，字段与 §4.1 的状态字段相同。**没有** `apiKey`、`expiresAt`、`keyVersion`。`status` 只取 PK13 六值。客户端把这次结果写入 `data/prefs/places-official-status.json`（US-PK-C-02 §4.3）。欠费时 **200**，`status=arrears`。已吊销时 **200**，`status=revoked`。登录凭证被 US-PK-G-04 吊销时返回 401 `credential_revoked`，Places 的 `status` 不变，不要写成 `revoked`。
 
 ### 4.3 取当前 Key · US-PK-G-02　查询状态与实时取 Key
 
@@ -222,8 +227,8 @@ stateDiagram-v2
 |------|--------|------|
 | 401 | `need_login` | 没有凭证或凭证过期且无法刷新 |
 | 401 | `credential_revoked` | 这一份登录凭证已被 §4.4 吊销 |
-| 200 | （无 `code`） | **欠费**：`status=suspended`，`reasonCode=insufficient_balance`，可有 `reasonMessage`。没有 `apiKey`、`expiresAt`、`keyVersion`。与 §4.2 在欠费时的体相同 |
-| 403 | `not_active` | 其它非开通状态（申请中、失败、吊销、手工停用）。体里带 `status`、`reasonCode`、`reasonMessage` |
+| 200 | （无 `code`） | `status` 为 `arrears` 或 `revoked`。没有 `apiKey`、`expiresAt`、`keyVersion`。与 §4.2 同一状态体 |
+| 403 | `not_active` | `none` / `pending` / `provision_failed`。体里带 `status`，没有 `apiKey` |
 | 429 | `rate_limited` | 超过 O14。客户端提示稍后重试，不改用 BYOK |
 | 503 | `unavailable` | 服务异常 |
 
@@ -231,7 +236,7 @@ stateDiagram-v2
 
 ### 4.4 吊销客户端身份凭证 · US-PK-G-04　吊销客户端身份凭证
 
-盗刷时切断「还能来取 Key 的那份登录」，不影响该用户的 Places Key，也不影响其他用户。本期没有定时轮换或手工轮换；要停掉 Google Key 时走 US-PK-AK-02 的吊销，不走本接口。
+盗刷时切断「还能来取 Key 的那份登录」，不把 Places 状态改成 `revoked`，也不影响其他用户。用户重新登录得到新凭证后，状态仍是吊销前的那一个（例如仍是 `active` 就可以再取 Key）。要把用户打进「已吊销」终态，走 US-PK-AK-02 的吊销 Key，不走本接口。
 
 | 项 | 内容 |
 |----|------|
@@ -318,9 +323,9 @@ stateDiagram-v2
 | `keyMaterial.materialRef` | `retained_at_admin` 时 | 服务留作引用。**永不**出现在 §4 的响应里 |
 
 `outcome = success` 且材料按 O9 的模式齐全：服务把该用户置为 `active`。  
-`outcome = failed`：置为 `failed`，不下发 Key。
+`outcome = failed`：置为 `provision_failed`，不下发 Key。
 
-成功响应：`{ "status": "active" | "failed", "applicationId" }`。重复的成功提交返回 200 与同一 `googleKeyId`。
+成功响应：`{ "status": "active" | "provision_failed", "applicationId" }`。重复的成功提交返回 200 与同一 `googleKeyId`。
 
 #### 5.2.1 仅当 `mode = retained_at_admin` 时的取回
 
@@ -333,13 +338,13 @@ stateDiagram-v2
 
 取回失败：服务保持 `pending` 或已记录的失败，不要把空 Key 标成 `active`。
 
-### 5.3 吊销 / 欠费重置 / 停用 · US-PK-AK-02　吊销 / 欠费重置 / 停用单用户 Key
+### 5.3 吊销 / 欠费重置 · US-PK-AK-02　吊销 / 欠费重置单用户 Key
 
-与 **US-PK-AR-02**（欠费 / 余额不足触发停用 / 吊销）相连：对账认定欠费后，由 AR-02 触发本接口的 `arrears_reset`；充值入账后的恢复同样走 AR-02，再调用 `arrears_restore`。没有定时任务，也没有「立即轮换」按钮。
+与 **US-PK-AR-02**（欠费 / 余额不足置「欠费」并重置 Key）相连：对账认定欠费后，由 AR-02 触发 `arrears_reset`；充值入账后自动 `arrears_restore`，无需客服。吊销 Key 把状态写成 `revoked`，只有客服点「恢复」才调用 `restore_revoked`。没有「停用」动作，也没有轮换。
 
 | 项 | 内容 |
 |----|------|
-| 触发方 | `revoke` / `suspend`：管理端运营。`arrears_reset` / `arrears_restore`：只由 US-PK-AR-02 |
+| 触发方 | `revoke` / `restore_revoked`：客服在管理端。`arrears_reset` / `arrears_restore`：只由 US-PK-AR-02 |
 | 幂等键 | `dispositionId` |
 | 绑定 P | `POST {service}/internal/places/official-key/dispositions` |
 | 绑定 Q | `GET {admin}/internal/places/official-key/dispositions?after={cursor}` |
@@ -348,8 +353,8 @@ stateDiagram-v2
 |------|------|
 | `dispositionId` | |
 | `accountId` | |
-| `action` | `revoke`（吊销 Google Key）、`suspend`（停用）、`arrears_reset`（欠费重置，只由 US-PK-AR-02 触发）、`arrears_restore`（充值入账后恢复，只由 US-PK-AR-02 触发） |
-| `reasonCode` | `abuse` 盗刷、`insufficient_balance` 欠费、`account_closed` 用户注销、`manual` 手工、`quota` 配额 |
+| `action` | `revoke`（吊销 Key，状态变为 `revoked`）、`restore_revoked`（客服恢复）、`arrears_reset`（欠费重置，只由 US-PK-AR-02）、`arrears_restore`（充值入账后自动恢复，只由 US-PK-AR-02） |
+| `reasonCode` | `abuse` 盗刷、`account_closed` 用户注销、`manual` 手工、`quota` 配额。欠费不用这些原因，欠费就是状态 `arrears` |
 | `reasonMessage` | 用户可见中文 |
 | `googleKeyId` | 被处置的那把 |
 
@@ -357,9 +362,10 @@ stateDiagram-v2
 
 | `action` | 用户状态 | 取 Key |
 |----------|----------|--------|
-| `revoke` 或 `suspend` | `suspended` | 清除可下发材料。之后 §4.3 返回 403 `not_active`，没有 `apiKey`。`reasonCode` 用处置原因，不用 `insufficient_balance` |
-| `arrears_reset` | `suspended` | `reasonCode=insufficient_balance`。旧 Key 材料作废。§4.2 与 §4.3 都只返回欠费状态，没有 `apiKey`。管理端先让这把 Key 在 Google 侧失效 |
-| `arrears_restore` | `active` | 仅当充值已经入账。管理端准备好新的仅 Places Key 后，服务才接受。之后 §4.3 返回新 `apiKey` |
+| `revoke` | `revoked` | 清除可下发材料。§4.2 / §4.3 都是 `revoked`，没有 `apiKey`。用户不能再申请 |
+| `restore_revoked` | `active` | 仅客服。管理端准备好新的仅 Places Key 后服务才接受。之后才能取 Key |
+| `arrears_reset` | `arrears` | 旧 Key 材料作废。§4.2 与 §4.3 都是 `arrears`，没有 `apiKey`。管理端先让这把 Key 在 Google 侧失效 |
+| `arrears_restore` | `active` | 仅当充值已经入账，自动执行，不经过客服。之后 §4.3 返回新 `apiKey` |
 
 Google 侧「删除、禁用、新建」由管理端完成后再调用本操作。服务不调用 Google。重复的 `dispositionId` 返回 200，不第二次改状态。
 
@@ -389,7 +395,7 @@ Google 侧「删除、禁用、新建」由管理端完成后再调用本操作�
 第一次接受：扣减该用户官方余额，返回 `{ "applied": true, "chargeId" }`。  
 同一 `chargeId` 再来：200，`{ "applied": false, "chargeId" }`，余额不变。
 
-入账后若官方余额已不足以继续使用官方通道：用户状态改为 `suspended`，`reasonCode = insufficient_balance`，清掉可下发材料，并产生一条 §5.5 能取到的欠费记录。管理端按 US-PK-AK-02 的 `arrears_reset` 让 Google 侧旧 Key 失效。是否允许负数见待确认里的欠费条目。`amountMinor` 的正负号：扣费为正整数表示「从余额减去」；调整若要冲回，用 `kind = adjustment` 且服务按 `amountMinor` 的符号增加或减少。选定 O1 前，实现不要在服务里再乘汇率。
+入账后若官方余额已不足以继续使用官方通道：用户状态改为 `arrears`，清掉可下发材料，并产生一条 §5.5 能取到的欠费记录。管理端按 US-PK-AK-02 的 `arrears_reset` 让 Google 侧旧 Key 失效。不进入 `revoked`。是否允许负数见待确认里的欠费条目。`amountMinor` 的正负号：扣费为正整数表示「从余额减去」；调整若要冲回，用 `kind = adjustment` 且服务按 `amountMinor` 的符号增加或减少。选定 O1 前，实现不要在服务里再乘汇率。
 
 找不到 `accountId` 与 `googleKeyId` 的绑定：422 `unknown_binding`，不入账。
 
@@ -397,15 +403,15 @@ Google 侧「删除、禁用、新建」由管理端完成后再调用本操作�
 
 | 项 | 内容 |
 |----|------|
-| 触发方 | 服务在 §5.4 把用户置为 `suspended` 且 `reasonCode=insufficient_balance` 之后 |
-| 幂等 | 同一 `accountId` + `usageDate` 重复读取不重复停用 |
+| 触发方 | 服务在 §5.4 把用户置为 `arrears` 之后 |
+| 幂等 | 同一 `accountId` + `usageDate` 重复读取不重复写成欠费 |
 | 绑定 P | `GET {service}/internal/places/official-key/unavailable?since={cursor}` |
 | 绑定 Q | `POST {admin}/internal/places/official-key/unavailable` |
 
 | 字段 | 说明 |
 |------|------|
 | `accountId` | |
-| `reasonCode` | `insufficient_balance` |
+| `status` | `arrears` |
 | `usageDate` | 触发这笔的日期，可空 |
 | `balanceMinor` | 入账后的整数余额，可空 |
 | `currency` | 与扣费记录一致 |
@@ -434,10 +440,11 @@ Google 侧「删除、禁用、新建」由管理端完成后再调用本操作�
 | 开通 | **半自动**：运营在 Google 创建仅 Places 的 Key 后，填写 `googleKeyId` 与材料模式，提交成功或失败。**全自动**：页面只读任务结果，仍走 §5.2。两套按钮哪一个出现，等 O2 | Google API Keys；§5.2 |
 | 用户 Key | 查看 `accountId`、`googleKeyId`、`keyVersion`、状态、原因、时间。没有轮换按钮，没有定时任务 | 管理端绑定表，与 §5.2、§5.3 一致 |
 | 吊销登录凭证 | 「吊销此客户端登录凭证」调用 §4.4（US-PK-G-04）。不删除 Google Key | §4.4 |
-| 处置 | 「吊销 Google Key」「停用」。原因必选：盗刷、注销、手工、配额。欠费重置不在这颗按钮上，只由对账页的 US-PK-AR-02 触发 | Google；§5.3 |
+| 吊销 Key | 「吊销 Key」。原因必选：盗刷、注销、手工、配额。确认后状态变为 `revoked`。没有「停用」按钮 | Google；§5.3 `revoke` |
+| 恢复已吊销 | 仅客服。状态为 `revoked` 时显示「恢复」。准备好新 Key 后调用 `restore_revoked`，状态回到 `active` | Google；§5.3 |
 | 配额与告警 | 展示项目级配额与预算告警，并能从一条告警点到 `googleKeyId`。阈值与通知渠道等待确认，页面先留「告警列表 + 跳到处置」 | Google 预算 / 配额；处置走 §5.3 |
 
-验收对应 US-PK-AK-01～03：一人一 Key、限制仅 Places（`placesOnly`）、T+1 内有结果回写（时限的日历见 O2）、吊销后服务状态变为 `suspended`、告警能定位到 Key。
+验收对应 US-PK-AK-01～03：一人一 Key、限制仅 Places（`placesOnly`）、T+1 内有结果回写（时限的日历见 O2）、吊销后状态为 `revoked`、客服可恢复、告警能定位到 Key。
 
 ---
 
@@ -452,7 +459,7 @@ Google 侧「删除、禁用、新建」由管理端完成后再调用本操作�
 
 BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 
-验收对应 US-PK-AR-01～02：按日、按 Key、按用户、幂等；欠费后服务侧通道已停用且客户端查询可见；Google 侧是否删除 Key 以待确认为准，但按钮必须在。
+验收对应 US-PK-AR-01～02：按日、按 Key、按用户、幂等；欠费后状态为 `arrears` 且客户端查询可见；充值入账后自动恢复，不进入 `revoked`。
 
 ---
 
@@ -498,12 +505,14 @@ BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 | J2 | 申请中 | 点「申请官方 Places Key」 | 先申请，成功后再一次状态查询。「申请中」，并有下一自然日或 `expectedReadyNote`。两次响应都无 `apiKey`，且没有取 Key 请求 | 不需要 |
 | J3 | 已开通，取 Key | 管理端完成开通后，只打开设置；确认没有取 Key 请求后再开始 R3 | 设置页只有状态查询，显示「已开通」。开始 R3 才出现 `GET .../current`，返回 `apiKey` 与 `keyVersion`，只在内存。Places 请求发往 `places.googleapis.com`。状态 json 与 `.env` 都没有这把 Key | **需要**。US-PK-AK-01 开通并同步 |
 | J4 | 失败 | 另用一个申请，管理端回传开通失败，桌面打开设置或点刷新 | 「开通失败」，能看到原因。只有状态查询，没有取 Key | **需要**。回传失败 |
-| J5 | 欠费重置 | 已开通账号由对账触发 `arrears_reset`。先只打开设置，再开始 R3 | 打开设置：状态查询为 `suspended` + `insufficient_balance`，无取 Key。开始 R3：取 Key 同样没有 `apiKey`，文案「已欠费，请充值」。不改用 BYOK | **需要**。US-PK-AR-02 → US-PK-AK-02 |
+| J5 | 欠费 | 已开通账号由对账触发 `arrears_reset`。先只打开设置，再开始 R3 | 打开设置：状态查询为 `arrears`，无取 Key。开始 R3：取 Key 同样没有 `apiKey`，文案「已欠费，请充值」。不改用 BYOK | **需要**。US-PK-AR-02 → US-PK-AK-02 |
 | J6 | 充值恢复 | J5 之后入账并 `arrears_restore`，再取 Key | 状态回到已开通。`keyVersion` 与重置前不同。可以再跑 R3 | **需要**。同一条恢复 |
 | J7 | Google 拒绝且是欠费 | R3 已持有内存中的 Key 后，管理端做欠费重置并让 Google 拒绝这把 Key | 任务失败。文案「已欠费，请充值」。这次失败只调用一次状态接口，不再调用取 Key，不重试 Places | **需要**。欠费重置，并让 Google 拒绝旧 Key |
-| J8 | Google 拒绝但不是欠费 | 运行中由管理端吊销 Google Key（原因不是欠费），使 Google 返回 401/403 或配额错误 | 任务失败。文案是 Google 错误原文，不是「已欠费，请充值」。仍然只查一次状态，不取 Key，不重试 | **需要**。US-PK-AK-02 吊销，不走欠费重置 |
+| J8 | Google 拒绝但不是欠费 | 运行中 Google 返回 401/403 或配额错误，状态仍是 `active` 或 `provision_failed` | 任务失败。文案是 Google 错误原文。只查一次状态，不取 Key，不重试 | 若要稳定造出拒绝，管理端先让 Google 拒绝这把 Key，但不要走欠费重置，也不要把状态改成 `revoked` |
+| J11 | 已吊销 | 客服吊销 Key 后打开设置，并尝试申请；再在 R3 运行中让 Google 拒绝后查状态 | 状态 `revoked`，文案「请联系客服」。申请按钮不可点；若调用申请则 409 `apply_while_revoked`。运行中查到 `revoked` 也是「请联系客服」。客服点恢复后状态回到 `active`，才能再取 Key | **需要**。吊销与恢复都在管理端 |
+| J12 | 非法状态申请 | 分别在申请中、已开通、欠费、已吊销调用申请 | 全部 409，错误码分别为 `apply_while_pending`、`apply_while_active`、`apply_while_arrears`、`apply_while_revoked`。桌面按错误码显示文案，状态不变 | 已开通、欠费、已吊销需要管理端先把状态做出来；申请中不需要 |
 | J9 | 查状态本身失败 | 在 J8 的 Google 拒绝已经发生时，断开桌面到 gateway 的网络 | 任务失败。文案仍是 Google 错误。不写成欠费 | 管理端先制造拒绝；断网由测试人员做 |
-| J10 | 吊销凭证 | 管理端吊销当前这份登录凭证后再取 Key；然后重新登录再取 | 旧登录得到 401 `credential_revoked`，提示重新登录，不改用 BYOK。新登录在通道仍开通时可以再取到 Key | **需要**。US-PK-G-04 |
+| J10 | 吊销凭证后重登 | 管理端吊销当前这份登录凭证后再取 Key；然后重新登录再取 | 旧登录得到 401 `credential_revoked`，提示重新登录，不改用 BYOK。Places 状态仍是吊销凭证之前的值（已开通就还是 `active`，不是 `revoked`）。新登录后可以再取到 Key | **需要**。US-PK-G-04，不要点「吊销 Key」 |
 
 接口级检查（G1–G4、A1–A3、R1–R2）在同一次联调里看服务和管理端，不另做客户端 mock。
 
@@ -512,14 +521,14 @@ BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 | # | 故事 | 期望 |
 |---|------|------|
 | G1 | G-01 | 无官方账号凭证的申请被拒绝。重复申请不产生第二把 Key。服务进程的出站里没有 Google |
-| G2 | G-02 | `GET /places/official-key` 无 `apiKey`。`GET .../current` 在 `active` 时返回本人的 `apiKey`、`expiresAt`、`keyVersion`；停用时 403 `not_active` |
-| G3 | G-03 | 同一 `chargeId` 两次，余额只减一次。不足后状态为 `suspended`，客户端 GET 可见原因 |
+| G2 | G-02 | `GET /places/official-key` 无 `apiKey`，`status` 为六值之一。`GET .../current` 仅 `active` 返回 `apiKey`；`arrears` 与 `revoked` 返回对应状态且无 Key |
+| G3 | G-03 | 同一 `chargeId` 两次，余额只减一次。不足后状态为 `arrears`，客户端 GET 可见 |
 | A1 | AK-01 | 待开通能被取走；成功回写后状态为 `active`；`placesOnly !== true` 被拒绝 |
-| A2 | AK-02 | 故事名「吊销 / 欠费重置 / 停用单用户 Key」。没有轮换接口。AR-02 触发 `arrears_reset` 后，状态与取 Key 都是 `suspended` + `insufficient_balance` 且无 Key；`arrears_restore` 之后才能取到新 Key。吊销只影响该账号 |
+| A2 | AK-02 | 故事名「吊销 / 欠费重置单用户 Key」。`arrears_reset` 后状态为 `arrears` 且无 Key，充值后 `arrears_restore` 自动回到 `active`。`revoke` 后为 `revoked`，只有 `restore_revoked` 能恢复。用户不能自己申请离开 `revoked` |
 | G4 | G-04 | 吊销某 `credentialId` 后，旧登录 token 取 Key 为 401 `credential_revoked`。重新登录的新 token 可以再取。另一用户不受影响。Google Key 可以仍是 `active` |
 | A3 | AK-03 | 项目级配额与预算告警能在管理端看到，并能打开对应 `googleKeyId` 的处置 |
 | R1 | AR-01 | 按日归集后生成扣费；差异可在对账页查到；重跑不双扣 |
-| R2 | AR-02 | 欠费通知能被对账页看到；停用后的客户端状态为已停用 |
+| R2 | AR-02 | 欠费通知能被对账页看到；客户端状态为 `arrears`，不是 `revoked` |
 | X1 | PK1 / PK11 | 全仓库接口列表里没有「代用户 searchText」；服务部署说明写明不调用 Google |
 
 ---
@@ -632,7 +641,7 @@ PK12 已规定客户端不落盘。本条只决定 **§4.3 应答时，服务从
 | 选项 | 内容 |
 |------|------|
 | A | 按 Google 账单原币原价扣，不加价、不换汇。客户端展示 SKU 明细 |
-| B（推荐） | 对账侧算好 `amountMinor` 与 `currency` 再提交。服务不保存单价公式。Places 扣的是现网同一官方余额（`usage/me` 那一份），不单开钱包。客户端 Places 区不展示 SKU，只展示已停用原因；余额数字仍用现网设置页 |
+| B（推荐） | 对账侧算好 `amountMinor` 与 `currency` 再提交。服务不保存单价公式。Places 扣的是现网同一官方余额（`usage/me` 那一份），不单开钱包。客户端 Places 区不展示 SKU，只展示欠费或已吊销文案；余额数字仍用现网设置页 |
 | C | 单独设立 Places 钱包，与模型余额无关 |
 
 推荐 B。补账只用 §5.4 的 `adjustment`，不改历史 `chargeId`。
@@ -656,20 +665,14 @@ PK12 已规定客户端不落盘。本条只决定 **§4.3 应答时，服务从
 | 选项 | 内容 |
 |------|------|
 | A | 一欠费就在 Google 删除 Key。充值后用户重新申请，再走 T+1 |
-| B（推荐） | 欠费立刻 `suspended` + `insufficient_balance`，并走 §2.3 / US-PK-AK-02 的 `arrears_reset`（旧 Key 失效，不下发）。不设自动宽限天数。充值入账后由 US-PK-AR-02 调用 `arrears_restore`，之后才能取到新 Key。允许余额记为负数，充值先补负 |
-| C | 欠费后固定宽限一个自然日，到期再停用并删除 Google Key |
+| B（推荐） | 欠费立刻把状态写成 `arrears`，并走 §2.3 的 `arrears_reset`（旧 Key 失效，不下发）。不设自动宽限天数。充值入账后由 US-PK-AR-02 调用 `arrears_restore`，之后才能取到新 Key。允许余额记为负数，充值先补负。不进入 `revoked` |
+| C | 欠费后固定宽限一个自然日，到期再写成 `arrears` 并让旧 Key 失效 |
 
-推荐 B。恢复不新造客户端 API，仍走 §5.2 / §5.3 的回写。选定前客户端只有「已停用」和「改用自备 Key」，没有「自行恢复」按钮。
+推荐 B。欠费恢复不新造客户端 API。已吊销的恢复只在管理端，用户侧没有按钮。
 
-### 失败或停用后，用户能否再次申请
+### 再次申请
 
-| 选项 | 内容 |
-|------|------|
-| A | `failed`、`suspended` 都可以再点申请，并再创建 Google Key |
-| B（推荐） | `pending` 与 `active` 重复申请只返回当前资源。`failed` 时 `reapplyAllowed = true`，再次申请回到 `pending`。`suspended` 时 `reapplyAllowed = false`，恢复只走上一题 |
-| C | 任何非 `none` 状态都不允许再次申请 |
-
-推荐 B。客户端只看 `reapplyAllowed`（US-PK-C-01）。
+已由 PK13 关闭，不再选项。只有 `none` 与 `provision_failed` 可以申请。`pending`、`active`、`arrears`、`revoked` 返回 409 与 §4.1 的错误码。已吊销只能客服 `restore_revoked`。欠费靠充值后的 `arrears_restore`。
 
 ### 谁可以申请官方 Places Key
 
@@ -728,3 +731,4 @@ PK12 已规定客户端不落盘。本条只决定 **§4.3 应答时，服务从
 | 2026-10-10 | 取消轮换与重取，只在欠费时重置 |
 | 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
 | 2026-10-11 | 设置页只查状态不取 Key |
+| 2026-10-11 | 按 PK13 六态与已吊销对齐 |

@@ -3,7 +3,7 @@
 > **用户故事**：[../30-需求-Places官方通道按用户下发APIKey.md](../30-需求-Places官方通道按用户下发APIKey.md) · US-PK-C-03 · Issue #21  
 > **状态**：**待评审**（本文件只定设计；业务代码尚未按本文改动）  
 > **范围**：官方通道可用时，不填自备 Key 也能跑 R3；Places 请求仍由 `places-api` 直连 Google；线索字段来自官网核实  
-> **依赖**：[US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md) 当次运行内存中的 Key；[US-PK-C-04](US-PK-C-04-与BYOK并存及停用提示.md) 选出的来源；现网 `discover-leads-r3`、US-E-07 FieldMask、US-E-08 管道
+> **依赖**：[US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md) 当次运行内存中的 Key；[US-PK-C-04](US-PK-C-04-与BYOK并存及停用提示.md)（与 BYOK 并存及欠费 / 已吊销提示）选出的来源；现网 `discover-leads-r3`、US-E-07 FieldMask、US-E-08 管道
 > **不做**：`PLACES_PROVIDER=gateway` 代调；新的 Places SKU；把 Places 商家字段写进线索库；解决本机访问不了 Google 的问题  
 > **文档位置**：`docs/design/`
 
@@ -91,13 +91,14 @@ flowchart LR
 
 | 状态查询结果 | 任务 | 用户看到的文案 |
 |--------------|------|----------------|
-| `status=suspended` 且 `reasonCode=insufficient_balance` | 失败 | **已欠费，请充值** |
-| 其它状态（含已开通、吊销、申请中） | 失败 | 原样呈现 Google 返回的错误（HTTP 状态与 `places-api` 已有的 `message`） |
-| 状态查询本身失败（网络、401、5xx、超时） | 失败 | 同样原样呈现 Google 的错误。不把查询失败说成欠费 |
+| `status=arrears` | 失败 | **已欠费，请充值** |
+| `status=revoked` | 失败 | **请联系客服** |
+| 其它状态（含已开通、申请中、开通失败） | 失败 | 原样呈现 Google 返回的错误（HTTP 状态与 `places-api` 已有的 `message`） |
+| 状态查询本身失败（网络、401、5xx、超时） | 失败 | 同样原样呈现 Google 的错误。不把查询失败说成欠费或已吊销 |
 
 自备 Key 遇到 401/403 不查官方状态，仍按现网说明 Key 无效或未启用 Places API (New)，然后停止。
 
-设置页若此时打开，欠费状态仍走 C-01：状态行「已停用」，并可走现有「去充值」。运行中的这一句就用上表，不另写一套。
+设置页若此时打开，欠费状态行是「欠费」，可走「去充值」；已吊销状态行是「已吊销」，文案「请联系客服」。运行中的句子用上表，不另写一套。
 
 ---
 
@@ -210,8 +211,9 @@ Preflight 在发会话之前就该拦住「没有生效 Key」。MCP 错误是�
 | M6 | 设置标明来源 | 打开设置 → 探索 | 能看到当前 R3 使用的是官方还是自备 |
 | M7 | 代调占位 | 手工把 provider 设成 `gateway` 再调 MCP | `PLACES_GATEWAY_NOT_READY`，文案不再承诺等待 US-E-10 |
 | M8 | R1/R2 | 无任何 Places Key 时开始 R1 | 与现网一样不检查 Places |
-| M9 | 运行中欠费 | 官方来源的 R3 已开始，Google 返回 401。状态接口返回 `suspended` + `insufficient_balance` | 任务失败。文案是「已欠费，请充值」。没有第二次 Places 请求，没有第二次取 Key，来源没有改成自备 |
-| M10 | 运行中非欠费 | 同样 401 或配额错误，状态接口返回 `active` 或 `suspended` 且原因不是 `insufficient_balance` | 任务失败。文案是 Google 错误原文。不出现「已欠费，请充值」。不重试 |
+| M9 | 运行中欠费 | 官方来源的 R3 已开始，Google 返回 401。状态接口返回 `arrears` | 任务失败。文案是「已欠费，请充值」。没有第二次 Places 请求，没有第二次取 Key，来源没有改成自备 |
+| M10 | 运行中非欠费 | 同样 401 或配额错误，状态接口返回 `active` 或 `provision_failed` | 任务失败。文案是 Google 错误原文。不出现「已欠费，请充值」或「请联系客服」。不重试 |
+| M13 | 运行中已吊销 | 同样 Google 拒绝，状态接口返回 `revoked` | 任务失败。文案是「请联系客服」。不重取、不重试、不改用 BYOK |
 | M11 | 查状态失败 | Google 403 之后，状态接口超时或 5xx | 任务失败。文案仍是 Google 错误。不写成欠费，不重试 |
 | M12 | 自备 Key | BYOK 路径上 Google 401 | 不调用官方状态接口。现网无效 Key 提示 |
 
@@ -257,3 +259,4 @@ O6（上线前法务）与 **O12**（内存最长存放）见[网关详设「待
 | 2026-10-10 | Key 不落盘，改为实时获取 |
 | 2026-10-10 | 取消轮换与重取，只在欠费时重置 |
 | 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
+| 2026-10-11 | 按 PK13 六态与已吊销对齐 |
