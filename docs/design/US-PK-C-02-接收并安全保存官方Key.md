@@ -30,7 +30,7 @@
 
 | 模块 | 本期 |
 |------|------|
-| **US-PK-C-02** | 取 Key、内存持有与丢弃、身份凭证、mock |
+| **US-PK-C-02** | 取 Key、内存持有与丢弃、身份凭证。验收与 gateway 联调，不设 mock |
 | **US-PK-C-01** | 申请与状态。状态接口**不**返回 `apiKey` |
 | **US-PK-C-03** | 把内存中的 Key 注入当次 `places-api`，直连 Google；Google 拒绝时再取一次 |
 | **US-PK-C-04** | 选用官方还是 BYOK。取 Key 失败时不自动改成 BYOK |
@@ -160,19 +160,17 @@ export interface PlacesOfficialKeyClient {
 
 ---
 
-## 6. 联调前 mock（对应待确认 O8）
+## 6. 与 gateway 联调
 
-mock 的是**取当前 Key**，不是往 `.env` 写一把假 Key。
+马丰顺已定：gateway 与客户端同步上线，客户端不实现 mock，也不做「接口未就绪时的本地假数据」。gateway 的 §4 在联调地址上可调用之后，客户端再开工。
 
-| 项 | 决定 |
+| 项 | 做法 |
 |----|------|
-| 开关 | `FTCS_PLACES_OFFICIAL_KEY_MOCK=1`，且 `app.isPackaged === false`。打包后忽略 |
-| 行为 | `getCurrent` 不发 HTTP。默认返回 `apiKey: "mock-places-key-not-real"`、`expiresAt` 为今后 1 小时的 ISO 时间、`keyVersion: "mock-1"` |
-| 失败夹具 | `FTCS_PLACES_OFFICIAL_KEY_MOCK_FIXTURE` 指向 JSON：`{ "error": "network" \| "need_login" \| "credential_revoked" \| "insufficient_balance" \| "revoked" \| "rate_limited" }` 或成功体。`insufficient_balance` 时没有 `apiKey` |
-| 欠费重置 | 测试把 mock 设为欠费后，`getCurrent` 与状态查询都是 `suspended` + `insufficient_balance`。再设为已恢复后，下一次 `getCurrent` 才返回新的 `apiKey`。断言本机没有 `FTCS_PLACES_OFFICIAL_API_KEY` |
-| 禁止 | 仓库里不放真实 `AIza` 样例。mock 成功后也不写磁盘 |
+| 地址 | 工作区 `.env` 的 `FTCS_TOKEN_GATEWAY_BASE_URL`。解析与现网官方通道相同：工作区 `.env` → 进程环境 → 默认 `https://token.ai-utills.com/v1`。值须已含 `/v1`；代码只去掉末尾 `/`，不再拼接 `/v1`。申请、查状态、取 Key 都接在这个 base 上。不另设 Places 专用地址 |
+| 账号 | 桌面现有「去登录」（官方账号 OAuth，`ensureFreshTokens`）。测试账号由 gateway / 运营开通后交给测试人员。仓库不放账号、密码或 Key |
+| 手测 | 五态、取 Key、欠费重置与恢复、Google 拒绝后只查一次状态、吊销凭证，见网关详设「联调手测」。本文件只核对：取到的 Key 不落盘 |
 
-未登录时主进程仍先走登录闸门，不进 mock。
+取 Key 成功后检查工作区 `.env`、`data/`、`userData`：除原有 `oauth-tokens.bin` 外，没有把本次 `apiKey` 写进任何文件。日志可以有 `keyVersion`，没有 Key 全文。
 
 ---
 
@@ -182,12 +180,12 @@ mock 的是**取当前 Key**，不是往 `.env` 写一把假 Key。
 
 | 文件 | 预期动作 |
 |------|----------|
-| `desktop/electron/gateway/places-official-key-client.ts` | `getCurrent` 的 HTTP 与 mock |
+| `desktop/electron/gateway/places-official-key-client.ts` | 只实现 HTTP `getCurrent`。不实现 mock 客户端，不读 mock 环境变量 |
 | `desktop/electron/gateway/places-official-key-memory.ts` | 内存 hold / clear。无磁盘 IO |
 | `desktop/electron/auth/oauth-service.ts` | `logout` 成功路径调用 `clear()`。不改 OAuth 文件格式 |
 | `desktop/electron/settings/settings-service.ts` | **不**增加官方 Key 环境变量。`saveSettings` 继续只处理 BYOK 的 `GOOGLE_PLACES_API_KEY` |
 
-建议单测：`hold` 之后工作区 `.env` 与 `userData` 除原有 `oauth-tokens.bin` 外没有新文件含 `mock-places-key-not-real`；`clear` 后再 `peek` 为空；快照对象没有 `apiKey`。
+建议单测只覆盖内存 `hold` / `clear`：`clear` 后再 `peek` 为空；快照类型里没有 `apiKey`。不发 HTTP，也不提供假 gateway。落盘与否在 §8 的联调里看。
 
 **明确不改**：`GOOGLE_PLACES_API_KEY` 的含义；`token-store.ts` 的加密格式；`docs/30`。
 
@@ -197,12 +195,12 @@ mock 的是**取当前 Key**，不是往 `.env` 写一把假 Key。
 
 | # | 步骤 | 期望 |
 |---|------|------|
-| M1 | mock 取 Key 成功后搜工作区与 userData | 没有 `FTCS_PLACES_OFFICIAL_API_KEY`，没有把 mock Key 写进 `.env`、json、钥匙串 |
+| M1 | 联调取 Key 成功后搜工作区与 userData | 没有 `FTCS_PLACES_OFFICIAL_API_KEY`，没有把 Key 写进 `.env`、json、钥匙串。前提见 §6 |
 | M2 | 同一次运行内第二次需要 Places | 按待确认推荐：不第二次打网关，除非已过 `expiresAt` |
 | M3 | 运行结束 | 内存为空；重启后的 `places-api` 环境里没有上一把官方 Key |
 | M4 | 退出登录 | 内存清空。BYOK 仍在 |
-| M5 | mock 返回 `credential_revoked` | 不启动 R3，不改来源，不用 BYOK |
-| M6 | 日志 | 可有 `keyVersion`，没有 `mock-places-key-not-real` |
+| M5 | 管理端吊销当前登录凭证后再取 Key | 不启动 R3，不改来源，不用 BYOK。提示重新登录 |
+| M6 | 日志 | 可有 `keyVersion`，没有 Key 全文 |
 
 ---
 
@@ -223,7 +221,7 @@ mock 的是**取当前 Key**，不是往 `.env` 写一把假 Key。
 |------|------|
 | 长驻 OpenCode 把 Key 留在子进程环境里 | 运行结束必须 `clear` 并重启 `places-api`；M3 |
 | 刷新状态的响应里夹带 `apiKey` 被快照保存 | 状态接口不允许该字段；快照类型里不声明它 |
-| 开发把 mock Key 写进夹具文件并提交了真实 Key | 夹具只用 `mock-places-key-not-real`；打包关闭 mock |
+| 在 gateway 未就绪时用假响应把客户端做完 | 不提供 mock。接口可联调后再开工，见 §6 与 O8 |
 
 ---
 
@@ -240,3 +238,4 @@ mock 的是**取当前 Key**，不是往 `.env` 写一把假 Key。
 | 2026-10-10 | 初稿：官方 Key 与 BYOK 分键存放、失效与 mock。O3 按现网 `.env` 决定 |
 | 2026-10-10 | Key 不落盘，改为实时获取 |
 | 2026-10-10 | 取消轮换与重取，只在欠费时重置 |
+| 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
