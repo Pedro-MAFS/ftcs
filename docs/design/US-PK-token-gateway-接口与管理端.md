@@ -201,7 +201,7 @@ stateDiagram-v2
 
 无请求体。未申请返回 **200**，`status = none`。不要用 404 表示未申请。
 
-响应只有状态和说明，字段与 §4.1 的状态字段相同。**没有** `apiKey`、`expiresAt`、`keyVersion`。`status` 只取 PK13 六值。客户端把这次结果写入 `data/prefs/places-official-status.json`（US-PK-C-02 §4.3）。欠费时 **200**，`status=arrears`。已吊销时 **200**，`status=revoked`。登录凭证被 US-PK-G-04 吊销时返回 401 `credential_revoked`，Places 的 `status` 不变，不要写成 `revoked`。
+响应只有状态和说明，字段与 §4.1 的状态字段相同。**没有** `apiKey`、`expiresAt`、`keyVersion`。`status` 只取 PK13 六值。客户端不把这次结果写成文件（US-PK-C-02 §4.3）。欠费时 **200**，`status=arrears`。已吊销时 **200**，`status=revoked`。登录凭证被 US-PK-G-04 吊销时返回 401 `credential_revoked`，Places 的 `status` 不变，不要写成 `revoked`。桌面三个接口的调用时机见 [US-PK-C-01 §5.1](US-PK-C-01-申请官方PlacesKey与状态展示.md)。
 
 ### 4.3 取当前 Key · US-PK-G-02　查询状态与实时取 Key
 
@@ -501,7 +501,7 @@ BYOK 用量不进入这些页面。实时扣费不做；节奏是按日。
 
 | # | 覆盖 | 步骤 | 期望 | 管理端 |
 |---|------|------|------|--------|
-| J1 | 未申请 | 新登录的测试账号打开设置 → 探索 | 状态「未申请」。抓包只有一次状态查询，没有 `GET .../current`。没有官方 Key 文件。`places-official-status.json` 里也没有 `apiKey` | 不需要 |
+| J1 | 未申请 | 新登录的测试账号打开设置 → 探索 | 先显示「查询中」，然后「未申请」。抓包只有一次状态查询，没有 `GET .../current`。工作区和 userData 里没有 Places 状态文件，也没有官方 Key | 不需要 |
 | J2 | 申请中 | 点「申请官方 Places Key」 | 先申请，成功后再一次状态查询。「申请中」，并有下一自然日或 `expectedReadyNote`。两次响应都无 `apiKey`，且没有取 Key 请求 | 不需要 |
 | J3 | 已开通，取 Key | 管理端完成开通后，只打开设置；确认没有取 Key 请求后再开始 R3 | 设置页只有状态查询，显示「已开通」。开始 R3 才出现 `GET .../current`，返回 `apiKey` 与 `keyVersion`，只在内存。Places 请求发往 `places.googleapis.com`。状态 json 与 `.env` 都没有这把 Key | **需要**。US-PK-AK-01 开通并同步 |
 | J4 | 失败 | 另用一个申请，管理端回传开通失败，桌面打开设置或点刷新 | 「开通失败」，能看到原因。只有状态查询，没有取 Key | **需要**。回传失败 |
@@ -732,3 +732,4 @@ PK12 已规定客户端不落盘。本条只决定 **§4.3 应答时，服务从
 | 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
 | 2026-10-11 | 设置页只查状态不取 Key |
 | 2026-10-11 | 按 PK13 六态与已吊销对齐 |
+| 2026-10-11 | 取消状态本地缓存，增加客户端接口一览 |

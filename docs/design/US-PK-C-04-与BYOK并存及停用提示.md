@@ -50,7 +50,7 @@
 | **识别当前 Key** | 设置「当前 R3 使用」一行（C-03）+ Preflight `detail`。两处用同一 `source` |
 | **gateway 标志** | `isPlacesGatewayReady` 继续恒为 `false`。选用官方 Key 时 `provider` 仍是 `custom` |
 
-设置上的「官方通道可尝试」看 C-02 的状态缓存是否为 `active`。本机没有官方 Key 文件。真正开跑时不先查状态，只取 Key；取 Key 失败就不能开始，也不沿用任何上一把 Key。
+设置页上的六态只来自刚返回的状态接口，不读本地文件。来源是官方时，开始 R3 直接调取 Key，不看那次查询的结果，也不看任何本地状态。取 Key 失败就不能开始，也不沿用任何上一把 Key。
 
 ---
 
@@ -68,19 +68,14 @@ interface PlacesEffectiveKey {
 }
 ```
 
-计算顺序：
+开跑时的顺序（不读 Places 状态文件，也不先查状态）：
 
 1. `saved` = `FTCS_PLACES_KEY_SOURCE`，只接受 `official` 与 `byok`，其它字符当空。
-2. `officialUsable`、`byokUsable` 按 §2。
-3. 若 `saved` 为空：
-   - 只有官方可用 → `official`
-   - 只有 BYOK 可用 → `byok`
-   - 两把都可用 → `official`
-   - 都不可用 → 失败
-4. 若 `saved === 'official'`：官方可用则用官方；否则失败，`offer` 在 BYOK 可用时为 `switch-to-byok`，否则 `open-settings`。
-5. 若 `saved === 'byok'`：BYOK 可用则用 BYOK；否则失败，`offer` 在官方可用时为 `switch-to-official`，否则 `open-settings`。
+2. `saved === 'byok'` 且自备 Key 非空：用自备 Key，不取官方 Key。
+3. `saved === 'official'`，或 `saved` 为空且没有自备 Key：直接调取 Key。成功才开跑；失败用取 Key 返回的状态显示 §3.1，不改来源。
+4. `saved` 为空且已有自备 Key：用自备 Key。设置页这次查到 `active` 时，可以提示改用官方，但不自动改来源。
 
-纯函数**不写盘**。唯一一次自动写入：状态变为已开通且来源键仍为空时，刷新处理函数把 `FTCS_PLACES_KEY_SOURCE` 写成 `official`（没有自备 Key、或两把通道都可用时都写这个名字）。不写任何 Key 材料。Preflight、设置快照、探索页按钮只调用纯函数。失败分支不改来源。用户切换走 §4 的 IPC。
+纯函数**不写盘**。用户在设置里点选来源才写 `FTCS_PLACES_KEY_SOURCE`，值只有 `official` 或 `byok`。不写状态，不写 Key。失败分支不改来源。
 
 `resolvePlacesStart` 改为返回上述结果里的 `ok`、`detail`、`provider: 'custom'`（只要 `ok`）。现有调用方只看 `ok` 与 `detail` 的，保持能编译。`places-start.test.ts` 里「官方通道无 Key 则要求 BYOK」的用例改为：无官方申请、无 BYOK 时失败；有 BYOK 且来源为空时仍成功且 `detail` 含「自备」。
 
@@ -140,7 +135,7 @@ IPC：`places-official:set-source`，入参 `{ source: 'official' | 'byok' }`。
 ```mermaid
 flowchart TD
   start[开始 R3]
-  pick[按缓存状态与来源选出]
+  pick[来源是官方则直接取 Key]
   ok{可用?}
   run[Preflight 通过并注入该 Key]
   block[Preflight 失败并展示 detail]
@@ -154,7 +149,7 @@ flowchart TD
   switch --> pick
 ```
 
-开跑不先查状态。状态缓存不是 Key；缓存为 `active` 时才去取 Key，取不到就失败，不改用自备 Key。
+开跑不查状态、不读本地状态。来源是官方就取 Key；取不到就失败，不改用自备 Key。
 
 ---
 
@@ -244,3 +239,4 @@ O4 已在 §2、§3 决定。其它未决项见[网关详设「待确认」](US-
 | 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
 | 2026-10-11 | 设置页只查状态不取 Key |
 | 2026-10-11 | 按 PK13 六态与已吊销对齐 |
+| 2026-10-11 | 取消状态本地缓存，增加客户端接口一览 |
