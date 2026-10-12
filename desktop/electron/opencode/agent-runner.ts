@@ -8,6 +8,12 @@ import {
 import { patchProfileSourceInputs } from '../profile/profile-writer'
 import { loadExpansion, type KeywordExpansion } from '../keywords/keywords-reader'
 import { getWorkspaceRoot } from '../config/paths'
+import { googleRejectionFromToolPart } from '../../src/domain/places-official'
+import {
+  beginPlacesDiscoverRun,
+  explainPlacesGoogleRejection,
+  releasePlacesDiscoverRun,
+} from '../gateway/places-official-runtime'
 import { isEligibleR2Query } from '../exploration/r2-query'
 import {
   formatEnabledR2SitesForPrompt,
@@ -360,7 +366,7 @@ function buildDiscoverLeadsR3Prompt(
     '2. search-api.search_usage 确认当日配额未用尽（官方通道以余额为准）。',
     '3. lead-store.exploration_start({ product_id, rounds: ["R3"] })，记住 run_id。',
     '4. 只跑 round=R3 且无 site_id 的词，按 priority 取前 max_queries 条。',
-    '5. 对每个词：places_text_search 的 pageSize 用下述 places_result_limit，一次调用即可；过滤后 place_details 不超过 floor(本次实际返回×0.75)。无官网则 Tavily search_web 补搜；chrome 只打开公司官网，对照画像判断是否目标客户。新域名且通过才 lead_append_raw（round=R3，run_id 必填，snippet 以「发现：place_id=」开头，并带 companyIntelligence）；同域名已有且本次仍通过则 lead_set_company_intelligence，不要再追加。禁止打开 Google 地图，禁止自己翻页。',
+    '5. 对每个词：places_text_search 的 pageSize 用下述 places_result_limit，一次调用即可；过滤后 place_details 不超过 floor(本次实际返回×0.75)。无官网则 Tavily search_web 补搜；chrome 只打开公司官网，对照画像判断是否目标客户。公司名、官网、电话、地址以打开后的官网为准，不要把 Places 的店名和地址写入线索。新域名且通过才 lead_append_raw（round=R3，run_id 必填，snippet 为「发现：Places 候选，经官网核实」，并带 companyIntelligence）；同域名已有且本次仍通过则 lead_set_company_intelligence，不要再追加。禁止打开 Google 地图，禁止自己翻页。',
     '6. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。全程未通过官网判断也允许 completed 且 0 条线索。',
     '7. 用简短中文汇报：run_id、R3 词数、Places Search/Details 次数、Tavily 补搜/官网打开次数、线索数、跳过原因、3～5 条样例或「无新线索」、下一步 score-and-dedupe。',
     '',
@@ -652,6 +658,10 @@ export function capDraftOutreachLeadIds(
   return { leadIds: kept, notice }
 }
 
+export interface AgentRunHooks {
+  reloadRuntime?: () => Promise<void>
+}
+
 export class AgentRunController {
   private abort: AbortController | null = null
   private sessionId: string | null = null
@@ -661,8 +671,29 @@ export class AgentRunController {
   private autoAbortReason: string | null = null
   /** session.error / message.updated.info.error 的可读文案，供任务结束读产物失败时使用 */
   private lastModelError: string | null = null
+  /** 本次 R3 用的是官方 Key 时，Google 拒绝只查一次状态。 */
+  private watchPlacesGoogleRejection = false
+  private placesRejectionHandled = false
 
-  constructor(private readonly getClient: () => OpencodeClient | null) {}
+  constructor(
+    private readonly getClient: () => OpencodeClient | null,
+    private readonly hooks: AgentRunHooks = {},
+  ) {}
+
+  private async failForPlacesGoogleRejection(googleMessage: string): Promise<void> {
+    let message = googleMessage
+    try {
+      message = await explainPlacesGoogleRejection(googleMessage)
+    } catch {
+      message = googleMessage
+    }
+    this.autoAbortReason = message
+    this.abort?.abort()
+    const client = this.getClient()
+    if (client && this.sessionId) {
+      await client.session.abort({ sessionID: this.sessionId }).catch(() => undefined)
+    }
+  }
 
   private attachTimeline(timeline: TimelineBuilder): void {
     this.timeline = timeline
@@ -2079,7 +2110,7 @@ export class AgentRunController {
       throw new Error('已有 Agent 任务在运行，请稍候或先中止')
     }
 
-    const client = this.getClient()
+    let client = this.getClient()
     if (!client) {
       throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
     }
@@ -2131,6 +2162,31 @@ export class AgentRunController {
     }
     // 未传 maxQueries 时按当前轮次可用词数全量执行（不再默认截断为 10）
     const maxQueries = Math.max(1, options?.maxQueries ?? availableCount)
+
+    let placesReleaseAfter = false
+    if (isR3) {
+      try {
+        const begun = await beginPlacesDiscoverRun(`r3:${productId}:${Date.now()}`)
+        if (!begun.ok) throw new Error(begun.message)
+        this.watchPlacesGoogleRejection = begun.watchGoogleRejection
+        this.placesRejectionHandled = false
+        placesReleaseAfter = begun.releaseAfter
+        if (begun.reloadBefore) {
+          await this.hooks.reloadRuntime?.()
+          client = this.getClient()
+          if (!client) {
+            throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+          }
+        }
+      } catch (err) {
+        if (placesReleaseAfter) {
+          const release = releasePlacesDiscoverRun()
+          this.watchPlacesGoogleRejection = false
+          if (release.reload) await this.hooks.reloadRuntime?.()
+        }
+        throw err
+      }
+    }
 
     this.running = true
     this.abort = new AbortController()
@@ -2425,6 +2481,12 @@ export class AgentRunController {
       stopEvents?.()
       this.running = false
       this.abort = null
+      if (placesReleaseAfter) {
+        const release = releasePlacesDiscoverRun()
+        this.watchPlacesGoogleRejection = false
+        this.placesRejectionHandled = false
+        if (release.reload) await this.hooks.reloadRuntime?.()
+      }
     }
   }
 
@@ -3021,6 +3083,13 @@ export class AgentRunController {
           }
           if (part.type === 'tool') {
             applySnapshot(toolPartToTimelineItem(part))
+            if (this.watchPlacesGoogleRejection && !this.placesRejectionHandled) {
+              const googleMessage = googleRejectionFromToolPart(part)
+              if (googleMessage) {
+                this.placesRejectionHandled = true
+                void this.failForPlacesGoogleRejection(googleMessage)
+              }
+            }
           }
           return
         }

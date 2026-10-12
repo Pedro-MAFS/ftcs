@@ -21,6 +21,9 @@ export const IPC = {
   GATEWAY_REFRESH_OFFICIAL_USAGE: 'gateway:refresh-official-usage',
   GATEWAY_OPEN_OFFICIAL_RECHARGE: 'gateway:open-official-recharge',
   GATEWAY_OPEN_OFFICIAL_PORTAL: 'gateway:open-official-portal',
+  PLACES_OFFICIAL_APPLY: 'places-official:apply',
+  PLACES_OFFICIAL_REFRESH: 'places-official:refresh',
+  PLACES_OFFICIAL_SET_SOURCE: 'places-official:set-source',
   LIBRARY_LIST: 'library:list',
   LIBRARY_ADD_WEBSITE: 'library:add-website',
   LIBRARY_DELETE_WEBSITE: 'library:delete-website',
@@ -1125,6 +1128,12 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: 'custom' | 'gateway'
+  placesKeySource: '' | 'official' | 'byok'
+  placesOfficialStatus: string | null
+  placesOfficialReasonMessage: string | null
+  placesOfficialExpectedReadyNote: string | null
+  placesOfficialQueryError: string | null
+  placesOfficialNeedLogin: boolean
   hunterApiKeySet: boolean
   hunterApiKeysMasked: string
   hunterApiKeyCount: number
@@ -1204,6 +1213,14 @@ export interface OpenOfficialRechargeResult {
 }
 
 export type OpenOfficialPortalResult = OpenOfficialRechargeResult
+
+export interface PlacesOfficialIpcResult {
+  ok: boolean
+  needLogin: boolean
+  message: string
+  queried: boolean
+  settings: SettingsSnapshot
+}
 
 export interface GoogleProxyDetectResult {
   ok: boolean

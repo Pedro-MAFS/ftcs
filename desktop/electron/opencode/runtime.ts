@@ -25,6 +25,11 @@ import {
   killProcessTree,
   readOpenCodeConfig,
 } from './resolver'
+import {
+  buildPlacesMcpEnvironment,
+  getPlacesMcpInjection,
+  markPlacesMcpInjectionApplied,
+} from './places-mcp-env'
 
 const MAX_LOG_LINES = 200
 const PORT_SCAN_RANGE = 20
@@ -332,6 +337,7 @@ export class OpenCodeRuntime {
         this.appendLog(
           `已就绪: ${this.status.baseUrl}${health.version ? ` (v${health.version})` : ''}${pid ? ` pid=${pid}` : ''}`,
         )
+        markPlacesMcpInjectionApplied()
         return this.getStatus()
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err)
@@ -482,11 +488,12 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
       }
 
   const placesEnv = {
-    FTCS_WORKSPACE: workspaceRoot,
-    PLACES_PROVIDER: process.env.PLACES_PROVIDER || 'custom',
-    ...(process.env.GOOGLE_PLACES_API_KEY
-      ? { GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY }
-      : {}),
+    ...buildPlacesMcpEnvironment({
+      workspaceRoot,
+      envByok: process.env.GOOGLE_PLACES_API_KEY,
+      envSource: process.env.FTCS_PLACES_KEY_SOURCE,
+      injection: getPlacesMcpInjection(),
+    }),
     ...buildGoogleProxyEnvVars(process.env[GOOGLE_PROXY_RESOLVED_ENV]),
   }
 

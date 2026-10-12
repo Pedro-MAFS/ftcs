@@ -1,5 +1,6 @@
 import { getSettingsSnapshot } from '../settings/settings-service'
 import type { OpenCodeRuntime } from '../opencode/runtime'
+import { preparePlacesForPreflight } from '../gateway/places-official-runtime'
 import {
   isPlacesGatewayReady,
   resolvePlacesStart,
@@ -215,7 +216,7 @@ export async function runAgentPreflight(
   }
 
   if (needsPlaces(kind)) {
-    const places = resolvePlacesStart(settings)
+    const places = await preparePlacesForPreflight()
     checks.push({
       id: 'places',
       label: 'Google Places（R3）',

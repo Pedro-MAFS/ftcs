@@ -13,6 +13,7 @@ import {
   getDefaultTokenGatewayBaseUrl,
   getTokenGatewayBaseUrl,
 } from '../gateway/gateway-config'
+import { readPlacesKeySourceFromEnv } from '../gateway/places-key-source-store'
 import {
   CUSTOM_VISION_ENV,
   formatEnvBool,
@@ -82,6 +83,17 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: PlacesProvider
+  /** 用户选择的 R3 来源，不是 Key，也不是六态。空表示尚未写入。 */
+  placesKeySource: '' | 'official' | 'byok'
+  /**
+   * 下面几项只在当次状态查询的 IPC 返回值里有内容。
+   * getSettings 固定为空：不把 Places 状态留在内存缓存或磁盘上。
+   */
+  placesOfficialStatus: string | null
+  placesOfficialReasonMessage: string | null
+  placesOfficialExpectedReadyNote: string | null
+  placesOfficialQueryError: string | null
+  placesOfficialNeedLogin: boolean
   /** Hunter BYOK：至少一个 Key */
   hunterApiKeySet: boolean
   /** 各 Key 掩码后换行拼接，供 textarea 回显 */
@@ -374,6 +386,12 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     placesApiKeyMasked: maskSecret(placesKey),
     placesApiKeySet: Boolean(placesKey),
     placesProvider,
+    placesKeySource: readPlacesKeySourceFromEnv(env),
+    placesOfficialStatus: null,
+    placesOfficialReasonMessage: null,
+    placesOfficialExpectedReadyNote: null,
+    placesOfficialQueryError: null,
+    placesOfficialNeedLogin: false,
     hunterApiKeySet: hunterKeys.length > 0,
     hunterApiKeysMasked: hunterKeys.map((key) => maskSecret(key)).join('\n'),
     hunterApiKeyCount: hunterKeys.length,

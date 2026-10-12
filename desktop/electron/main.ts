@@ -38,6 +38,14 @@ import {
   openOfficialPortal,
   maybeRefreshUsageAfterRechargeFocus,
 } from './gateway/official-channel-service'
+import {
+  applyPlacesOfficialKey,
+  refreshPlacesOfficialKey,
+  releasePlacesDiscoverRun,
+  setPlacesOfficialKeySource,
+} from './gateway/places-official-runtime'
+import { placesOfficialKeyMemory } from './gateway/places-official-key-memory'
+import { setPlacesMcpInjection } from './opencode/places-mcp-env'
 import { writeUserPrefs } from './config/user-prefs'
 import { initializeWorkspace, ensureMcpServersReady } from './config/workspace-init'
 import {
@@ -211,9 +219,16 @@ let isQuitting = false
 /** 登录自启 / --hidden：创建后不强制 show */
 let startHidden = false
 
+async function reloadOpenCodeRuntime(): Promise<void> {
+  if (!runtime) runtime = new OpenCodeRuntime()
+  await runtime.restart()
+}
+
 function getAgentRunner(): AgentRunController {
   if (!agentRunner) {
-    agentRunner = new AgentRunController(() => runtime?.getClient() ?? null)
+    agentRunner = new AgentRunController(() => runtime?.getClient() ?? null, {
+      reloadRuntime: reloadOpenCodeRuntime,
+    })
   }
   return agentRunner
 }
@@ -581,6 +596,10 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.AUTH_LOGOUT, async () => {
     const result = await authLogout()
+    const release = releasePlacesDiscoverRun()
+    if (release.reload && runtime) {
+      await runtime.restart()
+    }
     broadcastAuthChanged()
     return result
   })
@@ -854,6 +873,30 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.GATEWAY_OPEN_OFFICIAL_PORTAL, async () => {
     return openOfficialPortal()
   })
+  ipcMain.handle(IPC.PLACES_OFFICIAL_APPLY, async () => applyPlacesOfficialKey())
+  ipcMain.handle(IPC.PLACES_OFFICIAL_REFRESH, async () => refreshPlacesOfficialKey())
+  ipcMain.handle(
+    IPC.PLACES_OFFICIAL_SET_SOURCE,
+    async (_event, input?: { source?: string }) => {
+      const source = input?.source
+      if (source !== 'official' && source !== 'byok') {
+        return {
+          ok: false,
+          needLogin: false,
+          message: '来源无效',
+          queried: false,
+          settings: getSettingsSnapshot(),
+        }
+      }
+      const result = await setPlacesOfficialKeySource(source)
+      if (result.ok) {
+        placesOfficialKeyMemory.clear()
+        setPlacesMcpInjection({ kind: 'default' })
+        await reloadOpenCodeRuntime()
+      }
+      return result
+    },
+  )
   ipcMain.handle(IPC.SETTINGS_PICK_WORKSPACE, async () => {
     const dir = await pickWorkspaceDirectory()
     if (!dir) return { path: null, restarted: false }

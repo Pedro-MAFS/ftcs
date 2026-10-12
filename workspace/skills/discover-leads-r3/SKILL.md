@@ -60,7 +60,7 @@ R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过�
 - **禁止** chrome 打开 Google 地图（`google.com/maps`、`maps.google.com`、`goo.gl/maps` 等）。
 - **禁止**在未打开官网并判断为「是」时 `lead_append_raw`。
 - **禁止**未经 chrome 验证就把 Places `websiteUri` 写入 `company.website`。
-- **禁止**把整段 Places JSON 写入 Lead；snippet 仅含 `place_id`、店名、地址。
+- **禁止**把整段 Places JSON、店名、地址或 `place_id` 写入 Lead。snippet 固定为「发现：Places 候选，经官网核实」。
 - **禁止** query 含 `site:` / `intitle:` / `inurl:` / `filetype:`。
 
 ## `regionCode` 推断（可选）
@@ -256,7 +256,7 @@ lead-store.lead_append_raw({
     query_id: search_query.id,
     run_id,
     company: {
-      name: "<displayName，可用官网页校正>",
+      name: "<官网页面上的公司名；页面没有清晰名称时写短说明或留空>",
       website: "<打开过的官网 URL>",
       country: "...",
       description: "..."
@@ -264,9 +264,9 @@ lead-store.lead_append_raw({
     source: {
       url: "<与 company.website 相同>",
       type: "tavily_search",
-      snippet: "发现：place_id=<placeId>；<displayName>, <formattedAddress>"
+      snippet: "发现：Places 候选，经官网核实"
     },
-    match_reason: "<须具体：Places 如何发现 + 官网业务证据，禁止空泛>",
+    match_reason: "经 Places 发现后，打开官网核实：<官网业务证据，禁止空泛，不要贴 formattedAddress>",
     contacts: [],
     raw_score: 70,
     companyIntelligence: {
@@ -299,7 +299,8 @@ lead-store.lead_set_company_intelligence({
 ```
 
 - `run_id` 与 Step 0 一致
-- `source.snippet` **必须**以 `发现：place_id=` 开头
+- `source.snippet` **必须**是 `发现：Places 候选，经官网核实`
+- `company.name` 来自官网页面，不用 Places `displayName` 填这个字段
 - `company.website` / `source.url` 为 **chrome 打开过的官网**，不是地图链
 - `source.type` 固定 `tavily_search`
 - `companyIntelligence` 只含上面七个字符串，不要传 `status` 或 Markdown 字段。邮箱和电话不要写进画像
@@ -336,9 +337,10 @@ lead-store.exploration_finish({ product_id, run_id, status: "completed" })
 | 情况 | 处理 |
 |------|------|
 | 无 expansion 或无合格 R3 词 | 提示先 `expand-keywords` |
-| `MISSING_PLACES_API_KEY` | 停止；设置 → 探索 → Places Key |
-| Places 401/403 | 停止；Key 无效或未启用 Places API (New) |
-| `PLACES_GATEWAY_NOT_READY` | 停止；改 BYOK 或等官方网关 |
+| `MISSING_PLACES_API_KEY` | 停止。当前没有可用的 Places Key。请打开设置 → 探索，申请官方 Places Key 或填写自备 Key。 |
+| Places 401/403 或配额（官方 Key） | 停止，不重试，不改用自备 Key。若提示「已欠费，请充值」就用这句；否则原样说明 Google 返回的错误。 |
+| Places 401/403（自备 Key） | 停止，并说明 Key 无效或未启用 Places API (New)。不查官方状态。 |
+| `PLACES_GATEWAY_NOT_READY` | 停止。Places 不经服务器代调。请使用直连（PLACES_PROVIDER=custom），并配置官方下发 Key 或自备 Key。 |
 | 单词 Search 5xx/超时 | 该词 error，继续 |
 | Details / Tavily / 官网失败 | 跳过 candidate |
 | chrome 不可用 | 停止 |
@@ -351,9 +353,10 @@ lead-store.exploration_finish({ product_id, run_id, status: "completed" })
 |------|------|
 | `round` | `R3` |
 | `company.website` / `source.url` | 已打开并判断过的官网 |
-| `source.snippet` | `发现：place_id=…；店名, 地址` |
+| `company.name` | 官网页面上的公司名，不用 Places 店名 |
+| `source.snippet` | `发现：Places 候选，经官网核实` |
 | `source.type` | `tavily_search` |
-| `match_reason` | Places 发现 + 官网证据 |
+| `match_reason` | 经 Places 发现后，打开官网核实，加上官网业务证据 |
 | `query_id` / `run_id` | 搜索词与本次运行 |
 
 ### 探索运行 — `data/exploration/{product_id}/runs/{run_id}.json`
