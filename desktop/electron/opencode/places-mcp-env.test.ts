@@ -63,6 +63,6 @@ test('official source without an injection does not fall back to BYOK', () => {
     envByok: 'AIzaByok',
     injection: { kind: 'default' },
   })
-  assert.equal(env.GOOGLE_PLACES_API_KEY, undefined)
+  assert.equal(env.GOOGLE_PLACES_API_KEY, '')
   assert.equal(env.PLACES_PROVIDER, 'custom')
 })

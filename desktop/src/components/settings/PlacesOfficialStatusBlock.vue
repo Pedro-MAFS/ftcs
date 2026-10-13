@@ -79,6 +79,12 @@ async function onRecharge(): Promise<void> {
     <p class="hint-line">状态：{{ label }}</p>
     <p v-if="extra" class="hint-line">{{ extra }}</p>
     <p v-if="errorText" class="hint-line is-error">{{ errorText }}</p>
+    <p
+      v-if="status === 'arrears' || status === 'revoked'"
+      class="hint-line"
+    >
+      如需使用自备 Places Key，请把模型通道切换为「自定义」。官方通道不会使用本机已保存的自备 Key。
+    </p>
     <div class="settings-actions-row">
       <button
         v-if="!loggedIn"

@@ -720,7 +720,12 @@ function registerIpcHandlers(): void {
         mode?: 'off' | 'system' | 'manual'
         manualProxyUrl?: string
       },
-    ) => testGooglePlacesConnectivity(input),
+    ) => {
+      const officialChannel = (process.env.FTCS_CHANNEL_MODE || 'official') !== 'custom'
+      return testGooglePlacesConnectivity(
+        officialChannel ? { ...input, apiKey: '' } : input,
+      )
+    },
   )
   ipcMain.handle(IPC.SETTINGS_TEST_HUNTER, async () => testHunterConnectivity())
   ipcMain.handle(IPC.ONBOARDING_GET_STATE, () => getOnboardingState())
