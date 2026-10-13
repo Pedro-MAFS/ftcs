@@ -48,7 +48,6 @@ export const PROVISION_FAILED_PREFLIGHT_DETAIL =
 export const APPLY_NEED_LOGIN_MESSAGE = '请先登录'
 export const NETWORK_STATUS_MESSAGE = '暂时联系不上官方服务。'
 export const UNKNOWN_STATUS_MESSAGE = '状态无法识别，请稍后刷新'
-export const OFFICIAL_PLACES_ACTIVE_NOTE = ''
 export const PENDING_FALLBACK_NOTE = '预计在受理后的下一自然日内开通。'
 export const PROVISION_FAILED_FALLBACK_NOTE = '开通未成功。可以再次申请。'
 
