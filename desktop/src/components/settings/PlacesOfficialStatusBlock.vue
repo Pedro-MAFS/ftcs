@@ -50,7 +50,7 @@ async function onRecharge(): Promise<void> {
 
 <template>
   <p class="hint-line">需要能访问 Google 的网络。</p>
-  <p class="hint-line">费用按日计入官方余额。</p>
+  <p class="hint-line">使用费用计入官方额度。</p>
   <p v-if="phase === 'loading'" class="hint-line">查询中</p>
   <template v-else-if="phase === 'error'">
     <p class="hint-line is-error">{{ errorText || '查询官方 Places 状态失败' }}</p>
