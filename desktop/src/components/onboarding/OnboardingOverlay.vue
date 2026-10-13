@@ -17,6 +17,7 @@ import type {
   OpenCodeInstallResult,
 } from '../../types/onboarding'
 import Icon from '../shared/Icon.vue'
+import PlacesOfficialStatusBlock from '../settings/PlacesOfficialStatusBlock.vue'
 
 const router = useRouter()
 const {
@@ -427,7 +428,7 @@ async function onSaveKeys(andContinue: boolean): Promise<void> {
       smallModel,
       searchProvider: form.searchProvider,
       tavilyApiKey: form.tavilyApiKey,
-      placesApiKey: form.placesApiKey,
+      ...(form.channelMode === 'custom' ? { placesApiKey: form.placesApiKey } : {}),
       searchDailyLimit: form.searchDailyLimit,
       customModelSupportsImage: form.customModelSupportsImage,
     })
@@ -898,9 +899,10 @@ onMounted(() => {
 
             <div class="onboarding__section-head">
               <p class="onboarding__section-label">
-                Google Places API Key · R3 地图发现（可选）
+                {{ isOfficial ? '官方 Places Key · R3 地图发现' : 'Google Places API Key · R3 地图发现（可选）' }}
               </p>
               <button
+                v-if="!isOfficial"
                 type="button"
                 class="help-link-btn"
                 title="如何申请 Places API Key？"
@@ -910,7 +912,10 @@ onMounted(() => {
                 <Icon name="help-circle" :size="14" />
               </button>
             </div>
-            <div class="onboarding__card">
+            <div v-if="isOfficial" class="onboarding__card">
+              <PlacesOfficialStatusBlock />
+            </div>
+            <div v-else class="onboarding__card">
               <div class="onboarding__key-row">
                 <input
                   v-model="form.placesApiKey"
@@ -928,6 +933,7 @@ onMounted(() => {
                   {{ showPlacesKey ? '隐藏' : '显示' }}
                 </button>
               </div>
+              <p class="hint-line">当前 R3 使用：自备 Places Key</p>
               <p class="hint-line">
                 仅 R3 地图发现需要；R1/R2 可不填。Key 在
                 <button
@@ -948,7 +954,7 @@ onMounted(() => {
                 。
               </p>
               <p class="hint-line">
-                请求由本机直连 Google 服务。你须在<strong>合法合规、可访问 Google 服务</strong>的网络环境中使用，并遵守当地法规与 Google 政策。与模型 / 搜索通道独立。
+                请求由本机直连 Google 服务。你须在<strong>合法合规、可访问 Google 服务</strong>的网络环境中使用，并遵守当地法规与 Google 政策。自定义模型通道才填写这把 Key。
               </p>
             </div>
             <p v-if="keysMessage" class="onboarding__ok">{{ keysMessage }}</p>

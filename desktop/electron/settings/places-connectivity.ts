@@ -81,7 +81,9 @@ export async function testGooglePlacesConnectivity(options?: {
 
   const resolved = await resolveEffectiveGoogleProxyUrl(env)
   const apiKey =
-    options?.apiKey?.trim() || process.env.GOOGLE_PLACES_API_KEY?.trim() || ''
+    options && 'apiKey' in options
+      ? (options.apiKey || '').trim()
+      : process.env.GOOGLE_PLACES_API_KEY?.trim() || ''
 
   const fetchFn = resolved.url
     ? createFetchWithProxy(resolved.url)

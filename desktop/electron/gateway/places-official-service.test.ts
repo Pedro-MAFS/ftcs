@@ -39,9 +39,9 @@ function harness(options?: {
   current?: PlacesCurrentResult
   applyResult?: PlacesStatusResult
 }) {
-  const calls = { apply: 0, status: 0, current: 0, writes: [] as string[] }
+  const calls = { apply: 0, status: 0, current: 0 }
   let selection: PlacesSelection = options?.selection || {
-    source: '',
+    channelMode: 'official',
     byokSet: false,
     byokKey: '',
   }
@@ -79,10 +79,6 @@ function harness(options?: {
     memory,
     ensureToken: async () => 'access-token',
     readSelection: () => selection,
-    writeSource: (source) => {
-      calls.writes.push(source)
-      selection = { ...selection, source }
-    },
     getInjection: () => injection,
     setInjection: (next) => {
       injection = next
@@ -124,7 +120,7 @@ test('apply then queries status and never asks for the key', async () => {
 
 test('apply while revoked does not change the source or call get-key', async () => {
   const h = harness({
-    selection: { source: 'official', byokSet: true, byokKey: 'AIzaByok' },
+    selection: { channelMode: 'official', byokSet: true, byokKey: 'AIzaByok' },
     applyResult: {
       ok: false,
       httpStatus: 409,
@@ -137,21 +133,21 @@ test('apply while revoked does not change the source or call get-key', async () 
   assert.equal(result.queried, false)
   assert.equal(result.view.status, null)
   assert.equal(result.message, '请联系客服')
-  assert.equal(h.selection.source, 'official')
+  assert.equal(h.selection.channelMode, 'official')
   assert.equal(h.calls.current, 0)
-  assert.deepEqual(h.calls.writes, [])
 })
 
-test('refresh to active writes official only when the source is empty', async () => {
+test('refresh to active does not write a places source or touch BYOK', async () => {
   const h = harness({
-    selection: { source: '', byokSet: true, byokKey: 'AIzaByok' },
+    selection: { channelMode: 'official', byokSet: true, byokKey: 'AIzaByok' },
     status: statusBody('active'),
   })
   const result = await h.service.refresh()
   assert.equal(result.view.status, 'active')
-  assert.deepEqual(h.calls.writes, ['official'])
+  assert.equal(result.view.placesKeySource, 'official')
   assert.equal(h.calls.current, 0)
   assert.equal(h.selection.byokKey, 'AIzaByok')
+  assert.equal(h.selection.channelMode, 'official')
 })
 
 test('401 need_login does not rewrite places status to revoked', async () => {
@@ -175,10 +171,7 @@ test('401 need_login does not rewrite places status to revoked', async () => {
     http,
     memory: createPlacesOfficialKeyMemory(),
     ensureToken: async () => 'stale',
-    readSelection: () => ({ source: 'official', byokSet: false, byokKey: '' }),
-    writeSource: () => {
-      throw new Error('must not write source')
-    },
+    readSelection: () => ({ channelMode: 'official', byokSet: false, byokKey: '' }),
     getInjection: () => ({ kind: 'default' }),
     setInjection: () => undefined,
     injectionNeedsReload: () => false,
@@ -192,7 +185,7 @@ test('401 need_login does not rewrite places status to revoked', async () => {
 
 test('get-key failure does not switch the saved source to byok', async () => {
   const h = harness({
-    selection: { source: 'official', byokSet: true, byokKey: 'AIzaByok' },
+    selection: { channelMode: 'official', byokSet: true, byokKey: 'AIzaByok' },
     current: {
       ok: false,
       httpStatus: 200,
@@ -203,16 +196,26 @@ test('get-key failure does not switch the saved source to byok', async () => {
   })
   const begun = await h.service.beginRun('run-1')
   assert.equal(begun.ok, false)
-  assert.match(begun.message, /已欠费，请充值/)
-  assert.match(begun.message, /改用自备 Key/)
-  assert.equal(h.selection.source, 'official')
-  assert.deepEqual(h.calls.writes, [])
+  assert.equal(begun.message, '已欠费，请充值')
+  assert.doesNotMatch(begun.message, /自备/)
+  assert.equal(h.selection.channelMode, 'official')
   assert.equal(h.memory.peek('run-1', 10_000), null)
+})
+
+test('custom channel uses BYOK and does not fetch the official key', async () => {
+  const h = harness({
+    selection: { channelMode: 'custom', byokSet: true, byokKey: 'AIzaByok' },
+  })
+  const begun = await h.service.beginRun('run-byok')
+  assert.equal(begun.ok, true)
+  assert.equal(begun.watchGoogleRejection, false)
+  assert.equal(h.calls.current, 0)
+  assert.match(begun.message, /自备/)
 })
 
 test('google rejection queries status once and does not fetch another key', async () => {
   const h = harness({
-    selection: { source: 'official', byokSet: true, byokKey: 'AIzaByok' },
+    selection: { channelMode: 'official', byokSet: true, byokKey: 'AIzaByok' },
     status: statusBody('arrears'),
   })
   h.memory.hold({
@@ -257,11 +260,11 @@ test('source file stores only the source name', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-places-'))
   const envPath = path.join(dir, '.env')
   fs.writeFileSync(envPath, 'GOOGLE_PLACES_API_KEY=AIzaByok\n', 'utf8')
-  writePlacesKeySourceFile(envPath, 'official')
+  writePlacesKeySourceFile(envPath, 'custom')
   const text = fs.readFileSync(envPath, 'utf8')
-  assert.match(text, /FTCS_PLACES_KEY_SOURCE=official/)
+  assert.match(text, /FTCS_PLACES_KEY_SOURCE=custom/)
   assert.match(text, /GOOGLE_PLACES_API_KEY=AIzaByok/)
   assert.doesNotMatch(text, /AIzaOfficial/)
-  assert.equal(process.env.FTCS_PLACES_KEY_SOURCE, 'official')
+  assert.equal(process.env.FTCS_PLACES_KEY_SOURCE, 'custom')
   delete process.env.FTCS_PLACES_KEY_SOURCE
 })

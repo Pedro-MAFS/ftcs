@@ -13,7 +13,11 @@ import {
   getDefaultTokenGatewayBaseUrl,
   getTokenGatewayBaseUrl,
 } from '../gateway/gateway-config'
-import { readPlacesKeySourceFromEnv } from '../gateway/places-key-source-store'
+import {
+  PLACES_KEY_SOURCE_ENV,
+  placesByokPersistedForChannel,
+  placesSourceForChannel,
+} from '../../src/domain/places-official'
 import {
   CUSTOM_VISION_ENV,
   formatEnvBool,
@@ -83,8 +87,8 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: PlacesProvider
-  /** 用户选择的 R3 来源，不是 Key，也不是六态。空表示尚未写入。 */
-  placesKeySource: '' | 'official' | 'byok'
+  /** 跟模型通道走：official 或 custom。不是单独选择，也不是 Key。 */
+  placesKeySource: 'official' | 'custom'
   /**
    * 下面几项只在当次状态查询的 IPC 返回值里有内容。
    * getSettings 固定为空：不把 Places 状态留在内存缓存或磁盘上。
@@ -386,7 +390,7 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     placesApiKeyMasked: maskSecret(placesKey),
     placesApiKeySet: Boolean(placesKey),
     placesProvider,
-    placesKeySource: readPlacesKeySourceFromEnv(env),
+    placesKeySource: placesSourceForChannel(channelMode),
     placesOfficialStatus: null,
     placesOfficialReasonMessage: null,
     placesOfficialExpectedReadyNote: null,
@@ -515,7 +519,10 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
 
   const prevPlaces = env[PLACES_KEY_ENV] || ''
   let clearPlacesKey = false
-  if (input.placesApiKey === undefined) {
+  envUpdates[PLACES_KEY_SOURCE_ENV] = placesSourceForChannel(channelMode)
+  if (!placesByokPersistedForChannel(channelMode)) {
+    // 官方通道不写自备 Key，也不把它清掉。磁盘上原有的 BYOK 留着，运行时不用。
+  } else if (input.placesApiKey === undefined) {
     if (prevPlaces) {
       envUpdates[PLACES_KEY_ENV] = prevPlaces
     }

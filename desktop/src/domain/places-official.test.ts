@@ -12,6 +12,8 @@ import {
   googleRejectionFromToolPart,
   messageAfterGoogleRejectedKey,
   planPlacesRun,
+  placesByokPersistedForChannel,
+  placesSourceForChannel,
   resolvePlacesEffectiveKey,
 } from './places-official.ts'
 
@@ -28,91 +30,73 @@ test('canApplyPlacesOfficialKey follows login and status', () => {
   )
 })
 
-test('T1 no official and no BYOK fails', () => {
-  const result = resolvePlacesEffectiveKey({
-    savedSource: '',
-    byokSet: false,
-    officialStatus: 'none',
-  })
-  assert.equal(result.ok, false)
-  assert.equal(result.source, 'none')
+test('places source follows the model channel', () => {
+  assert.equal(placesSourceForChannel('official'), 'official')
+  assert.equal(placesSourceForChannel('custom'), 'custom')
+  assert.equal(placesSourceForChannel(undefined), 'official')
+  assert.equal(placesByokPersistedForChannel('official'), false)
+  assert.equal(placesByokPersistedForChannel('custom'), true)
 })
 
-test('T2 empty source with only BYOK uses BYOK', () => {
+test('official channel does not use BYOK even when a key is stored', () => {
   const result = resolvePlacesEffectiveKey({
-    savedSource: '',
-    byokSet: true,
-    officialStatus: 'none',
-  })
-  assert.equal(result.ok, true)
-  assert.equal(result.source, 'byok')
-  assert.match(result.detail, /自备/)
-})
-
-test('T3 both available and empty source prefers official', () => {
-  const result = resolvePlacesEffectiveKey({
-    savedSource: '',
+    channelMode: 'official',
     byokSet: true,
     officialStatus: 'active',
   })
   assert.equal(result.ok, true)
   assert.equal(result.source, 'official')
   assert.equal(result.detail, OFFICIAL_PLACES_DETAIL)
+  assert.equal(
+    planPlacesRun({ channelMode: 'official', byokSet: true }).action,
+    'fetch-official',
+  )
 })
 
-test('T4 saved byok wins when both are available', () => {
-  const result = resolvePlacesEffectiveKey({
-    savedSource: 'byok',
+test('custom channel uses BYOK and does not fetch the official key', () => {
+  const ready = resolvePlacesEffectiveKey({
+    channelMode: 'custom',
     byokSet: true,
     officialStatus: 'active',
   })
-  assert.equal(result.ok, true)
-  assert.equal(result.source, 'byok')
-  assert.equal(result.detail, BYOK_PLACES_DETAIL)
+  assert.equal(ready.ok, true)
+  assert.equal(ready.source, 'custom')
+  assert.equal(ready.detail, BYOK_PLACES_DETAIL)
+  assert.equal(planPlacesRun({ channelMode: 'custom', byokSet: true }).action, 'use-byok')
+
+  const missing = resolvePlacesEffectiveKey({
+    channelMode: 'custom',
+    byokSet: false,
+    officialStatus: 'active',
+  })
+  assert.equal(missing.ok, false)
+  assert.match(missing.detail, /自备 Places Key/)
+  assert.equal(planPlacesRun({ channelMode: 'custom', byokSet: false }).action, 'fail')
 })
 
-test('T5 official arrears or revoked does not switch to BYOK', () => {
+test('official arrears or revoked does not offer a BYOK switch', () => {
   for (const status of ['arrears', 'revoked'] as const) {
     const result = resolvePlacesEffectiveKey({
-      savedSource: 'official',
+      channelMode: 'official',
       byokSet: true,
       officialStatus: status,
     })
     assert.equal(result.ok, false)
     assert.equal(result.source, 'none')
-    assert.equal(result.offer, 'switch-to-byok')
-    assert.notEqual(result.source, 'byok')
+    assert.equal(result.offer, null)
+    assert.doesNotMatch(result.detail, /自备/)
   }
 })
 
-test('T6 official pending without BYOK stays blocked', () => {
+test('official pending stays blocked', () => {
   const result = resolvePlacesEffectiveKey({
-    savedSource: 'official',
+    channelMode: 'official',
     byokSet: false,
     officialStatus: 'pending',
   })
   assert.equal(result.ok, false)
-  assert.notEqual(result.source, 'byok')
+  assert.notEqual(result.source, 'custom')
   assert.match(result.detail, /申请中/)
-})
-
-test('run plan does not fetch when BYOK is selected or is the only saved key', () => {
-  assert.equal(
-    planPlacesRun({ savedSource: 'byok', byokSet: true }).action,
-    'use-byok',
-  )
-  assert.equal(
-    planPlacesRun({ savedSource: '', byokSet: true }).action,
-    'use-byok',
-  )
-  assert.equal(
-    planPlacesRun({ savedSource: 'official', byokSet: true }).action,
-    'fetch-official',
-  )
-  assert.equal(
-    planPlacesRun({ savedSource: '', byokSet: false }).action,
-    'fetch-official',
-  )
 })
 
 test('get-key failures name the reason and do not imply a BYOK fallback', () => {
@@ -129,9 +113,9 @@ test('get-key failures name the reason and do not imply a BYOK fallback', () => 
     status: 'revoked',
     byokSet: true,
   })
-  assert.match(revoked.detail, new RegExp(REVOKED_MESSAGE))
-  assert.match(revoked.detail, /改用自备 Key/)
-  assert.equal(revoked.offer, 'switch-to-byok')
+  assert.equal(revoked.detail, REVOKED_MESSAGE)
+  assert.equal(revoked.offer, null)
+  assert.doesNotMatch(revoked.detail, /自备/)
 
   const login = detailForOfficialKeyFailure({
     code: 'need_login',

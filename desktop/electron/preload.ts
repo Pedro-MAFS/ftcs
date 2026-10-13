@@ -145,10 +145,6 @@ const api = {
     ipcRenderer.invoke(IPC.PLACES_OFFICIAL_APPLY),
   refreshPlacesOfficialKey: (): Promise<PlacesOfficialIpcResult> =>
     ipcRenderer.invoke(IPC.PLACES_OFFICIAL_REFRESH),
-  setPlacesKeySource: (input: {
-    source: 'official' | 'byok'
-  }): Promise<PlacesOfficialIpcResult> =>
-    ipcRenderer.invoke(IPC.PLACES_OFFICIAL_SET_SOURCE, input),
   getOnboardingState: (): Promise<OnboardingState> =>
     ipcRenderer.invoke(IPC.ONBOARDING_GET_STATE),
   setOnboardingState: (patch: Partial<OnboardingState>): Promise<OnboardingState> =>

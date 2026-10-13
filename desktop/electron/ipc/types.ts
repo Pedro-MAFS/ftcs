@@ -23,7 +23,6 @@ export const IPC = {
   GATEWAY_OPEN_OFFICIAL_PORTAL: 'gateway:open-official-portal',
   PLACES_OFFICIAL_APPLY: 'places-official:apply',
   PLACES_OFFICIAL_REFRESH: 'places-official:refresh',
-  PLACES_OFFICIAL_SET_SOURCE: 'places-official:set-source',
   LIBRARY_LIST: 'library:list',
   LIBRARY_ADD_WEBSITE: 'library:add-website',
   LIBRARY_DELETE_WEBSITE: 'library:delete-website',
@@ -1128,7 +1127,7 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: 'custom' | 'gateway'
-  placesKeySource: '' | 'official' | 'byok'
+  placesKeySource: 'official' | 'custom'
   placesOfficialStatus: string | null
   placesOfficialReasonMessage: string | null
   placesOfficialExpectedReadyNote: string | null

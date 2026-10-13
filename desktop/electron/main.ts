@@ -42,7 +42,6 @@ import {
   applyPlacesOfficialKey,
   refreshPlacesOfficialKey,
   releasePlacesDiscoverRun,
-  setPlacesOfficialKeySource,
 } from './gateway/places-official-runtime'
 import { placesOfficialKeyMemory } from './gateway/places-official-key-memory'
 import { setPlacesMcpInjection } from './opencode/places-mcp-env'
@@ -721,7 +720,12 @@ function registerIpcHandlers(): void {
         mode?: 'off' | 'system' | 'manual'
         manualProxyUrl?: string
       },
-    ) => testGooglePlacesConnectivity(input),
+    ) => {
+      const officialChannel = (process.env.FTCS_CHANNEL_MODE || 'official') !== 'custom'
+      return testGooglePlacesConnectivity(
+        officialChannel ? { ...input, apiKey: '' } : input,
+      )
+    },
   )
   ipcMain.handle(IPC.SETTINGS_TEST_HUNTER, async () => testHunterConnectivity())
   ipcMain.handle(IPC.ONBOARDING_GET_STATE, () => getOnboardingState())
@@ -832,6 +836,8 @@ function registerIpcHandlers(): void {
   )
   ipcMain.handle(IPC.SETTINGS_SAVE, async (_event, input: SettingsSaveInput) => {
     const result = saveSettings(input)
+    placesOfficialKeyMemory.clear()
+    setPlacesMcpInjection({ kind: 'default' })
     if (!runtime) {
       runtime = new OpenCodeRuntime()
     }
@@ -875,28 +881,6 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.PLACES_OFFICIAL_APPLY, async () => applyPlacesOfficialKey())
   ipcMain.handle(IPC.PLACES_OFFICIAL_REFRESH, async () => refreshPlacesOfficialKey())
-  ipcMain.handle(
-    IPC.PLACES_OFFICIAL_SET_SOURCE,
-    async (_event, input?: { source?: string }) => {
-      const source = input?.source
-      if (source !== 'official' && source !== 'byok') {
-        return {
-          ok: false,
-          needLogin: false,
-          message: '来源无效',
-          queried: false,
-          settings: getSettingsSnapshot(),
-        }
-      }
-      const result = await setPlacesOfficialKeySource(source)
-      if (result.ok) {
-        placesOfficialKeyMemory.clear()
-        setPlacesMcpInjection({ kind: 'default' })
-        await reloadOpenCodeRuntime()
-      }
-      return result
-    },
-  )
   ipcMain.handle(IPC.SETTINGS_PICK_WORKSPACE, async () => {
     const dir = await pickWorkspaceDirectory()
     if (!dir) return { path: null, restarted: false }

@@ -490,8 +490,8 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
   const placesEnv = {
     ...buildPlacesMcpEnvironment({
       workspaceRoot,
+      channelMode: process.env.FTCS_CHANNEL_MODE,
       envByok: process.env.GOOGLE_PLACES_API_KEY,
-      envSource: process.env.FTCS_PLACES_KEY_SOURCE,
       injection: getPlacesMcpInjection(),
     }),
     ...buildGoogleProxyEnvVars(process.env[GOOGLE_PROXY_RESOLVED_ENV]),
