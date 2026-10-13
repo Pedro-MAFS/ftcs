@@ -49,9 +49,8 @@ async function onRecharge(): Promise<void> {
 </script>
 
 <template>
-  <p class="hint-line">
-    不想自己开通 Google Cloud 时可以申请。开通后 Key 发到这台电脑，Places 由本机直连 Google，不经 FTCS 服务器代查。你需要能访问 Google 的网络。费用按日计入官方余额，不走你自己的 GCP 账单。
-  </p>
+  <p class="hint-line">需要能访问 Google 的网络。</p>
+  <p class="hint-line">使用费用计入官方额度。</p>
   <p v-if="phase === 'loading'" class="hint-line">查询中</p>
   <template v-else-if="phase === 'error'">
     <p class="hint-line is-error">{{ errorText || '查询官方 Places 状态失败' }}</p>
@@ -132,5 +131,4 @@ async function onRecharge(): Promise<void> {
       </button>
     </div>
   </template>
-  <p class="hint-line">当前 R3 使用：官方下发 Key</p>
 </template>
