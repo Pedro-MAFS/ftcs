@@ -1,14 +1,14 @@
-# US-PK-C-04 按模型通道二选一及欠费 / 已吊销提示
+# US-PK-C-04 Places Key 来源跟随模型通道及欠费 / 已吊销提示
 
-> **用户故事**：[../30-需求-Places官方通道按用户下发APIKey.md](../30-需求-Places官方通道按用户下发APIKey.md) · US-PK-C-04 · Issue #21  
+> **用户故事**：[../30-需求-Places官方通道按用户下发APIKey.md](../30-需求-Places官方通道按用户下发APIKey.md) · US-PK-C-04 · Issue #21 · **PK7**  
 > **状态**：**待评审**（本文件只定设计；业务代码尚未按本文改动）  
-> **范围**：Places Key 来源只跟模型通道走；欠费 / 已吊销后的提示；Preflight 与「开始 R3」使用同一规则。设置页与环境设置引导第 2 步按通道只显示一种来源  
+> **范围**：Places Key 来源只跟模型通道走（PK7）；欠费 / 已吊销后的提示；Preflight 与「开始 R3」使用同一规则。设置页与环境设置引导第 2 步按通道只显示一种来源  
 > **依赖**：[US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md) 的实时取 Key；现网 `resolvePlacesStart`；探索页 `useExploreStart`；设置页与 `OnboardingOverlay` 的模型通道  
-> **不做**：官方通道与 BYOK 并存或让用户另选来源；取 Key 失败、欠费或已吊销时回落 BYOK；在官方通道读写自备 Key；计费 BYOK；代调  
+> **不做**：官方通道与 BYOK 并存或让用户另选来源（PK7）；取 Key 失败、欠费或已吊销时回落 BYOK；在官方通道读取或使用本机自备 Key；计费 BYOK；代调  
 > **文档位置**：`docs/design/`  
-> **文件名**：仍是 `US-PK-C-04-与BYOK并存及停用提示.md`，避免已有链接失效。标题以本节为准。
+> **文件名**：仍是 `US-PK-C-04-与BYOK并存及停用提示.md`，避免已有链接失效。标题与需求稿 US-PK-C-04 一致。
 
-需求 O4（两把 Key 并存时的优先级）按 2026-10-13 口径关闭：不并存，没有优先级，也没有「改用自备 Key」。来源就是当前的 `FTCS_CHANNEL_MODE`。
+需求 **O4** 已关闭（2026-10-13，PK7）：按模型通道二选一，不并存，没有优先级，也没有「改用自备 Key」按钮。来源就是当前的 `FTCS_CHANNEL_MODE`。需求稿若仍有「两把同时可用再选优先级」的旧句，以 PK7 与本文为准。
 
 ---
 
@@ -20,7 +20,7 @@
 |------|------------------------|
 | 只要 `placesApiKeySet`，就 `ok`，provider `custom` | 先看 `channelMode`。`official` 只尝试官方 Key；`custom` 只用自备 Key |
 | 官方通道且没有自备 Key：失败，并说明请填 BYOK | 官方通道不看自备 Key。未开通或取 Key 失败时用 C-01 的状态句，不能开始 R3 |
-| 官方通道**有**自备 Key：与自定义通道一样走 BYOK | **取消**。官方通道即使 `.env` 里还有自备 Key，也不使用、不回落 |
+| 官方通道**有**自备 Key：与自定义通道一样走 BYOK | **取消**（PK7）。官方通道下，本机即使曾经存过自备 Key，R3、Preflight、MCP 注入都不用它，也不回落 |
 | 设置与引导同时给出官方申请和 AIza 输入，或只用 AIza | 跟通道二选一，见 §4。官方通道没有自备 Key 输入框；自定义通道没有官方申请区 |
 | `useExploreStart` 用 `placesApiKeySet` 或 `FTCS_PLACES_KEY_SOURCE` 决定 R3 按钮 | 改为「当前通道下的那一种 Key 是否可用」 |
 | 含 R3 的方案 Preflight 走 `resolvePlacesStart` | 继续走这一个函数。探索页按钮与 Preflight 不得各算各的 |
@@ -45,11 +45,11 @@
 |----|------|
 | **来源** | 只有 `FTCS_CHANNEL_MODE`。`official` → 官方下发 Key；`custom` → 自备 Key。没有第三态，也不能在同一通道里再选一次 |
 | **不再使用来源键** | 不读、不写 `FTCS_PLACES_KEY_SOURCE`。工作区里若已有这个键，运行时忽略，保存时不更新。不提供 `places-official:set-source` |
-| **官方通道** | Places 只能用官方申请的 Key，不是可选项。设置页与引导第 2 步只显示官方 Key 申请与状态。不渲染「自备 Places Key」输入框，不把 `GOOGLE_PLACES_API_KEY` 读进表单 |
-| **自定义通道** | 只能 BYOK。只显示自备 Key 输入框，不显示官方申请区，也不为了展示去查状态或取 Key |
-| **保存与 `.env`** | 见 §2.1。官方通道的保存不读、不写、不清除自备 Key |
-| **R3** | 见 §3。官方通道取 Key 失败、欠费、已吊销、未登录、限频，都停止。不回落 `.env` 里的自备 Key，也不改 `channelMode` |
-| **欠费 / 已吊销** | 只在官方通道出现 C-01 的对应句（「已欠费，请充值」/「请联系客服」）。没有「改用自备 Key」。用户若要 BYOK，须自己把模型通道改成自定义 |
+| **官方通道** | PK7：Places 只能用官方申请的 Key，不是可选项。设置页与引导第 2 步只显示官方 Key 申请与状态，隐藏「自备 Places Key」输入框。不把 `GOOGLE_PLACES_API_KEY` 读进表单，运行时也不使用本机已存的那一把 |
+| **自定义通道** | PK7：只能 BYOK（US-E-07，行为与现网一致）。只显示自备 Key 输入框，隐藏官方申请区，也不为了展示去查状态或取 Key |
+| **保存与 `.env`** | 见 §2.1。官方通道的保存不读、不写、不清除自备 Key（PK7：保存不写入自备 Key） |
+| **R3** | 见 §3。官方通道只取官方 Key。失败、欠费、已吊销、未登录、限频都停止。本机存过的自备 Key 不参与，也不改 `channelMode`（PK7） |
+| **欠费 / 已吊销** | 官方通道提示「已欠费，请充值」或「请联系客服」，并接着引导：如需使用自备 Places Key，请把模型通道切换为「自定义」（PK6、PK7、PK12）。不回落，不提供「改用自备 Key」按钮。本机有没有旧自备 Key，这句都出现；在用户自己改通道之前，旧 Key 仍不使用 |
 | **未申请** | 官方通道不能开始 R3，文案指向设置 → 探索去申请。不改去要求填写自备 Key |
 | **识别当前 Key** | 看得到的那一块就是来源：官方区块表示官方下发 Key，自备输入框表示自备 Key。Preflight `detail` 用同一通道，句子在 §3.1 |
 | **gateway 标志** | `isPlacesGatewayReady` 继续恒为 `false`。官方 Key 的 `provider` 仍是 `custom` |
@@ -65,7 +65,7 @@
 | `official`（设置页或引导第 2 步） | **不读、不写、不清除**。服务端忽略本次的 `placesApiKey`，即使调用方传了空字符串也不当清除。`.env` 里已有的自备 Key 原样留下 |
 | `custom` | 与现网 US-E-07 相同：新值覆盖；掩码或未改则保留；用户把输入框清空再保存则清除 |
 
-官方通道的界面没有这只输入框，因此也不会把掩码读上来再存回去。留下的自备 Key 在官方通道的 R3、Preflight、MCP 注入里都不用。用户再把模型通道改回自定义后，设置页按现网掩码显示这把 Key，R3 才使用它。
+官方通道的界面没有这只输入框，因此也不会把掩码读上来再存回去。留下的自备 Key 在官方通道的 R3、Preflight、MCP 注入里都不用（PK7）：本机曾经保存过，也不拿来发 Places 请求。用户自己把模型通道改回自定义后，设置页按现网掩码显示这把 Key，R3 才使用它。
 
 ---
 
@@ -86,7 +86,7 @@ interface PlacesRunPlan {
 开跑时的顺序（不读 `FTCS_PLACES_KEY_SOURCE`，不读 Places 状态文件，也不先查状态）：
 
 1. `channelMode === 'custom'`：自备 Key 非空则用自备 Key，不调用取 Key。为空则失败，`detail` 见 §3.1，不改去申请官方 Key。
-2. `channelMode === 'official'`：调用 C-02 取 Key。成功才开跑。失败用取 Key返回的状态显示 §3.1。不读取 `GOOGLE_PLACES_API_KEY`，不把它注入 MCP。
+2. `channelMode === 'official'`：调用 C-02 取 Key。成功才开跑。失败用取 Key 返回的状态显示 §3.1。不读取 `GOOGLE_PLACES_API_KEY`，即使该键非空也不注入 MCP（PK7）。
 
 纯函数**不写盘**，也不修改 `channelMode`。
 
@@ -100,15 +100,15 @@ interface PlacesRunPlan {
 | 取 Key 网络失败 | 暂时联系不上官方服务，未能获取 Places Key。请稍后重试。 |
 | 401 `need_login` | 请先登录后再使用官方 Places Key。 |
 | 401 `credential_revoked` | 登录凭证已吊销，不能获取官方 Places Key。请重新登录。 |
-| `arrears` | 已欠费，请充值 |
-| `revoked` 或官方 Key 已吊销 | 请联系客服 |
+| `arrears` | 已欠费，请充值。如需使用自备 Places Key，请把模型通道切换为「自定义」。 |
+| `revoked` 或官方 Key 已吊销 | 请联系客服。如需使用自备 Places Key，请把模型通道切换为「自定义」。 |
 | 429 限频（O14） | 获取官方 Places Key 过于频繁，请稍后再试。 |
 | 官方通道，申请中 / 开通失败 | C-01 §4.3 的对应句 |
 | 官方通道，未申请或取不到 Key 且上面没有更具体的句子 | 请在设置 → 探索申请官方 Places Key（仅 R3 需要）。 |
 | 自定义通道，自备 Key 可用 | 自备 Google Places API Key（本机直连） |
 | 自定义通道，自备 Key 为空 | 请在设置 → 探索填写自备 Places Key（仅 R3 需要）。 |
 
-官方通道的失败句**不**追加「自备 Key 仍可用」或「改用自备 Key」。自定义通道的失败句**不**出现「申请官方 Places Key」。
+欠费与已吊销只用上面两句，不另做按钮，也不因为 `.env` 里已有自备 Key 就改用它或改写 `channelMode`。其它官方通道失败句不提自备 Key。自定义通道的失败句不出现「申请官方 Places Key」。
 
 ---
 
@@ -189,7 +189,7 @@ flowchart TD
 | T2 | `custom`，自备 Key 非空 | `ok`，来源自备，不调用取 Key |
 | T3 | `official`，取 Key 成功，`.env` 同时有自备 Key | `ok`，来源官方。注入值不是 `.env` 那一把 |
 | T4 | `custom`，自备 Key 为空 | `ok === false`，`detail` 只要求填写自备 Key |
-| T5 | `official`，状态 `arrears` 或 `revoked` | `ok === false`。文案分别是「已欠费，请充值」「请联系客服」。`channelMode` 仍是 `official` |
+| T5 | `official`，状态 `arrears` 或 `revoked`，`.env` 有自备 Key | `ok === false`。文案分别以「已欠费，请充值」「请联系客服」开头，并含「请把模型通道切换为「自定义」」。不返回自备 Key。`channelMode` 仍是 `official` |
 | T6 | `official`，状态 `pending` | `ok === false`，用 C-01 申请中的句子 |
 | T7 | `isPlacesGatewayReady` 在官方已开通时 | `false` |
 | T8 | 官方通道保存，入参 `placesApiKey` 为空串，`.env` 原本有 Key | 该键原文还在 |
@@ -206,7 +206,7 @@ flowchart TD
 | M2 | 官方通道隐藏自备输入 | 先在自定义通道写下自备 Key，再切到官方并保存，打开设置 → 探索 | 只看到官方状态与申请。没有自备 Key 输入框。`.env` 里自备 Key 原文还在 |
 | M3 | 官方通道不使用留下的 Key | M2 之后官方 Key 已开通，开始 R3 | Preflight 为官方下发 Key。Places 请求的 Key 不是 `.env` 里那一把 |
 | M4 | 切回自定义仍用原 Key | 再把模型通道改回自定义 | 输入框出现掩码。开始 R3 走自备 Key，不调用取 Key |
-| M5 | 失败不回落 | 官方通道下，管理端分别做欠费重置、吊销登录凭证；另断一次到 gateway 的网络。`.env` 里仍有 M2 的自备 Key | 开始 R3 失败。欠费文案是「已欠费，请充值」。没有「改用自备 Key」。本次不用自备 Key 发 Places 请求。`channelMode` 仍是 `official` |
+| M5 | 失败不回落 | 官方通道下，管理端分别做欠费重置、把 Key 吊销为 `revoked`；另断一次到 gateway 的网络。`.env` 里仍有 M2 的自备 Key | 开始 R3 失败。欠费文案是「已欠费，请充值。如需使用自备 Places Key，请把模型通道切换为「自定义」。」已吊销文案把前半换成「请联系客服」，后半相同。没有「改用自备 Key」按钮。本次不用自备 Key 发 Places 请求。`channelMode` 仍是 `official` |
 | M6 | 不改通道 | M5 之后不改模型通道，再开始一次 R3 | 仍然失败，仍然不读自备 Key |
 | M7 | 要 BYOK 须改通道 | 在 M5 把模型通道改成自定义并保存 | 来源变为自备 Key，R3 可以开始。这是用户改通道，不是失败路径自动切换 |
 | M8 | 方案里的 R3 | 含 R3 的方案在 M5 的状态下执行 | Preflight 同样失败，文案与探索页一致 |
@@ -220,7 +220,7 @@ flowchart TD
 
 | 项 | 说明 |
 |----|------|
-| 欠费或已吊销后自动改用 BYOK，或提供「改用自备 Key」 | 用户要 BYOK 时自己把模型通道改为自定义 |
+| 欠费或已吊销后自动改用 BYOK，或提供「改用自备 Key」按钮 | 只在文案里引导用户自己把模型通道改为「自定义」（PK7）。本机旧自备 Key 在改通道之前不使用 |
 | 官方通道与自备 Key 同时可选 | PK7。同一屏只出现一种 |
 | 两把都注入 MCP | C-03 只注入当前通道的一把 |
 | 用 `FTCS_PLACES_KEY_SOURCE` 记来源 | 通道即来源 |
@@ -238,7 +238,7 @@ flowchart TD
 | 官方通道保存传了空的 `placesApiKey`，把留下的自备 Key 清掉 | 服务端在 `official` 下忽略该字段；T8、M2、M9 |
 | 探索页仍只看 `placesApiKeySet`，官方通道没有自备 Key 时按钮永远不可用 | 都改为 `resolvePlacesStart`；M3、M8 |
 | 引导第 2 步仍提交 AIza，官方通道被写成 BYOK | M9、M11。保存以最终通道为准 |
-| 旧测试仍期望「请填 BYOK」或二选一 | 更新 `places-start.test.ts`。欠费用「已欠费，请充值」，已吊销用「请联系客服」 |
+| 旧测试仍期望「请填 BYOK」或二选一 | 更新 `places-start.test.ts`。欠费、已吊销用 §3.1 全文：前半仍是「已欠费，请充值」或「请联系客服」，后半引导把模型通道切换为「自定义」 |
 
 ---
 
@@ -259,4 +259,4 @@ O4 已关闭，不进入待确认。其它未决项见[网关详设「待确认�
 | 2026-10-11 | 设置页只查状态不取 Key |
 | 2026-10-11 | 按 PK13 六态与已吊销对齐 |
 | 2026-10-11 | 取消状态本地缓存，增加客户端接口一览 |
-| 2026-10-13 | Places Key 来源跟模型通道，官方通道不支持 BYOK |
+| 2026-10-13 | Places Key 来源跟模型通道，官方通道不支持 BYOK。对齐 #63 的 PK7：本机旧自备 Key 在官方通道下不使用；欠费 / 已吊销文案引导把通道切到自定义 |

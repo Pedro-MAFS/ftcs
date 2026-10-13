@@ -3,7 +3,7 @@
 > **用户故事**：[../30-需求-Places官方通道按用户下发APIKey.md](../30-需求-Places官方通道按用户下发APIKey.md) · US-PK-C-03 · Issue #21  
 > **状态**：**待评审**（本文件只定设计；业务代码尚未按本文改动）  
 > **范围**：模型通道为官方且取 Key 成功时，不使用自备 Key 也能跑 R3；Places 请求仍由 `places-api` 直连 Google；线索字段来自官网核实  
-> **依赖**：[US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md) 当次运行内存中的 Key；[US-PK-C-04](US-PK-C-04-与BYOK并存及停用提示.md)（按模型通道二选一及欠费 / 已吊销提示）决定的来源；现网 `discover-leads-r3`、US-E-07 FieldMask、US-E-08 管道
+> **依赖**：[US-PK-C-02](US-PK-C-02-接收并安全保存官方Key.md) 当次运行内存中的 Key；[US-PK-C-04](US-PK-C-04-与BYOK并存及停用提示.md)（PK7：来源跟随模型通道及欠费 / 已吊销提示）决定的来源；现网 `discover-leads-r3`、US-E-07 FieldMask、US-E-08 管道
 > **不做**：`PLACES_PROVIDER=gateway` 代调；新的 Places SKU；把 Places 商家字段写进线索库；解决本机访问不了 Google 的问题  
 > **文档位置**：`docs/design/`
 
@@ -15,7 +15,7 @@
 
 | 现网 | **本期（US-PK-C-03）** |
 |------|------------------------|
-| `runtime.ts` 把工作区 `.env` 里的 `GOOGLE_PLACES_API_KEY` 注入 `places-api` | `channelMode=custom` 时仍注入 `.env` 这一把。`official` 时只注入 C-02 **当次内存**里的 Key，环境变量名仍是 `GOOGLE_PLACES_API_KEY`，但不写回 `.env`。即使 `.env` 里还有自备 Key 也不注入它。两把不要同时注入 |
+| `runtime.ts` 把工作区 `.env` 里的 `GOOGLE_PLACES_API_KEY` 注入 `places-api` | `channelMode=custom` 时仍注入 `.env` 这一把。`official` 时只注入 C-02 **当次内存**里的 Key，环境变量名仍是 `GOOGLE_PLACES_API_KEY`，但不写回 `.env`。本机即使存过自备 Key 也不注入、不使用（PK7）。两把不要同时注入 |
 | `PLACES_PROVIDER=gateway` 时 MCP 返回 `PLACES_GATEWAY_NOT_READY`，文案指向 US-E-10 | provider **保持** `custom`。若环境被误设成 `gateway`，仍返回该错误码，文案改为「Places 不经服务器代调，请使用直连」 |
 | `isPlacesGatewayReady()` 恒 `false` | **保持恒 false**。官方 Key 已开通也不要把这个函数改成 true |
 | `places_text_search` / `place_details` 直连 `places.googleapis.com`，FieldMask 见 `field-masks.ts` | 工具名、URL、FieldMask、24h 缓存不变。官方 Key 与 BYOK 走同一条 `custom.ts` |
@@ -57,7 +57,7 @@ flowchart LR
 
 | 项 | 决定 |
 |----|------|
-| **官方通道不靠自备 Key** | `channelMode=official` 且 US-PK-G-02 取 Key 成功时，Preflight 通过。不读取 `GOOGLE_PLACES_API_KEY`，也不从磁盘读官方 Key（PK12）。`.env` 里留下的自备 Key 不参与这次运行 |
+| **官方通道不靠自备 Key** | PK7：`channelMode=official` 且 US-PK-G-02 取 Key 成功时，Preflight 通过。不读取 `GOOGLE_PLACES_API_KEY`，也不从磁盘读官方 Key（PK12）。本机曾经保存的自备 Key 不参与这次运行，取 Key 失败时也不改用它 |
 | **直连** | HTTP 仍是 `custom.ts` 里的 `places.googleapis.com`。`X-Goog-Api-Key` 用注入的那一把 |
 | **provider** | 成功路径的 `provider` 字段仍是 `custom`。不用 `gateway` 表示「这把 Key 来自官方」 |
 | **只发现** | Places 的 `displayName`、`formattedAddress`、`types`、`businessStatus`、`websiteUri`、`placeId` 只在当次会话里用来找候选、打开官网。落库的公司名、官网、电话、地址以 **chrome 打开后的页面**为准 |
@@ -74,7 +74,7 @@ flowchart LR
 1. 读 `FTCS_CHANNEL_MODE`，不读 `FTCS_PLACES_KEY_SOURCE`。纯函数里没有 `apiKey`。
 2. `custom` 且自备 Key 为空：不注入 `GOOGLE_PLACES_API_KEY`，本次运行不启动，文案见 C-04。
 3. `custom` 且自备 Key 非空：只注入 `.env` 里的自备 Key。不调用取 Key。
-4. `official`：调用 C-02 的 `getCurrent`。成功则把返回的 `apiKey` 放进内存，再注入子进程，变量名仍是 `GOOGLE_PLACES_API_KEY`。失败则本次运行不启动，文案见 C-04。不读取、不注入 `.env` 里的自备 Key。
+4. `official`：调用 C-02 的 `getCurrent`。成功则把返回的 `apiKey` 放进内存，再注入子进程，变量名仍是 `GOOGLE_PLACES_API_KEY`。失败则本次运行不启动，文案见 C-04。不读取、不注入 `.env` 里的自备 Key；该键非空也一样（PK7）。
 5. `PLACES_PROVIDER` 固定 `custom`。现网 Google 出站代理照旧，只影响本机直连，不是代调。
 
 `places-api` 继续只读 `GOOGLE_PLACES_API_KEY`。不增加 `FTCS_PLACES_OFFICIAL_API_KEY`。
@@ -91,14 +91,14 @@ flowchart LR
 
 | 状态查询结果 | 任务 | 用户看到的文案 |
 |--------------|------|----------------|
-| `status=arrears` | 失败 | **已欠费，请充值** |
-| `status=revoked` | 失败 | **请联系客服** |
+| `status=arrears` | 失败 | **已欠费，请充值。如需使用自备 Places Key，请把模型通道切换为「自定义」。** 不改用本机自备 Key |
+| `status=revoked` | 失败 | **请联系客服。如需使用自备 Places Key，请把模型通道切换为「自定义」。** 不改用本机自备 Key |
 | 其它状态（含已开通、申请中、开通失败） | 失败 | 原样呈现 Google 返回的错误（HTTP 状态与 `places-api` 已有的 `message`） |
 | 状态查询本身失败（网络、401、5xx、超时） | 失败 | 同样原样呈现 Google 的错误。不把查询失败说成欠费或已吊销 |
 
 自定义通道的自备 Key 遇到 401/403 不查官方状态，仍按现网说明 Key 无效或未启用 Places API (New)，然后停止。
 
-设置页若此时打开，欠费状态行是「欠费」，可走「去充值」；已吊销状态行是「已吊销」，文案「请联系客服」。运行中的句子用上表，不另写一套。
+设置页若此时打开，欠费状态行是「欠费」，可走「去充值」；已吊销状态行是「已吊销」。两态补充句与上表相同，引导把模型通道切换为「自定义」，不另写一套，也不使用本机自备 Key（PK7）。
 
 ---
 
@@ -162,7 +162,7 @@ flowchart LR
 | 未注入 Key，模型通道为官方 | MCP `MISSING_PLACES_API_KEY`。文案：「当前没有可用的 Places Key。请打开设置 → 探索，申请官方 Places Key。」 |
 | 未注入 Key，模型通道为自定义 | 同上错误码。文案：「当前没有可用的 Places Key。请打开设置 → 探索，填写自备 Places Key。」 |
 | 误设 `PLACES_PROVIDER=gateway` | `PLACES_GATEWAY_NOT_READY`。文案：「Places 不经服务器代调。请使用直连（PLACES_PROVIDER=custom）。官方通道申请官方 Places Key；自定义通道填写自备 Key。」 |
-| HTTP 401/403 或配额类错误，模型通道为官方 | 按 §3.1 只查一次状态。欠费则「已欠费，请充值」；已吊销则「请联系客服」；否则原样报 Google 错误。不重取、不重试、不改用 `.env` 里的自备 Key |
+| HTTP 401/403 或配额类错误，模型通道为官方 | 按 §3.1 只查一次状态。欠费、已吊销用该表全文（含引导切换到「自定义」）；否则原样报 Google 错误。不重取、不重试。本机存过的自备 Key 也不使用（PK7） |
 | HTTP 401/403，模型通道为自定义 | 现网：停止并说明 Key 无效或未启用 Places API (New)。不查官方状态 |
 | 超时、DNS、连接失败 | 停止该次 R3，说明本机访问 Google Places 失败。不创建「已成功」的空线索来掩盖 |
 | 官网打不开或判断为否 | 现网：不调用 `lead_append_raw` |
@@ -212,9 +212,9 @@ Preflight 在发会话之前就该拦住「没有生效 Key」。MCP 错误是�
 | M6 | 设置只显示当前通道 | 分别在官方通道与自定义通道打开设置 → 探索 | 官方通道只有官方状态，没有自备输入框。自定义通道只有自备输入框，没有官方申请 |
 | M7 | 代调占位 | 手工把 provider 设成 `gateway` 再调 MCP | `PLACES_GATEWAY_NOT_READY`，文案不再承诺等待 US-E-10 |
 | M8 | R1/R2 | 无任何 Places Key 时开始 R1 | 与现网一样不检查 Places |
-| M9 | 运行中欠费 | 官方通道的 R3 已开始，Google 返回 401。状态接口返回 `arrears`。`.env` 里可以仍有自备 Key | 任务失败。文案是「已欠费，请充值」。没有第二次 Places 请求，没有第二次取 Key，没有改用自备 Key |
+| M9 | 运行中欠费 | 官方通道的 R3 已开始，Google 返回 401。状态接口返回 `arrears`。`.env` 里仍有自备 Key | 任务失败。文案是「已欠费，请充值。如需使用自备 Places Key，请把模型通道切换为「自定义」。」没有第二次 Places 请求，没有第二次取 Key，没有改用那把自备 Key |
 | M10 | 运行中非欠费 | 同样 401 或配额错误，状态接口返回 `active` 或 `provision_failed` | 任务失败。文案是 Google 错误原文。不出现「已欠费，请充值」或「请联系客服」。不重试 |
-| M13 | 运行中已吊销 | 同样 Google 拒绝，状态接口返回 `revoked` | 任务失败。文案是「请联系客服」。不重取、不重试、不改用自备 Key |
+| M13 | 运行中已吊销 | 同样 Google 拒绝，状态接口返回 `revoked`。`.env` 里可以仍有自备 Key | 任务失败。文案是「请联系客服。如需使用自备 Places Key，请把模型通道切换为「自定义」。」不重取、不重试、不改用自备 Key |
 | M11 | 查状态失败 | Google 403 之后，状态接口超时或 5xx | 任务失败。文案仍是 Google 错误。不写成欠费，不重试 |
 | M12 | 自定义通道自备 Key | `channelMode=custom` 时 Google 401 | 不调用官方状态接口，不调用取 Key。现网无效 Key 提示 |
 
@@ -261,4 +261,4 @@ O6（上线前法务）与 **O12**（内存最长存放）见[网关详设「待
 | 2026-10-10 | 取消轮换与重取，只在欠费时重置 |
 | 2026-10-10 | 去掉 mock，改为与 gateway 联调验收 |
 | 2026-10-11 | 按 PK13 六态与已吊销对齐 |
-| 2026-10-13 | Places Key 来源跟模型通道，官方通道不支持 BYOK |
+| 2026-10-13 | Places Key 来源跟模型通道，官方通道不支持 BYOK。对齐 #63 的 PK7：本机旧自备 Key 在官方通道下不使用；欠费 / 已吊销文案引导把通道切到自定义 |
