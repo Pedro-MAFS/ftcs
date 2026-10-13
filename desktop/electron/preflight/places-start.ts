@@ -1,7 +1,9 @@
 import type { SettingsSnapshot } from '../settings/settings-service'
 import {
   BYOK_PLACES_DETAIL,
+  NO_PLACES_KEY_MESSAGE,
   OFFICIAL_PLACES_DETAIL,
+  placesSourceForChannel,
   planPlacesRun,
   type OfficialKeyFailureDetail,
 } from '../../src/domain/places-official'
@@ -40,12 +42,11 @@ export function resolvePlacesStart(
     SettingsSnapshot,
     'channelMode' | 'placesApiKeySet' | 'placesProvider' | 'officialProvisioned'
   > & {
-    placesKeySource?: string | null
     officialFetch?: PlacesOfficialFetchOutcome | null
   },
 ): PlacesStartResolution {
   const plan = planPlacesRun({
-    savedSource: settings.placesKeySource,
+    channelMode: settings.channelMode,
     byokSet: settings.placesApiKeySet,
   })
   if (plan.action === 'use-byok') {
@@ -70,6 +71,9 @@ export function resolvePlacesStart(
   }
   return {
     ok: false,
-    detail: '请在设置 → 探索申请官方 Places Key，或填写自备 Key（仅 R3 需要）。',
+    detail:
+      placesSourceForChannel(settings.channelMode) === 'custom'
+        ? '请在设置 → 探索填写自备 Places Key（仅 R3 需要）。'
+        : NO_PLACES_KEY_MESSAGE,
   }
 }

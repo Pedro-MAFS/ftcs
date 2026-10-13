@@ -12,8 +12,8 @@ import {
 test('official injection uses only the in-memory key and forces custom', () => {
   const env = buildPlacesMcpEnvironment({
     workspaceRoot: '/work',
+    channelMode: 'official',
     envByok: 'AIzaByok',
-    envSource: 'official',
     injection: { kind: 'official', apiKey: 'AIzaOfficial' },
   })
   assert.equal(env.PLACES_PROVIDER, 'custom')
@@ -25,19 +25,20 @@ test('official injection uses only the in-memory key and forces custom', () => {
 test('byok injection does not include an official key', () => {
   const env = buildPlacesMcpEnvironment({
     workspaceRoot: '/work',
+    channelMode: 'custom',
     envByok: 'AIzaByok',
-    envSource: 'byok',
-    injection: { kind: 'default' },
+    injection: { kind: 'official', apiKey: 'AIzaOfficial' },
   })
   assert.equal(env.GOOGLE_PLACES_API_KEY, 'AIzaByok')
+  assert.equal(JSON.stringify(env).includes('AIzaOfficial'), false)
   assert.equal(env.PLACES_PROVIDER, 'custom')
 })
 
 test('gateway provider in the workspace env is still custom', () => {
   const env = buildPlacesMcpEnvironment({
     workspaceRoot: '/work',
+    channelMode: 'custom',
     envByok: 'AIzaByok',
-    envSource: '',
     injection: { kind: 'default' },
   })
   assert.equal(env.PLACES_PROVIDER, 'custom')
@@ -58,8 +59,8 @@ test('dropping an official injection forgets the key and still reloads the child
 test('official source without an injection does not fall back to BYOK', () => {
   const env = buildPlacesMcpEnvironment({
     workspaceRoot: '/work',
+    channelMode: 'official',
     envByok: 'AIzaByok',
-    envSource: 'official',
     injection: { kind: 'default' },
   })
   assert.equal(env.GOOGLE_PLACES_API_KEY, undefined)

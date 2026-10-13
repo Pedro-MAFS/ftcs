@@ -18,16 +18,12 @@ import {
 import { createPlacesOfficialKeyClient } from './places-official-key-client'
 import { placesOfficialKeyMemory } from './places-official-key-memory'
 import {
-  readPlacesKeySourceFromEnv,
-  writePlacesKeySourceFile,
-} from './places-key-source-store'
-import {
   createPlacesOfficialService,
   type PlacesOfficialAction,
   type PlacesOfficialView,
   type PlacesRunBegin,
 } from './places-official-service'
-import type { PlacesKeySource } from '../../src/domain/places-official'
+import { placesSourceForChannel } from '../../src/domain/places-official'
 
 function envPath(): string {
   return path.join(getWorkspaceRoot(), '.env')
@@ -36,8 +32,9 @@ function envPath(): string {
 function readSelection() {
   const env = readEnvFile(envPath())
   const byokKey = (env.GOOGLE_PLACES_API_KEY || '').trim()
+  const channelMode = placesSourceForChannel(env.FTCS_CHANNEL_MODE)
   return {
-    source: readPlacesKeySourceFromEnv(env),
+    channelMode,
     byokSet: Boolean(byokKey),
     byokKey,
   }
@@ -51,9 +48,6 @@ export const placesOfficial = createPlacesOfficialService({
     return bundle?.accessToken ?? null
   },
   readSelection,
-  writeSource: (source: PlacesKeySource) => {
-    writePlacesKeySourceFile(envPath(), source)
-  },
   getInjection: getPlacesMcpInjection,
   setInjection: setPlacesMcpInjection,
   injectionNeedsReload: placesMcpInjectionNeedsReload,
@@ -95,12 +89,6 @@ export async function applyPlacesOfficialKey(): Promise<PlacesOfficialIpcResult>
 
 export async function refreshPlacesOfficialKey(): Promise<PlacesOfficialIpcResult> {
   return mergeView(await placesOfficial.refresh())
-}
-
-export async function setPlacesOfficialKeySource(
-  source: PlacesKeySource,
-): Promise<PlacesOfficialIpcResult> {
-  return mergeView(await placesOfficial.setSource(source))
 }
 
 export async function preparePlacesForPreflight(): Promise<{

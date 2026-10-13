@@ -7,12 +7,7 @@ import { useAuth } from '../composables/useAuth'
 import { useSettingsNav } from '../composables/useSettingsNav'
 import { SECTION_META } from '../types/workspace'
 import type { ChannelMode, GoogleProxyMode, SettingsSnapshot } from '../types/settings'
-import {
-  canApplyPlacesOfficialKey,
-  currentPlacesUsageLabel,
-  placesOfficialStatusLabel,
-  placesOfficialSupplement,
-} from '../domain/places-official'
+import PlacesOfficialStatusBlock from '../components/settings/PlacesOfficialStatusBlock.vue'
 import type { ExploreR2SiteDto } from '../types/electron'
 import { OFFICIAL_MODEL_CATALOG } from '../types/settings'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
@@ -109,13 +104,6 @@ const testingHunter = ref(false)
 const detectingProxy = ref(false)
 const testingPlaces = ref(false)
 const proxyDetectMessage = ref('')
-const placesOfficialPhase = ref<'loading' | 'ready' | 'error'>('loading')
-const placesOfficialStatus = ref<string | null>(null)
-const placesOfficialReason = ref<string | null>(null)
-const placesOfficialNote = ref<string | null>(null)
-const placesOfficialError = ref('')
-const placesOfficialNeedLogin = ref(false)
-const placesOfficialBusy = ref(false)
 const snapshot = ref<SettingsSnapshot | null>(null)
 const r2Sites = ref<ExploreR2SiteDto[]>([])
 const r2SitesHint = ref('')
@@ -169,51 +157,6 @@ const EXPLORE_INTENSITY_OPTIONS: Array<{
     summary: 'R1 约 60 词，每个社媒和地图词约 40；搜索每次 10 条；地图每次最多 40 条。',
   },
 ]
-
-const placesOfficialLabel = computed(() =>
-  placesOfficialStatusLabel(placesOfficialStatus.value),
-)
-const placesOfficialExtra = computed(() =>
-  placesOfficialPhase.value === 'ready'
-    ? placesOfficialSupplement({
-        status: placesOfficialStatus.value,
-        reasonMessage: placesOfficialReason.value,
-        expectedReadyNote: placesOfficialNote.value,
-      })
-    : '',
-)
-const placesCanApply = computed(
-  () =>
-    placesOfficialPhase.value === 'ready' &&
-    (placesOfficialStatus.value === 'none' ||
-      placesOfficialStatus.value === 'provision_failed') &&
-    canApplyPlacesOfficialKey({
-      loggedIn: loggedIn.value,
-      status: placesOfficialStatus.value,
-    }),
-)
-const placesUsageLabel = computed(() =>
-  currentPlacesUsageLabel({
-    savedSource: snapshot.value?.placesKeySource,
-    byokSet: Boolean(snapshot.value?.placesApiKeySet),
-    officialStatus:
-      placesOfficialPhase.value === 'ready' ? placesOfficialStatus.value : null,
-  }),
-)
-const showPlacesSourceChoice = computed(
-  () =>
-    placesOfficialPhase.value === 'ready' &&
-    placesOfficialStatus.value === 'active' &&
-    Boolean(snapshot.value?.placesApiKeySet),
-)
-const showSwitchToByok = computed(
-  () =>
-    snapshot.value?.placesKeySource === 'official' &&
-    Boolean(snapshot.value?.placesApiKeySet) &&
-    placesOfficialPhase.value === 'ready' &&
-    (placesOfficialStatus.value === 'arrears' ||
-      placesOfficialStatus.value === 'revoked'),
-)
 
 const exploreIntensitySummary = computed(
   () =>
@@ -459,93 +402,6 @@ function applySnapshot(data: SettingsSnapshot): void {
   markSaveableBaseline()
 }
 
-function rememberPlacesSource(settings: SettingsSnapshot | undefined): void {
-  if (!settings || !snapshot.value) {
-    if (settings) snapshot.value = settings
-    return
-  }
-  snapshot.value = {
-    ...snapshot.value,
-    placesKeySource: settings.placesKeySource,
-    placesApiKeySet: settings.placesApiKeySet,
-  }
-}
-
-function applyPlacesOfficialResult(res: {
-  ok: boolean
-  needLogin: boolean
-  message: string
-  queried: boolean
-  settings: SettingsSnapshot
-}): void {
-  rememberPlacesSource(res.settings)
-  if (!res.queried) {
-    if (!res.ok && res.message) error.value = res.message
-    if (res.needLogin) placesOfficialNeedLogin.value = true
-    return
-  }
-  placesOfficialStatus.value = res.settings.placesOfficialStatus
-  placesOfficialReason.value = res.settings.placesOfficialReasonMessage
-  placesOfficialNote.value = res.settings.placesOfficialExpectedReadyNote
-  placesOfficialNeedLogin.value =
-    res.settings.placesOfficialNeedLogin || res.needLogin
-  placesOfficialError.value =
-    res.settings.placesOfficialQueryError || (!res.ok ? res.message : '')
-  placesOfficialPhase.value = placesOfficialError.value ? 'error' : 'ready'
-}
-
-async function refreshPlacesOfficial(): Promise<void> {
-  if (!window.ftcs?.refreshPlacesOfficialKey) {
-    placesOfficialPhase.value = 'error'
-    placesOfficialError.value = '当前环境不能查询官方 Places Key'
-    return
-  }
-  placesOfficialPhase.value = 'loading'
-  placesOfficialError.value = ''
-  placesOfficialBusy.value = true
-  try {
-    const res = await window.ftcs.refreshPlacesOfficialKey()
-    applyPlacesOfficialResult(res)
-  } catch (err) {
-    placesOfficialPhase.value = 'error'
-    placesOfficialStatus.value = null
-    placesOfficialError.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    placesOfficialBusy.value = false
-  }
-}
-
-async function onApplyPlacesOfficial(): Promise<void> {
-  if (!window.ftcs?.applyPlacesOfficialKey) return
-  placesOfficialBusy.value = true
-  try {
-    const res = await window.ftcs.applyPlacesOfficialKey()
-    applyPlacesOfficialResult(res)
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    placesOfficialBusy.value = false
-  }
-}
-
-async function onSetPlacesSource(source: 'official' | 'byok'): Promise<void> {
-  if (!window.ftcs?.setPlacesKeySource) return
-  placesOfficialBusy.value = true
-  try {
-    const res = await window.ftcs.setPlacesKeySource({ source })
-    applyPlacesOfficialResult(res)
-    if (res.ok) {
-      message.value =
-        res.message ||
-        (source === 'official' ? '已改用官方下发 Key' : '已改用自备 Places Key')
-    }
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    placesOfficialBusy.value = false
-  }
-}
-
 async function loadSettings(): Promise<void> {
   if (!window.ftcs?.getSettings) {
     error.value = '未检测到设置 API（请在桌面应用中运行）'
@@ -721,7 +577,7 @@ async function onSave(): Promise<void> {
       smallModel,
       searchProvider: form.searchProvider,
       tavilyApiKey: form.tavilyApiKey,
-      placesApiKey: form.placesApiKey,
+      ...(form.channelMode === 'custom' ? { placesApiKey: form.placesApiKey } : {}),
       hunterApiKeys: hunterKeySlots.value.map((key) => String(key)),
       hunterVerifyEmails: form.hunterVerifyEmails,
       googleProxyMode: form.googleProxyMode,
@@ -944,11 +800,6 @@ onMounted(() => {
   void loadSettings()
   void loadR2Sites()
   void refreshAppVersion()
-  void refreshPlacesOfficial()
-})
-
-watch(loggedIn, (value, previous) => {
-  if (value && previous === false) void refreshPlacesOfficial()
 })
 
 async function onCheckUpdate(): Promise<void> {
@@ -1510,152 +1361,11 @@ async function onCheckUpdate(): Promise<void> {
 
           <div class="settings-block__sub">
             <h4>R3 地图发现（Google Places）</h4>
-            <h4>官方 Places Key</h4>
-            <p class="hint-line">
-              <Icon name="info" :size="12" />
-              不想自己开通 Google Cloud 时可以申请。开通后 Key 发到这台电脑，Places 由本机直连 Google，不经 FTCS 服务器代查。你需要能访问 Google 的网络。费用按日计入官方余额，不走你自己的 GCP 账单。
-            </p>
-            <p v-if="placesOfficialPhase === 'loading'" class="hint-line">查询中</p>
-            <template v-else-if="placesOfficialPhase === 'error'">
-              <p class="hint-line is-error">{{ placesOfficialError || '查询官方 Places 状态失败' }}</p>
-              <div class="settings-actions-row">
-                <button
-                  type="button"
-                  class="btn-secondary btn-sm"
-                  :disabled="placesOfficialBusy"
-                  @click="refreshPlacesOfficial"
-                >
-                  重试
-                </button>
-                <button
-                  v-if="placesOfficialNeedLogin || !loggedIn"
-                  type="button"
-                  class="btn-primary btn-sm"
-                  :disabled="authBusy || loginPending"
-                  @click="onAuthLogin"
-                >
-                  {{ loginPending ? '登录中…' : '去登录' }}
-                </button>
-              </div>
+            <template v-if="isOfficial">
+              <h4>官方 Places Key</h4>
+              <PlacesOfficialStatusBlock />
             </template>
             <template v-else>
-              <p class="hint-line">状态：{{ placesOfficialLabel }}</p>
-              <p v-if="placesOfficialExtra" class="hint-line">{{ placesOfficialExtra }}</p>
-              <div class="settings-actions-row">
-                <button
-                  v-if="!loggedIn"
-                  type="button"
-                  class="btn-primary btn-sm"
-                  :disabled="authBusy || loginPending"
-                  @click="onAuthLogin"
-                >
-                  {{ loginPending ? '登录中…' : '去登录' }}
-                </button>
-                <button
-                  v-else-if="placesCanApply"
-                  type="button"
-                  class="btn-primary btn-sm"
-                  :disabled="placesOfficialBusy"
-                  @click="onApplyPlacesOfficial"
-                >
-                  {{
-                    placesOfficialBusy
-                      ? '提交中…'
-                      : placesOfficialStatus === 'provision_failed'
-                        ? '再次申请'
-                        : '申请官方 Places Key'
-                  }}
-                </button>
-                <button
-                  v-else-if="placesOfficialStatus === 'pending'"
-                  type="button"
-                  class="btn-secondary btn-sm"
-                  disabled
-                >
-                  申请中
-                </button>
-                <button
-                  v-else-if="placesOfficialStatus === 'active'"
-                  type="button"
-                  class="btn-secondary btn-sm"
-                  :disabled="placesOfficialBusy"
-                  @click="refreshPlacesOfficial"
-                >
-                  刷新状态
-                </button>
-                <button
-                  v-if="loggedIn && placesOfficialStatus === 'arrears'"
-                  type="button"
-                  class="btn-primary btn-sm"
-                  :disabled="openingRecharge"
-                  @click="openOfficialRecharge"
-                >
-                  {{ openingRecharge ? '打开中…' : '去充值' }}
-                </button>
-              </div>
-            </template>
-            <p v-if="placesUsageLabel" class="hint-line">
-              当前 R3 使用：{{ placesUsageLabel }}
-            </p>
-            <template v-if="showPlacesSourceChoice">
-              <p class="hint-line">
-                自备 Key 仍在本机。官方 Key 在每次运行时重新获取，不写在这台电脑上。R3 只用当前选中的那一种，本机直连 Google。
-              </p>
-              <div class="theme-mode-row">
-                <label
-                  class="theme-mode-option"
-                  :class="{ 'is-active': snapshot?.placesKeySource === 'official' }"
-                >
-                  <input
-                    type="radio"
-                    name="placesKeySource"
-                    value="official"
-                    :checked="snapshot?.placesKeySource === 'official'"
-                    :disabled="placesOfficialBusy"
-                    @change="onSetPlacesSource('official')"
-                  />
-                  <span>官方下发 Key</span>
-                </label>
-                <label
-                  class="theme-mode-option"
-                  :class="{ 'is-active': snapshot?.placesKeySource === 'byok' }"
-                >
-                  <input
-                    type="radio"
-                    name="placesKeySource"
-                    value="byok"
-                    :checked="snapshot?.placesKeySource === 'byok'"
-                    :disabled="placesOfficialBusy"
-                    @change="onSetPlacesSource('byok')"
-                  />
-                  <span>自备 Places Key</span>
-                </label>
-              </div>
-            </template>
-            <div v-else-if="showSwitchToByok" class="settings-actions-row">
-              <button
-                type="button"
-                class="btn-secondary btn-sm"
-                :disabled="placesOfficialBusy"
-                @click="onSetPlacesSource('byok')"
-              >
-                改用自备 Key
-              </button>
-            </div>
-            <div
-              v-if="placesOfficialPhase === 'ready' && placesOfficialNeedLogin"
-              class="settings-actions-row"
-            >
-              <button
-                type="button"
-                class="btn-primary btn-sm"
-                :disabled="authBusy || loginPending"
-                @click="onAuthLogin"
-              >
-                {{ loginPending ? '登录中…' : '去登录' }}
-              </button>
-            </div>
-
             <h4>自备 Places Key</h4>
             <p class="hint-line">
               <Icon name="info" :size="12" />
@@ -1703,9 +1413,11 @@ async function onCheckUpdate(): Promise<void> {
                 <Icon :name="showPlacesKey ? 'eye' : 'eye-off'" :size="14" />
               </button>
             </div>
+            <p class="hint-line">当前 R3 使用：自备 Places Key</p>
             <p class="hint-line muted">
-              与模型 / Tavily 搜索通道独立；保存后请重启 OpenCode 使 MCP 生效。
+              自定义模型通道使用自备 Key。保存后请重启 OpenCode 使 MCP 生效。
             </p>
+            </template>
 
             <label class="field-label">Google 出站代理（R3 专用）</label>
             <p class="hint-line">

@@ -14,7 +14,7 @@ export const PLACES_OFFICIAL_STATUSES = [
 
 export type PlacesOfficialStatus = (typeof PLACES_OFFICIAL_STATUSES)[number]
 
-export type PlacesKeySource = 'official' | 'byok'
+export type PlacesKeySource = 'official' | 'custom'
 
 export type PlacesKeyOffer =
   | 'switch-to-byok'
@@ -29,12 +29,10 @@ export const BYOK_PLACES_DETAIL = '自备 Google Places API Key（本机直连�
 export const PLACES_DISCOVERY_SNIPPET = '发现：Places 候选，经官网核实'
 export const ARREARS_MESSAGE = '已欠费，请充值'
 export const REVOKED_MESSAGE = '请联系客服'
-export const BYOK_STILL_USABLE_SUFFIX =
-  '自备 Key 仍可用，可在设置 → 探索改用自备 Key。'
 export const NO_PLACES_KEY_MESSAGE =
-  '请在设置 → 探索申请官方 Places Key，或填写自备 Key（仅 R3 需要）。'
-export const EMPTY_BYOK_MESSAGE =
-  '当前选择的是自备 Key，但尚未填写。可在设置 → 探索改用官方下发 Key，或重新填写自备 Key。'
+  '请在设置 → 探索申请官方 Places Key（仅 R3 需要）。'
+export const CUSTOM_PLACES_MISSING_MESSAGE =
+  '请在设置 → 探索填写自备 Places Key（仅 R3 需要）。'
 export const NETWORK_KEY_MESSAGE =
   '暂时联系不上官方服务，未能获取 Places Key。请稍后重试。'
 export const NEED_LOGIN_KEY_MESSAGE = '请先登录后再使用官方 Places Key。'
@@ -57,10 +55,25 @@ export const PROVISION_FAILED_FALLBACK_NOTE = '开通未成功。可以再次申
 
 const PLACES_TOOL_NAMES = new Set(['places_text_search', 'place_details'])
 
+/** 模型通道决定 Places 来源。自定义通道用自备 Key，其余（含官方）用官方 Key。 */
+export function placesSourceForChannel(
+  channelMode: string | null | undefined,
+): PlacesKeySource {
+  return channelMode === 'custom' ? 'custom' : 'official'
+}
+
+/** 只有自定义通道才把自备 Key 写入 .env。官方通道忽略这次输入。 */
+export function placesByokPersistedForChannel(
+  channelMode: string | null | undefined,
+): boolean {
+  return placesSourceForChannel(channelMode) === 'custom'
+}
+
 export function parsePlacesKeySource(
   raw: string | null | undefined,
 ): '' | PlacesKeySource {
-  if (raw === 'official' || raw === 'byok') return raw
+  if (raw === 'official') return 'official'
+  if (raw === 'custom' || raw === 'byok') return 'custom'
   return ''
 }
 
@@ -163,32 +176,14 @@ export interface PlacesEffectiveKey {
   offer: PlacesKeyOffer | null
 }
 
-function withByokHint(
-  detail: string,
-  status: string | null | undefined,
-  byokSet: boolean,
-): string {
-  if (!byokSet) return detail
-  if (status !== 'arrears' && status !== 'revoked') return detail
-  const glue = /[。！？]$/.test(detail) ? '' : '。'
-  return `${detail}${glue}${BYOK_STILL_USABLE_SUFFIX}`
-}
-
 export function detailForKnownOfficialStatus(
   status: string | null | undefined,
-  byokSet: boolean,
 ): { detail: string; offer: PlacesKeyOffer | null } {
   if (status === 'arrears') {
-    return {
-      detail: withByokHint(ARREARS_MESSAGE, status, byokSet),
-      offer: byokSet ? 'switch-to-byok' : null,
-    }
+    return { detail: ARREARS_MESSAGE, offer: null }
   }
   if (status === 'revoked') {
-    return {
-      detail: withByokHint(REVOKED_MESSAGE, status, byokSet),
-      offer: byokSet ? 'switch-to-byok' : null,
-    }
+    return { detail: REVOKED_MESSAGE, offer: null }
   }
   if (status === 'pending') {
     return { detail: PENDING_PREFLIGHT_DETAIL, offer: 'open-settings' }
@@ -200,44 +195,26 @@ export function detailForKnownOfficialStatus(
 }
 
 /**
- * 设置页已经知道官方状态时的选用（O4）。
- * 开跑路径不先查状态，用 planPlacesRun。
+ * Places 来源跟模型通道走，不单独选择。
+ * 官方通道只用官方 Key；自定义通道只用自备 Key。
  */
 export function resolvePlacesEffectiveKey(input: {
-  savedSource?: string | null
+  channelMode?: string | null
   byokSet: boolean
   officialStatus?: string | null
 }): PlacesEffectiveKey {
-  const saved = parsePlacesKeySource(input.savedSource)
-  const status = input.officialStatus ?? null
-  const officialAvailable = status === 'active'
-
-  if (saved === 'byok') {
+  if (placesSourceForChannel(input.channelMode) === 'custom') {
     if (input.byokSet) {
-      return { ok: true, source: 'byok', detail: BYOK_PLACES_DETAIL, offer: null }
+      return { ok: true, source: 'custom', detail: BYOK_PLACES_DETAIL, offer: null }
     }
     return {
       ok: false,
       source: 'none',
-      detail: EMPTY_BYOK_MESSAGE,
-      offer: officialAvailable ? 'switch-to-official' : 'open-settings',
+      detail: CUSTOM_PLACES_MISSING_MESSAGE,
+      offer: 'open-settings',
     }
   }
-
-  if (saved === 'official') {
-    if (officialAvailable) {
-      return {
-        ok: true,
-        source: 'official',
-        detail: OFFICIAL_PLACES_DETAIL,
-        offer: null,
-      }
-    }
-    const failure = detailForKnownOfficialStatus(status, input.byokSet)
-    return { ok: false, source: 'none', detail: failure.detail, offer: failure.offer }
-  }
-
-  if (officialAvailable) {
+  if (input.officialStatus === 'active') {
     return {
       ok: true,
       source: 'official',
@@ -245,15 +222,8 @@ export function resolvePlacesEffectiveKey(input: {
       offer: null,
     }
   }
-  if (input.byokSet) {
-    return { ok: true, source: 'byok', detail: BYOK_PLACES_DETAIL, offer: null }
-  }
-  return {
-    ok: false,
-    source: 'none',
-    detail: NO_PLACES_KEY_MESSAGE,
-    offer: 'open-settings',
-  }
+  const failure = detailForKnownOfficialStatus(input.officialStatus)
+  return { ok: false, source: 'none', detail: failure.detail, offer: failure.offer }
 }
 
 export type PlacesRunPlan =
@@ -261,29 +231,28 @@ export type PlacesRunPlan =
   | { action: 'fetch-official' }
   | { action: 'fail'; detail: string; offer: PlacesKeyOffer | null }
 
-/** 开跑不查状态：来源是官方，或来源为空且没有自备 Key 时才取 Key。 */
+/** 开跑不查状态。官方通道取官方 Key；自定义通道只用已填写的自备 Key。 */
 export function planPlacesRun(input: {
-  savedSource?: string | null
+  channelMode?: string | null
   byokSet: boolean
 }): PlacesRunPlan {
-  const saved = parsePlacesKeySource(input.savedSource)
-  if (saved === 'byok') {
+  if (placesSourceForChannel(input.channelMode) === 'custom') {
     if (input.byokSet) return { action: 'use-byok' }
-    return { action: 'fail', detail: EMPTY_BYOK_MESSAGE, offer: 'open-settings' }
+    return {
+      action: 'fail',
+      detail: CUSTOM_PLACES_MISSING_MESSAGE,
+      offer: 'open-settings',
+    }
   }
-  if (saved === 'official' || !input.byokSet) return { action: 'fetch-official' }
-  return { action: 'use-byok' }
+  return { action: 'fetch-official' }
 }
 
 export function currentPlacesUsageLabel(input: {
-  savedSource?: string | null
+  channelMode?: string | null
   byokSet: boolean
-  officialStatus?: string | null
 }): string {
-  const saved = parsePlacesKeySource(input.savedSource)
-  if (saved === 'official') return '官方下发 Key'
-  if (saved === 'byok' || input.byokSet) return '自备 Places Key'
-  if (input.officialStatus === 'active') return '官方下发 Key'
+  if (placesSourceForChannel(input.channelMode) === 'official') return '官方下发 Key'
+  if (input.byokSet) return '自备 Places Key'
   return ''
 }
 
@@ -313,21 +282,17 @@ export function detailForOfficialKeyFailure(input: {
     }
   }
   if (code === 'network') {
-    return {
-      detail: NETWORK_KEY_MESSAGE,
-      offer: input.byokSet ? 'switch-to-byok' : null,
-      needLogin: false,
-    }
+    return { detail: NETWORK_KEY_MESSAGE, offer: null, needLogin: false }
   }
   if (code === 'rate_limited') {
     return { detail: RATE_LIMIT_MESSAGE, offer: null, needLogin: false }
   }
   if (code === 'arrears' || status === 'arrears') {
-    const mapped = detailForKnownOfficialStatus('arrears', input.byokSet)
+    const mapped = detailForKnownOfficialStatus('arrears')
     return { ...mapped, needLogin: false }
   }
   if (code === 'revoked' || status === 'revoked') {
-    const mapped = detailForKnownOfficialStatus('revoked', input.byokSet)
+    const mapped = detailForKnownOfficialStatus('revoked')
     return { ...mapped, needLogin: false }
   }
   const reason = (input.reasonCode || '').toLowerCase()
@@ -339,17 +304,17 @@ export function detailForOfficialKeyFailure(input: {
   ) {
     return {
       detail: OFFICIAL_KEY_REVOKED_MESSAGE,
-      offer: input.byokSet ? 'switch-to-byok' : null,
+      offer: null,
       needLogin: false,
     }
   }
   if (code === 'not_active' || code === 'forbidden') {
-    const mapped = detailForKnownOfficialStatus(status, input.byokSet)
+    const mapped = detailForKnownOfficialStatus(status)
     return { ...mapped, needLogin: false }
   }
   return {
     detail: input.serverMessage?.trim() || '未能获取官方 Places Key。',
-    offer: input.byokSet ? 'switch-to-byok' : null,
+    offer: null,
     needLogin: false,
   }
 }

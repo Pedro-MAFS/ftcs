@@ -9,8 +9,8 @@ export type PlacesMcpInjection =
 
 export interface PlacesMcpEnvInput {
   workspaceRoot: string
+  channelMode?: string | null
   envByok?: string | null
-  envSource?: string | null
   injection: PlacesMcpInjection
 }
 
@@ -21,13 +21,14 @@ export function buildPlacesMcpEnvironment(
     FTCS_WORKSPACE: input.workspaceRoot,
     PLACES_PROVIDER: 'custom',
   }
-  if (input.injection.kind === 'official') {
-    const key = input.injection.apiKey.trim()
-    if (key) env.GOOGLE_PLACES_API_KEY = key
+  const official = input.channelMode !== 'custom'
+  if (official) {
+    if (input.injection.kind === 'official') {
+      const key = input.injection.apiKey.trim()
+      if (key) env.GOOGLE_PLACES_API_KEY = key
+    }
     return env
   }
-  const source = (input.envSource || '').trim()
-  if (source === 'official') return env
   const byok = (input.envByok || '').trim()
   if (byok) env.GOOGLE_PLACES_API_KEY = byok
   return env

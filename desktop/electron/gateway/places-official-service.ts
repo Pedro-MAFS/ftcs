@@ -10,7 +10,7 @@ import {
   applyErrorMessage,
   detailForOfficialKeyFailure,
   messageAfterGoogleRejectedKey,
-  parsePlacesKeySource,
+  placesSourceForChannel,
   planPlacesRun,
   type PlacesKeySource,
 } from '../../src/domain/places-official'
@@ -26,7 +26,7 @@ import {
 import type { PlacesMcpInjection } from '../opencode/places-mcp-env'
 
 export interface PlacesSelection {
-  source: '' | PlacesKeySource
+  channelMode: 'official' | 'custom'
   byokSet: boolean
   byokKey: string
 }
@@ -61,14 +61,13 @@ export interface PlacesOfficialServiceDeps {
   memory: PlacesOfficialKeyMemory
   ensureToken: (options?: { force?: boolean }) => Promise<string | null>
   readSelection: () => PlacesSelection
-  writeSource: (source: PlacesKeySource) => void
   getInjection: () => PlacesMcpInjection
   setInjection: (next: PlacesMcpInjection) => void
   injectionNeedsReload: () => boolean
   now?: () => number
 }
 
-function blankView(source: '' | PlacesKeySource): PlacesOfficialView {
+function blankView(source: PlacesKeySource): PlacesOfficialView {
   return {
     placesKeySource: source,
     status: null,
@@ -80,7 +79,7 @@ function blankView(source: '' | PlacesKeySource): PlacesOfficialView {
 }
 
 function viewFromStatus(
-  source: '' | PlacesKeySource,
+  source: PlacesKeySource,
   body: {
     status: string
     reasonMessage: string | null
@@ -130,7 +129,7 @@ export function createPlacesOfficialService(deps: PlacesOfficialServiceDeps) {
     failure: { code: string; message: string },
     queried: boolean,
   ): PlacesOfficialAction {
-    const source = parsePlacesKeySource(deps.readSelection().source)
+    const source = placesSourceForChannel(deps.readSelection().channelMode)
     const needLogin =
       failure.code === 'need_login' || failure.code === 'credential_revoked'
     const message =
@@ -155,11 +154,7 @@ export function createPlacesOfficialService(deps: PlacesOfficialServiceDeps) {
   async function refresh(): Promise<PlacesOfficialAction> {
     const res = await callWithToken((token) => deps.http.getStatus(token))
     if (!res.ok) return failureAction(res, true)
-    let source = parsePlacesKeySource(deps.readSelection().source)
-    if (res.body.status === 'active' && source === '') {
-      deps.writeSource('official')
-      source = 'official'
-    }
+    const source = placesSourceForChannel(deps.readSelection().channelMode)
     return {
       ok: true,
       needLogin: false,
@@ -175,49 +170,6 @@ export function createPlacesOfficialService(deps: PlacesOfficialServiceDeps) {
     return refresh()
   }
 
-  async function setSource(source: PlacesKeySource): Promise<PlacesOfficialAction> {
-    const selection = deps.readSelection()
-    if (source === 'byok') {
-      if (!selection.byokSet) {
-        return {
-          ok: false,
-          needLogin: false,
-          message: '请先填写自备 Places Key',
-          queried: false,
-          view: blankView(parsePlacesKeySource(selection.source)),
-        }
-      }
-      deps.writeSource('byok')
-      return {
-        ok: true,
-        needLogin: false,
-        message: '已改用自备 Places Key',
-        queried: false,
-        view: { ...blankView('byok') },
-      }
-    }
-    const status = await refresh()
-    if (!status.ok || status.view.status !== 'active') {
-      return {
-        ...status,
-        ok: false,
-        message: status.ok
-          ? '官方 Places Key 当前不可用'
-          : status.message || '官方 Places Key 当前不可用',
-      }
-    }
-    if (parsePlacesKeySource(deps.readSelection().source) !== 'official') {
-      deps.writeSource('official')
-    }
-    return {
-      ok: true,
-      needLogin: false,
-      message: '已改用官方下发 Key',
-      queried: true,
-      view: { ...status.view, placesKeySource: 'official' },
-    }
-  }
-
   async function fetchOfficialKey(runId: string): Promise<
     | { ok: true }
     | { ok: false; detail: string; needLogin: boolean }
@@ -231,7 +183,7 @@ export function createPlacesOfficialService(deps: PlacesOfficialServiceDeps) {
         code: res.ok ? 'not_active' : res.code,
         status: res.ok ? null : res.status,
         reasonCode: res.ok ? null : res.reasonCode,
-        byokSet: deps.readSelection().byokSet,
+        byokSet: false,
         serverMessage: res.ok ? null : res.message,
       })
       return { ok: false, detail: failure.detail, needLogin: failure.needLogin }
@@ -253,7 +205,7 @@ export function createPlacesOfficialService(deps: PlacesOfficialServiceDeps) {
   }> {
     const selection = deps.readSelection()
     const plan = planPlacesRun({
-      savedSource: selection.source,
+      channelMode: selection.channelMode,
       byokSet: selection.byokSet,
     })
     if (plan.action === 'use-byok') {
@@ -268,7 +220,7 @@ export function createPlacesOfficialService(deps: PlacesOfficialServiceDeps) {
   async function beginRun(runId: string): Promise<PlacesRunBegin> {
     const selection = deps.readSelection()
     const plan = planPlacesRun({
-      savedSource: selection.source,
+      channelMode: selection.channelMode,
       byokSet: selection.byokSet,
     })
     if (plan.action === 'fail') {
@@ -360,7 +312,6 @@ export function createPlacesOfficialService(deps: PlacesOfficialServiceDeps) {
   return {
     apply,
     refresh,
-    setSource,
     prepareForPreflight,
     beginRun,
     releaseRun,

@@ -35,7 +35,7 @@ export function useExploreStart(options?: {
   const startingR2 = ref(false)
   const startingR3 = ref(false)
   const placesKeySet = ref(false)
-  const placesKeySource = ref<'' | 'official' | 'byok'>('')
+  const channelMode = ref<'official' | 'custom'>('official')
 
   const extraBusy = computed(() => Boolean(toValue(options?.extraBusy)))
 
@@ -99,7 +99,7 @@ export function useExploreStart(options?: {
       r3QueryCount.value > 0 &&
       !generating.value &&
       !isLaunching.value &&
-      !(placesKeySource.value === 'byok' && !placesKeySet.value)
+      !(channelMode.value === 'custom' && !placesKeySet.value)
     )
   })
 
@@ -121,8 +121,8 @@ export function useExploreStart(options?: {
   const startR3DisabledReason = computed(() => {
     if (generating.value || isLaunching.value) return '已有任务在运行'
     if (!hasKeywordsReady.value) return '请先完成关键词扩展'
-    if (placesKeySource.value === 'byok' && !placesKeySet.value) {
-      return '当前选择的是自备 Key，但尚未填写。可在设置 → 探索改用官方下发 Key，或重新填写自备 Key。'
+    if (channelMode.value === 'custom' && !placesKeySet.value) {
+      return '请在设置 → 探索填写自备 Places Key（仅 R3 需要）'
     }
     if (r3QueryCount.value > 0) return ''
     return '当前没有 R3 地图发现词，请重新扩展关键词'
@@ -160,10 +160,7 @@ export function useExploreStart(options?: {
     try {
       const settings = await window.ftcs?.getSettings?.()
       placesKeySet.value = settings?.placesApiKeySet ?? false
-      placesKeySource.value =
-        settings?.placesKeySource === 'official' || settings?.placesKeySource === 'byok'
-          ? settings.placesKeySource
-          : ''
+      channelMode.value = settings?.channelMode === 'custom' ? 'custom' : 'official'
     } catch {
       placesKeySet.value = false
     }
