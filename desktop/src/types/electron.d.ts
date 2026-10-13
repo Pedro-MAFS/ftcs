@@ -846,6 +846,29 @@ declare global {
       openOfficialPortal: () => Promise<
         import('./settings').OpenOfficialPortalResult
       >
+      applyPlacesOfficialKey: () => Promise<{
+        ok: boolean
+        needLogin: boolean
+        message: string
+        queried: boolean
+        settings: SettingsSnapshot
+      }>
+      refreshPlacesOfficialKey: () => Promise<{
+        ok: boolean
+        needLogin: boolean
+        message: string
+        queried: boolean
+        settings: SettingsSnapshot
+      }>
+      setPlacesKeySource: (input: {
+        source: 'official' | 'byok'
+      }) => Promise<{
+        ok: boolean
+        needLogin: boolean
+        message: string
+        queried: boolean
+        settings: SettingsSnapshot
+      }>
       getOnboardingState: () => Promise<OnboardingState>
       setOnboardingState: (patch: Partial<OnboardingState>) => Promise<OnboardingState>
       probeEnvironment: () => Promise<EnvProbeResult>

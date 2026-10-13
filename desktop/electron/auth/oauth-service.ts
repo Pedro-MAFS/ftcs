@@ -20,6 +20,7 @@ import {
   type StoredTokenBundle,
 } from './token-store'
 import { evaluateLoginAccountSwitch } from './auth-account-switch'
+import { placesOfficialKeyMemory } from '../gateway/places-official-key-memory'
 
 export interface AuthSessionSnapshot {
   loggedIn: boolean
@@ -172,6 +173,7 @@ export async function logout(): Promise<AuthActionResult> {
     await revokeToken(bundle.refreshToken || bundle.accessToken).catch(() => undefined)
   }
   clearTokenBundle()
+  placesOfficialKeyMemory.clear()
   lastError = ''
   return {
     ok: true,
@@ -249,6 +251,7 @@ export async function ensureFreshTokens(options?: {
 
 function invalidateStoredAuth(message: string): null {
   clearTokenBundle()
+  placesOfficialKeyMemory.clear()
   lastError = message
   notifySession()
   return null

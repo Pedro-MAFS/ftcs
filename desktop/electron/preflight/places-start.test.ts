@@ -5,51 +5,72 @@ import {
   resolvePlacesStart,
 } from './places-start.ts'
 
-test('resolvePlacesStart: custom channel requires BYOK Places key', () => {
+const base = {
+  channelMode: 'custom' as const,
+  placesApiKeySet: false,
+  placesProvider: 'custom' as const,
+  officialProvisioned: false,
+}
+
+test('resolvePlacesStart: no key fails closed', () => {
   const result = resolvePlacesStart({
+    ...base,
     channelMode: 'custom',
-    placesApiKeySet: false,
-    placesProvider: 'custom',
-    officialProvisioned: false,
   })
   assert.equal(result.ok, false)
-  assert.match(result.detail, /Google Places API Key/)
+  assert.match(result.detail, /官方 Places Key|自备 Key/)
 })
 
-test('resolvePlacesStart: custom channel with key allows custom provider', () => {
+test('resolvePlacesStart: BYOK with empty source stays on the self-serve key', () => {
   const result = resolvePlacesStart({
-    channelMode: 'custom',
+    ...base,
+    channelMode: 'official',
     placesApiKeySet: true,
-    placesProvider: 'custom',
-    officialProvisioned: false,
+    officialProvisioned: true,
+    placesKeySource: '',
   })
   assert.equal(result.ok, true)
   assert.equal(result.provider, 'custom')
+  assert.match(result.detail, /自备/)
 })
 
-test('resolvePlacesStart: official channel with BYOK allows custom provider', () => {
+test('resolvePlacesStart: saved byok uses the self-serve detail', () => {
   const result = resolvePlacesStart({
-    channelMode: 'official',
+    ...base,
     placesApiKeySet: true,
-    placesProvider: 'custom',
-    officialProvisioned: true,
+    placesKeySource: 'byok',
+  })
+  assert.equal(result.ok, true)
+  assert.match(result.detail, /自备/)
+  assert.match(result.detail, /本机直连/)
+})
+
+test('resolvePlacesStart: official fetch success does not require BYOK', () => {
+  const result = resolvePlacesStart({
+    ...base,
+    channelMode: 'official',
+    placesKeySource: 'official',
+    officialFetch: { ok: true, detail: '官方下发 Key（本机直连 Google）' },
   })
   assert.equal(result.ok, true)
   assert.equal(result.provider, 'custom')
+  assert.match(result.detail, /官方下发 Key/)
+  assert.match(result.detail, /本机直连/)
 })
 
-test('resolvePlacesStart: official channel without key requires BYOK', () => {
+test('resolvePlacesStart: official arrears does not become BYOK', () => {
   const result = resolvePlacesStart({
-    channelMode: 'official',
-    placesApiKeySet: false,
-    placesProvider: 'gateway',
-    officialProvisioned: true,
+    ...base,
+    placesApiKeySet: true,
+    placesKeySource: 'official',
+    officialFetch: { ok: false, detail: '已欠费，请充值' },
   })
   assert.equal(result.ok, false)
-  assert.match(result.detail, /BYOK|Places API Key/)
+  assert.equal(result.detail, '已欠费，请充值')
+  assert.equal(result.provider, undefined)
 })
 
-test('isPlacesGatewayReady stays false while E-10 deferred', () => {
+test('isPlacesGatewayReady stays false when official places is active', () => {
   assert.equal(
     isPlacesGatewayReady({
       channelMode: 'official',
