@@ -48,8 +48,7 @@ export const PROVISION_FAILED_PREFLIGHT_DETAIL =
 export const APPLY_NEED_LOGIN_MESSAGE = '请先登录'
 export const NETWORK_STATUS_MESSAGE = '暂时联系不上官方服务。'
 export const UNKNOWN_STATUS_MESSAGE = '状态无法识别，请稍后刷新'
-export const OFFICIAL_PLACES_ACTIVE_NOTE =
-  '官方 Places Key 已开通。每次使用时重新获取，不保存在这台电脑上。'
+export const OFFICIAL_PLACES_ACTIVE_NOTE = ''
 export const PENDING_FALLBACK_NOTE = '预计在受理后的下一自然日内开通。'
 export const PROVISION_FAILED_FALLBACK_NOTE = '开通未成功。可以再次申请。'
 
@@ -127,7 +126,7 @@ export function placesOfficialSupplement(input: {
     case 'pending':
       return note || PENDING_FALLBACK_NOTE
     case 'active':
-      return OFFICIAL_PLACES_ACTIVE_NOTE
+      return ''
     case 'provision_failed':
       return reason || PROVISION_FAILED_FALLBACK_NOTE
     case 'arrears':
