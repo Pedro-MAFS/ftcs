@@ -19,7 +19,7 @@
 
 | 现网 | **本期（US-PK-C-02）** |
 |------|------------------------|
-| 自备 Places Key 在工作区 `.env` 的 `GOOGLE_PLACES_API_KEY` | **仍只表示 BYOK**。官方 Key 不占用这个键，也不另造键 |
+| 自备 Places Key 在工作区 `.env` 的 `GOOGLE_PLACES_API_KEY` | **仍只表示自定义通道的 BYOK**。官方 Key 不占用这个键，也不另造键。模型通道为官方时，保存不读、不写、不清除这个键；R3 也不使用它 |
 | 官方模型 sk 在 `.env` 的 `FTCS_GATEWAY_API_KEY` | 继续只给模型 / `usage/me`。**不用**它取 Places Key |
 | 官方登录 token 在 `token-store.ts`：`userData/oauth-tokens.bin`，`safeStorage` 加密 access / refresh。退出登录会调 IdP `{issuer}/oauth2/revoke` 并 `clearTokenBundle()` | **这是本故事允许留在本机的身份凭证**。取 Key 走 `ensureFreshTokens()` 的 access token，与现网 `POST /keys/rotate` 相同 |
 | 没有「运行前向网关要 Google API Key」的调用 | 一次 R3 开始时（或该次运行里第一次需要 Places 之前）调用取当前 Key。响应里的 `apiKey` 只进主进程内存 |
@@ -33,7 +33,7 @@
 | **US-PK-C-02** | 取 Key、内存持有与丢弃、身份凭证。验收与 gateway 联调，不设 mock |
 | **US-PK-C-01** | 申请与状态。状态接口**不**返回 `apiKey` |
 | **US-PK-C-03** | 把内存中的 Key 注入当次 `places-api`，直连 Google；Google 拒绝时再取一次 |
-| **US-PK-C-04** | 选用官方还是 BYOK。取 Key 失败时不自动改成 BYOK |
+| **US-PK-C-04** | 来源由模型通道决定。官方通道取 Key 失败时不回落 BYOK，也不改 `channelMode` |
 | **网关详设** | HTTP。本文不另定义 URL |
 
 ---
@@ -47,8 +47,8 @@
 | **放哪** | 主进程变量。渲染进程、Preflight `detail`、设置快照都拿不到 `apiKey` |
 | **何时丢掉** | 该次运行结束、失败、用户停止、退出登录、取 Key 失败，或运行中 Google 拒绝后准备去查状态时。丢掉后重启 `places-api`（或整个 OpenCode），使子进程环境里也不再留着这把 Key。不因为拒绝再取一把新 Key |
 | **短时缓存（O12）** | 按 O12 推荐：同一次 R3 运行内可留到 `expiresAt` 与运行结束中较早的时刻。不跨运行。O12 若改选「每次调用都取」或「固定 N 分钟」，只改本行 |
-| **身份凭证** | 复用现网官方登录 token，保护方式见 §4.2。US-PK-G-04 可单独吊销这一份凭证：旧 token 再取 Key 得 401 `credential_revoked`；用户重新登录拿到新凭证后可以再取。不自动改用 BYOK |
-| **与 BYOK** | 来源是自备时不调用取 Key，继续读 `GOOGLE_PLACES_API_KEY`。两条路径不互相写入 |
+| **身份凭证** | 复用现网官方登录 token，保护方式见 §4.2。US-PK-G-04 可单独吊销这一份凭证：旧 token 再取 Key 得 401 `credential_revoked`；用户重新登录拿到新凭证后可以再取。不回落 BYOK |
+| **与自备 Key** | 只在 `channelMode=custom` 时读取 `GOOGLE_PLACES_API_KEY`，且不调用取 Key。`official` 时不读这个键，也不把取到的官方 Key 写进这个键。官方通道的保存忽略 `placesApiKey`，已有自备 Key 留在 `.env` 但不用 |
 
 ---
 
@@ -78,7 +78,7 @@ sequenceDiagram
   Note over Main: 运行结束或失败后清空内存并丢掉子进程里的 Key
 ```
 
-取 Key 失败时的句子见 C-04，这里只保证主进程不会改 `FTCS_PLACES_KEY_SOURCE`，也不会把 BYOK 填进官方通道。
+取 Key 失败时的句子见 C-04。主进程不修改 `channelMode`，不读取 `GOOGLE_PLACES_API_KEY` 来顶上，也不再读写 `FTCS_PLACES_KEY_SOURCE`。
 
 ---
 
@@ -110,7 +110,7 @@ interface PlacesOfficialKeyMemory {
 | 怎么加密 | 调用 Electron `safeStorage`：`safeStorage.isEncryptionAvailable()` 时 `encryptString` / `decryptString`，与现网登录 token 同一条路径。不可用时现网会退回明文写入该文件；本故事不另起一套加密，避免两套登录态 |
 | 怎么用 | `ensureFreshTokens()`。取 Key、申请、查状态的请求头都是 `Authorization: Bearer` + access token，与现网 `POST {base}/keys/rotate` 相同 |
 | 用户退出 | 现网 `logout()`：IdP `POST {issuer}/oauth2/revoke`，然后 `clearTokenBundle()`。同时 `clear()` 内存中的 Places Key。没有 Places 状态文件可删 |
-| 网关吊销（US-PK-G-04） | 吊销的是**这一份**登录凭证，不是 Google Key，也不是别的用户或别的设备上的登录。本机文件可能还在，但用旧 token 取 Key 得到 401 `credential_revoked`。提示「登录凭证已吊销，请重新登录」。用户走现有「去登录」拿到新 token 后可以再取。有 BYOK 时另外显示「改用自备 Key」，来源不自动改 |
+| 网关吊销（US-PK-G-04） | 吊销的是**这一份**登录凭证，不是 Google Key，也不是别的用户或别的设备上的登录。本机文件可能还在，但用旧 token 取 Key 得到 401 `credential_revoked`。提示「登录凭证已吊销，请重新登录」。用户走现有「去登录」拿到新 token 后可以再取。不回落 `.env` 里的自备 Key，也不出现「改用自备 Key」 |
 
 渲染进程不读 `oauth-tokens.bin`，也不接收 `apiKey`。
 
@@ -118,9 +118,7 @@ interface PlacesOfficialKeyMemory {
 
 不写 `data/prefs/places-official-status.json`，也不写别的文件来记六态。设置页只在当前界面里放下这一次状态接口的结果；关掉或查询失败就没有上一份状态可显示。R3 不读它。
 
-快照里给渲染进程的，只有这一次查询得到的 `placesOfficialStatus`、`reasonMessage`、`expectedReadyNote`，以及来源 `placesKeySource`。没有 `placesOfficialKeySet`，也没有官方 Key 掩码。
-
-`placesKeySource`（`official` | `byok`）是用户选的来源，不是状态，也不是 Key。它可以写在 `.env` 的 `FTCS_PLACES_KEY_SOURCE`（C-04）。这个键的值只有来源名字。
+快照里给渲染进程的，在模型通道为官方、且这一次状态查询成功时，只有 `placesOfficialStatus`、`reasonMessage`、`expectedReadyNote`。没有 `placesOfficialKeySet`，也没有官方 Key 掩码。来源不再另存：就是当前的 `channelMode`。不写 `FTCS_PLACES_KEY_SOURCE`。工作区里若已有这个旧键，读取时忽略。
 
 客户端调用的三个 gateway 接口见 [US-PK-C-01 §5.1](US-PK-C-01-申请官方PlacesKey与状态展示.md)。
 
@@ -184,7 +182,7 @@ export interface PlacesOfficialKeyClient {
 | `desktop/electron/gateway/places-official-key-client.ts` | 只实现 HTTP `getCurrent`。不实现 mock 客户端，不读 mock 环境变量 |
 | `desktop/electron/gateway/places-official-key-memory.ts` | Key 只在内存 hold / clear，不写盘 |
 | `desktop/electron/auth/oauth-service.ts` | `logout` 成功路径调用 `clear()`。不改 OAuth 文件格式 |
-| `desktop/electron/settings/settings-service.ts` | **不**增加官方 Key 环境变量。`saveSettings` 继续只处理 BYOK 的 `GOOGLE_PLACES_API_KEY` |
+| `desktop/electron/settings/settings-service.ts` | **不**增加官方 Key 环境变量。`channelMode=official` 时忽略 `placesApiKey`（不写、不清除 `GOOGLE_PLACES_API_KEY`）。`custom` 时该键仍只表示 BYOK。不再读写 `FTCS_PLACES_KEY_SOURCE` |
 
 建议单测只覆盖内存 `hold` / `clear`：`clear` 后再 `peek` 为空；快照类型里没有 `apiKey`。不发 HTTP，也不提供假 gateway。落盘与否在 §8 的联调里看。
 
@@ -199,8 +197,8 @@ export interface PlacesOfficialKeyClient {
 | M1 | 联调取 Key 成功后搜工作区与 userData | 没有 `FTCS_PLACES_OFFICIAL_API_KEY`，没有把 Key 写进 `.env`、json、钥匙串。前提见 §6 |
 | M2 | 同一次运行内第二次需要 Places | 按待确认推荐：不第二次打网关，除非已过 `expiresAt` |
 | M3 | 运行结束 | 内存为空；重启后的 `places-api` 环境里没有上一把官方 Key |
-| M4 | 退出登录 | 内存清空。BYOK 仍在 |
-| M5 | 管理端吊销当前登录凭证后再取 Key | 不启动 R3，不改来源，不用 BYOK。提示重新登录 |
+| M4 | 退出登录 | 内存中的官方 Key 清空。`.env` 里若有自备 Key，原文仍在；官方通道不使用它 |
+| M5 | 管理端吊销当前登录凭证后再取 Key | 不启动 R3，不改 `channelMode`，不用 `.env` 里的自备 Key。提示重新登录 |
 | M6 | 日志 | 可有 `keyVersion`，没有 Key 全文 |
 
 ---
@@ -211,7 +209,7 @@ export interface PlacesOfficialKeyClient {
 |----|------|
 | 用 `.env` 或 safeStorage 保存官方 Places Key | 本口径禁止 |
 | 设置页为了显示「已开通」而取 Key | 用状态接口 |
-| 取 Key 失败时改写 BYOK 或来源 | C-04 |
+| 取 Key 失败时改写自备 Key 或 `channelMode` | C-04。官方通道也不清除 `.env` 里留下的自备 Key |
 | 代调 | Places 仍由客户端直连 Google |
 
 ---
@@ -243,3 +241,4 @@ export interface PlacesOfficialKeyClient {
 | 2026-10-11 | 设置页只查状态不取 Key |
 | 2026-10-11 | 按 PK13 六态与已吊销对齐 |
 | 2026-10-11 | 取消状态本地缓存，增加客户端接口一览 |
+| 2026-10-13 | Places Key 来源跟模型通道，官方通道不支持 BYOK |
