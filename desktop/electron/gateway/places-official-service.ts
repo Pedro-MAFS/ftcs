@@ -217,6 +217,30 @@ export function createPlacesOfficialService(deps: PlacesOfficialServiceDeps) {
     return { ok: true, detail: OFFICIAL_PLACES_DETAIL, provider: 'custom' }
   }
 
+  /**
+   * 设置页「测试 Google 连接」用的 Key。
+   * 官方通道：向 token-gateway 取一次（可复用 arming 内存）；自定义通道：用自备 Key（可为空，仅测网）。
+   * 不写入 MCP 注入，避免测试按钮牵动 OpenCode 子进程。
+   */
+  async function resolveApiKeyForConnectivityTest(): Promise<
+    | { ok: true; apiKey: string }
+    | { ok: false; message: string }
+  > {
+    const selection = deps.readSelection()
+    if (selection.channelMode === 'custom') {
+      return { ok: true, apiKey: selection.byokKey }
+    }
+    const fetched = await fetchOfficialKey(PLACES_KEY_ARMING_RUN_ID)
+    if (!fetched.ok) {
+      return { ok: false, message: fetched.detail }
+    }
+    const held = deps.memory.peek(PLACES_KEY_ARMING_RUN_ID, now())
+    if (!held?.apiKey) {
+      return { ok: false, message: NETWORK_STATUS_MESSAGE }
+    }
+    return { ok: true, apiKey: held.apiKey }
+  }
+
   async function beginRun(runId: string): Promise<PlacesRunBegin> {
     const selection = deps.readSelection()
     const plan = planPlacesRun({
@@ -313,6 +337,7 @@ export function createPlacesOfficialService(deps: PlacesOfficialServiceDeps) {
     apply,
     refresh,
     prepareForPreflight,
+    resolveApiKeyForConnectivityTest,
     beginRun,
     releaseRun,
     handleGoogleRejection,

@@ -99,6 +99,13 @@ export async function preparePlacesForPreflight(): Promise<{
   return placesOfficial.prepareForPreflight()
 }
 
+export async function resolvePlacesApiKeyForConnectivityTest(): Promise<
+  | { ok: true; apiKey: string }
+  | { ok: false; message: string }
+> {
+  return placesOfficial.resolveApiKeyForConnectivityTest()
+}
+
 export async function beginPlacesDiscoverRun(runId: string): Promise<PlacesRunBegin> {
   return placesOfficial.beginRun(runId)
 }

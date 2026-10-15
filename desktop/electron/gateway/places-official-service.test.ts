@@ -268,3 +268,44 @@ test('source file stores only the source name', () => {
   assert.equal(process.env.FTCS_PLACES_KEY_SOURCE, 'custom')
   delete process.env.FTCS_PLACES_KEY_SOURCE
 })
+
+test('connectivity test on official channel fetches getCurrent once', async () => {
+  const h = harness()
+  const first = await h.service.resolveApiKeyForConnectivityTest()
+  assert.equal(first.ok, true)
+  if (!first.ok) return
+  assert.equal(first.apiKey, 'AIzaLive')
+  assert.equal(h.calls.current, 1)
+  assert.equal(h.injection.kind, 'default')
+  const again = await h.service.resolveApiKeyForConnectivityTest()
+  assert.equal(again.ok, true)
+  assert.equal(h.calls.current, 1)
+})
+
+test('connectivity test on custom channel uses BYOK and skips getCurrent', async () => {
+  const h = harness({
+    selection: { channelMode: 'custom', byokSet: true, byokKey: 'AIzaByok' },
+  })
+  const res = await h.service.resolveApiKeyForConnectivityTest()
+  assert.equal(res.ok, true)
+  if (!res.ok) return
+  assert.equal(res.apiKey, 'AIzaByok')
+  assert.equal(h.calls.current, 0)
+})
+
+test('connectivity test surfaces official getCurrent failure', async () => {
+  const h = harness({
+    current: {
+      ok: false,
+      httpStatus: 200,
+      code: 'none',
+      message: '尚未申请',
+      status: 'none',
+    },
+  })
+  const res = await h.service.resolveApiKeyForConnectivityTest()
+  assert.equal(res.ok, false)
+  if (res.ok) return
+  assert.match(res.message, /申请|开通|官方/)
+  assert.equal(h.calls.current, 1)
+})

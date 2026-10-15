@@ -42,6 +42,7 @@ import {
   applyPlacesOfficialKey,
   refreshPlacesOfficialKey,
   releasePlacesDiscoverRun,
+  resolvePlacesApiKeyForConnectivityTest,
 } from './gateway/places-official-runtime'
 import { placesOfficialKeyMemory } from './gateway/places-official-key-memory'
 import { setPlacesMcpInjection } from './opencode/places-mcp-env'
@@ -721,10 +722,14 @@ function registerIpcHandlers(): void {
         manualProxyUrl?: string
       },
     ) => {
-      const officialChannel = (process.env.FTCS_CHANNEL_MODE || 'official') !== 'custom'
-      return testGooglePlacesConnectivity(
-        officialChannel ? { ...input, apiKey: '' } : input,
-      )
+      const keyRes = await resolvePlacesApiKeyForConnectivityTest()
+      if (!keyRes.ok) {
+        return { ok: false as const, message: keyRes.message }
+      }
+      return testGooglePlacesConnectivity({
+        ...input,
+        apiKey: keyRes.apiKey,
+      })
     },
   )
   ipcMain.handle(IPC.SETTINGS_TEST_HUNTER, async () => testHunterConnectivity())
