@@ -17,6 +17,7 @@ import type {
   OpenCodeInstallResult,
 } from '../../types/onboarding'
 import Icon from '../shared/Icon.vue'
+import DiagnosticDetails from '../shared/DiagnosticDetails.vue'
 import PlacesOfficialStatusBlock from '../settings/PlacesOfficialStatusBlock.vue'
 
 const router = useRouter()
@@ -125,7 +126,7 @@ const header = computed(() => {
       eyebrow: 'FTCS 首次设置 · 步骤 2 / 3',
       title: '选择模型通道并配置密钥',
       subtitle:
-        '写入本地 workspace/.env，不会上传。搜索 Key 用于 R1/R2；Places Key 可选，仅 R3 地图发现需要。',
+        '地图发现可选。',
     }
   }
   if (phase.value === 'tour') {
@@ -140,7 +141,7 @@ const header = computed(() => {
     eyebrow: 'FTCS 首次设置 · 步骤 1 / 3',
     title: '先检查运行环境',
     subtitle:
-      '安装包保持轻量，以下依赖需本机就绪。请先就绪 Node.js，再一键安装 OpenCode；装成功后请退出并重启应用，再点重新检测。另有 OfficeCLI（可选）：仅当资料含 Word / Excel / PPT 时需要，可稍后安装。',
+      '安装以下组件后即可使用。',
   }
 })
 
@@ -536,6 +537,7 @@ onMounted(() => {
                 <div>
                   <h3>{{ item.label }}</h3>
                   <p>{{ item.detail }}</p>
+                  <DiagnosticDetails v-if="item.diagnostic" :text="item.diagnostic" />
                 </div>
               </div>
               <div class="onboarding__dep-actions">
@@ -546,7 +548,7 @@ onMounted(() => {
                   :disabled="anyRuntimeInstalling"
                   @click="onInstallNode(false)"
                 >
-                  {{ installingNode ? '准备中…' : '一键准备 Node.js 24.18.0' }}
+                  {{ installingNode ? '准备中…' : '一键安装' }}
                 </button>
                 <button
                   v-if="canReinstallNode(item)"
@@ -567,7 +569,7 @@ onMounted(() => {
                   {{
                     installingOpenCode
                       ? '准备中…'
-                      : '一键准备 OpenCode 1.18.4'
+                      : '一键安装'
                   }}
                 </button>
                 <button
@@ -589,7 +591,7 @@ onMounted(() => {
                   {{
                     installingOfficeCli
                       ? '安装中…'
-                      : '一键安装 OfficeCLI 1.0.144'
+                      : '一键安装'
                   }}
                 </button>
                 <button
@@ -648,12 +650,18 @@ onMounted(() => {
               {{ officeCliInstallResult.message }}
             </p>
             <p v-if="error" class="onboarding__error">{{ error }}</p>
-            <p
+            <DiagnosticDetails
               v-if="nodeInstallResult && !nodeInstallResult.ok && nodeInstallResult.logPath"
-              class="onboarding__log-path"
-            >
-              安装日志：{{ nodeInstallResult.logPath }}
-            </p>
+              :text="nodeInstallResult.logPath"
+            />
+            <DiagnosticDetails
+              v-if="openCodeInstallResult && !openCodeInstallResult.ok && openCodeInstallResult.logPath"
+              :text="openCodeInstallResult.logPath"
+            />
+            <DiagnosticDetails
+              v-if="officeCliInstallResult && !officeCliInstallResult.ok && officeCliInstallResult.logPath"
+              :text="officeCliInstallResult.logPath"
+            />
             <button
               v-if="nodeInstallResult && !nodeInstallResult.ok && nodeInstallResult.manualUrl"
               type="button"
@@ -668,7 +676,7 @@ onMounted(() => {
               class="btn-secondary btn-sm"
               @click="openExternal(openCodeInstallResult.manualUrl)"
             >
-              查看 OpenCode 安装说明
+              查看安装说明
             </button>
             <button
               v-if="officeCliInstallResult && !officeCliInstallResult.ok && officeCliInstallResult.manualUrl"
@@ -711,7 +719,7 @@ onMounted(() => {
 
               <template v-if="isOfficial">
                 <p class="hint-line">
-                  经公司 Token 网关调用官方模型（DeepSeek / GLM / Qwen 等，以网关列表为准），费用从账户余额扣除；无需自备上游 API Key。
+                  使用官方模型，费用从账户余额扣除，无需自备 Key。
                 </p>
                 <div class="active-banner">
                   <Icon name="info" :size="14" />
@@ -719,7 +727,7 @@ onMounted(() => {
                     官方通道需要登录。请先登录，登录后即可开通。
                   </span>
                   <span v-else-if="!snapshot?.officialProvisioned">
-                    已登录。请开通官方通道以获取网关凭证。
+                    已登录。请开通官方通道。
                   </span>
                   <span v-else>官方通道已开通。</span>
                   <button
@@ -744,7 +752,7 @@ onMounted(() => {
                   </button>
                 </div>
                 <p v-if="authHint" class="hint-line">{{ authHint }}</p>
-                <p v-if="modelsDisabled" class="hint-line">开通后从网关加载可选模型</p>
+                <p v-if="modelsDisabled" class="hint-line">开通后加载可选模型</p>
 
                 <div class="onboarding__grid2">
                   <div>
@@ -776,7 +784,7 @@ onMounted(() => {
 
               <template v-else>
                 <p class="hint-line">
-                  使用自备 OpenAI 兼容接口（含自备 DeepSeek 等），不经公司网关计费。可在
+                  使用你自己的模型接口。费用由模型服务商收取，不从官方余额扣除。可在
                   <button
                     type="button"
                     class="onboarding__link"
@@ -833,8 +841,7 @@ onMounted(() => {
                 <label class="settings-checkbox">
                   <input v-model="form.customModelSupportsImage" type="checkbox" />
                   <span>
-                    默认/轻量模型支持读图（多模态）
-                    <span class="muted">勾选后 OpenCode 才允许 Read 图片</span>
+                    允许识别图片（需所选模型支持图片）
                   </span>
                 </label>
               </template>
@@ -842,7 +849,7 @@ onMounted(() => {
 
             <div class="onboarding__section-head">
               <p class="onboarding__section-label">
-                {{ isOfficial ? '搜索服务 · R1 探索需要' : '搜索 API（Tavily）· R1 探索需要' }}
+                搜索服务
               </p>
               <button
                 v-if="!isOfficial"
@@ -877,7 +884,7 @@ onMounted(() => {
                 </button>
               </div>
               <p class="hint-line">
-                自定义通道需自备 Tavily Key。免费用户每月约 1000 次调用。前往
+                费用由 Tavily 按其价格收取。前往
                 <button
                   type="button"
                   class="onboarding__link"
@@ -899,7 +906,7 @@ onMounted(() => {
 
             <div class="onboarding__section-head">
               <p class="onboarding__section-label">
-                {{ isOfficial ? '官方 Places Key · R3 地图发现' : 'Google Places API Key · R3 地图发现（可选）' }}
+                {{ isOfficial ? '官方 Places Key' : '自备 Places Key（可选）' }}
               </p>
               <button
                 v-if="!isOfficial"
@@ -933,9 +940,9 @@ onMounted(() => {
                   {{ showPlacesKey ? '隐藏' : '显示' }}
                 </button>
               </div>
-              <p class="hint-line">当前 R3 使用：自备 Places Key</p>
+              <p class="hint-line">需要能访问 Google 的网络。</p>
               <p class="hint-line">
-                仅 R3 地图发现需要；R1/R2 可不填。Key 在
+                仅地图发现需要。费用由 Google 按其价格收取。
                 <button
                   type="button"
                   class="onboarding__link"
@@ -943,7 +950,6 @@ onMounted(() => {
                 >
                   Google Cloud Console
                 </button>
-                创建，须启用 <strong>Places API (New)</strong>。申请步骤见
                 <button
                   type="button"
                   class="onboarding__link"
@@ -951,10 +957,6 @@ onMounted(() => {
                 >
                   帮助文档
                 </button>
-                。
-              </p>
-              <p class="hint-line">
-                请求由本机直连 Google 服务。你须在<strong>合法合规、可访问 Google 服务</strong>的网络环境中使用，并遵守当地法规与 Google 政策。自定义模型通道才填写这把 Key。
               </p>
             </div>
             <p v-if="keysMessage" class="onboarding__ok">{{ keysMessage }}</p>

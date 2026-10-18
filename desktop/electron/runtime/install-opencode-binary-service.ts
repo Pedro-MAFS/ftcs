@@ -35,10 +35,6 @@ async function appendLog(logPath: string, chunk: string): Promise<void> {
   await fs.promises.appendFile(logPath, chunk, 'utf8')
 }
 
-function withLogHint(message: string, logPath: string): string {
-  return `${message}（日志：${logPath}）`
-}
-
 async function readOpenCodeVersion(exe: string): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync(exe, ['--version'], {
@@ -59,7 +55,7 @@ async function verifyOpenCodeBinary(
     (await readOpenCodeVersion(exe)) ?? OPENCODE_BINARY_INSTALL.version
   if (!version) {
     await appendLog(logPath, `verify: --version failed for ${exe}\n`)
-    return { ok: false, detail: '无法读取 OpenCode 版本（--version 失败）' }
+    return { ok: false, detail: '组件未能运行。请重新安装后再检测。' }
   }
   await appendLog(logPath, `verify: ok ${version} at ${exe}\n`)
   return { ok: true, version }
@@ -81,7 +77,7 @@ export async function installOpenCodeBinaryRuntime(options?: {
     return {
       ok: false,
       code: 'busy',
-      message: 'OpenCode 正在准备中，请稍候',
+      message: '智能体服务正在安装，请稍候',
       manualUrl,
     }
   }
@@ -90,13 +86,13 @@ export async function installOpenCodeBinaryRuntime(options?: {
     return {
       ok: false,
       code: 'unsupported-platform',
-      message: '当前仅支持 Windows 64 位一键准备 OpenCode CLI',
+      message: '当前仅支持 Windows 64 位一键安装',
       manualUrl,
     }
   }
 
   installing = true
-  emit('checking', '正在检查 OpenCode CLI…')
+  emit('checking', '正在检查智能体服务…')
 
   const tmpRoot = path.join(app.getPath('temp'), 'ftcs-opencode-binary')
   const zipPath = path.join(tmpRoot, `opencode-download-${Date.now()}.zip`)
@@ -116,7 +112,7 @@ export async function installOpenCodeBinaryRuntime(options?: {
       if (existing) {
         const verified = await verifyOpenCodeBinary(existing.exe, logPath)
         if (verified.ok) {
-          const message = `OpenCode CLI ${verified.version} 已在应用目录中就绪，无需重复下载。`
+          const message = '智能体服务已就绪。'
           emit('done', message)
           return {
             ok: true,
@@ -131,7 +127,7 @@ export async function installOpenCodeBinaryRuntime(options?: {
       }
     }
 
-    emit('downloading', '正在下载 OpenCode CLI…')
+    emit('downloading', '正在下载…')
     let usedUrl = ''
     try {
       const { url } = await downloadOpenCodeBinaryZip(
@@ -161,10 +157,7 @@ export async function installOpenCodeBinaryRuntime(options?: {
       return {
         ok: false,
         code: 'network',
-        message: withLogHint(
-          `下载失败（已试 Gitee 与 GitHub）：${msg}`,
-          logPath,
-        ),
+        message: '下载未完成。请重试，或查看安装说明。',
         logPath,
         manualUrl,
       }
@@ -179,10 +172,7 @@ export async function installOpenCodeBinaryRuntime(options?: {
       return {
         ok: false,
         code: 'checksum',
-        message: withLogHint(
-          '下载文件校验失败（SHA256 不符），未写入应用目录。请重试或按说明手动下载同一 zip。',
-          logPath,
-        ),
+        message: '安装包校验未通过。请重试。',
         logPath,
         manualUrl,
       }
@@ -200,7 +190,7 @@ export async function installOpenCodeBinaryRuntime(options?: {
       return {
         ok: false,
         code: 'extract-failed',
-        message: withLogHint(`解压失败：${msg}`, logPath),
+        message: '安装未完成。请重试。',
         logPath,
         manualUrl,
       }
@@ -221,26 +211,26 @@ export async function installOpenCodeBinaryRuntime(options?: {
       return {
         ok: false,
         code: 'write-failed',
-        message: withLogHint(`写入配置失败：${msg}`, logPath),
+        message: '安装未完成。请重试。',
         logPath,
         manualUrl,
       }
     }
 
-    emit('verifying', '正在验证 OpenCode CLI…')
+    emit('verifying', '正在检查组件…')
     const verified = await verifyOpenCodeBinary(destExe, logPath)
     if (!verified.ok) {
       emit('failed', '验证失败')
       return {
         ok: false,
         code: 'verify-failed',
-        message: withLogHint(verified.detail, logPath),
+        message: '组件未能运行。请重新安装后再检测。',
         logPath,
         manualUrl,
       }
     }
 
-    const message = `OpenCode CLI ${OPENCODE_BINARY_INSTALL.version} 已准备到本应用目录，可立即使用。`
+    const message = '智能体服务已安装，可以继续。'
     emit('done', message)
     await appendLog(logPath, `[done] ${message}\n`)
 
@@ -260,7 +250,7 @@ export async function installOpenCodeBinaryRuntime(options?: {
     return {
       ok: false,
       code: 'unknown',
-      message: withLogHint(`准备失败：${msg}`, logPath),
+      message: '安装未完成。请重试。',
       logPath,
       manualUrl,
     }

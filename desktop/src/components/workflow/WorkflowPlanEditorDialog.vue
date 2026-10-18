@@ -210,7 +210,7 @@ onUnmounted(() => {
             class="text-input"
             type="text"
             maxlength="40"
-            placeholder="例如：仅 R1 探索"
+            placeholder="例如：仅全网搜索"
             :readonly="isView"
             :disabled="!isView && saving"
           />

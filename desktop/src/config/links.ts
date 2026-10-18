@@ -36,6 +36,8 @@ export const PRODUCT_LINKS = {
   hunter: 'https://hunter.io/',
   /** Hunter API Keys 管理页 */
   hunterApiKeys: 'https://hunter.io/api-keys',
+  /** Hunter 服务条款（只放链接，不转述正文） */
+  hunterTerms: 'https://hunter.io/terms-of-service',
 } as const
 
 export type ProductLinkId = keyof typeof PRODUCT_LINKS

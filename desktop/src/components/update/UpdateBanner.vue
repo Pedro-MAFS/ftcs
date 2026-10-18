@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import DiagnosticDetails from '../shared/DiagnosticDetails.vue'
+import { UPDATE_CHECK_FAILED, UPDATE_FAILED } from '../../config/user-facing'
 import { useUpdateCheck } from '../../composables/useUpdateCheck'
 
 const {
@@ -14,6 +17,16 @@ const {
   installUpdate,
   deferUpdate,
 } = useUpdateCheck()
+
+const checkDiagnostic = computed(() => {
+  const raw = result.value.message.trim()
+  return raw && raw !== UPDATE_CHECK_FAILED ? raw : ''
+})
+
+const downloadDiagnostic = computed(() => {
+  const raw = downloadState.value.message.trim()
+  return raw && raw !== UPDATE_FAILED ? raw : ''
+})
 </script>
 
 <template>
@@ -28,7 +41,8 @@ const {
   >
     <template v-if="bannerMode === 'check-error'">
       <div class="update-banner__main">
-        <strong class="update-banner__title">{{ result.message }}</strong>
+        <strong class="update-banner__title">{{ UPDATE_CHECK_FAILED }}</strong>
+        <DiagnosticDetails v-if="checkDiagnostic" :text="checkDiagnostic" />
       </div>
       <div class="update-banner__actions">
         <button type="button" class="btn-primary btn-sm" @click="retryCheck">重试</button>
@@ -114,7 +128,8 @@ const {
 
     <template v-else-if="bannerMode === 'download-failed'">
       <div class="update-banner__main">
-        <strong class="update-banner__title">{{ downloadState.message }}</strong>
+        <strong class="update-banner__title">{{ UPDATE_FAILED }}</strong>
+        <DiagnosticDetails v-if="downloadDiagnostic" :text="downloadDiagnostic" />
       </div>
       <div class="update-banner__actions">
         <button type="button" class="btn-primary btn-sm" @click="retryDownload">重试</button>

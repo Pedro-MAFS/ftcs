@@ -8,13 +8,14 @@ export function countEligibleR2Queries(expansion: {
   return expansion.search_queries.filter(isEligibleR2Query).length
 }
 
+const ROUND_TITLES: Record<string, string> = {
+  R1: '全网搜索',
+  R2: '社媒发现',
+  R3: '地图发现',
+  R4: '规划中',
+}
+
 export function exploreRunTitle(rounds: string[]): string {
-  if (rounds.length === 1) {
-    const round = rounds[0]
-    if (round === 'R1') return 'R1 广撒网'
-    if (round === 'R2') return 'R2 社媒发现'
-    if (round === 'R3') return 'R3 地图发现'
-    if (round === 'R4') return 'R4 规划中'
-  }
-  return rounds.join('+') || '探索任务'
+  if (rounds.length === 0) return '探索任务'
+  return rounds.map((round) => ROUND_TITLES[round] ?? round).join(' + ')
 }

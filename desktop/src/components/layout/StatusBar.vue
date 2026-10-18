@@ -21,7 +21,7 @@ const shortPath = computed(() => {
       <span>last run —</span>
     </div>
     <div class="status-bar__right">
-      <span>main · Electron + OpenCode</span>
+      <span>桌面版</span>
     </div>
   </footer>
 </template>

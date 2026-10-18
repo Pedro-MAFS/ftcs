@@ -156,6 +156,7 @@ export interface EnvProbeItem {
   label: string
   status: EnvProbeStatus
   detail: string
+  diagnostic?: string
   installUrl?: string
   optional?: boolean
 }

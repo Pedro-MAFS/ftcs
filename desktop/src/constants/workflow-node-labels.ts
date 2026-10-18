@@ -2,9 +2,9 @@ import type { AgentPreflightKind, WorkflowNodeId } from '../types/electron'
 
 export const WORKFLOW_NODE_LABELS: Record<WorkflowNodeId, string> = {
   'expand-keywords': '扩展关键词',
-  'discover-r1': 'R1 广撒网',
-  'discover-r2': 'R2 社媒发现',
-  'discover-r3': 'R3 地图发现',
+  'discover-r1': '全网搜索',
+  'discover-r2': '社媒发现',
+  'discover-r3': '地图发现',
   'score-and-dedupe': '评分去重',
   'enrich-lead-contacts': '批量补全联系人',
   'draft-outreach-email': '批量起草开发信',

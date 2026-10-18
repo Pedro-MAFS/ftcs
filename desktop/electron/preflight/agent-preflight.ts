@@ -72,15 +72,13 @@ function mcpOk(
 ): { ok: boolean; detail?: string } {
   const item = servers.find((s) => s.name === name)
   if (!item) {
-    return { ok: false, detail: `未在 OpenCode 中发现 MCP「${name}」` }
+    return { ok: false, detail: '服务未就绪，请稍后或重启应用' }
   }
   const status = (item.status || '').toLowerCase()
-  if (status === 'connected') return { ok: true, detail: status }
+  if (status === 'connected') return { ok: true, detail: '已连接' }
   return {
     ok: false,
-    detail: item.error
-      ? `${item.status}：${item.error}`
-      : `状态为 ${item.status || 'unknown'}（需要 connected）`,
+    detail: '服务未就绪，请稍后或重启应用',
   }
 }
 
@@ -96,15 +94,16 @@ export async function runAgentPreflight(
   if (ctx.isAgentRunning()) {
     checks.push({
       id: 'agent-idle',
-      label: '无其它 Agent 任务',
+      label: '其它任务',
       ok: false,
       detail: '请等待当前任务结束',
     })
   } else {
     checks.push({
       id: 'agent-idle',
-      label: '无其它 Agent 任务',
+      label: '其它任务',
       ok: true,
+      detail: '没有其它任务在运行',
     })
   }
 
@@ -119,19 +118,19 @@ export async function runAgentPreflight(
   if (!runtime || runtimeState !== 'running' || !hasClient || !healthy) {
     checks.push({
       id: 'opencode',
-      label: 'OpenCode 运行时',
+      label: '智能体服务',
       ok: false,
       detail:
         runtimeState === 'starting'
           ? '正在启动，请稍候再试'
-          : '未就绪。请到设置页确认本机已安装 OpenCode，或点击「重启 OpenCode」',
+          : '服务未就绪，请稍后或重启应用',
     })
   } else {
     checks.push({
       id: 'opencode',
-      label: 'OpenCode 运行时',
+      label: '智能体服务',
       ok: true,
-      detail: 'healthy',
+      detail: '已就绪',
     })
   }
 
@@ -166,7 +165,7 @@ export async function runAgentPreflight(
     if (settings.channelMode === 'official') {
       searchOk = Boolean(settings.officialProvisioned)
       searchDetail = searchOk
-        ? '官方通道 · 搜索复用网关凭证'
+        ? '官方通道已包含搜索'
         : '探索需要搜索。请先登录并开通官方通道（设置 → 模型通道）'
     } else {
       searchOk = settings.tavilyApiKeySet
@@ -188,7 +187,7 @@ export async function runAgentPreflight(
   const leadStore = mcpOk(mcpServers, 'lead-store')
   checks.push({
     id: 'mcp-lead-store',
-    label: 'MCP lead-store',
+      label: '线索服务',
     ok: leadStore.ok,
     detail: leadStore.detail,
   })
@@ -197,7 +196,7 @@ export async function runAgentPreflight(
     const searchApi = mcpOk(mcpServers, 'search-api')
     checks.push({
       id: 'mcp-search-api',
-      label: 'MCP search-api',
+      label: '搜索服务',
       ok: searchApi.ok,
       detail: searchApi.detail,
     })
@@ -207,11 +206,11 @@ export async function runAgentPreflight(
     const chrome = mcpOk(mcpServers, 'chrome-devtools')
     checks.push({
       id: 'mcp-chrome',
-      label: 'MCP chrome-devtools',
+      label: '浏览器',
       ok: chrome.ok,
       detail: chrome.ok
         ? chrome.detail
-        : `${chrome.detail || '未连接'}。请确认本机已安装 Google Chrome，并在设置中查看 MCP 状态`,
+        : '服务未就绪，请稍后或重启应用',
     })
   }
 
@@ -219,14 +218,14 @@ export async function runAgentPreflight(
     const places = await preparePlacesForPreflight()
     checks.push({
       id: 'places',
-      label: 'Google Places（R3）',
+      label: '地图发现',
       ok: places.ok,
       detail: places.detail,
     })
     const placesApi = mcpOk(mcpServers, 'places-api')
     checks.push({
       id: 'mcp-places-api',
-      label: 'MCP places-api',
+      label: '地图服务',
       ok: placesApi.ok,
       detail: placesApi.detail,
     })
@@ -243,7 +242,7 @@ export async function runAgentPreflight(
     const hunterApi = mcpOk(mcpServers, 'hunter-api')
     checks.push({
       id: 'mcp-hunter-api',
-      label: 'MCP hunter-api',
+      label: '联系人服务',
       ok: hunterApi.ok,
       detail: hunterApi.detail,
     })
@@ -261,7 +260,7 @@ export async function runAgentPreflight(
   const lines = failed.map((c) => `· ${c.label}：${c.detail || '未通过'}`)
   return {
     ok: false,
-    message: `环境未就绪，请先完成配置后再启动 AI 任务：\n${lines.join('\n')}`,
+    message: `还有步骤没准备好。请按下面的说明处理后再试。\n${lines.join('\n')}`,
     checks,
   }
 }

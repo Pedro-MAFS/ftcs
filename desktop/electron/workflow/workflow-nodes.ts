@@ -31,7 +31,7 @@ export const WORKFLOW_NODE_CATALOG: readonly WorkflowNodeDef[] = [
   },
   {
     id: 'discover-r1',
-    label: 'R1 广撒网',
+    label: '全网搜索',
     skill: 'discover-leads',
     preflightSkill: 'discover-leads',
     executeVia: 'startExploreR1',
@@ -39,7 +39,7 @@ export const WORKFLOW_NODE_CATALOG: readonly WorkflowNodeDef[] = [
   },
   {
     id: 'discover-r2',
-    label: 'R2 社媒发现',
+    label: '社媒发现',
     skill: 'discover-leads-r2',
     preflightSkill: 'discover-leads-r2',
     executeVia: 'startExploreR2',
@@ -47,7 +47,7 @@ export const WORKFLOW_NODE_CATALOG: readonly WorkflowNodeDef[] = [
   },
   {
     id: 'discover-r3',
-    label: 'R3 地图发现',
+    label: '地图发现',
     skill: 'discover-leads-r3',
     preflightSkill: 'discover-leads-r3',
     executeVia: 'startExploreR3',

@@ -722,12 +722,12 @@ export class AgentRunController {
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string; expansion?: KeywordExpansion }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const profile = loadProfile(productId)
@@ -946,12 +946,12 @@ export class AgentRunController {
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string; scored?: ScoredLeadsArtifact }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const profile = loadProfile(productId)
@@ -1160,12 +1160,12 @@ export class AgentRunController {
     options?: { leadIds?: string[] },
   ): Promise<{ ok: boolean; message: string; emailDrafts?: EmailDraftsArtifact }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const profile = loadProfile(productId)
@@ -1417,12 +1417,12 @@ export class AgentRunController {
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string; recipientKey?: string }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const productId = options.productId.trim()
@@ -1658,12 +1658,12 @@ export class AgentRunController {
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string; recipientKey?: string }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const productId = options.productId.trim()
@@ -1887,12 +1887,12 @@ export class AgentRunController {
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const productId = options.productId.trim()
@@ -2107,12 +2107,12 @@ export class AgentRunController {
     },
   ): Promise<{ ok: boolean; message: string; explorationRun?: ExplorationRun }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     let client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const profile = loadProfile(productId)
@@ -2136,11 +2136,7 @@ export class AgentRunController {
       : isR2
         ? 'discover-leads-r2'
         : 'discover-leads'
-    const roundName = isR3
-      ? 'R3 地图发现'
-      : isR2
-        ? 'R2 社媒发现'
-        : 'R1 广撒网'
+    const roundName = isR3 ? '地图发现' : isR2 ? '社媒发现' : '全网搜索'
     const rounds = isR3 ? ['R3'] : isR2 ? ['R2'] : ['R1']
     const availableCount = isR3
       ? expansion.search_queries.filter(
@@ -2154,10 +2150,10 @@ export class AgentRunController {
     if (availableCount === 0) {
       throw new Error(
         isR3
-          ? 'expansion.json 中没有 R3 地图发现词，请重新扩展关键词'
+          ? '当前没有地图发现词，请重新扩展关键词'
           : isR2
-            ? 'expansion.json 中没有带站点的 R2 搜索词，请重新扩展关键词'
-            : 'expansion.json 中没有 R1 轮次的搜索词',
+            ? '当前社媒发现词没有指定站点，请重新扩展关键词'
+            : '当前没有全网搜索词，请编辑关键词后重试',
       )
     }
     // 未传 maxQueries 时按当前轮次可用词数全量执行（不再默认截断为 10）
@@ -2175,7 +2171,7 @@ export class AgentRunController {
           await this.hooks.reloadRuntime?.()
           client = this.getClient()
           if (!client) {
-            throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+            throw new Error('服务未就绪，请稍后或重启应用')
           }
         }
       } catch (err) {
@@ -2269,7 +2265,7 @@ export class AgentRunController {
       kind: 'system',
       time: nowTime(),
       title: '系统',
-      body: `准备为 ${productId}（${profile.companyName || '未命名'}）执行 ${roundName} · 最多 ${maxQueries} 词（可用 ${availableCount}）· 每次搜索 ${searchNumResults} 条${isR3 ? ` · 地图每次 ${placesResultLimit} 条` : ''}`,
+      body: `准备为 ${profile.companyName?.trim() || '当前产品'} 执行 ${roundName}。`,
     })
     timeline.addPrefix({
       id: 'user-discover',
@@ -2495,12 +2491,12 @@ export class AgentRunController {
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string; profile?: ProductProfileDetail }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     this.running = true
@@ -2918,7 +2914,7 @@ export class AgentRunController {
         kind: 'error',
         time: nowTime(),
         title: '事件订阅失败',
-        body: `${this.autoAbortReason}\n任务已中止，请检查 OpenCode 运行时状态后重试。`,
+        body: `${this.autoAbortReason}\n任务已中止。请稍后或重启应用后再试。`,
       })
       flush()
       void client.session.abort({ sessionID: sessionId }).catch(() => undefined)

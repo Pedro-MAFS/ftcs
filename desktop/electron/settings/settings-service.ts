@@ -596,7 +596,7 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
 
   return {
     ok: true,
-    message: '配置已保存。正在重启 OpenCode 使模型与密钥生效…',
+    message: '配置已保存。',
     settings: getSettingsSnapshot(),
   }
 }

@@ -69,14 +69,14 @@ async function restartOpenCode(): Promise<void> {
 }
 
 async function reconnectMcp(name: string): Promise<string | null> {
-  if (!window.ftcs?.reconnectMcp) return '当前环境不支持 MCP 重连'
+  if (!window.ftcs?.reconnectMcp) return '暂不支持重新连接，请重启应用'
   loading.value = true
   try {
     const res = await window.ftcs.reconnectMcp(name)
     status.value = res.status
     if (!res.ok) {
-      error.value = res.message
-      return res.message
+      error.value = '暂不支持重新连接，请重启应用'
+      return '暂不支持重新连接，请重启应用'
     }
     error.value = ''
     return null
@@ -96,15 +96,15 @@ const runtimeState = computed(
 const runtimeHealthy = computed(() => Boolean(status.value?.opencodeHealthy))
 
 const runtimeLabel = computed(() => {
-  if (runtimeHealthy.value && runtimeState.value === 'running') return 'OpenCode ready'
+  if (runtimeHealthy.value && runtimeState.value === 'running') return '服务已就绪'
   const map: Record<string, string> = {
-    idle: 'OpenCode idle',
-    starting: 'OpenCode starting',
-    running: 'OpenCode running',
-    error: 'OpenCode error',
-    stopped: 'OpenCode stopped',
+    idle: '服务空闲',
+    starting: '服务启动中',
+    running: '服务运行中',
+    error: '服务异常',
+    stopped: '服务已停止',
   }
-  return map[runtimeState.value] ?? 'OpenCode'
+  return map[runtimeState.value] ?? '服务未就绪'
 })
 
 const mcpServers = computed(() => status.value?.mcpServers ?? [])

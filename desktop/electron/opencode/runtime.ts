@@ -249,7 +249,7 @@ export class OpenCodeRuntime {
   async reconnectMcp(name: string): Promise<{ ok: boolean; message: string }> {
     const client = this.client
     if (!client || this.status.state !== 'running') {
-      return { ok: false, message: 'OpenCode 未运行，无法重连 MCP' }
+      return { ok: false, message: '暂不支持重新连接，请重启应用' }
     }
     const serverName = name.trim()
     if (!serverName) {

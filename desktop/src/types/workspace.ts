@@ -78,7 +78,7 @@ export const SECTION_META: Record<
   explore: {
     label: '探索',
     title: '获客探索',
-    subtitle: '探索任务由画像驱动，扩展关键词后即可启用 R1',
+    subtitle: '探索任务由画像驱动，扩展关键词后即可开始找客户',
   },
   leads: {
     label: '线索',
@@ -93,7 +93,7 @@ export const SECTION_META: Record<
   settings: {
     label: '设置',
     title: '设置',
-    subtitle: '模型通道 · 搜索 API · 工作区 · OpenCode',
+    subtitle: '模型通道 · 搜索 · 工作区 · 运行状态',
   },
 }
 

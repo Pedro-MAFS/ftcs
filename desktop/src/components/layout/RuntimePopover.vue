@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../shared/Icon.vue'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
+import DiagnosticDetails from '../shared/DiagnosticDetails.vue'
 import { useAppStatus } from '../../composables/useAppStatus'
 import { useSettingsNav } from '../../composables/useSettingsNav'
 
@@ -50,11 +51,18 @@ const statusClass = computed(() => {
 })
 
 const healthLabel = computed(() => {
-  if (runtimeHealthy.value && runtimeState.value === 'running') return 'healthy'
-  if (runtimeState.value === 'starting') return 'starting'
-  if (runtimeState.value === 'error') return 'error'
-  if (runtimeState.value === 'stopped') return 'stopped'
-  return runtimeState.value
+  if (runtimeHealthy.value && runtimeState.value === 'running') return '正常'
+  if (runtimeState.value === 'starting') return '启动中'
+  if (runtimeState.value === 'error') return '异常'
+  if (runtimeState.value === 'stopped') return '已停止'
+  return '未就绪'
+})
+
+const healthTone = computed(() => {
+  if (runtimeHealthy.value && runtimeState.value === 'running') return 'ok'
+  if (runtimeState.value === 'starting') return 'warn'
+  if (runtimeState.value === 'error') return 'err'
+  return ''
 })
 
 const baseUrlLine = computed(() => {
@@ -75,16 +83,19 @@ const canStop = computed(
 )
 const canRestart = computed(() => !loading.value && runtimeState.value !== 'starting')
 
-const chipExtra = computed(() => {
-  if (runtimeState.value !== 'running' || mcpTotalCount.value === 0) return ''
-  if (mcpConnectedCount.value < mcpTotalCount.value) {
-    return ` · MCP ${mcpConnectedCount.value}/${mcpTotalCount.value}`
+const runtimeDiagnostic = computed(() => {
+  const lines: string[] = []
+  if (baseUrlLine.value && baseUrlLine.value !== '—') lines.push(baseUrlLine.value)
+  if (status.value?.opencode?.error) lines.push(status.value.opencode.error)
+  for (const item of mcpServers.value) {
+    const desc = item.error || mcpDesc(item.name)
+    lines.push(`${item.name} ${item.status} ${desc}`)
   }
-  return ''
+  return lines.join('\n')
 })
 
 function mcpDesc(name: string): string {
-  return MCP_META[name] || 'MCP 服务'
+  return MCP_META[name] || '服务'
 }
 
 function mcpOk(statusText: string): boolean {
@@ -153,7 +164,7 @@ async function onReconnect(name: string): Promise<void> {
   reconnecting.value = name
   actionMessage.value = ''
   const err = await reconnectMcp(name)
-  actionMessage.value = err || `${name} 已重连`
+  actionMessage.value = err || '已重新连接'
   reconnecting.value = ''
 }
 
@@ -188,11 +199,11 @@ onUnmounted(() => {
       :class="statusClass"
       :aria-expanded="open"
       aria-haspopup="dialog"
-      title="OpenCode 运行时"
+      title="运行状态"
       @click="toggle"
     >
       <i class="oc-status__dot" />
-      <span>{{ runtimeLabel }}{{ chipExtra }}</span>
+      <span>{{ runtimeLabel }}</span>
       <Icon name="chevron-down" :size="12" class="oc-status__chevron" />
     </button>
 
@@ -200,27 +211,23 @@ onUnmounted(() => {
       v-if="open"
       class="runtime-popover__panel"
       role="dialog"
-      aria-label="OpenCode 运行时"
+      aria-label="运行状态"
     >
       <div class="runtime-popover__head">
         <div class="runtime-popover__head-row">
-          <span class="runtime-popover__title">OpenCode 运行时</span>
+          <span class="runtime-popover__title">运行状态</span>
           <span
             class="runtime-popover__badge"
             :class="{
-              ok: healthLabel === 'healthy',
-              err: healthLabel === 'error',
-              warn: healthLabel === 'starting',
+              ok: healthTone === 'ok',
+              err: healthTone === 'err',
+              warn: healthTone === 'warn',
             }"
           >
             <i class="oc-status__dot" />
             {{ healthLabel }}
           </span>
         </div>
-        <p class="runtime-popover__url mono">{{ baseUrlLine }}</p>
-        <p v-if="status?.opencode?.error" class="runtime-popover__err">
-          {{ status.opencode.error }}
-        </p>
       </div>
 
       <div class="runtime-popover__actions">
@@ -253,9 +260,13 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <div class="runtime-popover__mcp">
+      <p v-if="!mcpServers.length" class="runtime-popover__mcp-empty muted">
+        服务未就绪，请稍后或重启应用
+      </p>
+      <details class="diag-details runtime-popover__mcp">
+        <summary>诊断信息</summary>
         <div class="runtime-popover__mcp-head">
-          <span>MCP 服务</span>
+          <span>服务连接</span>
           <button
             type="button"
             class="runtime-popover__link-btn"
@@ -266,7 +277,6 @@ onUnmounted(() => {
             刷新状态
           </button>
         </div>
-
         <ul v-if="mcpServers.length" class="runtime-popover__mcp-list">
           <li v-for="item in mcpServers" :key="item.name" class="runtime-popover__mcp-row">
             <i
@@ -274,15 +284,8 @@ onUnmounted(() => {
               :class="{ ok: mcpOk(item.status), err: !mcpOk(item.status) }"
             />
             <div class="runtime-popover__mcp-meta">
-              <span class="mono">{{ item.name }}</span>
-              <span class="muted">{{ item.error || mcpDesc(item.name) }}</span>
+              <span>{{ mcpDesc(item.name) }}</span>
             </div>
-            <span
-              class="runtime-popover__mcp-badge"
-              :class="{ ok: mcpOk(item.status) }"
-            >
-              {{ item.status }}
-            </span>
             <button
               v-if="!mcpOk(item.status)"
               type="button"
@@ -294,16 +297,18 @@ onUnmounted(() => {
             </button>
           </li>
         </ul>
-        <p v-else class="runtime-popover__mcp-empty muted">
-          OpenCode 未就绪或 MCP 尚未连接
-        </p>
-      </div>
+        <DiagnosticDetails
+          v-if="runtimeDiagnostic"
+          title="连接详情"
+          :text="runtimeDiagnostic"
+        />
+      </details>
 
       <div class="runtime-popover__foot">
         <span class="muted">
           {{
             agentRunning
-              ? '有 Agent 任务在运行，停止将中断当前任务'
+              ? '当前有任务正在运行，停止后任务会被中断。'
               : actionMessage || '运行中停止需确认'
           }}
         </span>
@@ -315,8 +320,8 @@ onUnmounted(() => {
 
     <ConfirmDialog
       :open="confirmStop"
-      title="停止 OpenCode？"
-      message="当前有 Agent 任务正在运行，停止后任务将被中断。确定继续？"
+      title="停止智能体服务？"
+      message="当前有任务正在运行，停止后任务会被中断。确定继续？"
       confirm-label="停止"
       danger
       :busy="loading"

@@ -218,7 +218,7 @@ export async function provisionOfficialChannel(input?: {
   const listed = await listModels({ apiKey: rotate.apiKey, baseUrl })
   let message =
     rotate.action === 'rotated' || reset
-      ? '网关凭证已更新（旧 Key 已作废）。'
+      ? '凭证已更新，旧凭证已失效。'
       : '官方通道已开通。'
 
   if (listed.ok) {
@@ -232,7 +232,7 @@ export async function provisionOfficialChannel(input?: {
     if (listed.code === 'empty_models') {
       message =
         rotate.action === 'rotated' || reset
-          ? `网关凭证已更新（旧 Key 已作废）。${listed.message}`
+          ? `凭证已更新，旧凭证已失效。${listed.message}`
           : listed.message
     } else {
       message += ` 模型列表未更新：${listed.message}`
@@ -370,7 +370,7 @@ export async function openOfficialRecharge(): Promise<OpenOfficialRechargeResult
     loginMessage: '请先登录后再充值',
     invalidUrlMessage: '无法打开充值页：地址无效',
     protocolMessage: '无法打开充值页：仅支持 http(s)',
-    originMismatchMessage: '无法打开充值页：网关地址异常',
+    originMismatchMessage: '无法打开充值页，请重试',
     browserMessage: '无法打开浏览器，请检查系统默认浏览器设置',
     successMessage: '已在浏览器打开充值页',
     logTag: 'recharge',
@@ -387,7 +387,7 @@ export async function openOfficialPortal(): Promise<OpenOfficialPortalResult> {
     loginMessage: '请先登录后再查看账户详情',
     invalidUrlMessage: '无法打开账户面板：地址无效',
     protocolMessage: '无法打开账户面板：仅支持 http(s)',
-    originMismatchMessage: '无法打开账户面板：网关地址异常',
+    originMismatchMessage: '无法打开账户面板，请重试',
     browserMessage: '无法打开浏览器，请检查系统默认浏览器设置',
     successMessage: '已在浏览器打开账户面板',
     logTag: 'portal',
