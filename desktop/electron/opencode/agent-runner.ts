@@ -57,6 +57,23 @@ import {
   formatDiscoverPlacesLimits,
   formatDiscoverSearchLimits,
 } from '../explore/discover-search-limits'
+import {
+  armAwaitingReplyNotification,
+  disarmAwaitingReplyNotification,
+} from '../notify/task-done-notify'
+import {
+  AwaitingReplyCoordinator,
+  type AwaitingQuestionClient,
+  type AwaitingReplyView,
+  type ReplyQuestionResult,
+  buildV1QuestionRejectCall,
+  buildV1QuestionReplyCall,
+  buildV2QuestionRejectCall,
+  buildV2QuestionReplyCall,
+  classifyQuestionHttpResult,
+  formatQuestionToolCard,
+  resolveAwaitingReplyTimeoutMs,
+} from './awaiting-reply'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -94,6 +111,10 @@ export type AgentEventPayload =
       explorationRun?: ExplorationRun
       scored?: ScoredLeadsArtifact
       emailDrafts?: EmailDraftsArtifact
+    }
+  | {
+      type: 'awaiting-reply'
+      pending: AwaitingReplyView | null
     }
 
 export type AgentEventSink = (event: AgentEventPayload) => void
@@ -559,6 +580,18 @@ function toolPartToTimelineItem(part: ToolPart): AgentTimelineItem {
   if (state.status === 'error') {
     detailParts.push(`错误:\n${state.error || '调用失败'}`)
   }
+  const questionCard = formatQuestionToolCard(part.tool, status)
+  if (questionCard) {
+    return {
+      id: `tool-${part.id}`,
+      kind: 'tool',
+      time: nowTime(),
+      title: questionCard.title,
+      body: questionCard.body,
+      status,
+      collapsed: true,
+    }
+  }
   const body = detailParts.join('\n\n') || '执行中…'
   return {
     id: `tool-${part.id}`,
@@ -674,11 +707,49 @@ export class AgentRunController {
   /** 本次 R3 用的是官方 Key 时，Google 拒绝只查一次状态。 */
   private watchPlacesGoogleRejection = false
   private placesRejectionHandled = false
+  private currentEmit: AgentEventSink | null = null
+  private currentFlush: (() => void) | null = null
+  private awaitTimelineSeq = 0
+  private readonly awaitingReply: AwaitingReplyCoordinator
 
   constructor(
     private readonly getClient: () => OpencodeClient | null,
     private readonly hooks: AgentRunHooks = {},
-  ) {}
+  ) {
+    this.awaitingReply = new AwaitingReplyCoordinator({
+      timeoutMs: () =>
+        resolveAwaitingReplyTimeoutMs(process.env.FTCS_AWAITING_REPLY_TIMEOUT_MS),
+      schedule: (ms, cb) => {
+        const timer = setTimeout(cb, ms)
+        return { clear: () => clearTimeout(timer) }
+      },
+      emit: (pending) => {
+        this.currentEmit?.({ type: 'awaiting-reply', pending })
+      },
+      timeline: (body) => {
+        this.awaitTimelineSeq += 1
+        this.timeline?.addSuffix({
+          id: `await-reply-${this.awaitTimelineSeq}`,
+          kind: 'system',
+          time: nowTime(),
+          title: '系统',
+          body,
+        })
+        this.currentFlush?.()
+      },
+      logReject: (info) => {
+        console.warn('[ftcs:await-reply] reject', info)
+      },
+      client: () => this.questionClient(),
+      performSessionAbort: () => this.abortCurrent(),
+      onSlotCreated: () => {
+        armAwaitingReplyNotification()
+      },
+      onSlotCleared: () => {
+        disarmAwaitingReplyNotification()
+      },
+    })
+  }
 
   private async failForPlacesGoogleRejection(googleMessage: string): Promise<void> {
     let message = googleMessage
@@ -706,6 +777,7 @@ export class AgentRunController {
   }
 
   async abortCurrent(): Promise<void> {
+    await this.awaitingReply.endForAbort()
     this.abort?.abort()
     const client = this.getClient()
     if (client && this.sessionId) {
@@ -714,6 +786,93 @@ export class AgentRunController {
       } catch {
         // ignore
       }
+    }
+  }
+
+  replyToPendingQuestion(input: unknown): Promise<ReplyQuestionResult> {
+    return this.awaitingReply.reply(input)
+  }
+
+  private questionClient(): AwaitingQuestionClient | null {
+    const client = this.getClient()
+    if (!client) return null
+    return {
+      replyV1: async (requestID, answers) => {
+        try {
+          const res = await client.question.reply(buildV1QuestionReplyCall(requestID, answers))
+          return classifyQuestionHttpResult({
+            error: res.error,
+            data: res.data,
+            status: res.response?.status,
+            protocol: 'v1',
+          })
+        } catch (error) {
+          return classifyQuestionHttpResult({
+            error,
+            data: undefined,
+            status: undefined,
+            protocol: 'v1',
+          })
+        }
+      },
+      replyV2: async (sessionID, requestID, answers) => {
+        try {
+          const res = await client.v2.session.question.reply(
+            buildV2QuestionReplyCall(sessionID, requestID, answers),
+          )
+          return classifyQuestionHttpResult({
+            error: res.error,
+            data: res.data,
+            status: res.response?.status,
+            protocol: 'v2',
+          })
+        } catch (error) {
+          return classifyQuestionHttpResult({
+            error,
+            data: undefined,
+            status: undefined,
+            protocol: 'v2',
+          })
+        }
+      },
+      rejectV1: async (requestID) => {
+        try {
+          const res = await client.question.reject(buildV1QuestionRejectCall(requestID))
+          return classifyQuestionHttpResult({
+            error: res.error,
+            data: res.data,
+            status: res.response?.status,
+            protocol: 'v1',
+          })
+        } catch (error) {
+          return classifyQuestionHttpResult({
+            error,
+            data: undefined,
+            status: undefined,
+            protocol: 'v1',
+          })
+        }
+      },
+      rejectV2: async (sessionID, requestID) => {
+        try {
+          const res = await client.v2.session.question.reject(
+            buildV2QuestionRejectCall(sessionID, requestID),
+          )
+          return classifyQuestionHttpResult({
+            error: res.error,
+            data: res.data,
+            status: res.response?.status,
+            protocol: 'v2',
+          })
+        } catch (error) {
+          return classifyQuestionHttpResult({
+            error,
+            data: undefined,
+            status: undefined,
+            protocol: 'v2',
+          })
+        }
+      },
     }
   }
 
@@ -840,6 +999,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -1053,6 +1213,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -1307,6 +1468,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -1542,6 +1704,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -1779,6 +1942,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -2027,6 +2191,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -2307,6 +2472,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -2608,6 +2774,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -2817,7 +2984,11 @@ export class AgentRunController {
     timeline: TimelineBuilder,
     flush: () => void,
     userPrompt: string,
+    emit: AgentEventSink,
   ): { stop: () => void } {
+    this.currentEmit = emit
+    this.currentFlush = flush
+    this.awaitingReply.resume()
     let stopped = false
     const messageRoles = new Map<string, Message['role']>()
     let retrySince = 0
@@ -2953,6 +3124,29 @@ export class AgentRunController {
             .reply({ requestID: event.properties.id, reply: 'always' })
             .catch(() => undefined)
           return
+
+        case 'question.asked':
+        case 'question.v2.asked': {
+          if (event.properties.sessionID !== sessionId) return
+          const side = event.type === 'question.asked' ? 'v1' : 'v2'
+          void this.awaitingReply.ingest(
+            sessionId,
+            side,
+            event.properties.id,
+            event.properties.questions,
+          )
+          return
+        }
+
+        case 'question.replied':
+        case 'question.rejected':
+        case 'question.v2.replied':
+        case 'question.v2.rejected': {
+          if (event.properties.sessionID !== sessionId) return
+          const side = event.type.startsWith('question.v2.') ? 'v2' : 'v1'
+          this.awaitingReply.noteSettled(sessionId, side, event.properties.requestID)
+          return
+        }
 
         case 'message.updated': {
           if (event.properties.sessionID !== sessionId) return
@@ -3192,6 +3386,7 @@ export class AgentRunController {
       stop: () => {
         stopped = true
         disarmWatchdog()
+        this.awaitingReply.dispose()
         // US-ST-02: 停止时 flush 最后一帧
         flushNow()
       },

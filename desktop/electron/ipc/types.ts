@@ -72,6 +72,7 @@ export const IPC = {
   WORKFLOW_SAVE_PLAN: 'workflow:save-plan',
   WORKFLOW_DELETE_PLAN: 'workflow:delete-plan',
   AGENT_EVENT: 'agent:event',
+  AGENT_REPLY_QUESTION: 'agent:reply-question',
   APP_OPEN_EXTERNAL: 'app:open-external',
   AUTH_GET_SESSION: 'auth:get-session',
   AUTH_LOGIN: 'auth:login',
@@ -999,6 +1000,28 @@ export type AgentTimelineItem = {
   collapsed?: boolean
 }
 
+export type AwaitingReplyQuestion = {
+  header: string
+  question: string
+  multiple: boolean
+  custom: boolean
+  options: Array<{ label: string; description: string }>
+}
+
+export type AwaitingUserReply = {
+  questions: AwaitingReplyQuestion[]
+  renderable: boolean
+} | null
+
+export interface ReplyQuestionInput {
+  selections: Array<{ optionLabels: string[]; customText: string }>
+}
+
+export interface ReplyQuestionResult {
+  ok: boolean
+  message: string
+}
+
 export type AgentEventPayload =
   | {
       type: 'state'
@@ -1021,6 +1044,10 @@ export type AgentEventPayload =
       explorationRun?: ExplorationRunDto
       scored?: ScoredLeadsSummaryDto
       emailDrafts?: EmailDraftsSummaryDto
+    }
+  | {
+      type: 'awaiting-reply'
+      pending: AwaitingUserReply
     }
 
 export type OpenCodeRuntimeState = 'idle' | 'starting' | 'running' | 'error' | 'stopped'

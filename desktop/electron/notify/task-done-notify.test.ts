@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import { describe, it, beforeEach } from 'node:test'
 import {
   resolveTaskDoneNotificationEnabled,
+  shouldShowAwaitingReplyNotification,
   shouldShowTaskDoneNotification,
   truncateTaskDoneNotifyBody,
+  AWAITING_REPLY_NOTIFY_BODY,
   setWorkflowNotifySuppressed,
   isWorkflowNotifySuppressed,
   resetWorkflowNotifySuppressedForTests,
@@ -84,6 +86,35 @@ describe('task-done-notify-logic', () => {
       }),
       true,
     )
+  })
+
+  it('等待回复通知：未聚焦可弹，前台不弹，抑制闸门不生效，开关关闭不弹', () => {
+    assert.equal(AWAITING_REPLY_NOTIFY_BODY, '任务在等你回复')
+    const base = {
+      enabled: true,
+      suppressed: true,
+      supported: true,
+      window: { isFocused: false, isMinimized: false },
+    }
+    assert.equal(shouldShowAwaitingReplyNotification(base), true)
+    assert.equal(
+      shouldShowAwaitingReplyNotification({
+        ...base,
+        suppressed: false,
+        window: { isFocused: true, isMinimized: false },
+      }),
+      false,
+    )
+    assert.equal(
+      shouldShowAwaitingReplyNotification({
+        ...base,
+        window: { isFocused: true, isMinimized: true },
+      }),
+      true,
+    )
+    assert.equal(shouldShowAwaitingReplyNotification({ ...base, enabled: false }), false)
+    assert.equal(shouldShowAwaitingReplyNotification({ ...base, supported: false }), false)
+    assert.equal(shouldShowAwaitingReplyNotification({ ...base, window: null }), false)
   })
 
   it('编排抑制 flag', () => {
