@@ -328,7 +328,6 @@ function onTreeBlankContext(event: MouseEvent) {
       <Icon name="folder" :size="14" class="library-type-icon" />
       <div class="library-meta">
         <div class="library-title">资料库</div>
-        <div class="muted">data/library/files</div>
       </div>
     </div>
 

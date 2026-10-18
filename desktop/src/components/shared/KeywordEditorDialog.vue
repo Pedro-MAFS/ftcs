@@ -245,7 +245,7 @@ onUnmounted(() => {
               <tr>
                 <th class="kw-col-query">搜索词</th>
                 <th class="kw-col-dim">维度</th>
-                <th class="kw-col-round">轮次</th>
+                <th class="kw-col-round">方式</th>
                 <th class="kw-col-site">站点</th>
                 <th class="kw-col-pri">优先级</th>
                 <th class="kw-col-act" />

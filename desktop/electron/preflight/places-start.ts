@@ -1,6 +1,7 @@
 import type { SettingsSnapshot } from '../settings/settings-service'
 import {
   BYOK_PLACES_DETAIL,
+  CUSTOM_PLACES_MISSING_MESSAGE,
   NO_PLACES_KEY_MESSAGE,
   OFFICIAL_PLACES_DETAIL,
   placesSourceForChannel,
@@ -73,7 +74,7 @@ export function resolvePlacesStart(
     ok: false,
     detail:
       placesSourceForChannel(settings.channelMode) === 'custom'
-        ? '请在设置 → 探索填写自备 Places Key（仅 R3 需要）。'
+        ? CUSTOM_PLACES_MISSING_MESSAGE
         : NO_PLACES_KEY_MESSAGE,
   }
 }

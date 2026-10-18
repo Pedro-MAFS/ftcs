@@ -1148,8 +1148,14 @@ onUnmounted(() => {
       />
 
       <p class="library-hint muted">
-        <Icon name="info" :size="14" />
-        资料保存在 data/library/。Ctrl 点选、Shift 范围选；F2 或右键可重命名；拖到另一夹移动。勾选文件夹后生成时纳入该夹下全部文件与网站。双击书签用浏览器打开。Ctrl+V 粘贴到焦点目录。生成画像时再分配产品 ID。
+        <button
+          type="button"
+          class="help-link-btn"
+          aria-label="资料库操作说明"
+          title="Ctrl 点选、Shift 范围选；F2 或右键可重命名；拖到另一夹移动。勾选文件夹后，生成时纳入该夹下全部文件与网站。双击书签用浏览器打开。Ctrl+V 粘贴到焦点目录。"
+        >
+          <Icon name="help-circle" :size="14" />
+        </button>
       </p>
     </div>
 

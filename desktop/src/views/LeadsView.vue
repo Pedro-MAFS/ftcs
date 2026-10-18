@@ -18,7 +18,7 @@ import WorkflowPlanEditorDialog from '../components/workflow/WorkflowPlanEditorD
 import WorkflowSchedulePanel from '../components/workflow/WorkflowSchedulePanel.vue'
 import LeadDetailDrawer from '../components/shared/LeadDetailDrawer.vue'
 import type { LeadRowDto, LeadsSnapshotDto, WorkflowPlan } from '../types/electron'
-import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonDisplay } from '../utils/leads-export'
+import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonScreen } from '../utils/leads-export'
 import { parseCompanyDomain } from '../utils/parse-company-domain'
 
 const meta = SECTION_META.leads
@@ -525,7 +525,7 @@ async function onScoreClick(): Promise<void> {
     return
   }
   if (generating.value) {
-    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    actionMessage.value = '已有任务在运行，请稍候'
     return
   }
 
@@ -558,7 +558,7 @@ async function onScoreClick(): Promise<void> {
 async function startDraftEmails(leadIds?: string[]): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.draftEmails) return
   if (generating.value || isDrafting.value) {
-    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    actionMessage.value = '已有任务在运行，请稍候'
     return
   }
 
@@ -633,7 +633,7 @@ function canEnrichLead(lead: LeadRowDto): boolean {
 async function startEnrichContacts(leadIds: string[]): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.enrichLeadContacts) return
   if (generating.value || isDrafting.value || isEnriching.value) {
-    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    actionMessage.value = '已有任务在运行，请稍候'
     return
   }
   const targets = leadIds.map((id) => id.trim()).filter(Boolean)
@@ -1146,9 +1146,9 @@ onUnmounted(() => {
             </span>
             <span
               class="table-cell leads-table__reason"
-              :title="matchReasonDisplay(row) || row.matchReason"
+              :title="matchReasonScreen(row) || row.matchReason"
             >
-              {{ matchReasonDisplay(row) || '—' }}
+              {{ matchReasonScreen(row) || '—' }}
             </span>
             <span class="table-cell leads-table__actions">
               <button

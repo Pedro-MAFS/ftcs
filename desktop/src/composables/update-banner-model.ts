@@ -91,9 +91,9 @@ export function resolveSettingsUpdateActions(input: UpdateUiInput): SettingsUpda
   } else if (win && dl.phase === 'ready' && version) {
     line = `已下载 ${version}`
   } else if (checkFailed) {
-    line = check.message
-  } else if (win && dl.phase === 'failed' && dl.message) {
-    line = dl.message
+    line = '检查更新失败，请重试或前往官网下载'
+  } else if (win && dl.phase === 'failed') {
+    line = '更新失败，请重试或前往官网下载'
   } else if (input.manualChecked && check.ok && check.hasUpdate && win && version) {
     line = `发现新版本 ${version}，正在后台下载`
   } else if (input.manualChecked && check.ok && check.hasUpdate && !win) {

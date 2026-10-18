@@ -44,8 +44,8 @@ onMounted(async () => {
     <ConfirmDialog
       :open="gatewayResetPromptOpen"
       title="检测到账号已切换"
-      message="当前登录账号与上次不同。若已开通官方通道，本地网关凭证可能仍绑定上一账号，模型与搜索扣费会记到旧账号。是否立即重置网关凭证？"
-      confirm-label="重置网关凭证"
+      message="当前登录账号与上次不同。若已开通官方通道，本机上的旧凭证可能仍绑定上一账号，模型与搜索费用会记到旧账号。是否立即重置凭证？"
+      confirm-label="重置凭证"
       cancel-label="暂不重置"
       danger
       :busy="gatewayResetBusy"

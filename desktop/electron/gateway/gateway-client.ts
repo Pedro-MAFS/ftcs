@@ -132,19 +132,19 @@ function userMessage(code: GatewayHttpErrorCode, fallback: string): string {
     case 'account_disabled':
       return '账户已禁用，请联系运营'
     case 'invalid_name':
-      return '网关 Key 名称无效'
+      return '凭证无效，请重置凭证'
     case 'conflict':
       return '开通冲突，请稍后重试'
     case 'invalid_api_key':
-      return '网关凭证无效或已失效，请重置网关凭证'
+      return '凭证无效或已失效，请重置凭证'
     case 'key_disabled':
-      return '网关 Key 已禁用，请重置或联系运营'
+      return '凭证已停用，请重置凭证或联系客服'
     case 'network':
-      return '无法连接 Token 网关，请检查网关地址与网络'
+      return '暂时联系不上官方服务，请检查网络后重试'
     case 'empty_models':
-      return '开通成功，但暂无可用模型。请联系运营检查价目与白名单'
+      return '开通成功，但暂时没有可选模型。请稍后重试。'
     default:
-      return fallback || '网关请求失败'
+      return fallback || '操作失败，请重试'
   }
 }
 
@@ -217,7 +217,7 @@ export async function rotateKey(input: {
       return {
         ok: false,
         code: 'unknown',
-        message: '网关未返回 api_key',
+        message: '操作失败，请重试',
         httpStatus: res.status,
       }
     }
@@ -493,7 +493,7 @@ export async function createRechargeTicket(input: {
       return {
         ok: false,
         code: 'unknown',
-        message: '无法打开充值页：网关未返回有效 ticket',
+        message: '无法打开充值页，请重试',
         httpStatus: res.status,
       }
     }

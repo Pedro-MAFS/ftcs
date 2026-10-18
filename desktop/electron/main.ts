@@ -645,7 +645,7 @@ function registerIpcHandlers(): void {
       ok: runtime.getStatus().state === 'running',
       message:
         runtime.getStatus().state === 'running'
-          ? 'OpenCode 已启动'
+          ? '服务已启动'
           : runtime.getStatus().error || '启动失败',
       status: await buildAppStatus(),
     }
@@ -654,7 +654,7 @@ function registerIpcHandlers(): void {
     if (!runtime) {
       return {
         ok: true,
-        message: 'OpenCode 未运行',
+        message: '服务未就绪，请稍后或重启应用',
         status: await buildAppStatus(),
       }
     }
@@ -664,7 +664,7 @@ function registerIpcHandlers(): void {
     await runtime.stop()
     return {
       ok: true,
-      message: 'OpenCode 已停止',
+      message: '服务已停止',
       status: await buildAppStatus(),
     }
   })
@@ -683,7 +683,7 @@ function registerIpcHandlers(): void {
     if (!runtime) {
       return {
         ok: false,
-        message: 'OpenCode 未初始化',
+        message: '暂不支持重新连接，请重启应用',
         status: await buildAppStatus(),
       }
     }
@@ -1719,7 +1719,7 @@ function registerIpcHandlers(): void {
 
       return {
         ok: true,
-        message: `正在为 ${productId} 启动 R1 探索…`,
+        message: '正在准备…',
         productId,
       }
     } catch (err) {
@@ -1762,7 +1762,7 @@ function registerIpcHandlers(): void {
 
       return {
         ok: true,
-        message: `正在为 ${productId} 启动 R2 社媒发现…`,
+        message: '正在准备…',
         productId,
       }
     } catch (err) {
@@ -1805,7 +1805,7 @@ function registerIpcHandlers(): void {
 
       return {
         ok: true,
-        message: `正在为 ${productId} 启动 R3 地图发现…`,
+        message: '正在准备…',
         productId,
       }
     } catch (err) {

@@ -358,6 +358,7 @@ function emailStatusLabel(status: string): string {
   if (status === 'hunter_invalid') return '无效'
   if (status === 'hunter_unknown') return '未知'
   if (status === 'hunter_unverified') return '未验证'
+  if (status.startsWith('hunter_')) return '未知'
   return status || '—'
 }
 
@@ -742,7 +743,7 @@ onUnmounted(() => {
                     <input v-model="row.lastName" type="text" />
                   </label>
                   <label>
-                    <span>email_status</span>
+                    <span>邮箱状态</span>
                     <select v-model="row.emailStatus">
                       <option value="hunter_unverified">未验证</option>
                       <option value="hunter_unknown">未知</option>

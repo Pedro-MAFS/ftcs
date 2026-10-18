@@ -16,6 +16,8 @@ export interface EnvProbeItem {
   label: string
   status: EnvProbeStatus
   detail: string
+  /** 版本、路径等排障信息，只在诊断信息里展示 */
+  diagnostic?: string
   installUrl?: string
   optional?: boolean
 }
@@ -176,7 +178,7 @@ export const TOUR_STEPS = [
     title: '画像生成',
     desc: 'Agent 抽取产品画像',
     detail:
-      '在「画像」页启动生成。系统会用 chrome-devtools 打开网站并整理公司/产品/买家画像。环境未就绪时会先弹出预检说明。',
+      '在「画像」页启动生成。系统会打开网站并整理公司、产品和买家画像。环境未就绪时会先弹出预检说明。',
   },
   {
     id: 'keywords',
@@ -184,15 +186,14 @@ export const TOUR_STEPS = [
     title: '关键字扩展',
     desc: '大模型生成搜索词',
     detail:
-      '画像就绪后，在画像页扩展搜索关键词。由大模型根据画像与获客目标生成五维 query，再经 keywords_save 落盘，供后续 R1 探索使用。',
+      '根据画像自动生成搜索关键词。',
   },
   {
     id: 'explore',
     route: 'explore',
-    title: 'R1 线索探索',
+    title: '开始找客户',
     desc: '搜索 + 打开网页核验',
-    detail:
-      '在「探索」页启动 R1。需要 Tavily 等搜索 Key，以及可用的 Chrome。可配置最多探索词数。',
+    detail: '在「探索」页开始找客户。需要可用的搜索和 Chrome。',
   },
   {
     id: 'score',
@@ -200,7 +201,7 @@ export const TOUR_STEPS = [
     title: '评分与去重',
     desc: '筛选高意向线索',
     detail:
-      '探索完成后，在线索或探索页执行评分去重，得到 high / medium / low 分层结果。',
+      '探索完成后，在线索或探索页执行评分去重，得到高、中、低三档结果。',
   },
   {
     id: 'draft',

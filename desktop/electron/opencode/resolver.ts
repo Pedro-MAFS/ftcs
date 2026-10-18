@@ -27,12 +27,7 @@ export async function ensureOpenCodeOnPath(): Promise<string> {
     if (fromPath) return fromPath
   }
 
-  throw new Error(
-    [
-      '未找到 OpenCode CLI。',
-      '请在应用引导中一键准备 OpenCode，或设置环境变量 FTCS_OPENCODE_PATH。',
-    ].join('\n'),
-  )
+  throw new Error('智能体服务未就绪。请点「一键安装」，或查看安装说明后再检测。')
 }
 
 function prependPathDir(dir: string): void {

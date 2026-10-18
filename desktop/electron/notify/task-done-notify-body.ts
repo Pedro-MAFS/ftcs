@@ -39,9 +39,9 @@ function isDiscoverSkill(skill: string): boolean {
 export function taskLabelForNotify(skill: string, message: string): string {
   if (skill === 'extract-product-profile') return '产品画像'
   if (skill === 'expand-keywords') return '关键词扩展'
-  if (skill === 'discover-leads') return 'R1 广撒网'
-  if (skill === 'discover-leads-r2') return 'R2 社媒发现'
-  if (skill === 'discover-leads-r3') return 'R3 地图发现'
+  if (skill === 'discover-leads') return '全网搜索'
+  if (skill === 'discover-leads-r2') return '社媒发现'
+  if (skill === 'discover-leads-r3') return '地图发现'
   if (skill === 'score-and-dedupe') return '评分去重'
   if (skill === 'enrich-lead-contacts') return '补全联系人'
   if (skill === 'translate-outreach-email') return '中文对照'
@@ -85,6 +85,13 @@ function truncateReason(raw: string, max = 40): string {
   const value = raw.trim()
   if (!value) return '详见应用内时间线'
   if (PATH_HINT.test(value)) return '详见应用内时间线'
+  if (
+    /OpenCode|\bMCP\b|discover-|keywords_save|hunter_|(^|[^A-Za-z0-9])R[1-4]([^A-Za-z0-9]|$)/.test(
+      value,
+    )
+  ) {
+    return '详见应用内时间线'
+  }
   const chars = [...value]
   if (chars.length <= max) return value
   return `${chars.slice(0, max).join('')}…`
@@ -102,15 +109,15 @@ function formatSuccessBody(skill: string, message: string): string {
 
   if (skill === 'discover-leads') {
     const n = parseLeadCount(message)
-    return n != null ? `R1 广撒网已完成（线索 ${n}）` : 'R1 广撒网已完成'
+    return n != null ? `全网搜索已完成（线索 ${n}）` : '全网搜索已完成'
   }
   if (skill === 'discover-leads-r2') {
     const n = parseLeadCount(message)
-    return n != null ? `R2 社媒发现已完成（线索 ${n}）` : 'R2 社媒发现已完成'
+    return n != null ? `社媒发现已完成（线索 ${n}）` : '社媒发现已完成'
   }
   if (skill === 'discover-leads-r3') {
     const n = parseLeadCount(message)
-    return n != null ? `R3 地图发现已完成（线索 ${n}）` : 'R3 地图发现已完成'
+    return n != null ? `地图发现已完成（线索 ${n}）` : '地图发现已完成'
   }
 
   if (skill === 'score-and-dedupe') {

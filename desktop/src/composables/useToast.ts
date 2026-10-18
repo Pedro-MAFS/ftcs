@@ -1,4 +1,5 @@
 import { readonly, ref } from 'vue'
+import { splitUserText } from '../config/user-facing'
 
 export type ToastTone = 'info' | 'success' | 'error'
 
@@ -6,6 +7,7 @@ export interface ToastItem {
   id: number
   message: string
   tone: ToastTone
+  diagnostic?: string
 }
 
 const toasts = ref<ToastItem[]>([])
@@ -25,8 +27,17 @@ export function showToast(
   const id = ++seq
   const tone = options?.tone ?? 'info'
   const durationMs = options?.durationMs ?? TOAST_DEFAULT_MS
+  const shown = splitUserText(text)
 
-  toasts.value = [...toasts.value, { id, message: text, tone }].slice(-MAX_VISIBLE)
+  toasts.value = [
+    ...toasts.value,
+    {
+      id,
+      message: shown.text,
+      tone,
+      diagnostic: shown.diagnostic || undefined,
+    },
+  ].slice(-MAX_VISIBLE)
 
   const existing = timers.get(id)
   if (existing) clearTimeout(existing)

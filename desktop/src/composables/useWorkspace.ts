@@ -269,7 +269,7 @@ export function useWorkspace() {
 
   async function deleteProduct(id: string): Promise<{ ok: boolean; message: string }> {
     if (!window.ftcs?.deleteProfile) {
-      return { ok: false, message: '删除接口不可用' }
+      return { ok: false, message: '操作失败，请重试' }
     }
     const res = await window.ftcs.deleteProfile(id)
     if (!res.ok) return { ok: false, message: res.message }
@@ -302,7 +302,7 @@ export function useWorkspace() {
     productId?: string
   }> {
     if (!window.ftcs?.createDraftProfile) {
-      return { ok: false, message: '新建草稿接口不可用' }
+      return { ok: false, message: '操作失败，请重试' }
     }
     const res = await window.ftcs.createDraftProfile()
     if (!res.ok || !res.profile) {
@@ -348,13 +348,31 @@ export function useWorkspace() {
     agentMeta.value = []
   }
 
+  function productStatusLabel(): string {
+    const name =
+      activeProduct.value?.name?.trim() || activeProduct.value?.companyName?.trim() || ''
+    if (!name || name === activeProductId.value) return '当前产品'
+    return name
+  }
+
+  function leadStatusLabel(leadId: string): string {
+    const row = leadsSnapshot.value?.rows.find((item) => item.id === leadId)
+    const name = row?.companyName?.trim()
+    return name || '—'
+  }
+
+  function recipientStatusLabel(key: string): string {
+    if (key.trim() === 'company') return '公司'
+    return '—'
+  }
+
   function resetAgentForExpandKeywords(): void {
     agentSkill.value = 'expand-keywords'
     agentStatus.value = 'running'
     resetTimelineView()
     agentMeta.value = [
       { label: '状态', value: '扩展中', tone: 'accent' },
-      { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
+      { label: '产品', value: productStatusLabel() },
       { label: '来源', value: '画像' },
     ]
     updatePipelineFromProfile()
@@ -381,7 +399,7 @@ export function useWorkspace() {
     agentMeta.value = [
       { label: '状态', value: '评分中', tone: 'accent' },
       { label: '原始', value: rawCount != null ? String(rawCount) : '—' },
-      { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
+      { label: '产品', value: productStatusLabel() },
     ]
     updatePipelineFromProfile()
   }
@@ -393,7 +411,7 @@ export function useWorkspace() {
     agentMeta.value = [
       { label: '状态', value: '起草中', tone: 'accent' },
       { label: '目标', value: targetCount != null ? String(targetCount) : '—' },
-      { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
+      { label: '产品', value: productStatusLabel() },
     ]
     updatePipelineFromProfile()
   }
@@ -404,9 +422,9 @@ export function useWorkspace() {
     resetTimelineView()
     agentMeta.value = [
       { label: '状态', value: '翻译对照中', tone: 'accent' },
-      { label: '线索', value: leadId.slice(0, 18) || '—' },
-      { label: '槽', value: recipientKey.slice(0, 18) || 'company' },
-      { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
+      { label: '线索', value: leadStatusLabel(leadId) },
+      { label: '收件人', value: recipientStatusLabel(recipientKey) },
+      { label: '产品', value: productStatusLabel() },
     ]
     updatePipelineFromProfile()
   }
@@ -416,8 +434,7 @@ export function useWorkspace() {
     verifyEmails: boolean,
   ): void {
     const ids = Array.isArray(leadIds) ? leadIds : [leadIds]
-    const label =
-      ids.length === 1 ? ids[0].slice(0, 18) || '—' : `${ids.length} 条`
+    const label = ids.length === 1 ? leadStatusLabel(ids[0] || '') : `${ids.length} 条`
     agentSkill.value = 'enrich-lead-contacts'
     agentStatus.value = 'running'
     resetTimelineView()
@@ -425,7 +442,7 @@ export function useWorkspace() {
       { label: '状态', value: '补全中', tone: 'accent' },
       { label: '线索', value: label },
       { label: '验邮', value: verifyEmails ? '是' : '否' },
-      { label: '产品', value: activeProductId.value.slice(0, 18) || '—' },
+      { label: '产品', value: productStatusLabel() },
     ]
     updatePipelineFromProfile()
   }

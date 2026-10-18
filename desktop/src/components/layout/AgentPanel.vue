@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import Icon from '../shared/Icon.vue'
 import { useWorkspace } from '../../composables/useWorkspace'
 import type { AgentTimelineItem } from '../../types/workspace'
@@ -14,6 +14,21 @@ const {
   toggleTimelineExpand,
   isTimelineExpanded,
 } = useWorkspace()
+
+const SKILL_LABELS: Record<string, string> = {
+  'extract-product-profile': '画像生成',
+  'expand-keywords': '关键词扩展',
+  'discover-leads': '全网搜索',
+  'discover-leads-r2': '社媒发现',
+  'discover-leads-r3': '地图发现',
+  'score-and-dedupe': '评分去重',
+  'enrich-lead-contacts': '补全联系人',
+  'draft-outreach-email': '起草开发信',
+  'translate-outreach-email': '翻译对照',
+  idle: '空闲',
+}
+
+const skillLabel = computed(() => SKILL_LABELS[agentSkill.value] || '任务')
 
 const timelineEl = ref<HTMLElement | null>(null)
 const composerHint = ref('')
@@ -46,7 +61,7 @@ function preview(body: string, max = 160): string {
 
 async function onSend(): Promise<void> {
   composerHint.value =
-    '当前暂不支持在对话区自由发送指令，请通过左侧流水线按钮启动对应 Agent 任务。'
+    '当前暂不支持在对话区自由发送指令，请通过左侧按钮启动对应任务。'
 }
 
 async function onAbort(): Promise<void> {
@@ -72,13 +87,13 @@ watch(
 </script>
 
 <template>
-  <aside class="agent-panel" aria-label="Agent">
+  <aside class="agent-panel" aria-label="智能体">
     <div class="agent-panel__head">
       <div class="agent-panel__title">
         <i class="agent-panel__pulse" :class="{ on: generating }" />
-        <span>Agent</span>
+        <span>智能体</span>
       </div>
-      <span class="agent-panel__skill">{{ agentSkill }}</span>
+      <span class="agent-panel__skill">{{ skillLabel }}</span>
     </div>
 
     <div class="agent-panel__meta">
@@ -126,7 +141,7 @@ watch(
       </div>
 
       <p v-if="!agentTimeline.length" class="agent-panel__empty">
-        {{ generating ? '任务启动中…' : '点击「生成画像」后，此处按时间顺序展示指令、思考、工具与回复' }}
+        {{ generating ? '任务启动中…' : '点击「生成画像」后，此处按时间顺序展示过程' }}
       </p>
     </div>
 
@@ -142,8 +157,10 @@ watch(
       <p v-if="composerHint" class="composer-hint" role="status">{{ composerHint }}</p>
       <div class="composer-actions">
         <span class="composer-skill">
-          Skill · {{ agentSkill }}
-          <template v-if="agentStatus !== 'idle'"> · {{ agentStatus }}</template>
+          {{ skillLabel }}
+          <template v-if="agentStatus === 'running'"> · 运行中</template>
+          <template v-else-if="agentStatus === 'done'"> · 完成</template>
+          <template v-else-if="agentStatus === 'error'"> · 异常</template>
         </span>
         <button
           v-if="generating"

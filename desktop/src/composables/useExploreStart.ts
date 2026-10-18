@@ -107,25 +107,25 @@ export function useExploreStart(options?: {
     if (generating.value || isLaunching.value) return '已有任务在运行'
     if (!hasKeywordsReady.value) return '请先完成关键词扩展'
     if (r1QueryCount.value > 0) return ''
-    return '当前没有 R1 搜索词，请编辑关键词后重试'
+    return '当前没有全网搜索词，请编辑关键词后重试'
   })
 
   const startR2DisabledReason = computed(() => {
     if (generating.value || isLaunching.value) return '已有任务在运行'
     if (!hasKeywordsReady.value) return '请先完成关键词扩展'
     if (r2QueryCount.value > 0) return ''
-    if (r2LegacyCount.value > 0) return '当前 R2 词没有站点，请重新扩展关键词'
-    return '没有可用的 R2 词。请在设置页启用社媒站点后重新扩展'
+    if (r2LegacyCount.value > 0) return '当前社媒发现词没有指定站点，请重新扩展关键词'
+    return '没有可用的社媒发现词。请在设置页启用社媒站点后重新扩展'
   })
 
   const startR3DisabledReason = computed(() => {
     if (generating.value || isLaunching.value) return '已有任务在运行'
     if (!hasKeywordsReady.value) return '请先完成关键词扩展'
     if (channelMode.value === 'custom' && !placesKeySet.value) {
-      return '请在设置 → 探索填写自备 Places Key（仅 R3 需要）'
+      return '请在设置 → 探索填写自备 Places Key（仅地图发现需要）。'
     }
     if (r3QueryCount.value > 0) return ''
-    return '当前没有 R3 地图发现词，请重新扩展关键词'
+    return '当前没有地图发现词，请重新扩展关键词'
   })
 
   const canStartSelected = computed(() => {

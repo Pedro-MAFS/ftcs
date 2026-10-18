@@ -30,9 +30,9 @@ export const PLACES_DISCOVERY_SNIPPET = '发现：Places 候选，经官网核�
 export const ARREARS_MESSAGE = '已欠费，请充值'
 export const REVOKED_MESSAGE = '请联系客服'
 export const NO_PLACES_KEY_MESSAGE =
-  '请在设置 → 探索申请官方 Places Key（仅 R3 需要）。'
+  '请在设置 → 探索申请官方 Places Key（仅地图发现需要）。'
 export const CUSTOM_PLACES_MISSING_MESSAGE =
-  '请在设置 → 探索填写自备 Places Key（仅 R3 需要）。'
+  '请在设置 → 探索填写自备 Places Key（仅地图发现需要）。'
 export const NETWORK_KEY_MESSAGE =
   '暂时联系不上官方服务，未能获取 Places Key。请稍后重试。'
 export const NEED_LOGIN_KEY_MESSAGE = '请先登录后再使用官方 Places Key。'

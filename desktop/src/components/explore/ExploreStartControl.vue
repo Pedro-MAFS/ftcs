@@ -29,15 +29,16 @@ function onRoundChange(event: Event): void {
 
 const runLabel = computed(() => {
   if (props.busy) return '探索中…'
-  if (props.round === 'R3') return '开始 R3'
-  return '开始探索'
+  if (props.round === 'R3') return '开始地图发现'
+  if (props.round === 'R2') return '开始社媒发现'
+  return '开始全网搜索'
 })
 
 const runTitle = computed(() => {
   if (props.disabled) return props.disabledReason
-  if (props.round === 'R3') return '按 R3 地图发现词执行 Places 获客'
-  if (props.round === 'R2') return '按当前选择执行社媒发现'
-  return '按当前选择执行广撒网'
+  if (props.round === 'R3') return '开始地图发现'
+  if (props.round === 'R2') return '开始社媒发现'
+  return '开始全网搜索'
 })
 </script>
 
@@ -47,12 +48,12 @@ const runTitle = computed(() => {
       class="text-input explore-start__round"
       :value="props.round"
       :disabled="props.busy"
-      aria-label="选择探索轮次"
+      aria-label="选择探索方式"
       @change="onRoundChange"
     >
-      <option value="R1">R1 广撒网</option>
-      <option value="R2">R2 社媒发现</option>
-      <option value="R3">R3 地图发现</option>
+      <option value="R1">全网搜索</option>
+      <option value="R2">社媒发现</option>
+      <option value="R3">地图发现</option>
     </select>
     <button
       type="button"
