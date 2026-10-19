@@ -32,9 +32,11 @@ import {
   listRawLeads,
   loadExplorationRun,
   loadScoredLeads,
+  matchAppendRawSkip,
   patchScoredLead,
   scoreAndDedupeLeads,
   setLeadCompanyIntelligence,
+  toCompanyIntelligenceSkipToolResult,
   updateExplorationRun,
 } from "./lead-storage.js";
 import { generateLeadId } from "./lead-id.js";
@@ -367,7 +369,7 @@ server.tool(
 
 server.tool(
   "lead_append_raw",
-  "Append one raw lead with company base fields and companyIntelligence (six portrait strings plus icebreak) in the same call. Validation failure does not write the row. Include run_id from exploration_start. Do not pass status, errorMessage, or markdown; the server sets status=ready.",
+  "Append one raw lead with company base fields and companyIntelligence (six portrait strings plus icebreak) in the same call. Validation failure does not write the row. If the company is already in the library, return skipped: true and message 「线索已存在」 without writing a row and without a validation error. Include run_id from exploration_start. Do not pass status, errorMessage, or markdown; the server sets status=ready.",
   {
     product_id: z.string(),
     round: z.enum(["R1", "R2", "R3", "R4"]),
@@ -397,6 +399,26 @@ server.tool(
               code: "NOT_FOUND",
               message: `Product not found: ${product_id}`,
             }),
+          },
+        ],
+      };
+    }
+
+    const skip = matchAppendRawSkip(
+      root,
+      product_id,
+      lead.company.website,
+      lead.source.url,
+    );
+    if (skip) {
+      console.error(
+        `[lead-store] lead_append_raw skipped product_id=${product_id} domain=${skip.domain} matched_lead_id=${skip.matched_lead_id}`,
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(skip, null, 2),
           },
         ],
       };
@@ -447,7 +469,7 @@ server.tool(
 
 server.tool(
   "lead_set_company_intelligence",
-  "Overwrite companyIntelligence on an existing lead from the current explore session. Does not create a lead, does not call a model, and does not change company, contacts, people, score, or lifecycle status. Same-domain re-hit only. Invalid fields set status=failed, restore the previous portrait text, and return an error.",
+  "Set companyIntelligence on an existing raw lead. If that lead is already in the library, skip: return skipped: true with message 「线索已存在」 and do not change any field. Overwrite the portrait only when the lead is still a raw lead and has not entered the library. Does not create a lead and does not call a model. Invalid fields on an overwrite set status=failed, restore the previous portrait text, and return an error.",
   {
     product_id: z.string(),
     lead_id: z.string(),
@@ -491,6 +513,19 @@ server.tool(
               code: result.message === "未找到线索" ? "NOT_FOUND" : "INVALID_COMPANY_INTELLIGENCE",
               message: result.message,
             }),
+          },
+        ],
+      };
+    }
+    if ("skipped" in result) {
+      console.error(
+        `[lead-store] lead_set_company_intelligence skipped product_id=${product_id} domain=${result.domain ?? ""} matched_lead_id=${result.matchedLeadId}`,
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(toCompanyIntelligenceSkipToolResult(result), null, 2),
           },
         ],
       };
