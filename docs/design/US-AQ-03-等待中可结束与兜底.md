@@ -136,7 +136,7 @@ export function decideAwaitingReplyTimeout(input: {
 1. `renderable !== true`，或 `questions` 为空 → `{ action: 'reject', reason: 'unrenderable' }`。
 2. 任一题 `multiple === true` → `{ action: 'reject', reason: 'multiple' }`。
 3. 任一题没有 `options`，或没有任何一个去空白后非空的首项可用（看的是 `options[0].label`）→ `{ action: 'reject', reason: 'no-options' }`。
-4. 否则 `{ action: 'reply', answers }`，`answers[i] = [questions[i].options[0].label]`。每题只取首项的 `label`，不取 `description`，不填自定义文本。`custom === true` 但首项 label 有效时，仍然走 reply，不因为有自定义输入就 reject。
+4. 否则 `{ action: 'reply', answers }`，`answers[i] = [questions[i].options[0].label]`。每题只取首项的 `label`，不取 `description`，不填自定义文本。可自填（`custom` 缺省或 `true`）但首项 label 有效时，仍然走 reply，不因为有自定义输入就 reject。
 
 计时器在主进程，用 `setTimeout`。不要放在渲染进程。建槽时启动；并槽不重置；换题、清槽、用户提交成功、进入 §3 时都 `clearTimeout`。
 
@@ -295,3 +295,4 @@ console.warn('[ftcs:await-reply] reject', {
 | 日期 | 说明 |
 |------|------|
 | 2026-10-18 | 初稿。结束顺序定为先 reject 再 `abortCurrent` 原有两步。超时常量 `AWAITING_REPLY_TIMEOUT_MS = 600_000`。AQ6a 不能默认时只 reject，发送失败才 abort |
+| 2026-10-19 | 超时决策不改。仅把「有自定义输入仍 reply」的条件从 `custom === true` 扩到缺省或 `true`（AQ2a）。10 分钟、先 reject 再 abort、权限 always 不改 |

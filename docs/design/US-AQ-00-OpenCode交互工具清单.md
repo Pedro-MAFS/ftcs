@@ -79,11 +79,11 @@ flowchart LR
 
 ## 3. 正式清单（四类）
 
-字段来自 SDK `QuestionInfo`、`QuestionV2Info`、`PermissionRequest`、`permission.v2.asked` 的 `properties`。`custom`、`multiple` 都是可选布尔。
+字段来自 SDK `QuestionInfo`、`QuestionV2Info`、`PermissionRequest`、`permission.v2.asked` 的 `properties`。`custom`、`multiple` 都是可选布尔。`multiple` 缺省视为单选。`custom` **缺省视为可自填**（等同 `true`，AQ2a）：界面默认出现「输入自己的答案」，样式与其它选项一致；仅 `custom === false`（显式关闭）时隐藏。展示与组答案见 US-AQ-01、US-AQ-02。
 
 | 类型 | 事件（同一条 Legacy 流） | 入参（`properties`） | 答复 / 出参 | 客户端 API（`@opencode-ai/sdk@1.18.1`） | 现网 | 本期处理 |
 |------|--------------------------|----------------------|-------------|----------------------------------------|------|----------|
-| **问答 `question`** | `question.asked` → `question.replied` / `question.rejected` | `id`, `sessionID`, `questions[]`, `tool?`。每题 `QuestionInfo`：`question`, `header`, `options[{label, description}]`, `multiple?`, `custom?` | 提交 `answers: string[][]`（每题一个 `string[]`，元素为所选 `label` 或自定义文本）。拒绝只带 `requestID`。`question.replied` 回带 `sessionID`, `requestID`, `answers`；`question.rejected` 回带 `sessionID`, `requestID` | `client.question.reply({ requestID, answers })` → `POST /question/{requestID}/reply`，成功 200 `boolean`。`client.question.reject({ requestID })` → `POST /question/{requestID}/reject`，成功 200 `boolean`。另有 `client.question.list()`，**本期不用于恢复待答** | **未处理** | **必须识别 + 渲染 + 提交 / 拒绝**。久不回复归 US-AQ-03 |
+| **问答 `question`** | `question.asked` → `question.replied` / `question.rejected` | `id`, `sessionID`, `questions[]`, `tool?`。每题 `QuestionInfo`：`question`, `header`, `options[{label, description}]`, `multiple?`, `custom?` | 提交 `answers: string[][]`（每题一个 `string[]`，元素为所选 `label` 或自定义文本）。拒绝只带 `requestID`。`question.replied` 回带 `sessionID`, `requestID`, `answers`；`question.rejected` 回带 `sessionID`, `requestID` | `client.question.reply({ requestID, answers })` → `POST /question/{requestID}/reply`，成功 200 `boolean`。`client.question.reject({ requestID })` → `POST /question/{requestID}/reject`，成功 200 `boolean`。另有 `client.question.list()`，**本期不用于恢复待答** | **未处理** | **必须识别 + 渲染 + 提交 / 拒绝**（`custom` 缺省展示「输入自己的答案」，仅 `false` 隐藏，见 AQ2a）。久不回复归 US-AQ-03 |
 | **问答 `question.v2`** | `question.v2.asked` → `question.v2.replied` / `question.v2.rejected` | 与上同构。`questions[]` 元素为 `QuestionV2Info`（字段同 `QuestionInfo`）。`tool?` 为 `QuestionV2Tool` | 同构：`QuestionV2Answer = string[]`，`QuestionV2Reply = { answers: QuestionV2Answer[] }` | **不是** `client.question.*`。`client.v2.session.question.reply({ sessionID, requestID, questionV2Reply: { answers } })` → `POST /api/session/{sessionID}/question/{requestID}/reply`，成功 204。`.reject({ sessionID, requestID })` → 同路径 `/reject`，成功 204。`client.v2.session.question.list({ sessionID })` **本期不用于恢复** | **未处理** | **与 v1 同等。禁止只认 v1** |
 | **权限 `permission`** | `permission.asked` → `permission.replied` | `id`, `sessionID`, `permission`, `patterns[]`, `metadata`, `always[]`, `tool?` | `reply: 'once' \| 'always' \| 'reject'` | `client.permission.reply({ requestID, reply })`。旧 `respond` 已弃用，现网未使用 | 收到 asked 后 **自动 `reply: 'always'`** | **已识别、自动 always**。不渲染确认弹窗 |
 | **权限 `permission.v2`** | `permission.v2.asked` → `permission.v2.replied` | `id`, `sessionID`, `action`, `resources[]`, `save?`, `metadata?`, `source?` | `PermissionV2Reply`: `'once' \| 'always' \| 'reject'` | 现网对这条事件 **仍调用上一行的** `client.permission.reply({ requestID, reply: 'always' })`，没有改走 `client.v2.session.permission.reply` | 同上，自动 `always` | **已识别、自动 always**。与 v1 写在同一张表里。本期不改调用 |
@@ -117,7 +117,7 @@ flowchart LR
 
 1. 一个会话同时只有一个待答槽。
 2. 槽里可以同时记下 `v1RequestId` 与 `v2RequestId`（哪侧没到就空着）。
-3. 后到的那侧若与先到的展示字段一致（题数相同，且每题 `header`、`question`、`multiple`、`custom`、`options.label` 按序相同），只补上另一侧的 id。不另画一张卡片，不重置 10 分钟计时，不第二次弹通知。
+3. 后到的那侧若与先到的展示字段一致（题数相同，且每题 `header`、`question`、`multiple`、`custom`、`options.label` 按序相同），只补上另一侧的 id。比较 `custom` 时，缺省与 `true` 都按可自填，只有显式 `false` 与它们不同。不另画一张卡片，不重置 10 分钟计时，不第二次弹通知。
 4. 后到的内容不一致：先对槽内已有各侧 `reject`（失败只打日志），再装入新提问并重新计时。避免旧题继续挂起。
 5. 提交、拒绝时，对槽里每一个非空 id 各调 **该侧自己的** API，答案相同。v2 必须包一层 `questionV2Reply: { answers }`。
 
@@ -148,6 +148,7 @@ flowchart LR
 - [ ] 问答事件写明挂在现有 `client.event.subscribe()` 上，同时识别 `question.asked` 与 `question.v2.asked`。
 - [ ] §4 四条备案没有被做成提问卡片。
 - [ ] 没有出现权限确认弹窗的设计。
+- [ ] 问答两类写明：`custom` 缺省可自填，展示「输入自己的答案」，样式与其它选项一致；仅显式 `custom === false` 隐藏。权限两行仍是「已识别、自动 always」。
 
 ---
 
@@ -177,3 +178,4 @@ flowchart LR
 | 日期 | 说明 |
 |------|------|
 | 2026-10-18 | 初稿。对照 `docs/31` PR #75 的调研基线，用 SDK 1.18.1 与 `agent-runner.ts` 定稿。v2 问答 API 改为 `client.v2.session.question.*`；权限 v2 维持现网 `client.permission.reply` |
+| 2026-10-19 | 对齐 `docs/31` AQ2a：`custom` 缺省视为可自填（等同 `true`），默认展示「输入自己的答案」；仅显式 `false` 隐藏。权限 always、10 分钟与结束顺序不改 |
