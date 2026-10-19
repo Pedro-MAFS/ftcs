@@ -39,9 +39,10 @@
 | **答案形状** | `answers: string[][]`，长度等于题数，下标与 `questions` 对齐。每一项是该题选中的 `label`，或自定义文本。用 `label`，不用 `description` |
 | **v1** | `client.question.reply({ requestID, answers })` |
 | **v2** | `client.v2.session.question.reply({ sessionID, requestID, questionV2Reply: { answers } })`。禁止把 `answers` 放在与 `requestID` 平级却不包 `questionV2Reply` |
-| **单选** | `multiple !== true`。选项互斥。若自定义文本去空白后非空，本题答案为 `[这段文本]`，忽略已选选项。否则必须恰好选一个选项，答案为 `[label]` |
-| **多选** | `multiple === true`。按选项原顺序收集选中的 `label`。自定义文本非空时追加在末尾。至少要有一项 |
-| **自定义未开启** | 忽略输入框（界面上也不该有）。答案里不得出现选项列表之外的字符串 |
+| **单选** | `multiple !== true`。选项互斥。自定义已开启且自定义文本去空白后非空时，本题答案为 `[这段文本]`，忽略已选选项。否则必须恰好选一个选项，答案为 `[label]` |
+| **多选** | `multiple === true`。按选项原顺序收集选中的 `label`。自定义已开启且自定义文本非空时追加在末尾。至少要有一项 |
+| **自定义开启** | `custom` 缺省或 `true`（AQ2a，等同可自填）。界面有「输入自己的答案」，样式与其它选项一致。文本按上两行进入 `answers` |
+| **自定义未开启** | 仅 `custom === false`。界面没有「输入自己的答案」。忽略自定义文本。答案里不得出现选项列表之外的字符串 |
 | **不可渲染** | 没有「提交」。用户只能走 AQ-03 的结束 |
 | **成功之后** | 清槽、卸通知、取消超时计时（计时的所有权在 AQ-03，成功路径必须取消）。推 `awaiting-reply` 且 `pending: null`。`agentStatus` 保持 `running`，状态句回到「运行中」 |
 | **不 abort** | 用户提交是为了继续。禁止在 reply 成功后调用 `abortCurrent` 或 `session.abort` |
@@ -97,7 +98,7 @@ export function buildQuestionAnswers(
 ): { ok: true; answers: string[][] } | { ok: false }
 ```
 
-规则与 §2 相同。选中的 label 必须与该题某个选项去空白后的 `label` 一致，否则 `ok: false`。
+规则与 §2 相同。`custom` 缺省按开启（`!== false`），仅显式 `false` 丢弃自定义文本。选中的 label 必须与该题某个选项去空白后的 `label` 一致，否则 `ok: false`。
 
 ---
 
@@ -156,7 +157,7 @@ SDK 结果：没有 `error` 且 HTTP 2xx 为成功。v1 的 200 且 body 为 `fa
 - [ ] 单选点一项并提交：对应 API 收到 `answers: [[该 label]]`。v2 时 body 含 `questionV2Reply`。任务不中止，面板回到「运行中」，卡片消失。
 - [ ] 样例三选一里选择第三个选项的 label 并提交：客户端只回传该 label，不额外调用评分或收尾。
 - [ ] 多选两项：该题 `string[]` 含两个 label，顺序与选项原序一致。
-- [ ] `custom === true` 且只填了文字、没选选项：该题答案是这段去空白文本。单选里既选了选项又填了文字：以文字为准。
+- [ ] `custom` 缺省或 `true`，且只填了「输入自己的答案」、没选选项：该题答案是这段去空白文本。单选里既选了选项又填了文字：以文字为准。`custom === false` 时不接受选项列表之外的字符串。
 - [ ] 少选一题时按钮不可用；绕过界面时主进程不发 HTTP。
 - [ ] 提交过程中连点只产生一次 reply。成功后再调用 IPC 不再打 HTTP。
 - [ ] 断网或 500：卡片还在，文案为「没能提交，请再试一次，或结束任务。」可以再提交。
@@ -192,3 +193,4 @@ SDK 结果：没有 `error` 且 HTTP 2xx 为成功。v1 的 200 且 body 为 `fa
 | 日期 | 说明 |
 |------|------|
 | 2026-10-18 | 初稿。提交只 reply、不 abort；404 视为该侧已结束；失败保留卡片 |
+| 2026-10-19 | 对齐 AQ2a：自定义开启含 `custom` 缺省（等同 `true`）；仅显式 `false` 视为未开启。单选以自填文本为准、多选追加、提交不 abort 不改 |
