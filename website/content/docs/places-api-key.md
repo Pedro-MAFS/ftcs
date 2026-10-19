@@ -1,16 +1,16 @@
-# 申请 Google Places API Key（R3 地图发现）
+# 申请 Google Places API Key（地图发现 · 自备）
 
-FTCS **R3 地图发现**通过 **Google Places API (New)** 按城市与品类查找本地商户。Key 由你在 [Google Cloud Console](https://console.cloud.google.com/) 自行申请，粘贴到桌面端 **设置 → 探索 → Google Places API Key**（或首次引导 **步骤 2** 的可选区块）。
+自定义通道做 **地图发现** 时，通过 **Google Places API (New)** 按城市与品类查找本地商户。Key 由你在 [Google Cloud Console](https://console.cloud.google.com/) 自行申请，粘贴到桌面端 **设置 → 探索 → 自备 Places Key**（或首次引导第 2 步的可选区块）。
 
-- **只跑 R1 广撒网 / R2 社媒发现**：可不配置。  
-- **官方通道用户**：模型与 Tavily 搜索仍走官方；**Places 须自备 Key**（不经 FTCS 代调）。  
-- **费用**：按 Google Maps Platform 计费，计入你的 GCP 结算账号。
+- **只跑全网搜索 / 社媒发现**：可不配置。  
+- **官方通道**：在 **设置 → 探索** 申请官方 Places Key，不必按本文自备。申请受理后，预计在下一自然日内开通。需要能访问 Google 的网络，由本机直接访问 Google；使用费用计入官方额度。  
+- **费用（自备 Key）**：按 Google Maps Platform 计费，计入你的 GCP 结算账号。
 
-## 网络与合规（必读）
+## 网络（必读）
 
-Places 请求由 **本机 OpenCode** 直连 Google 服务（`places.googleapis.com`），**不经过 FTCS 服务器**。
+Places 请求由本机访问 Google 服务（`places.googleapis.com`），不经过 FTCS 服务器。
 
-使用 R3 前，请确保本机网络 **合法合规**，且 **能够正常访问 Google 服务**（含 Google Cloud Console 与 Places API），并遵守：
+使用地图发现前，本机需要能访问 Google（含 Google Cloud Console 与 Places API），并遵守：
 
 - 所在地法律法规  
 - [Google Maps Platform 服务条款](https://cloud.google.com/maps-platform/terms)  
@@ -59,22 +59,22 @@ Places API 为按量计费服务。在控制台打开 **结算**，为当前项�
 
 > **安全提示**：请勿把 Key 提交到公开仓库或发给他人。若 Key 已泄露，请在 Console 中 **轮换 / 删除** 后重新创建。
 
-### 5. 粘贴到 FTCS 并重启 OpenCode
+### 5. 粘贴到 FTCS 并重启应用
 
-1. 桌面端 **设置 → 探索 → R3 地图发现** 粘贴 Key，点击 **保存配置**。  
-2. 在 **OpenCode 运行时** 区域点击 **重启**，使 `places-api` MCP 加载 Key。  
-3. 探索页选择 **R3 地图发现**，点 **开始 R3** 前会执行 Preflight；通过后即可运行。
+1. 桌面端 **设置 → 探索 → 自备 Places Key** 粘贴 Key，点击 **保存配置**。  
+2. 按页面提示 **重启应用** 后生效。  
+3. 探索页选择 **地图发现**，点 **开始地图发现**；通过后即可运行。
 
-首次引导可在 **步骤 2 · 模型通道** 底部 **可选** 填写 Places Key，与模型 / Tavily 一并保存。
+首次引导可在 **步骤 2 · 模型通道** 底部 **可选** 填写自备 Places Key，与模型 / Tavily 一并保存。
 
-若 Google API 需经代理访问，可在 **设置 → 探索** 配置出站代理（跟随系统 / 手动指定 / 直连），并测试连接。
+若访问 Google 需要单独的网络设置，可在 **设置 → 探索 → 高级 → 网络设置** 选择跟随系统、自定义或直连。
 
 ## 验证是否生效
 
-- 设置页 **OpenCode 运行时 → MCP 服务** 中 `places-api` 为 `connected`。  
-- 探索页 Preflight 通过；Agent 调用 `places_text_search` 返回商户列表，而非 `MISSING_PLACES_API_KEY` 或连接失败。
+- 保存并重启应用后，探索页可以选择地图发现并开始。  
+- 能返回商户列表，而不是提示缺少 Key 或连接失败。
 
-若仍报 `fetch failed` 或连接超时，优先确认本机能否 **合法合规地访问 Google 服务**，并确认 **Places API (New)** 已启用、Key 限制未误拦本机。
+若仍连接超时，优先确认本机能否访问 Google，并确认 **Places API (New)** 已启用、Key 限制未误拦本机。
 
 ## 相关链接
 

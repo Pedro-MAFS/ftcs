@@ -16,9 +16,9 @@ FTCS 是 AI-Utills 旗下的 Windows 桌面外贸获客智能体（Agent）。�
 
 ## 标题栏一直显示未就绪 / 启动失败
 
-- 确认 `node -v` 为 **v22 及以上**，且 OpenCode 可用（应用内一键安装或 `opencode --version`）  
-- 检查是否被安全软件拦截本机端口（默认 OpenCode 端口可参考桌面端文档）  
-- 在设置中查看 OpenCode 日志  
+- 确认 `node -v` 为 **v22 及以上**，且标题栏为 **服务已就绪**（应用内一键安装，或本机 `opencode --version` 可用）  
+- 检查是否被安全软件拦截本机服务  
+- 在 **设置 → 运行状态** 查看诊断信息  
 
 ## 画像 / 探索时报浏览器或 chrome-devtools 相关错误
 
@@ -27,27 +27,27 @@ FTCS 是 AI-Utills 旗下的 Windows 桌面外贸获客智能体（Agent）。�
 - 重启应用后再试；必要时更新 Chrome 到较新版本  
 - 若页面出现人机验证或登录墙，智能体会停下，请不要尝试绕过；可换下一条线索或改用社媒发现（不打开社媒真页）  
 
-## 广撒网和社媒发现有什么不同？
+## 全网搜索和社媒发现有什么不同？
 
 探索页（以及线索页）可以分开开始：
 
-- **广撒网**（R1）：按关键词检索公开网页，并打开候选公司官网后写入线索。  
-- **社媒发现**（R2）：只检索你在设置里启用的站点（默认 LinkedIn 公司页、Facebook 公共主页）的公开搜索摘要，抽出公司并核对官网后再写入。**不会登录、也不会打开领英 / 脸书真页。**  
-- **地图发现**（R3，可选）：用 Google Places 按城市与品类找本地商户，须自备 Places API Key。  
+- **全网搜索**：按关键词检索公开网页，并打开候选公司官网后写入线索。  
+- **社媒发现**：只检索你在设置里启用的站点（默认 LinkedIn 公司页、Facebook 公共主页）的公开搜索摘要，抽出公司并核对官网后再写入。**不会登录、也不会打开领英 / 脸书真页。**  
+- **地图发现**（可选）：用 Google Places 按城市与品类找本地商户。官方通道申请官方 Places Key；自定义通道须自备 Places API Key。  
 
 在 **设置 → 探索** 可选择低 / 中 / 高探索强度（默认中）。强度越高，关键词和每次看到的结果越多。改强度或社媒站点开关后，需要重新扩展关键词。几种探索不共用同一次任务，可分开跑。
 
 ## 主题、完成通知和定时任务
 
 - **设置 → 外观**：暗黑、日间或跟随 Windows 系统外观，切换后立即生效。标题栏按钮在当前画面的日间和暗黑之间一键切换。  
-- **任务完成通知**默认开启：探索、评分、开发信等长任务结束，且窗口不在前台时弹出 Windows 通知。编排一键跑通只在整段结束时通知一次。可在设置中关闭。  
+- **任务完成通知**默认开启：探索、评分、开发信等长任务结束，且窗口不在前台时弹出 Windows 通知。任务在等你回复、窗口不在前台时，也会弹出「任务在等你回复」。编排一键跑通只在整段结束时通知一次。可在设置中关闭。  
 - **定时**：线索页对已保存方案按每日或每周时刻自动执行，最多 5 条。请开启开机自启，并让关闭窗口进入托盘。已有任务在进行时，本轮定时会跳过。
 
 ## 探索没有线索
 
-- **官方通道**：确认已开通官方通道且运行时正常（R1/R2 搜索无需单独 Key）  
+- **官方通道**：确认已开通官方通道且运行状态正常（全网搜索、社媒发现无需单独的搜索 Key）  
 - **自定义通道**：确认 Tavily Key 有效且有配额  
-- **R3 地图发现**：确认已配置 [Places API Key](/docs/places-api-key)，且本机网络合法合规、可访问 Google 服务  
+- **地图发现**：官方通道确认已申请官方 Places Key；自定义通道确认已配置 [Places API Key](/docs/places-api-key)。需要能访问 Google 的网络  
 - 确认关键词扩展已生成；社媒发现还需要带站点的关键词  
 - 探索需要一定时间；完成后到线索页刷新查看（线索页也可直接开始探索）
 
@@ -81,22 +81,21 @@ FTCS 是 AI-Utills 旗下的 Windows 桌面外贸获客智能体（Agent）。�
 
 <h2 id="tavily-search">什么是 Tavily？还要配置搜索 Key 吗？</h2>
 
-广撒网和社媒发现都需要联网检索公开内容。底层可使用 **Tavily** 等搜索能力。社媒发现会把检索限制在你启用的站点，不会打开社媒登录页。
+全网搜索和社媒发现都需要联网检索公开内容。底层可使用 **Tavily** 等搜索能力。社媒发现会把检索限制在你启用的站点，不会打开社媒登录页。
 
 - **官方通道**：**不需要**你配置 Tavily Key。开通官方通道后即可搜索，费用从账户余额扣除。  
 - **自定义通道**：需要自备 Tavily API Key（直连 Tavily，不经官方余额）。免费用户每月约有 1000 次调用配额（以 [Tavily 官网](https://tavily.com/) 当前说明为准）。在桌面端「设置 → 搜索服务」或首次引导中粘贴 Key。  
 
 官方通道用户可直接开始探索；自定义通道用户可先完成产品画像与关键词扩展，开始探索前再补搜索 Key。
 
-<h2 id="places-api-key">R3 地图发现需要 Places API Key 吗？</h2>
+<h2 id="places-api-key">地图发现需要 Places API Key 吗？</h2>
 
-**R1 广撒网 / R2 社媒发现** 不需要。**R3 地图发现** 需要你在 [Google Cloud Console](https://console.cloud.google.com/apis/credentials) 自行申请 **Google Places API Key**，并启用 **Places API (New)**；费用计入你的 GCP 账号。
+**全网搜索 / 社媒发现** 不需要。**地图发现** 需要 Places Key，按模型通道区分：
 
-- **官方通道与自定义通道均需自备 Places Key**（模型 / Tavily 搜索与 Places 独立；FTCS 不提供 Google 代调）。  
-- Key 填在桌面端 **设置 → 探索**，或首次引导 **步骤 2** 底部可选区块；保存后请 **重启 OpenCode**。  
-- 请求由 **本机** 直连 Google 服务，你须在 **合法合规、可访问 Google 服务** 的网络环境中使用，并遵守当地法规与 [Places API 政策](https://developers.google.com/maps/documentation/places/web-service/policies)。
+- **官方通道**：在桌面端 **设置 → 探索**（或首次引导第 2 步）申请官方 Places Key。申请受理后，预计在下一自然日内开通；设置里会显示开通状态。需要能访问 Google 的网络，地图发现由本机直接访问 Google；使用费用计入官方额度。欠费时会提示充值，已吊销时会提示联系客服。  
+- **自定义通道**：在 [Google Cloud Console](https://console.cloud.google.com/apis/credentials) 自行申请 **Google Places API Key**，并启用 **Places API (New)**，填到 **设置 → 探索** 的自备 Places Key。费用由 Google 按其价格收取。保存后重启应用生效。  
 
-逐步申请说明见 **[申请 Places API Key](/docs/places-api-key)**。
+请求由本机访问 Google 服务，并遵守 [Places API 政策](https://developers.google.com/maps/documentation/places/web-service/policies)。逐步申请自备 Key 的说明见 **[申请 Places API Key](/docs/places-api-key)**。
 
 <h2 id="hunter-api-key">补全联系人需要 Hunter API Key 吗？</h2>
 
