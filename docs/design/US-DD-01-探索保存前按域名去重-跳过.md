@@ -21,9 +21,9 @@
 |------|----------------------|
 | `lead_append_raw`（`workspace/mcp-servers/lead-store/src/index.ts`）确认产品存在后调用 `appendRawLeadFromTool`。该函数只做画像校验，通过后 `appendRawLead` 追加一行到 `data/leads/{product_id}/raw/{round}.jsonl`，并用 `generateLeadId` 生成新 id。写入前不读 `scored.json` | 同一工具在调用 `appendRawLeadFromTool` **之前**做域名拦截。命中则返回跳过，不追加、不生成 id、不改旧行 |
 | `lead_set_company_intelligence` 入参是 `product_id`、`lead_id` 和七个字符串，**没有** `website`。`setLeadCompanyIntelligence` 用 `listRawLeads` 按 `lead_id` 找 raw；找不到返回「未找到线索」且不新建。找到后即使用 `getDedupeKey` 覆盖该 raw，并覆盖 `scored.json` 里同 id 或同 `dedupe_key` 的行。校验失败也会先把 `status=failed` 写回去 | 写入前用这条已有线索的域名，以及它是否已在 scored，决定拒绝。命中则一次都不写（raw 与 scored 都不动）。未命中且只在 raw 的覆盖保持 |
-| 技能 `discover-leads` / `discover-leads-r2` / `discover-leads-r3`，以及 `agent-runner.ts` 的 `DISCOVER_COMPANY_INTELLIGENCE_RULES` 和三份 `buildDiscoverLeads*`：同域名已在 `lead_list_raw` 就不要 `lead_append_raw`，改为 `lead_set_company_intelligence` 覆盖画像和破冰 | 域名已在 **scored** 时改为跳过，两个工具都不调用。只在 raw、尚未进 scored 的同域，仍可不追加、可覆盖 |
+| 技能 `discover-leads` / `discover-leads-r2` / `discover-leads-r3`，以及 `agent-runner.ts` 的 `DISCOVER_COMPANY_INTELLIGENCE_RULES` 和三份 `buildDiscoverLeads*`：同域名已在 `lead_list_raw` 就不要 `lead_append_raw`，改为 `lead_set_company_intelligence` 覆盖画像和破冰 | 提示词改为直接调用这两个保存工具，不要求模型先查线索库再决定是否保存。域名已在 scored 时，工具返回跳过，模型继续下一家，不把探索标 failed。只在 raw、尚未进 scored 的同域，仍可直接调覆盖 |
 | `normalizeDomain`（`lead-id.ts`）取 `new URL(url).hostname`，小写，只剥一个前缀 `www.`，失败返回 `null`。`getDedupeKey`（`lead-scorer.ts`）是 `normalizeDomain(company.website ?? source.url) ?? 公司名 trim 小写 ?? lead.id`。`rawLeadToScoredLead` 把这个键写成 `dedupe_key` | 跳过只使用 `normalizeDomain` 的结果去对 `leads[].dedupe_key`。公司名和 `lead.id` 回退不作为跳过条件 |
-| `loadScoredLeads` 读 `getScoredLeadsPath` → `data/leads/{product_id}/scored.json`。文件不存在返回 `null`。`leads_get_scored` 在文件不存在时返回 `isError` + `NOT_FOUND` | 拦截自己读文件：不存在或 `leads` 为空 = 空集，保存不因此失败。不要把 `leads_get_scored` 的 `NOT_FOUND` 当成拦截失败 |
+| `loadScoredLeads` 读 `getScoredLeadsPath` → `data/leads/{product_id}/scored.json`。文件不存在返回 `null`。`leads_get_scored` 在文件不存在时返回 `isError` + `NOT_FOUND` | 对照只在两个保存工具内部用 `loadScoredLeads` 完成。不存在或 `leads` 为空 = 空集，保存不因此失败。提示词不调用 `leads_get_scored` |
 | `exploration_finish` 的 `status` 由调用方传入。桌面在 `agent-runner.ts` 里看到 `run.status === 'failed'`，或会话结束时 run 仍是 `running`，才把整次探索当成失败。单次工具 `isError` 本身不会由桌面改 run 状态 | 跳过必须是工具成功结果里的 `skipped: true`。禁止用 `isError` / `INVALID_COMPANY_INTELLIGENCE` 表示跳过，避免模型按「校验失败」重试，或调用 `exploration_finish({ status: "failed" })` |
 | `scoreAndDedupeLeads` / `dedupeRawLeadsDetailed` 在 raw 内按 `getDedupeKey` 留一条进 scored，其余进 `discarded.json`（`reason: "duplicate_domain"`） | 不改这个算法，不读 `discarded.json` 当「已存在」 |
 | 桌面 `lead-writer.ts` 另有一份不导出的 `normalizeDomain`（会 `trim`，空串再用 `source.url`），供 `saveLeadIcebreak` 用 | 本期拦截不用这份。不改 `saveLeadIcebreak` / `saveRawLead` |
@@ -35,7 +35,7 @@
 3. **取域与 `getDedupeKey` 的域名分支相同，回退不同。** 只用 `company.website ?? source.url` 再交给 `normalizeDomain`。`null` 时不看公司名。`countUniqueLeadDomains` 会在域名为空时改用公司名，不能拿来做跳过。
 4. **比较的是已经写在 scored 上的 `dedupe_key` 原文字。** 它由 `rawLeadToScoredLead` 调用 `getDedupeKey` 生成，域名情况下已经是 `normalizeDomain` 的结果。拦截时不要再对 `dedupe_key` 剥 `www.`、不要再跑一遍 `new URL`。
 5. **空串 website 不会落到 `source.url`。** `??` 只在 `null` / `undefined` 时取值。`company.website === ""` 时 `normalizeDomain("")` 为 `null`，本条不跳过。这与 `getDedupeKey` 一致。桌面那份 `normalizeDomain` 的空串回退不要抄过来。
-6. **提示词和工具描述是两处，都挡不住未授权调用。** `server.tool` 的 description 今天仍写「Overwrite companyIntelligence…」。技能和 `buildDiscoverLeads*` 仍要求同域名去覆盖。两处文字都要改成「已在线索库则跳过」。文字改完而回调仍调用写入函数，不算完成。
+6. **提示词和工具描述挡不住写入。** `server.tool` 的 description 今天仍写「Overwrite companyIntelligence…」。技能和 `buildDiscoverLeads*` 仍要求同域名去覆盖。文字改为：直接调用保存工具；收到 `skipped: true`（「线索已存在」）就继续下一家，不要把探索标 failed。校验只在两个保存工具写入前完成。只改文字、回调仍能写入，不算完成。
 7. **时间线会展示工具输出和整段任务提示词。** `toolPartToTimelineItem` 把工具 JSON 放进「输出」。`buildDiscoverLeads*` 的全文会作为用户气泡。新增的用户能读到的句子不要出现 `MCP`、`scored.json`。
 
 ---
@@ -90,10 +90,10 @@ DD1～DD6 与 O1～O5 按需求锁定，实现按下表，不再选择策略。
 | **DD5** | 不做覆盖旧线索、保存前确认框、字段级合并。已在 scored 时废止 CI6 的再次覆盖 |
 | **O1** | 沿用 `lead-id.ts` 的 `normalizeDomain`，只剥一个 `www.`。`https://www.Example.com/path` 与 `http://example.com` 都得到 `example.com` |
 | **O2** | `shop.example.com` 与 `example.com` 不是同一键。不引入公共后缀表 |
-| **O3** | 可静默。无逐条弹窗，无保存前确认框。允许 stderr 一行日志；允许探索结束说明里一句中文带过条数 |
+| **O3** | 对用户可静默。无逐条弹窗，无保存前确认框。允许 stderr 一行日志。工具成功结果里的 `message` 写「线索已存在」，给模型看。结束说明可以不提 |
 | **O4** | 只在 raw 的同域不作为本故事失败。现网覆盖可保持。已在 scored 必须拒绝 |
 | **O5** | 同一次探索里两条都不在 scored 的同域，保存前不互斥。每次调用只读当时的 `scored.json`，不在进程内记「本 run 已追加的域名」去挡第二笔。事后仍由 `leads_score_and_dedupe` 处理。实现若顺手互斥，也不得改写已在 scored 的旧行 |
-| **跳过结果** | 工具成功，`skipped: true`。与画像校验失败区分开。不把整次探索标成 failed |
+| **跳过结果** | 工具成功，`skipped: true`，`message` 为「线索已存在」。禁止用 `isError` 表示跳过。不把整次探索标成 failed |
 | **版本** | 实现落在 `dev-0.5.8` 系分支。不关 Issue #68 |
 
 ---
@@ -123,7 +123,7 @@ sequenceDiagram
   alt 产品不存在
     Tool-->>Agent: isError NOT_FOUND
   else normalizeDomain 非空且等于某条 dedupe_key
-    Tool-->>Agent: success skipped，无 isError
+    Tool-->>Agent: success，skipped，message 线索已存在
     Note over Raw,Scored: 不追加、不生成 id、不改旧行
   else 域名为 null 或不在集合中
     Tool->>Raw: 现网 appendRawLeadFromTool
@@ -169,25 +169,23 @@ sequenceDiagram
 | 新域名，画像合法 | 不设置 | 追加一行，`status=ready` | 与今天成功相同 |
 | 新域名或未入 scored 的覆盖，画像不合法 | `true`，`INVALID_COMPANY_INTELLIGENCE` | 追加路径不写行；覆盖路径仍按 US-CI-01 标 `failed` 并恢复旧正文 | 现网提示词：只重试这一家的字段，不把整次标 failed |
 | 产品不存在，或覆盖工具的 `lead_id` 不在 raw | `true`，`NOT_FOUND` | 不新建 | 与今天相同 |
-| `scored.json` 不存在 | 不因此失败 | 按空集走写入 | 模型不要因为 `leads_get_scored` 的 `NOT_FOUND` 调用 `exploration_finish` 的 `failed` |
+| `scored.json` 不存在 | 不因此失败 | 按空集走写入 | 空集由保存工具内部判断。模型不必预查，也不因此把探索标 failed |
 
 `exploration_finish` 仍用现网逻辑：按 `run_id` 统计 raw 条数写回 `leads_found`。跳过的公司不在 raw 里，不会被算进去。不要把跳过写进 `exploration_update` 的 `error`，那个数组是运行错误，不是条数说明。
 
 ### 3.5 提示词（必要，但单独改不算完成）
 
-模型侧规则改成下面这一套。R1 / R2 / R3 相同。
+模型侧不增加保存前预查。R1 / R2 / R3 相同。域名是否已在 scored，只在 `lead_append_raw` 与 `lead_set_company_intelligence` 写入前由工具对照该产品的 `scored.json` 完成。
 
-- 判为目标客户之后、保存之前，可以调用 `leads_get_scored` 看该产品已有线索。文件不存在或返回 `NOT_FOUND`：线索库为空，继续保存，不要把探索标成失败。
-- 待保存域名用 `company.website`，没有则用 `source.url`，规则与 §4.1 相同。这个域名已经在线索库里：不要 `lead_append_raw`，也不要 `lead_set_company_intelligence`。继续下一家。
-- 同域名只出现在 `lead_list_raw`、线索库里还没有：不要 `lead_append_raw`；本次仍是目标客户时，可以 `lead_set_company_intelligence`，`lead_id` 用已有那条。
-- 线索库和 raw 都没有：先写七个字符串，再 `lead_append_raw`。七段规则、`暂无公开信息`、不要传 `status`，保持 US-CI-01。
-- 解析不出域名：不按公司名跳过，仍 `lead_append_raw`。
-- 工具返回 `skipped === true`：跳过已成功。不要改字段重试，不要 `exploration_finish` 传 `failed`，`exploration_update` 的 `leads_found` 不要加 1。
-- 工具 `isError` 且 `code` 为 `INVALID_COMPANY_INTELLIGENCE`：仍是画像校验失败，只重试这一家。
+- 判为目标客户后直接调用保存工具。不要调用 `leads_get_scored`，也不要先对照线索库再决定是否保存。
+- 新域名，或解析不出域名：直接 `lead_append_raw`。七段规则、`暂无公开信息`、不要传 `status`，保持 US-CI-01。解析不出域名时不按公司名跳过，这一判断在工具内完成。
+- 只在 raw、尚未进 scored 的同域：可以直接 `lead_set_company_intelligence`（O4）。这不是对 scored 的预查。模型若改为直接 `lead_append_raw`，域名不在 scored 时工具按现网追加，不作为本故事失败。
+- 工具返回 `skipped === true`，`message` 为「线索已存在」：跳过已成功。继续下一家。不要改字段重试，不要 `exploration_finish` 传 `failed`，`exploration_update` 的 `leads_found` 不要加 1。
+- 工具 `isError` 且 `code` 为 `INVALID_COMPANY_INTELLIGENCE`：仍是画像校验失败，只重试这一家，不把整次探索标 failed。
 - 不是目标客户：两个工具都不调用。
-- 结束时向用户用一句带过即可，例如「有 N 家公司已在线索库中，已跳过」。这句话里不要写 `MCP`、`scored.json`、`dedupe_key`。没有跳过就不要为了 0 条专门加一句。
+- 对用户可静默：无逐条弹窗，无保存前确认框。工具输出里的「线索已存在」给模型看即可。结束说明可以不提；若带一句，用「线索已存在」，不要写 `MCP`、`scored.json`、`dedupe_key`。
 
-同一次运行里两家新公司域名相同：两家都可以 `lead_append_raw`。不要在提示词里要求模型丢掉第二家，也不要要求它去改第一家或改线索库里的旧记录。
+同一次运行里两家新公司域名相同：两家都可以直接 `lead_append_raw`。不要在提示词里要求模型先查出第二家再丢掉，也不要改已在 scored 的旧记录。
 
 ---
 
@@ -289,7 +287,7 @@ export function findScoredLeadForDomain(
   "domain": "example.com",
   "matched_lead_id": "lead_20261007_0001",
   "wrote": false,
-  "message": "该公司已在线索库中，已跳过，未改原记录。"
+  "message": "线索已存在"
 }
 ```
 
@@ -301,11 +299,11 @@ export function findScoredLeadForDomain(
 | `domain` | 本次 `normalizeDomain` 的结果。追加路径上跳过时一定是非空字符串 |
 | `matched_lead_id` | 命中的那条 scored `id` |
 | `wrote` | `false` |
-| `message` | 上面这句中文。不要写 `MCP`、`scored.json`、`dedupe_key`、工具名 |
+| `message` | 固定「线索已存在」。不要写 `MCP`、`scored.json`、`dedupe_key`、工具名 |
 
 跳过响应里不要出现新的 `lead_id`，也不要 `raw_path`，避免调用方把它当成已经追加。
 
-工具 description 从「校验失败不写行」扩展一句：域名已在该产品线索库中时返回 `skipped: true`，不写行、不报校验失败。描述里同样不要出现 `scored.json` 这几个字（模型看 description，时间线也可能展开工具名；文件名留给本详设）。
+工具 description 从「校验失败不写行」扩展一句：命中已有线索时返回 `skipped: true`，`message` 为「线索已存在」，不写行、不报校验失败。描述里不要出现 `scored.json`（模型看 description，时间线也可能展开工具名；文件名留给本详设）。不要写成「请先查询再调用本工具」。
 
 ### 4.5 `lead_set_company_intelligence` 返回
 
@@ -322,20 +320,20 @@ export function findScoredLeadForDomain(
   "lead_id": "lead_requested",
   "matched_lead_id": "lead_scored",
   "wrote": false,
-  "message": "该公司已在线索库中，已跳过，未改原记录。"
+  "message": "线索已存在"
 }
 ```
 
 `lead_id` 是调用方传入的目标。`matched_lead_id` 见 §3.3。仅因 `lead_id` 已在库中而跳过、且 `normalizeDomain` 为 `null` 时，`domain` 为 `null`。
 
-工具 description 里「Overwrite companyIntelligence on an existing lead…」改为：目标线索的域名或该 `lead_id` 已在线索库中则跳过（`skipped: true`，不改任何字段）；只在原始线索、尚未进入线索库时才覆盖画像。
+工具 description 里「Overwrite companyIntelligence on an existing lead…」改为：命中已有线索则跳过（`skipped: true`，`message` 为「线索已存在」，不改任何字段）；只在原始线索、尚未进入线索库时才覆盖画像。不要写成「请先查询再调用本工具」。
 
 ### 4.6 日志与用户可见文案
 
 - 允许在跳过时 `console.error` 一行到 stderr（stdio MCP 的日志在 stderr）。这行可以含 `product_id`、域名、`matched_lead_id`，供排查。不要往 stdout 打，以免打断 MCP 帧。
-- 探索结束说明由模型在现有中文汇报里加一句（§3.5）。没有这条跳过时不追加。
+- 给模型看的说明就是跳过 JSON 的 `message`：「线索已存在」。对用户无逐条弹窗、无保存前确认框。结束说明可以不提。
 - 桌面完成条保持现网：`` `${roundName}完成：${run.id} · ${run.queries_executed} 词 · 线索 ${run.leads_found}` ``。不新增确认框、不新增逐条 toast、不改 `AgentPanel.vue`。
-- 时间线工具卡片仍会显示工具名和 JSON。这是现网行为。本期约束的是新增 `message` 和结束说明用词，不去改时间线组件。
+- 时间线工具卡片仍会显示工具名和 JSON。这是现网行为。本期不去改时间线组件。`message` 只用「线索已存在」。
 
 ### 4.7 提示词落点
 
@@ -343,11 +341,11 @@ export function findScoredLeadForDomain(
 
 | 位置 | 现网句子（核对原文） | 改成 |
 |------|----------------------|------|
-| `workspace/skills/discover-leads/SKILL.md` 约第 94、118–119、156–169 行 | `lead_list_raw` 已有同域名则 `lead_set_company_intelligence` | 已在线索库则跳过；只在 raw 才覆盖。保留跳过成功与校验失败的区别 |
-| `workspace/skills/discover-leads-r2/SKILL.md` 文首「同域名不再追加，改为覆盖画像」，以及约第 53、80、187、221、257–262、279 行 | 同上，并写「同域名覆盖不加这一条」 | 线索库中已有则跳过且 `leads_found` 不加；只在 raw 的覆盖仍不加 `leads_found` |
+| `workspace/skills/discover-leads/SKILL.md` 约第 94、118–119、156–169 行 | `lead_list_raw` 已有同域名则 `lead_set_company_intelligence` | 直接调用 `lead_append_raw` 或 `lead_set_company_intelligence`。不要先 `leads_get_scored`。收到 `skipped: true`（「线索已存在」）继续下一家，不把探索标 failed。只在 raw 的同域仍可直接调覆盖。校验失败与跳过要分开 |
+| `workspace/skills/discover-leads-r2/SKILL.md` 文首「同域名不再追加，改为覆盖画像」，以及约第 53、80、187、221、257–262、279 行 | 同上，并写「同域名覆盖不加这一条」 | 同上。`skipped` 时 `leads_found` 不加；只在 raw 的覆盖仍不加 `leads_found` |
 | `workspace/skills/discover-leads-r3/SKILL.md` 文首与约第 24、99、238、249、285–290、307 行 | 「新域名 lead_append_raw / 同域名 lead_set_company_intelligence」 | 同 R2 这一列 |
-| `desktop/electron/opencode/agent-runner.ts` 的 `DISCOVER_COMPANY_INTELLIGENCE_RULES` | 「同域名已在 lead_list_raw 且本次仍是目标客户：不要 lead_append_raw，调用 lead_set_company_intelligence」 | 拆成「已在线索库则两个工具都不调」和「只在 raw 才调覆盖」；下一句写明 `skipped: true` 不是校验失败 |
-| 同文件 `buildDiscoverLeadsPrompt` 第 5 步、`buildDiscoverLeadsR2Prompt` 第 6 步、`buildDiscoverLeadsR3Prompt` 第 5 步 | 「同域名已有且本次仍通过则 lead_set_company_intelligence，不要再追加」 | 已在线索库则跳过；只在 raw 的同域才覆盖。结束汇报允许一句跳过条数，用 §3.5 的中文 |
+| `desktop/electron/opencode/agent-runner.ts` 的 `DISCOVER_COMPANY_INTELLIGENCE_RULES` | 「同域名已在 lead_list_raw 且本次仍是目标客户：不要 lead_append_raw，调用 lead_set_company_intelligence」 | 直接调用两个保存工具。删除「先查再决定是否保存」。`skipped: true` 不是校验失败，继续下一家，`exploration_finish` 用 `completed` |
+| 同文件 `buildDiscoverLeadsPrompt` 第 5 步、`buildDiscoverLeadsR2Prompt` 第 6 步、`buildDiscoverLeadsR3Prompt` 第 5 步 | 「同域名已有且本次仍通过则 lead_set_company_intelligence，不要再追加」 | 直接调用保存工具，校验在工具内。收到「线索已存在」继续下一家。只在 raw 的同域仍可直接调覆盖 |
 
 `agent-runner.ts` 除此三份提示词和上面的常量外，不改 `startEventBridge`、不新增 `run*`、不改桌面如何根据 `run.status` 判失败。
 
@@ -412,17 +410,17 @@ T17、T18 用来证明「没改算法」：断言结果形状与现网 `dedupeRa
 | # | 需求句 | 步骤 | 期望 |
 |---|--------|------|------|
 | M1 | 保存前能读到已有域名；无文件或空库不导致保存失败 | 产品甲没有 `scored.json`，跑一轮探索让一家新公司保存成功。再把 `scored.json` 换成 `"leads": []` 重试一家新公司 | 两次都落入对应 raw。探索可以 `completed` |
-| M2 | 域名相同则不出现新 raw、不出现新 id，旧字段不变 | 先评分，使 `example.com` 在 scored，并记下破冰原文。再探索一家官网为 `https://www.Example.com/path` 的目标客户，即使模型仍调用了 `lead_append_raw` 或 `lead_set_company_intelligence` | 工具结果含 `skipped: true` 且不是失败卡片语义（完成，不是 `isError`）。raw 无新 id。破冰原文仍在 |
+| M2 | 域名相同则不出现新 raw、不出现新 id，旧字段不变 | 先评分，使 `example.com` 在 scored，并记下破冰原文。再探索一家官网为 `https://www.Example.com/path` 的目标客户。模型直接调用 `lead_append_raw` 或 `lead_set_company_intelligence`，中间不查线索库 | 工具结果 `skipped: true`，`message` 为「线索已存在」，且不是 `isError`。raw 无新 id。破冰原文仍在 |
 | M3 | 新域名仍可落库 | 库中没有 `shop.example.com`，探索保存 `https://shop.example.com` | raw 多这一条，`lead_append_raw` 成功返回含 `lead_id` |
 | M4 | 无合法域名不按公司名跳过 | 构造无 scheme 的网址或无法解析的 `source.url`，公司名与某条 `dedupe_key` 相同 | 仍尝试现网落库；不会只因为公司名被跳过 |
 | M5 | 子域名不算同域 | 库中已有 `example.com`，再保存 `shop.example.com` | 可以落库 |
-| M6 | 可静默；无选择、无逐条弹窗、无保存前确认框 | 跑一轮会命中旧域名的探索 | 不出现「跳过还是覆盖」，不出现保存前确认。结束说明里最多一句「有 N 家公司已在线索库中，已跳过」。界面文案无 `MCP`、`scored.json` |
+| M6 | 可静默；无选择、无逐条弹窗、无保存前确认框 | 跑一轮会命中旧域名的探索 | 不出现「跳过还是覆盖」，不出现保存前确认，无逐条弹窗。工具输出里有「线索已存在」即可，结束说明可以不出现。界面文案无 `MCP`、`scored.json` |
 | M7 | 只在 raw 的同域不是本故事失败 | 有 raw、尚未评分（没有 scored 或 scored 无该域）。再探索该域名并仍判为目标客户 | 允许仍走 `lead_set_company_intelligence` 并覆盖这条 raw。若开发没有改这条路径，也算通过。不得出现「因为没进 scored 就把已在 scored 的别的公司改掉」 |
 | M8 | 同一次两条都不在 scored 的同域，保存前不互斥 | 一次探索里两家新公司最终域名相同，且探索开始时库中没有 | 保存阶段两笔都可以写下。评分去重之后仍是现网的一留一淘汰，且没有覆盖探索开始前就在 scored 里的其它公司 |
 | M9 | 不跨产品 | 产品乙已有该域名，产品甲没有 | 只在甲里探索时可以保存 |
 | M10 | 评分去重无回归 | 对一组含重复域名的 raw 执行 `leads_score_and_dedupe` | `duplicate_domain`、保留条数与改拦截之前一致 |
 | M11 | 线索页手改不在范围 | 在线索页改破冰并保存 | 仍只更新该 id 的破冰（`saveLeadIcebreak`）。随后再探索这家已在库中的公司，手改破冰不被探索换掉 |
-| M12 | 只改提示词不算完成 | 代码审查 | `index.ts` 两个回调在写入前有拦截，并返回 §4.4 / §4.5。技能和 `buildDiscoverLeads*` 的对应句已改为跳过。缺拦截则本故事不通过 |
+| M12 | 只改提示词不算完成 | 代码审查 | `index.ts` 两个回调在写入前对照 `scored.json` 并返回 §4.4 / §4.5。技能和 `buildDiscoverLeads*` 改为直接调用保存工具，收到「线索已存在」继续下一家；其中没有保存前 `leads_get_scored`。缺工具内拦截则本故事不通过 |
 
 ---
 
@@ -442,6 +440,7 @@ T17、T18 用来证明「没改算法」：断言结果形状与现网 `dedupeRa
 | 桌面弹窗、确认框、为跳过改时间线组件 | O3 |
 | 把跳过写入 `exploration_update.error` 或 `companyIntelligence.status=failed` | §3.4 |
 | 关闭 #68、合 `main`、打 tag | DD6 |
+| 提示词要求保存前调用 `leads_get_scored` 或先查后存 | 校验只在两个保存工具写入前完成。§3.5 |
 | 在本详设 PR 里改业务代码、技能正文或 `docs/33` | 文件清单交开发 |
 
 ---
@@ -455,10 +454,10 @@ T17、T18 用来证明「没改算法」：断言结果形状与现网 `dedupeRa
 | `setLeadCompanyIntelligence` 先写后返回，跳过判断放晚了 | 判断放在 `replaceRawLeadCompanyIntelligence` 之前。T13 对比破冰原文字符串 |
 | 用公司名回退去改一条没有域名的 scored | `domain === null` 时不按公司名跳过追加，但覆盖路径禁止用公司名匹配去 `saveScoredLeads`。T7 |
 | 空串 website 与桌面 `lead-writer.ts` 的取域不一致 | 拦截只用 `lead-id.ts` 与 `??`。T8。不改桌面那份函数 |
-| 模型不读线索库，直接保存 | 工具仍拒绝。提示词只是少一次无效调用 |
-| `leads_get_scored` 在文件不存在时 `NOT_FOUND`，模型把探索标 failed | 提示词写明这是空库。拦截本身把 `loadScoredLeads === null` 当空集，不返回错误 |
+| 提示词仍写成先查再决定是否保存 | 模型可能少调工具，硬闸却不在提示词里。§3.5 要求直接调用；拒绝发生在两个保存工具写入前。M12 |
+| 模型把「线索已存在」当成整次失败 | 返回不设 `isError`。提示词写明 `skipped` 后继续下一家，`exploration_finish` 用 `completed`。T9、M2 |
 | 同一次运行第二笔被误写成覆盖旧 scored | 每次只读 scored；O5 要求两笔新域名都追加。T12、M8 |
-| 时间线展开后看到工具 JSON | `message` 用中文短句，不含 `MCP` / `scored.json`。不新增弹窗 |
+| 时间线展开后看到工具 JSON | `message` 固定「线索已存在」，不含 `MCP` / `scored.json`。无逐条弹窗 |
 | 坏的 `scored.json` 使 `parse` 抛错 | 抛错前不写。不把坏文件修成空库，也不当成命中跳过 |
 | 只剥一个 `www.`，`www.www.example.com` 对不上 `example.com` | 与现网函数一致，验收不要求它们相同 |
 
@@ -469,3 +468,4 @@ T17、T18 用来证明「没改算法」：断言结果形状与现网 `dedupeRa
 | 日期 | 说明 |
 |------|------|
 | 2026-10-19 | 初稿。对齐 docs/33 的 DD1～DD6 与已锁 O1～O5。基线 `dev-0.5.8`（`8ed139f`）。核对 `normalizeDomain`、`lead_append_raw`、`appendRawLeadFromTool`、`lead_set_company_intelligence`、`setLeadCompanyIntelligence`。已在 scored 时废止 US-CI-01 的 CI6 覆盖；只在 raw 的覆盖保持。状态：待评审。 |
+| 2026-10-19 | 马丰顺拍板：去掉提示词里保存前 `leads_get_scored` 预查。模型直接调用两个保存工具；`skipped: true` 且 `message` 为「线索已存在」则继续下一家，不把探索标 failed。对照 `scored.json` 仍只在工具写入前。 |
