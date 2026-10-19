@@ -9,11 +9,31 @@ const HEADERS = [
   '域名',
   '国家',
   '联系方式',
+  '关键联系人',
   'Tier',
   '评分',
   '匹配理由',
   '来源URL',
 ] as const
+
+function contactsExport(row: LeadRowDto): string {
+  return (row.contacts || [])
+    .map((contact) => contact.value.trim())
+    .filter(Boolean)
+    .join(',')
+}
+
+function peopleExport(row: LeadRowDto): string {
+  return (row.people || [])
+    .map((person) => {
+      const name = person.name.trim()
+      const contact = person.email.trim()
+      if (name && contact) return `${name}：${contact}`
+      return name || contact
+    })
+    .filter(Boolean)
+    .join('；')
+}
 
 function phaseLabel(phase: LeadRowDto['phase']): string {
   if (phase === 'scored') return '已评分'
@@ -70,7 +90,8 @@ export function buildLeadsCsv(rows: LeadRowDto[]): string {
     lifecycleLabel(row.status),
     row.domain || '',
     row.country || '',
-    row.contactLabel || '',
+    contactsExport(row),
+    peopleExport(row),
     row.tierLabel || '',
     row.score != null ? String(row.score) : '',
     matchReasonDisplay(row),
