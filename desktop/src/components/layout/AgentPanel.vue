@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import Icon from '../shared/Icon.vue'
+import AgentAwaitingReplyCard from './AgentAwaitingReplyCard.vue'
 import { useWorkspace } from '../../composables/useWorkspace'
 import type { AgentTimelineItem } from '../../types/workspace'
 
@@ -10,6 +11,7 @@ const {
   agentTimeline,
   agentPrompt,
   agentStatus,
+  awaitingUserReply,
   generating,
   toggleTimelineExpand,
   isTimelineExpanded,
@@ -29,6 +31,22 @@ const SKILL_LABELS: Record<string, string> = {
 }
 
 const skillLabel = computed(() => SKILL_LABELS[agentSkill.value] || '任务')
+const awaitingCardKey = computed(() => {
+  const pending = awaitingUserReply.value
+  if (!pending) return 'none'
+  if (!pending.renderable) return 'fallback'
+  return pending.questions
+    .map((question) =>
+      [
+        question.header,
+        question.question,
+        question.multiple ? '1' : '0',
+        question.custom ? '1' : '0',
+        ...question.options.map((option) => option.label),
+      ].join('\u0001'),
+    )
+    .join('\u0002')
+})
 
 const timelineEl = ref<HTMLElement | null>(null)
 const composerHint = ref('')
@@ -90,7 +108,13 @@ watch(
   <aside class="agent-panel" aria-label="智能体">
     <div class="agent-panel__head">
       <div class="agent-panel__title">
-        <i class="agent-panel__pulse" :class="{ on: generating }" />
+        <i
+          class="agent-panel__pulse"
+          :class="{
+            on: generating && !awaitingUserReply,
+            'is-awaiting': !!awaitingUserReply,
+          }"
+        />
         <span>智能体</span>
       </div>
       <span class="agent-panel__skill">{{ skillLabel }}</span>
@@ -145,6 +169,12 @@ watch(
       </p>
     </div>
 
+    <AgentAwaitingReplyCard
+      v-if="awaitingUserReply"
+      :key="awaitingCardKey"
+      :pending="awaitingUserReply"
+    />
+
     <div class="agent-panel__composer">
       <textarea
         v-model="agentPrompt"
@@ -158,7 +188,8 @@ watch(
       <div class="composer-actions">
         <span class="composer-skill">
           {{ skillLabel }}
-          <template v-if="agentStatus === 'running'"> · 运行中</template>
+          <template v-if="awaitingUserReply"> · 任务在等你回复</template>
+          <template v-else-if="agentStatus === 'running'"> · 运行中</template>
           <template v-else-if="agentStatus === 'done'"> · 完成</template>
           <template v-else-if="agentStatus === 'error'"> · 异常</template>
         </span>

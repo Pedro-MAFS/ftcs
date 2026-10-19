@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
 import type {
   AgentEventPayload,
+  ReplyQuestionInput,
+  ReplyQuestionResult,
   AppStatus,
   OpenCodeActionResult,
   ExploreTasksSnapshotDto,
@@ -338,6 +340,8 @@ const api = {
   generateProfile: (input: ProfileGenerateInput): Promise<ProfileGenerateResult> =>
     ipcRenderer.invoke(IPC.PROFILE_GENERATE, input),
   abortProfile: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.PROFILE_ABORT),
+  replyQuestion: (input: ReplyQuestionInput): Promise<ReplyQuestionResult> =>
+    ipcRenderer.invoke(IPC.AGENT_REPLY_QUESTION, input),
   getProfile: (productId: string): Promise<ProfileDetail | null> =>
     ipcRenderer.invoke(IPC.PROFILE_GET, productId),
   listProfiles: (): Promise<ProfileSummary[]> => ipcRenderer.invoke(IPC.PROFILE_LIST),

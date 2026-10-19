@@ -2,17 +2,21 @@ import type { BrowserWindow } from 'electron'
 import { createRequire } from 'node:module'
 import { readUserPrefs } from '../config/user-prefs'
 import {
+  AWAITING_REPLY_NOTIFY_BODY,
   TASK_DONE_NOTIFY_TITLE,
   isWorkflowNotifySuppressed,
   resolveTaskDoneNotificationEnabled,
+  shouldShowAwaitingReplyNotification,
   shouldShowTaskDoneNotification,
   truncateTaskDoneNotifyBody,
 } from './task-done-notify-logic'
 
 export {
+  AWAITING_REPLY_NOTIFY_BODY,
   TASK_DONE_NOTIFY_TITLE,
   TASK_DONE_NOTIFY_BODY_MAX,
   resolveTaskDoneNotificationEnabled,
+  shouldShowAwaitingReplyNotification,
   shouldShowTaskDoneNotification,
   truncateTaskDoneNotifyBody,
   setWorkflowNotifySuppressed,
@@ -35,6 +39,9 @@ const requireElectron = createRequire(import.meta.url)
 
 let getMainWindow: MainWindowGetter = () => null
 let notifySeq = 0
+/** 当前等待槽已武装。成功 show 之后不再弹，直到下一次 arm。 */
+let awaitingArmed = false
+let awaitingShown = false
 
 /**
  * Electron 要求保留 Notification 强引用，否则会被 GC，click 永远不触发。
@@ -213,9 +220,70 @@ export function showTaskDoneNotification(input: TaskDoneNotifyInput): boolean {
   }
 }
 
+/**
+ * 槽建立时试一次。窗口在前台则不弹，但保持武装；之后 blur / minimize 再试。
+ * 不看编排抑制闸门。失败吞掉。
+ */
+export function armAwaitingReplyNotification(): void {
+  awaitingArmed = true
+  awaitingShown = false
+  tryShowAwaitingReplyNotification()
+}
+
+export function disarmAwaitingReplyNotification(): void {
+  awaitingArmed = false
+  awaitingShown = false
+}
+
+export function onMainWindowBackgrounded(): void {
+  if (!awaitingArmed || awaitingShown) return
+  tryShowAwaitingReplyNotification()
+}
+
+function tryShowAwaitingReplyNotification(): void {
+  if (!awaitingArmed || awaitingShown) return
+  const id = ++notifySeq
+  try {
+    const win = getMainWindow()
+    const windowState = win
+      ? { isFocused: win.isFocused(), isMinimized: win.isMinimized() }
+      : null
+    const electron = loadElectron()
+    const NotificationCtor = electron?.Notification ?? null
+    let supported = false
+    try {
+      supported = Boolean(NotificationCtor?.isSupported?.())
+    } catch {
+      supported = false
+    }
+    const allow = shouldShowAwaitingReplyNotification({
+      enabled: isTaskDoneNotificationEnabled(),
+      suppressed: isWorkflowNotifySuppressed(),
+      supported,
+      window: windowState,
+    })
+    if (!allow || !NotificationCtor) return
+    const notification = new NotificationCtor({
+      title: TASK_DONE_NOTIFY_TITLE,
+      body: AWAITING_REPLY_NOTIFY_BODY,
+      silent: false,
+    })
+    retainNotification(notification, id)
+    notification.on('click', () => {
+      focusMainWindowFromNotification('awaiting-reply-click')
+    })
+    notification.show()
+    awaitingShown = true
+  } catch (err) {
+    logWarn('awaiting:error', { id, err })
+  }
+}
+
 /** 单测用：重置主窗口 getter 与活跃通知引用 */
 export function resetTaskDoneNotifyForTests(): void {
   getMainWindow = () => null
   activeNotifications.length = 0
   notifySeq = 0
+  awaitingArmed = false
+  awaitingShown = false
 }

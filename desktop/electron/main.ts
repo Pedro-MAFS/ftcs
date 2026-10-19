@@ -20,6 +20,7 @@ import {
   type SettingsSaveInput,
 } from './settings/settings-service'
 import {
+  onMainWindowBackgrounded,
   setTaskDoneNotifyMainWindowGetter,
   setWorkflowNotifySuppressed,
   showTaskDoneNotification,
@@ -362,6 +363,13 @@ async function createWindow(): Promise<void> {
 
   win.on('focus', () => {
     void maybeRefreshUsageAfterRechargeFocus()
+  })
+
+  win.on('blur', () => {
+    onMainWindowBackgrounded()
+  })
+  win.on('minimize', () => {
+    onMainWindowBackgrounded()
   })
 
   win.on('close', (event) => {
@@ -1819,6 +1827,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.PROFILE_ABORT, async () => {
     await getAgentRunner().abortCurrent()
     return { ok: true }
+  })
+
+  ipcMain.handle(IPC.AGENT_REPLY_QUESTION, async (_event, input: unknown) => {
+    return getAgentRunner().replyToPendingQuestion(input)
   })
 
   ipcMain.handle(IPC.PROFILE_GENERATE, async (event, input: ProfileGenerateInput) => {

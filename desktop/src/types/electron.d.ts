@@ -25,6 +25,19 @@ export type AgentTimelineItem = {
   collapsed?: boolean
 }
 
+export type AwaitingReplyQuestion = {
+  header: string
+  question: string
+  multiple: boolean
+  custom: boolean
+  options: Array<{ label: string; description: string }>
+}
+
+export type AwaitingUserReply = {
+  questions: AwaitingReplyQuestion[]
+  renderable: boolean
+} | null
+
 export type AgentEventPayload =
   | {
       type: 'state'
@@ -47,6 +60,10 @@ export type AgentEventPayload =
       explorationRun?: ExplorationRunDto
       scored?: ScoredLeadsSummaryDto
       emailDrafts?: EmailDraftsSummaryDto
+    }
+  | {
+      type: 'awaiting-reply'
+      pending: AwaitingUserReply
     }
 
 export interface ProfileGenerateInput {
@@ -977,6 +994,9 @@ declare global {
       moveLibraryEntry: (relativePath: string, destDir: string, cwd?: string) => Promise<LibraryMutationResult>
       generateProfile: (input: ProfileGenerateInput) => Promise<ProfileGenerateResult>
       abortProfile: () => Promise<{ ok: boolean }>
+      replyQuestion: (input: {
+        selections: Array<{ optionLabels: string[]; customText: string }>
+      }) => Promise<{ ok: boolean; message: string }>
       getProfile: (productId: string) => Promise<ProfileDetail | null>
       listProfiles: () => Promise<ProfileSummary[]>
       saveProfile: (input: ProfileSaveInput) => Promise<ProfileSaveResult>

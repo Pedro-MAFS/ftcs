@@ -1,5 +1,6 @@
 export const TASK_DONE_NOTIFY_TITLE = 'FTCS·外贸获客智能体'
 export const TASK_DONE_NOTIFY_BODY_MAX = 180
+export const AWAITING_REPLY_NOTIFY_BODY = '任务在等你回复'
 
 let workflowNotifySuppressed = false
 
@@ -45,4 +46,22 @@ export function shouldShowTaskDoneNotification(opts: {
   if (!opts.window) return false
   if (opts.window.isFocused && !opts.window.isMinimized) return false
   return true
+}
+
+/**
+ * 等待回复通知：窗口条件与任务完成通知相同，但忽略编排抑制。
+ * suppressed 参数保留是为了调用方把现网闸门原样传进来，这里固定不看它。
+ */
+export function shouldShowAwaitingReplyNotification(opts: {
+  enabled: boolean
+  suppressed: boolean
+  supported: boolean
+  window: { isFocused: boolean; isMinimized: boolean } | null
+}): boolean {
+  return shouldShowTaskDoneNotification({
+    enabled: opts.enabled,
+    suppressed: false,
+    supported: opts.supported,
+    window: opts.window,
+  })
 }

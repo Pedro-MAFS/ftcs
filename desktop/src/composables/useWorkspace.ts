@@ -8,6 +8,7 @@ import type {
 } from '../types/workspace'
 import type {
   AgentEventPayload,
+  AwaitingUserReply,
   EmailDraftsSnapshotDto,
   ExploreTasksSnapshotDto,
   KeywordExpansionDto,
@@ -36,6 +37,7 @@ const agentMeta = ref<AgentMetaItem[]>([
 const agentTimeline = ref<AgentTimelineItem[]>([])
 const agentExpanded = ref<Record<string, boolean>>({})
 const agentPrompt = ref('')
+const awaitingUserReply = ref<AwaitingUserReply>(null)
 const generating = computed(() => agentStatus.value === 'running')
 
 const activeProduct = computed(
@@ -224,7 +226,12 @@ function handleAgentEvent(payload: AgentEventPayload): void {
     agentTimeline.value = payload.items
     return
   }
+  if (payload.type === 'awaiting-reply') {
+    awaitingUserReply.value = payload.pending
+    return
+  }
   if (payload.type === 'done') {
+    awaitingUserReply.value = null
     agentStatus.value = payload.ok ? 'done' : 'error'
     if (payload.profile) {
       applyProfileToState(payload.profile)
@@ -476,6 +483,7 @@ export function useWorkspace() {
     agentMeta,
     agentTimeline,
     agentPrompt,
+    awaitingUserReply,
     generating,
     selectProduct,
     deleteProduct,
