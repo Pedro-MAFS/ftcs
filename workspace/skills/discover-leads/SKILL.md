@@ -91,7 +91,7 @@ search-api.search_web({
    - 新闻/博客/论坛/百科/社交媒体/纯聚合搜索页
    - 与产品无关的 B2B 平台 listing 页（无具体公司信息）
 
-   同域名不要在打开前跳过。写入前调用 `lead_list_raw`：域名尚未出现才 `lead_append_raw`；已经出现则不要再追加。若本次仍判定为目标客户，调用 `lead_set_company_intelligence`。
+   同域名不要在打开前跳过。判为目标客户后直接调用 `lead_append_raw` 或 `lead_set_company_intelligence`。不要先调用 `leads_get_scored`，也不要先对照线索库再决定是否保存。
 
 2. 使用 **chrome-devtools-mcp**：
    ```
@@ -115,9 +115,10 @@ search-api.search_web({
 
 4. **若为目标客户** → 在本探索会话里，用本轮已经拿到的搜索摘要、官网公开页和 `product_get` 写好六段与破冰，再调用工具。某一段没有公开信息就写「暂无公开信息」。不要把 Markdown 正文另存成画像，不要为画像再开一轮搜索。不是目标客户：两个工具都不调用。
 
-   - `lead_list_raw` 里还没有同域名：调用 `lead_append_raw`。`companyIntelligence` 只含下面七个字符串，不要传 `status`。校验失败则该次工具失败，不要改成先只写公司。
-   - 同域名已有线索，且本次仍是目标客户：不要调用 `lead_append_raw`。调用 `lead_set_company_intelligence`，`lead_id` 用已有那条。
-   - 单条工具失败只重试这一家的字段，不要把整次探索标成 failed，也不要因此停止下一家。
+   - 新域名，或解析不出域名：直接调用 `lead_append_raw`。`companyIntelligence` 只含下面七个字符串，不要传 `status`。校验失败则该次工具失败，不要改成先只写公司。
+   - 只在原始线索、尚未进入线索库的同域，且本次仍是目标客户：可以直接调用 `lead_set_company_intelligence`，`lead_id` 用已有那条。
+   - 工具返回 `skipped: true` 且 `message` 为「线索已存在」：跳过已成功。继续下一家。不要改字段重试，不要 `exploration_finish` 传 `failed`，`leads_found` 不要加 1。
+   - 工具 `isError` 且 `code` 为 `INVALID_COMPANY_INTELLIGENCE`：只重试这一家的字段，不要把整次探索标成 failed，也不要因此停止下一家。
 
 ```
 lead-store.lead_append_raw({
@@ -153,12 +154,12 @@ lead-store.lead_append_raw({
 })
 ```
 
-同域名再次命中且仍是目标客户：
+只在原始线索、尚未进入线索库的同域，且本次仍是目标客户时，可以直接覆盖：
 
 ```
 lead-store.lead_set_company_intelligence({
   product_id,
-  lead_id,   // lead_list_raw 里已有的那条
+  lead_id,   // 已有原始线索的那条
   businessModel: "...",
   productsBrands: "...",
   targetMarket: "...",
@@ -168,6 +169,8 @@ lead-store.lead_set_company_intelligence({
   icebreak: "..."
 })
 ```
+
+若返回 `skipped: true` 且 `message` 为「线索已存在」，继续下一家，不要把探索标成 failed。不要先调用 `leads_get_scored`。
 
 `run_id` **必须**与本次 `exploration_start` 返回值一致。  
 `match_reason` **必须具体**，说明为何判断为目标客户（引用网站上的产品/业务证据）。  

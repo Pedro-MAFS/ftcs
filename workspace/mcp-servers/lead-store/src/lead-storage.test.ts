@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import {
   appendRawLead,
   appendRawLeadFromTool,
@@ -12,10 +13,15 @@ import {
   patchScoredLead,
   scoreAndDedupeLeads,
   loadScoredLeads,
+  findScoredLeadById,
+  findScoredLeadForDomain,
+  matchAppendRawSkip,
   saveScoredLeads,
   setLeadCompanyIntelligence,
+  toCompanyIntelligenceSkipToolResult,
   updateExplorationRun,
 } from "./lead-storage.js";
+import { getDiscardedLeadsPath, getRawLeadsPath, getScoredLeadsPath } from "./paths.js";
 import { saveProfile } from "./storage.js";
 import type { PersonInput } from "./person-types.js";
 import {
@@ -481,6 +487,18 @@ test("set company intelligence overwrites portrait and restores text on failure"
       },
       productId,
     );
+    appendRawLead(root, productId, "R1", {
+      ...rawInput(productId, "Other Co"),
+      company: {
+        name: "Other Co",
+        website: "https://other.example",
+        country: "US",
+      },
+      source: { url: "https://other.example", type: "manual" },
+    });
+    scoreAndDedupeLeads(root, productId);
+    const scoredBefore = readFileSync(getScoredLeadsPath(root, productId), "utf8");
+
     const saved = appendRawLeadFromTool(
       root,
       productId,
@@ -490,20 +508,7 @@ test("set company intelligence overwrites portrait and restores text on failure"
     );
     assert.equal(saved.ok, true);
     if (!saved.ok) return;
-    scoreAndDedupeLeads(root, productId);
     const beforeIds = listRawLeads(root, productId).map((lead) => lead.id);
-
-    const scored = loadScoredLeads(root, productId)!;
-    const sibling = {
-      ...scored.leads[0]!,
-      id: "lead_sibling",
-      companyIntelligence: {
-        ...scored.leads[0]!.companyIntelligence!,
-        icebreak: "另一行旧破冰",
-      },
-    };
-    scored.leads.push(sibling);
-    saveScoredLeads(root, scored);
 
     const next = portraitTexts({
       businessModel: "新的商业模式",
@@ -511,23 +516,18 @@ test("set company intelligence overwrites portrait and restores text on failure"
     });
     const updated = setLeadCompanyIntelligence(root, productId, saved.lead.id, next);
     assert.equal(updated.ok, true);
+    assert.equal("skipped" in updated, false);
     assert.deepEqual(listRawLeads(root, productId).map((lead) => lead.id), beforeIds);
 
-    const raw = listRawLeads(root, productId)[0]!;
+    const raw = listRawLeads(root, productId).find((lead) => lead.id === saved.lead.id)!;
     assert.equal(raw.companyIntelligence?.status, "ready");
     assert.equal(raw.companyIntelligence?.businessModel, "新的商业模式");
     assert.equal(raw.companyIntelligence?.icebreak, "新的破冰");
     assert.equal(raw.companyIntelligence?.errorMessage, undefined);
     assert.equal(raw.company.name, "ABC Decking");
     assert.equal(raw.company.website, "https://abc-decking.de");
-
-    const afterScore = loadScoredLeads(root, productId)!;
-    const same = afterScore.leads.find((lead) => lead.id === saved.lead.id)!;
-    const other = afterScore.leads.find((lead) => lead.id === "lead_sibling")!;
-    assert.equal(same.companyIntelligence?.icebreak, "新的破冰");
-    assert.equal(other.companyIntelligence?.icebreak, "新的破冰");
-    assert.equal(other.companyIntelligence?.businessModel, "新的商业模式");
-    assert.equal(same.contacts[0]?.value, "sales@abc-decking.de");
+    assert.equal(raw.contacts[0]?.value, "sales@abc-decking.de");
+    assert.equal(readFileSync(getScoredLeadsPath(root, productId), "utf8"), scoredBefore);
 
     const failed = setLeadCompanyIntelligence(root, productId, saved.lead.id, {
       businessModel: "缺了其它字段",
@@ -536,7 +536,7 @@ test("set company intelligence overwrites portrait and restores text on failure"
     if (!failed.ok) {
       assert.equal(failed.message, COMPANY_INTELLIGENCE_INVALID_MESSAGE);
     }
-    const restored = listRawLeads(root, productId)[0]!;
+    const restored = listRawLeads(root, productId).find((lead) => lead.id === saved.lead.id)!;
     assert.equal(restored.companyIntelligence?.status, "failed");
     assert.equal(restored.companyIntelligence?.errorMessage, COMPANY_INTELLIGENCE_INVALID_MESSAGE);
     assert.equal(restored.companyIntelligence?.icebreak, "新的破冰");
@@ -544,20 +544,526 @@ test("set company intelligence overwrites portrait and restores text on failure"
     assert.equal(restored.company.name, "ABC Decking");
     assert.equal(restored.company.website, "https://abc-decking.de");
     assert.equal(restored.contacts[0]?.value, "sales@abc-decking.de");
-    const failedScored = loadScoredLeads(root, productId)!;
-    assert.equal(
-      failedScored.leads.find((lead) => lead.id === saved.lead.id)?.companyIntelligence?.status,
-      "failed",
-    );
-    assert.equal(
-      failedScored.leads.find((lead) => lead.id === saved.lead.id)?.companyIntelligence?.icebreak,
-      "新的破冰",
-    );
+    assert.equal(readFileSync(getScoredLeadsPath(root, productId), "utf8"), scoredBefore);
 
     const missing = setLeadCompanyIntelligence(root, productId, "lead_missing", next);
     assert.equal(missing.ok, false);
-    assert.equal(listRawLeads(root, productId).length, 1);
+    assert.equal(listRawLeads(root, productId).length, 2);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+function saveReadyProfile(root: string, productId: string): void {
+  saveProfile(
+    root,
+    {
+      company: { name: "ACME", website: "https://acme.test" },
+      products: [{ name: "Deck", name_en: "WPC Decking", use_cases: ["outdoor"] }],
+      buyer_personas: [{ company_types: ["distributor"] }],
+      target_markets: { regions: ["EU"] },
+    },
+    productId,
+  );
+}
+
+function domainLead(
+  productId: string,
+  sourceUrl: string,
+  website?: string,
+  name = "Example Co",
+  id?: string,
+): RawLeadInput {
+  return {
+    id,
+    product_id: productId,
+    round: "R1",
+    query_id: "q_dd",
+    company: {
+      name,
+      ...(website !== undefined ? { website } : {}),
+      country: "DE",
+    },
+    source: { url: sourceUrl, type: "manual", snippet: "发现：测试" },
+    match_reason: "测试线索",
+    contacts: [],
+  };
+}
+
+function seedScoredLead(
+  root: string,
+  productId: string,
+  website: string,
+  icebreak = "已知破冰原文",
+  id?: string,
+  name = "Example Co",
+) {
+  const saved = appendRawLeadFromTool(
+    root,
+    productId,
+    "R1",
+    domainLead(productId, website, website, name, id),
+    portraitTexts({ icebreak }),
+  );
+  assert.equal(saved.ok, true);
+  if (!saved.ok) {
+    throw new Error("seed failed");
+  }
+  scoreAndDedupeLeads(root, productId);
+  return saved.lead;
+}
+
+test("US-DD-01 T1 T2 T4 T6 T9 append skips a domain already in the library", () => {
+  const root = createTempProject();
+  const productId = "prod_dd_skip_append";
+  try {
+    saveReadyProfile(root, productId);
+    const existing = seedScoredLead(root, productId, "https://example.com", "已知破冰原文", "lead_lib");
+    const scored = loadScoredLeads(root, productId)!;
+    scored.leads.push({
+      ...scored.leads[0]!,
+      id: "lead_later",
+    });
+    saveScoredLeads(root, scored);
+    const scoredBefore = readFileSync(getScoredLeadsPath(root, productId), "utf8");
+    const rawBefore = readFileSync(getRawLeadsPath(root, productId, "R1"), "utf8");
+    const idsBefore = listRawLeads(root, productId).map((lead) => lead.id);
+
+    const cases = [
+      "https://www.Example.com/path",
+      "http://example.com",
+      "https://example.com:8443/a",
+    ];
+    for (const website of cases) {
+      const skip = matchAppendRawSkip(root, productId, website, "https://unused.example/source");
+      assert.ok(skip);
+      assert.equal(skip.success, true);
+      assert.equal(skip.skipped, true);
+      assert.equal(skip.reason, "domain_already_in_library");
+      assert.equal(skip.domain, "example.com");
+      assert.equal(skip.matched_lead_id, existing.id);
+      assert.equal(skip.wrote, false);
+      assert.equal(skip.message, "线索已存在");
+      assert.equal("lead_id" in skip, false);
+      assert.equal("raw_path" in skip, false);
+      assert.equal("isError" in skip, false);
+      assert.equal("code" in skip, false);
+    }
+
+    const fromSource = matchAppendRawSkip(
+      root,
+      productId,
+      undefined,
+      "https://www.Example.com/path",
+    );
+    assert.equal(fromSource?.domain, "example.com");
+    assert.equal(fromSource?.matched_lead_id, existing.id);
+
+    const invalidPortrait = { businessModel: "只有一段" };
+    assert.equal(validateCompanyIntelligenceInput(invalidPortrait).ok, false);
+    const skippedDespiteInvalid = matchAppendRawSkip(
+      root,
+      productId,
+      "https://www.Example.com/path",
+      "https://www.Example.com/path",
+    );
+    assert.equal(skippedDespiteInvalid?.skipped, true);
+    assert.equal(skippedDespiteInvalid?.message, "线索已存在");
+    assert.notEqual(
+      (skippedDespiteInvalid as { code?: string } | null)?.code,
+      "INVALID_COMPANY_INTELLIGENCE",
+    );
+
+    assert.equal(readFileSync(getScoredLeadsPath(root, productId), "utf8"), scoredBefore);
+    assert.equal(readFileSync(getRawLeadsPath(root, productId, "R1"), "utf8"), rawBefore);
+    assert.deepEqual(listRawLeads(root, productId).map((lead) => lead.id), idsBefore);
+    assert.equal(
+      loadScoredLeads(root, productId)?.leads.find((lead) => lead.id === existing.id)
+        ?.companyIntelligence?.icebreak,
+      "已知破冰原文",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("US-DD-01 T3 T5 T7 T8 T10 T11 new or unparsable domains still append", () => {
+  const root = createTempProject();
+  const productId = "prod_dd_append";
+  const otherProduct = "prod_dd_other";
+  try {
+    saveReadyProfile(root, productId);
+    saveReadyProfile(root, otherProduct);
+    const library = seedScoredLead(root, productId, "https://example.com", "库内破冰", "lead_root");
+    const otherLibrary = seedScoredLead(root, otherProduct, "https://shop.example.com", "乙的破冰");
+    const scoredBefore = readFileSync(getScoredLeadsPath(root, productId), "utf8");
+    const otherScoredBefore = readFileSync(getScoredLeadsPath(root, otherProduct), "utf8");
+
+    const shop = domainLead(productId, "https://shop.example.com/x", "https://shop.example.com/x", "Shop Co");
+    assert.equal(matchAppendRawSkip(root, productId, shop.company.website, shop.source.url), null);
+    const shopSaved = appendRawLeadFromTool(root, productId, "R1", shop, portraitTexts());
+    assert.equal(shopSaved.ok, true);
+    if (!shopSaved.ok) return;
+    assert.notEqual(shopSaved.lead.id, library.id);
+    assert.equal(shopSaved.lead.companyIntelligence?.status, "ready");
+
+    const bare = domainLead(productId, "https://bare.example/page", "example.com", "example.com");
+    assert.equal(matchAppendRawSkip(root, productId, bare.company.website, bare.source.url), null);
+    const bareSaved = appendRawLeadFromTool(root, productId, "R1", bare, portraitTexts());
+    assert.equal(bareSaved.ok, true);
+
+    const emptyWebsite = domainLead(productId, "https://example.com/from-source", "", "Empty Site");
+    assert.equal(
+      matchAppendRawSkip(root, productId, emptyWebsite.company.website, emptyWebsite.source.url),
+      null,
+    );
+    const emptySaved = appendRawLeadFromTool(root, productId, "R1", emptyWebsite, portraitTexts());
+    assert.equal(emptySaved.ok, true);
+
+    assert.equal(readFileSync(getScoredLeadsPath(root, productId), "utf8"), scoredBefore);
+    assert.equal(readFileSync(getScoredLeadsPath(root, otherProduct), "utf8"), otherScoredBefore);
+    assert.equal(otherLibrary.company.website, "https://shop.example.com");
+
+    const freshRoot = createTempProject();
+    const freshId = "prod_dd_empty";
+    try {
+      const noFile = domainLead(freshId, "https://new.example", "https://new.example");
+      assert.equal(matchAppendRawSkip(freshRoot, freshId, noFile.company.website, noFile.source.url), null);
+      assert.equal(findScoredLeadForDomain(freshRoot, freshId, "new.example"), null);
+      const noFileSaved = appendRawLeadFromTool(freshRoot, freshId, "R1", noFile, portraitTexts());
+      assert.equal(noFileSaved.ok, true);
+      assert.equal(listRawLeads(freshRoot, freshId).length, 1);
+
+      saveScoredLeads(freshRoot, {
+        product_id: freshId,
+        updated_at: "2026-10-19T00:00:00.000Z",
+        leads: [],
+        stats: { total: 0, by_tier: {}, by_status: {} },
+      });
+      const emptyLibrary = domainLead(freshId, "https://empty-lib.example", "https://empty-lib.example");
+      assert.equal(
+        matchAppendRawSkip(freshRoot, freshId, emptyLibrary.company.website, emptyLibrary.source.url),
+        null,
+      );
+      const emptyLibrarySaved = appendRawLeadFromTool(
+        freshRoot,
+        freshId,
+        "R1",
+        emptyLibrary,
+        portraitTexts(),
+      );
+      assert.equal(emptyLibrarySaved.ok, true);
+      assert.equal(listRawLeads(freshRoot, freshId).length, 2);
+    } finally {
+      rmSync(freshRoot, { recursive: true, force: true });
+    }
+
+    const discardedOnly = createTempProject();
+    const discardedProduct = "prod_dd_discarded";
+    try {
+      const discardedPath = getDiscardedLeadsPath(discardedOnly, discardedProduct);
+      mkdirSync(dirname(discardedPath), { recursive: true });
+      writeFileSync(
+        discardedPath,
+        `${JSON.stringify({ leads: [{ dedupe_key: "example.com", reason: "duplicate_domain" }] })}\n`,
+        "utf8",
+      );
+      const fromDiscarded = domainLead(
+        discardedProduct,
+        "https://example.com",
+        "https://example.com",
+      );
+      assert.equal(
+        matchAppendRawSkip(discardedOnly, discardedProduct, fromDiscarded.company.website, fromDiscarded.source.url),
+        null,
+      );
+      const discardedSaved = appendRawLeadFromTool(
+        discardedOnly,
+        discardedProduct,
+        "R1",
+        fromDiscarded,
+        portraitTexts(),
+      );
+      assert.equal(discardedSaved.ok, true);
+      assert.equal(listRawLeads(discardedOnly, discardedProduct).length, 1);
+    } finally {
+      rmSync(discardedOnly, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("US-DD-01 T12 same domain twice before scoring appends both rows", () => {
+  const root = createTempProject();
+  const productId = "prod_dd_twice";
+  try {
+    saveReadyProfile(root, productId);
+    seedScoredLead(root, productId, "https://kept.example", "旧行破冰", "lead_kept");
+    const scoredBefore = readFileSync(getScoredLeadsPath(root, productId), "utf8");
+    const first = domainLead(productId, "https://www.Fresh.example/a", "https://www.Fresh.example/a", "Fresh A");
+    const second = domainLead(productId, "http://fresh.example/b", "http://fresh.example/b", "Fresh B");
+    assert.equal(matchAppendRawSkip(root, productId, first.company.website, first.source.url), null);
+    const savedFirst = appendRawLeadFromTool(root, productId, "R1", first, portraitTexts({ icebreak: "第一家" }));
+    assert.equal(matchAppendRawSkip(root, productId, second.company.website, second.source.url), null);
+    const savedSecond = appendRawLeadFromTool(root, productId, "R1", second, portraitTexts({ icebreak: "第二家" }));
+    assert.equal(savedFirst.ok, true);
+    assert.equal(savedSecond.ok, true);
+    if (!savedFirst.ok || !savedSecond.ok) return;
+    assert.notEqual(savedFirst.lead.id, savedSecond.lead.id);
+    const fresh = listRawLeads(root, productId).filter((lead) =>
+      lead.company.website?.includes("fresh.example") || lead.company.website?.includes("Fresh.example"),
+    );
+    assert.equal(fresh.length, 2);
+    assert.equal(readFileSync(getScoredLeadsPath(root, productId), "utf8"), scoredBefore);
+
+    const deduped = scoreAndDedupeLeads(root, productId);
+    assert.equal(deduped.discarded_total, 1);
+    assert.equal(deduped.discarded.leads[0]?.reason, "duplicate_domain");
+    const freshScored = deduped.scored.leads.filter((lead) => lead.dedupe_key === "fresh.example");
+    assert.equal(freshScored.length, 1);
+    assert.equal(
+      deduped.scored.leads.find((lead) => lead.id === "lead_kept")?.companyIntelligence?.icebreak,
+      "旧行破冰",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("US-DD-01 T13 T15 T16 set company intelligence skips library hits", () => {
+  const root = createTempProject();
+  const productId = "prod_dd_set_skip";
+  try {
+    saveReadyProfile(root, productId);
+    const scoredLead = seedScoredLead(
+      root,
+      productId,
+      "https://example.com",
+      "已知破冰原文",
+      "lead_scored",
+    );
+    const scoredBytes = readFileSync(getScoredLeadsPath(root, productId), "utf8");
+    const rawBytes = readFileSync(getRawLeadsPath(root, productId, "R1"), "utf8");
+    const idsBefore = listRawLeads(root, productId).map((lead) => lead.id);
+
+    const skipped = setLeadCompanyIntelligence(
+      root,
+      productId,
+      scoredLead.id,
+      portraitTexts({ icebreak: "不该写上的破冰" }),
+    );
+    assert.equal(skipped.ok, true);
+    if (!skipped.ok || !("skipped" in skipped)) {
+      assert.fail("expected skip");
+    }
+    assert.equal(skipped.skipped, true);
+    assert.equal(skipped.domain, "example.com");
+    assert.equal(skipped.leadId, scoredLead.id);
+    assert.equal(skipped.matchedLeadId, scoredLead.id);
+    const toolBody = toCompanyIntelligenceSkipToolResult(skipped);
+    assert.deepEqual(toolBody, {
+      success: true,
+      skipped: true,
+      reason: "domain_already_in_library",
+      domain: "example.com",
+      lead_id: scoredLead.id,
+      matched_lead_id: scoredLead.id,
+      wrote: false,
+      message: "线索已存在",
+    });
+    assert.equal("isError" in toolBody, false);
+    assert.equal(readFileSync(getScoredLeadsPath(root, productId), "utf8"), scoredBytes);
+    assert.equal(readFileSync(getRawLeadsPath(root, productId, "R1"), "utf8"), rawBytes);
+    assert.deepEqual(listRawLeads(root, productId).map((lead) => lead.id), idsBefore);
+
+    const rawOnly = appendRawLeadFromTool(
+      root,
+      productId,
+      "R1",
+      domainLead(productId, "https://www.Example.com/about", "https://www.Example.com/about", "Raw Twin", "lead_raw_twin"),
+      portraitTexts({ icebreak: "A的破冰" }),
+    );
+    assert.equal(rawOnly.ok, true);
+    if (!rawOnly.ok) return;
+    const beforeCross = readFileSync(getScoredLeadsPath(root, productId), "utf8");
+    const rawCross = readFileSync(getRawLeadsPath(root, productId, "R1"), "utf8");
+    const cross = setLeadCompanyIntelligence(
+      root,
+      productId,
+      rawOnly.lead.id,
+      portraitTexts({ icebreak: "不该覆盖 A" }),
+    );
+    assert.equal(cross.ok, true);
+    if (!cross.ok || !("skipped" in cross)) {
+      assert.fail("expected domain skip");
+    }
+    assert.equal(cross.domain, "example.com");
+    assert.equal(cross.leadId, rawOnly.lead.id);
+    assert.equal(cross.matchedLeadId, scoredLead.id);
+    assert.equal(readFileSync(getScoredLeadsPath(root, productId), "utf8"), beforeCross);
+    assert.equal(readFileSync(getRawLeadsPath(root, productId, "R1"), "utf8"), rawCross);
+
+    const missingBytes = readFileSync(getScoredLeadsPath(root, productId), "utf8");
+    const missing = setLeadCompanyIntelligence(root, productId, "lead_missing", portraitTexts());
+    assert.deepEqual(missing, { ok: false, message: "未找到线索" });
+    assert.equal(readFileSync(getScoredLeadsPath(root, productId), "utf8"), missingBytes);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("US-DD-01 T14 raw-only same domain still overwrites that raw row", () => {
+  const root = createTempProject();
+  const productId = "prod_dd_raw_only";
+  try {
+    saveReadyProfile(root, productId);
+    seedScoredLead(root, productId, "https://other.example", "别人的破冰", "lead_other");
+    const saved = appendRawLeadFromTool(
+      root,
+      productId,
+      "R1",
+      domainLead(productId, "https://only-raw.example", "https://only-raw.example", "Only Raw"),
+      portraitTexts({ icebreak: "旧破冰" }),
+    );
+    assert.equal(saved.ok, true);
+    if (!saved.ok) return;
+    const idsBefore = listRawLeads(root, productId).map((lead) => lead.id);
+    const scoredBefore = readFileSync(getScoredLeadsPath(root, productId), "utf8");
+
+    const updated = setLeadCompanyIntelligence(
+      root,
+      productId,
+      saved.lead.id,
+      portraitTexts({ icebreak: "覆盖后的破冰", businessModel: "只改这条 raw" }),
+    );
+    assert.equal(updated.ok, true);
+    assert.equal("skipped" in updated, false);
+    const raw = listRawLeads(root, productId).find((lead) => lead.id === saved.lead.id)!;
+    assert.equal(raw.companyIntelligence?.icebreak, "覆盖后的破冰");
+    assert.equal(raw.companyIntelligence?.businessModel, "只改这条 raw");
+    assert.equal(raw.companyIntelligence?.status, "ready");
+    assert.deepEqual(listRawLeads(root, productId).map((lead) => lead.id), idsBefore);
+    assert.equal(readFileSync(getScoredLeadsPath(root, productId), "utf8"), scoredBefore);
+    assert.equal(findScoredLeadForDomain(root, productId, "only-raw.example"), null);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("US-DD-01 null domain does not skip by company name or rewrite other scored rows", () => {
+  const root = createTempProject();
+  const productId = "prod_dd_null_domain";
+  try {
+    saveReadyProfile(root, productId);
+    const scoredLead = seedScoredLead(
+      root,
+      productId,
+      "example.com",
+      "库内破冰",
+      "lead_named",
+      "Acme Decks",
+    );
+    assert.equal(loadScoredLeads(root, productId)?.leads[0]?.dedupe_key, "acme decks");
+    const saved = appendRawLeadFromTool(
+      root,
+      productId,
+      "R1",
+      domainLead(productId, "https://source.example/no-host", "example.com", "Acme Decks"),
+      portraitTexts({ icebreak: "raw 旧破冰" }),
+    );
+    assert.equal(saved.ok, true);
+    if (!saved.ok) return;
+    assert.equal(
+      matchAppendRawSkip(root, productId, "example.com", "https://example.com"),
+      null,
+    );
+    const scoredBefore = readFileSync(getScoredLeadsPath(root, productId), "utf8");
+    const updated = setLeadCompanyIntelligence(
+      root,
+      productId,
+      saved.lead.id,
+      portraitTexts({ icebreak: "只改 raw" }),
+    );
+    assert.equal(updated.ok, true);
+    assert.equal("skipped" in updated, false);
+    assert.equal(
+      listRawLeads(root, productId).find((lead) => lead.id === saved.lead.id)?.companyIntelligence?.icebreak,
+      "只改 raw",
+    );
+    assert.equal(readFileSync(getScoredLeadsPath(root, productId), "utf8"), scoredBefore);
+    assert.equal(
+      loadScoredLeads(root, productId)?.leads.find((lead) => lead.id === scoredLead.id)?.companyIntelligence
+        ?.icebreak,
+      "库内破冰",
+    );
+
+    const self = setLeadCompanyIntelligence(
+      root,
+      productId,
+      scoredLead.id,
+      portraitTexts({ icebreak: "不该改库内" }),
+    );
+    assert.equal(self.ok, true);
+    if (!self.ok || !("skipped" in self)) {
+      assert.fail("id already in library should skip");
+    }
+    assert.equal(self.domain, null);
+    assert.equal(self.matchedLeadId, scoredLead.id);
+    assert.equal(toCompanyIntelligenceSkipToolResult(self).domain, null);
+    assert.equal(
+      loadScoredLeads(root, productId)?.leads.find((lead) => lead.id === scoredLead.id)?.companyIntelligence
+        ?.icebreak,
+      "库内破冰",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("US-DD-01 corrupt scored file throws before any write", () => {
+  const root = createTempProject();
+  const productId = "prod_dd_corrupt";
+  try {
+    const saved = appendRawLeadFromTool(
+      root,
+      productId,
+      "R1",
+      domainLead(productId, "https://example.com", "https://example.com"),
+      portraitTexts(),
+    );
+    assert.equal(saved.ok, true);
+    if (!saved.ok) return;
+    const scoredPath = getScoredLeadsPath(root, productId);
+    mkdirSync(dirname(scoredPath), { recursive: true });
+    writeFileSync(scoredPath, "{", "utf8");
+    const rawBefore = readFileSync(getRawLeadsPath(root, productId, "R1"), "utf8");
+    assert.throws(() => matchAppendRawSkip(root, productId, "https://example.com", "https://example.com"));
+    assert.throws(() => findScoredLeadById(root, productId, saved.lead.id));
+    assert.throws(() =>
+      setLeadCompanyIntelligence(root, productId, saved.lead.id, portraitTexts({ icebreak: "不该写下" })),
+    );
+    assert.equal(readFileSync(scoredPath, "utf8"), "{");
+    assert.equal(readFileSync(getRawLeadsPath(root, productId, "R1"), "utf8"), rawBefore);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("US-DD-01 tool callbacks skip before write and do not mark skip as isError", () => {
+  const source = readFileSync(fileURLToPath(new URL("../src/index.ts", import.meta.url)), "utf8");
+  const appendAt = source.indexOf('server.tool(\n  "lead_append_raw"');
+  const setAt = source.indexOf('server.tool(\n  "lead_set_company_intelligence"');
+  const listAt = source.indexOf('server.tool(\n  "lead_list_raw"');
+  assert.ok(appendAt >= 0 && setAt > appendAt && listAt > setAt);
+  const append = source.slice(appendAt, setAt);
+  const set = source.slice(setAt, listAt);
+  assert.match(append, /matchAppendRawSkip[\s\S]*appendRawLeadFromTool/);
+  assert.equal(append.includes("scored.json"), false);
+  assert.equal(set.includes("scored.json"), false);
+  const appendSkip = append.slice(append.indexOf("if (skip)"), append.indexOf("appendRawLeadFromTool"));
+  assert.equal(appendSkip.includes("isError"), false);
+  assert.match(set, /"skipped" in result[\s\S]*toCompanyIntelligenceSkipToolResult/);
+  const setSkip = set.slice(set.indexOf('"skipped" in result'), set.indexOf("lead_id: result.leadId"));
+  assert.equal(setSkip.includes("isError"), false);
 });
