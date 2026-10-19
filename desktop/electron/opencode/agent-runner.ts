@@ -580,7 +580,12 @@ function toolPartToTimelineItem(part: ToolPart): AgentTimelineItem {
   if (state.status === 'error') {
     detailParts.push(`错误:\n${state.error || '调用失败'}`)
   }
-  const questionCard = formatQuestionToolCard(part.tool, status)
+  const questionCard = formatQuestionToolCard(
+    part.tool,
+    status,
+    state.input,
+    state.status === 'completed' ? state.output : undefined,
+  )
   if (questionCard) {
     return {
       id: `tool-${part.id}`,

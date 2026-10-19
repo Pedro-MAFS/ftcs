@@ -186,7 +186,8 @@ function parseQuestion(item: unknown): { key: MatchKey; display: DisplayQuestion
   const header = typeof rec.header === 'string' ? rec.header.trim() : ''
   const question = typeof rec.question === 'string' ? rec.question.trim() : ''
   const multiple = rec.multiple === true
-  const custom = rec.custom === true
+  // OpenCode 网页/TUI：custom 缺省视为允许自己填写，只有显式 false 才关掉
+  const custom = rec.custom !== false
   const optionsRaw = rec.options
   const optionsOk = Array.isArray(optionsRaw)
   const labels: string[] = []
@@ -223,12 +224,105 @@ function parseQuestion(item: unknown): { key: MatchKey; display: DisplayQuestion
 export function formatQuestionToolCard(
   tool: string,
   status: 'running' | 'done' | 'error',
-): { title: string; body: string; collapsed: true } | null {
+  input?: unknown,
+  output?: unknown,
+): { title: string; body: string; collapsed: false } | null {
   const name = tool.trim().toLowerCase()
   if (name !== 'question' && !name.startsWith('question.')) return null
   const title =
     status === 'done' ? '等待回复 · 完成' : status === 'error' ? '等待回复 · 失败' : '等待回复'
-  return { title, body: '等待你的选择', collapsed: true }
+  return {
+    title,
+    body: formatQuestionToolBody(status, input, output),
+    collapsed: false,
+  }
+}
+
+function formatQuestionToolBody(
+  status: 'running' | 'done' | 'error',
+  input: unknown,
+  output: unknown,
+): string {
+  const questions = readTimelineQuestions(input)
+  const answers = readTimelineAnswers(output)
+  if (questions.length === 0) {
+    if (status === 'done' && answers.length > 0) {
+      return answers.map((answer) => `你的选择：${answer.join('、')}`).join('\n')
+    }
+    if (status === 'error') return '这次提问没有完成'
+    return '等待你的选择'
+  }
+  return questions
+    .map((question, index) => {
+      const lines = [question.header, question.question].filter((line) => line !== '')
+      if (status === 'done') {
+        const chosen = answers[index]
+        lines.push(chosen && chosen.length > 0 ? `你的选择：${chosen.join('、')}` : '你的选择：未记录')
+      } else if (status === 'error') {
+        lines.push('这次提问没有完成')
+      } else {
+        lines.push('尚未选择')
+      }
+      return lines.join('\n')
+    })
+    .join('\n\n')
+}
+
+function readTimelineQuestions(input: unknown): Array<{ header: string; question: string }> {
+  const raw = Array.isArray(input)
+    ? input
+    : input && typeof input === 'object'
+      ? (input as { questions?: unknown }).questions
+      : undefined
+  if (!Array.isArray(raw)) return []
+  const questions: Array<{ header: string; question: string }> = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const rec = item as { header?: unknown; question?: unknown }
+    const header = typeof rec.header === 'string' ? rec.header.trim() : ''
+    const question = typeof rec.question === 'string' ? rec.question.trim() : ''
+    if (!header && !question) continue
+    questions.push({ header, question })
+  }
+  return questions
+}
+
+function readTimelineAnswers(output: unknown): string[][] {
+  const parsed = parseAnswerPayload(output)
+  if (!parsed) return []
+  return parsed
+    .map((answer) => answer.map((item) => item.trim()).filter((item) => item !== ''))
+    .filter((answer) => answer.length > 0)
+}
+
+function parseAnswerPayload(output: unknown): string[][] | null {
+  if (Array.isArray(output)) return normalizeAnswerRows(output)
+  if (typeof output !== 'string') return null
+  const trimmed = output.trim()
+  if (!trimmed) return null
+  try {
+    const json = JSON.parse(trimmed) as unknown
+    if (Array.isArray(json)) return normalizeAnswerRows(json)
+    if (json && typeof json === 'object' && Array.isArray((json as { answers?: unknown }).answers)) {
+      return normalizeAnswerRows((json as { answers: unknown[] }).answers)
+    }
+  } catch {
+    return [[trimmed]]
+  }
+  return [[trimmed]]
+}
+
+function normalizeAnswerRows(rows: unknown[]): string[][] | null {
+  const answers: string[][] = []
+  for (const row of rows) {
+    if (typeof row === 'string') {
+      answers.push([row])
+      continue
+    }
+    if (!Array.isArray(row) || row.some((item) => typeof item !== 'string')) return null
+    answers.push(row)
+  }
+  return answers
 }
 
 export function buildV1QuestionReplyCall(requestID: string, answers: string[][]): {

@@ -4616,7 +4616,8 @@ textarea.text-input {
   line-height: 1.4;
 }
 
-.await-reply__option input {
+.await-reply__option input[type='radio'],
+.await-reply__option input[type='checkbox'] {
   margin-top: 2px;
 }
 
@@ -4632,17 +4633,21 @@ textarea.text-input {
   font-size: 11px;
 }
 
-.await-reply__custom {
+.await-reply__own {
   width: 100%;
-  min-height: 52px;
-  resize: vertical;
-  padding: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-input);
-  color: var(--text);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.await-reply__own:focus {
+  outline: none;
+  color: var(--text);
 }
 
 .await-reply__alert {

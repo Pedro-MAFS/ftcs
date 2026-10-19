@@ -184,19 +184,23 @@ describe('buildQuestionAnswers', () => {
 })
 
 describe('assessQuestionRequest', () => {
-  it('custom 缺省为 false，空说明仍可渲染', () => {
+  it('custom 缺省为 true，空说明仍可渲染', () => {
     const assessed = assessQuestionRequest([
       { header: ' 范围 ', question: ' 怎么继续 ', options: [{ label: '甲', description: '' }] },
     ])
     assert.equal(assessed.renderable, true)
-    assert.equal(assessed.questions[0]?.custom, false)
+    assert.equal(assessed.questions[0]?.custom, true)
     assert.equal(assessed.questions[0]?.multiple, false)
     assert.equal(assessed.questions[0]?.header, '范围')
   })
 
-  it('空选项且没有自定义、缺说明、空标题都不可渲染', () => {
+  it('显式 custom false 才关闭自由输入；空选项、缺说明、空标题不可渲染', () => {
+    const omitted = assessQuestionRequest([{ header: 'H', question: 'Q', options: [] }])
+    assert.equal(omitted.renderable, true)
+    assert.equal(omitted.questions[0]?.custom, true)
     assert.equal(
-      assessQuestionRequest([{ header: 'H', question: 'Q', options: [] }]).renderable,
+      assessQuestionRequest([{ header: 'H', question: 'Q', custom: false, options: [] }])
+        .renderable,
       false,
     )
     assert.equal(
@@ -224,12 +228,29 @@ describe('assessQuestionRequest', () => {
 })
 
 describe('formatQuestionToolCard', () => {
-  it('提问工具改标题且预览不用原始 JSON', () => {
+  it('提问工具改标题，并写出问题与选择结果', () => {
     assert.deepEqual(formatQuestionToolCard(' Question ', 'running'), {
       title: '等待回复',
       body: '等待你的选择',
-      collapsed: true,
+      collapsed: false,
     })
+    const input = {
+      questions: [
+        {
+          header: '测试提问',
+          question: '请选一项',
+          options: [{ label: '继续', description: '接着做' }],
+        },
+      ],
+    }
+    assert.equal(
+      formatQuestionToolCard('question', 'running', input)?.body,
+      '测试提问\n请选一项\n尚未选择',
+    )
+    assert.equal(
+      formatQuestionToolCard('question', 'done', input, JSON.stringify([['继续']]))?.body,
+      '测试提问\n请选一项\n你的选择：继续',
+    )
     assert.equal(formatQuestionToolCard('question.v2', 'done')?.title, '等待回复 · 完成')
     assert.equal(formatQuestionToolCard('QUESTION.ask', 'error')?.title, '等待回复 · 失败')
     assert.equal(formatQuestionToolCard('questions', 'running'), null)
@@ -358,9 +379,7 @@ describe('AwaitingReplyCoordinator', () => {
     assert.equal(h.emits.at(-1)?.questions[0]?.header, '范围')
     assert.equal(h.created(), 1)
 
-    await h.coord.ingest('s1', 'v2', 'v2-id', [
-      question('范围', ['继续', '收尾'], { custom: false }),
-    ])
+    await h.coord.ingest('s1', 'v2', 'v2-id', [question('范围', ['继续', '收尾'])])
     assert.equal(h.timers.length, 1)
     assert.equal(h.timers[0]?.cleared, false)
     assert.equal(h.created(), 1)
