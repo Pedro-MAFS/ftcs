@@ -25,6 +25,19 @@ export type AgentTimelineItem = {
   collapsed?: boolean
 }
 
+export type AwaitingReplyQuestion = {
+  header: string
+  question: string
+  multiple: boolean
+  custom: boolean
+  options: Array<{ label: string; description: string }>
+}
+
+export type AwaitingUserReply = {
+  questions: AwaitingReplyQuestion[]
+  renderable: boolean
+} | null
+
 export type AgentEventPayload =
   | {
       type: 'state'
@@ -47,6 +60,10 @@ export type AgentEventPayload =
       explorationRun?: ExplorationRunDto
       scored?: ScoredLeadsSummaryDto
       emailDrafts?: EmailDraftsSummaryDto
+    }
+  | {
+      type: 'awaiting-reply'
+      pending: AwaitingUserReply
     }
 
 export interface ProfileGenerateInput {
@@ -377,6 +394,21 @@ export interface LeadScoreBreakdownDto {
   competition: number
 }
 
+export type CompanyIntelligenceStatusDto = 'pending' | 'ready' | 'failed'
+
+export interface CompanyIntelligenceDto {
+  businessModel: string
+  productsBrands: string
+  targetMarket: string
+  supplyChain: string
+  industryPosition: string
+  collabOpportunity: string
+  icebreak: string
+  status: CompanyIntelligenceStatusDto
+  errorMessage?: string
+  updatedAt?: string
+}
+
 export interface LeadRowDto {
   id: string
   productId: string
@@ -406,6 +438,7 @@ export interface LeadRowDto {
   contactLabel: string
   people: LeadPersonDto[]
   peopleLabel: string
+  companyIntelligence?: CompanyIntelligenceDto
   record: Record<string, unknown>
 }
 
@@ -724,6 +757,18 @@ export interface RawLeadSaveResult {
   lead?: LeadRowDto
 }
 
+export interface SaveLeadIcebreakInput {
+  productId: string
+  leadId: string
+  icebreak: string
+}
+
+export interface SaveLeadIcebreakResult {
+  ok: boolean
+  message: string
+  lead?: LeadRowDto
+}
+
 export interface SaveScoredPeoplePersonInput {
   id?: string
   name: string
@@ -818,6 +863,20 @@ declare global {
       openOfficialPortal: () => Promise<
         import('./settings').OpenOfficialPortalResult
       >
+      applyPlacesOfficialKey: () => Promise<{
+        ok: boolean
+        needLogin: boolean
+        message: string
+        queried: boolean
+        settings: SettingsSnapshot
+      }>
+      refreshPlacesOfficialKey: () => Promise<{
+        ok: boolean
+        needLogin: boolean
+        message: string
+        queried: boolean
+        settings: SettingsSnapshot
+      }>
       getOnboardingState: () => Promise<OnboardingState>
       setOnboardingState: (patch: Partial<OnboardingState>) => Promise<OnboardingState>
       probeEnvironment: () => Promise<EnvProbeResult>
@@ -935,6 +994,9 @@ declare global {
       moveLibraryEntry: (relativePath: string, destDir: string, cwd?: string) => Promise<LibraryMutationResult>
       generateProfile: (input: ProfileGenerateInput) => Promise<ProfileGenerateResult>
       abortProfile: () => Promise<{ ok: boolean }>
+      replyQuestion: (input: {
+        selections: Array<{ optionLabels: string[]; customText: string }>
+      }) => Promise<{ ok: boolean; message: string }>
       getProfile: (productId: string) => Promise<ProfileDetail | null>
       listProfiles: () => Promise<ProfileSummary[]>
       saveProfile: (input: ProfileSaveInput) => Promise<ProfileSaveResult>
@@ -961,6 +1023,7 @@ declare global {
       startExploreR3: (input: DiscoverLeadsInput) => Promise<DiscoverLeadsResult>
       listLeads: (productId: string) => Promise<LeadsSnapshotDto>
       saveRawLead: (input: RawLeadSaveInput) => Promise<RawLeadSaveResult>
+      saveLeadIcebreak: (input: SaveLeadIcebreakInput) => Promise<SaveLeadIcebreakResult>
       saveScoredPeople: (input: SaveScoredPeopleInput) => Promise<SaveScoredPeopleResult>
       verifyPersonEmail: (
         input: VerifyPersonEmailInput,

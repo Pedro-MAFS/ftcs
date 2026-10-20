@@ -3,10 +3,13 @@ import { describe, it } from 'node:test'
 import type { WorkflowPlan } from '../types/electron'
 import {
   addEditorStep,
+  canViewBuiltinWorkflowPlan,
   createDefaultEditorDraft,
   createEditorStep,
+  editorModeProducesSaveInput,
   moveEditorStep,
   removeEditorStep,
+  saveInputForEditorMode,
   toSaveInput,
   validateWorkflowPlanDraft,
   WORKFLOW_PLAN_MAX_STEPS,
@@ -94,6 +97,49 @@ describe('useWorkflowPlanEditor', () => {
       name: '仅 R1',
       steps: [{ nodeId: 'discover-r1' }],
     })
+  })
+
+  it('canViewBuiltinWorkflowPlan is true only for the two builtin plan ids', () => {
+    assert.equal(canViewBuiltinWorkflowPlan('builtin-standard'), true)
+    assert.equal(canViewBuiltinWorkflowPlan('builtin-advanced'), true)
+    assert.equal(canViewBuiltinWorkflowPlan('user_aaa'), false)
+    assert.equal(canViewBuiltinWorkflowPlan(''), false)
+    assert.equal(canViewBuiltinWorkflowPlan(null), false)
+    assert.equal(canViewBuiltinWorkflowPlan(undefined), false)
+    assert.equal(canViewBuiltinWorkflowPlan('builtin-custom'), false)
+    assert.equal(canViewBuiltinWorkflowPlan('builtin-'), false)
+  })
+
+  it('editorModeProducesSaveInput is false only for view', () => {
+    assert.equal(editorModeProducesSaveInput('view'), false)
+    assert.equal(editorModeProducesSaveInput('create'), true)
+    assert.equal(editorModeProducesSaveInput('edit'), true)
+  })
+
+  it('saveInputForEditorMode returns null for view', () => {
+    const draft = {
+      name: '标准获客',
+      steps: [createEditorStep('discover-r1'), createEditorStep('discover-r2')],
+      editingId: 'builtin-standard',
+    }
+    const viewed = saveInputForEditorMode('view', draft)
+    assert.equal(viewed, null)
+
+    const created = saveInputForEditorMode('create', {
+      name: draft.name,
+      steps: draft.steps,
+    })
+    assert.ok(created)
+    assert.equal(created.name, '标准获客')
+    assert.deepEqual(created.steps, [
+      { nodeId: 'discover-r1' },
+      { nodeId: 'discover-r2' },
+    ])
+
+    const edited = saveInputForEditorMode('edit', draft)
+    assert.ok(edited)
+    assert.equal(edited.id, 'builtin-standard')
+    assert.equal(edited.name, '标准获客')
   })
 
   it('addEditorStep and removeEditorStep enforce limits', () => {

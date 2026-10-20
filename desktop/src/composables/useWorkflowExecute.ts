@@ -156,7 +156,7 @@ export function useWorkflowExecute(options?: {
     switch (nodeId) {
       case 'expand-keywords': {
         if (!window.ftcs?.expandKeywords) {
-          return { ipcOk: false, message: '扩展关键词接口不可用' }
+          return { ipcOk: false, message: '操作失败，请重试' }
         }
         resetAgentForExpandKeywords()
         const donePromise = waitForAgentDone(productId, { signal })
@@ -197,7 +197,7 @@ export function useWorkflowExecute(options?: {
       }
       case 'score-and-dedupe': {
         if (!window.ftcs?.scoreAndDedupeLeads) {
-          return { ipcOk: false, message: '评分去重接口不可用' }
+          return { ipcOk: false, message: '操作失败，请重试' }
         }
         const raw = leadsSnapshot.value?.stats.raw ?? 0
         resetAgentForScoreAndDedupe(raw)
@@ -221,7 +221,7 @@ export function useWorkflowExecute(options?: {
       }
       case 'draft-outreach-email': {
         if (!window.ftcs?.draftEmails) {
-          return { ipcOk: false, message: '批量起草接口不可用' }
+          return { ipcOk: false, message: '操作失败，请重试' }
         }
         const pending = emailDraftsSnapshot.value?.pendingHighLeadIds.length ?? 0
         const donePromise = waitForAgentDone(productId, { signal })
@@ -244,7 +244,7 @@ export function useWorkflowExecute(options?: {
       }
       case 'enrich-lead-contacts': {
         if (!window.ftcs?.enrichLeadContacts) {
-          return { ipcOk: false, message: '批量补全接口不可用' }
+          return { ipcOk: false, message: '操作失败，请重试' }
         }
         const pendingIds = (leadsSnapshot.value?.rows ?? [])
           .filter(

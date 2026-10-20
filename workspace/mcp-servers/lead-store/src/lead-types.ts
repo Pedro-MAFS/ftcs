@@ -20,6 +20,111 @@ export const LeadContactSchema = z.object({
   confidence: z.enum(["high", "medium", "low"]).optional(),
 });
 
+export const CompanyIntelligenceStatusSchema = z.enum(["pending", "ready", "failed"]);
+
+export type CompanyIntelligenceStatus = z.infer<typeof CompanyIntelligenceStatusSchema>;
+
+/** 落盘形态。六段 + 破冰一一对应；不接受整篇 Markdown。 */
+export const CompanyIntelligenceSchema = z.object({
+  businessModel: z.string(),
+  productsBrands: z.string(),
+  targetMarket: z.string(),
+  supplyChain: z.string(),
+  industryPosition: z.string(),
+  collabOpportunity: z.string(),
+  icebreak: z.string(),
+  status: CompanyIntelligenceStatusSchema,
+  errorMessage: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export type CompanyIntelligence = z.infer<typeof CompanyIntelligenceSchema>;
+
+export const COMPANY_INTELLIGENCE_TEXT_KEYS = [
+  "businessModel",
+  "productsBrands",
+  "targetMarket",
+  "supplyChain",
+  "industryPosition",
+  "collabOpportunity",
+  "icebreak",
+] as const;
+
+export type CompanyIntelligenceTextKey = (typeof COMPANY_INTELLIGENCE_TEXT_KEYS)[number];
+
+export type CompanyIntelligenceTexts = Record<CompanyIntelligenceTextKey, string>;
+
+export const COMPANY_INTELLIGENCE_MAX_CHARS = 4000;
+
+export const COMPANY_INTELLIGENCE_INVALID_MESSAGE =
+  "目标公司画像未写入：缺少字段或不是规定的文本";
+
+const COMPANY_INTELLIGENCE_TEXT_KEY_SET = new Set<string>(COMPANY_INTELLIGENCE_TEXT_KEYS);
+
+export function validateCompanyIntelligenceInput(
+  input: unknown,
+): { ok: true; texts: CompanyIntelligenceTexts } | { ok: false; message: string } {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return { ok: false, message: COMPANY_INTELLIGENCE_INVALID_MESSAGE };
+  }
+  const record = input as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (
+    keys.length !== COMPANY_INTELLIGENCE_TEXT_KEYS.length ||
+    keys.some((key) => !COMPANY_INTELLIGENCE_TEXT_KEY_SET.has(key))
+  ) {
+    return { ok: false, message: COMPANY_INTELLIGENCE_INVALID_MESSAGE };
+  }
+  const texts = {} as CompanyIntelligenceTexts;
+  for (const key of COMPANY_INTELLIGENCE_TEXT_KEYS) {
+    const value = record[key];
+    if (typeof value !== "string" || value.length > COMPANY_INTELLIGENCE_MAX_CHARS) {
+      return { ok: false, message: COMPANY_INTELLIGENCE_INVALID_MESSAGE };
+    }
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || trimmed.length > COMPANY_INTELLIGENCE_MAX_CHARS) {
+      return { ok: false, message: COMPANY_INTELLIGENCE_INVALID_MESSAGE };
+    }
+    texts[key] = trimmed;
+  }
+  return { ok: true, texts };
+}
+
+export function buildReadyCompanyIntelligence(
+  texts: CompanyIntelligenceTexts,
+  updatedAt = new Date().toISOString(),
+): CompanyIntelligence {
+  return {
+    businessModel: texts.businessModel,
+    productsBrands: texts.productsBrands,
+    targetMarket: texts.targetMarket,
+    supplyChain: texts.supplyChain,
+    industryPosition: texts.industryPosition,
+    collabOpportunity: texts.collabOpportunity,
+    icebreak: texts.icebreak,
+    status: "ready",
+    updatedAt,
+  };
+}
+
+export function buildFailedCompanyIntelligence(
+  previous: CompanyIntelligence | undefined,
+  updatedAt = new Date().toISOString(),
+): CompanyIntelligence {
+  return {
+    businessModel: previous?.businessModel ?? "",
+    productsBrands: previous?.productsBrands ?? "",
+    targetMarket: previous?.targetMarket ?? "",
+    supplyChain: previous?.supplyChain ?? "",
+    industryPosition: previous?.industryPosition ?? "",
+    collabOpportunity: previous?.collabOpportunity ?? "",
+    icebreak: previous?.icebreak ?? "",
+    status: "failed",
+    errorMessage: COMPANY_INTELLIGENCE_INVALID_MESSAGE,
+    updatedAt,
+  };
+}
+
 export const RawLeadSchema = z.object({
   id: z.string(),
   product_id: z.string(),
@@ -33,6 +138,8 @@ export const RawLeadSchema = z.object({
   match_reason: z.string(),
   contacts: z.array(LeadContactSchema).default([]),
   raw_score: z.number().optional(),
+  /** 旧线索可没有。有则必须是六段 + 破冰，而不是整篇自由文本 */
+  companyIntelligence: CompanyIntelligenceSchema.optional(),
 });
 
 export type RawLead = z.infer<typeof RawLeadSchema>;
@@ -119,6 +226,7 @@ export const ScoredLeadSchema = z.object({
   query_id: z.string().optional(),
   run_id: z.string().optional(),
   discovered_at: z.string().optional(),
+  companyIntelligence: CompanyIntelligenceSchema.optional(),
 });
 
 export type ScoredLead = z.infer<typeof ScoredLeadSchema>;

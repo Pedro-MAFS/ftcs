@@ -18,7 +18,7 @@ outputs:
 
 # discover-leads-r2
 
-基于关键词中的 **R2 社媒渠道词**执行获客：Tavily（带 `include_domains`）搜社媒摘要 → 抽公司名并解析稳定官网 → chrome 只打开**公司官网** → 按 R1 口径判断 → 通过才写入 `raw/R2.jsonl`。
+基于关键词中的 **R2 社媒渠道词**执行获客：Tavily（带 `include_domains`）搜社媒摘要 → 抽公司名并解析稳定官网 → chrome 只打开**公司官网** → 按 R1 口径判断 → 在本探索会话里把六段画像与破冰和公司字段一次写入 `raw/R2.jsonl`。判为目标客户后直接调用保存工具。收到「线索已存在」则继续下一家。只在原始线索里的同域仍可直接覆盖画像。
 
 **不要**调用 skill `discover-leads`，也不要给它传 `rounds: ["R2"]`。R1 / R2 不共用同一份 Skill。
 
@@ -49,7 +49,8 @@ outputs:
 ## 硬禁令
 
 - **禁止**对社媒 URL 调用 chrome-devtools（`new_page` / `navigate_page`）。社媒只使用 Tavily 的 title / url / content。
-- **禁止**在未打开官网并判断为「是」时调用 `lead_append_raw`。
+- **禁止**在未打开官网并判断为「是」时调用 `lead_append_raw` 或 `lead_set_company_intelligence`。
+- **禁止**在保存前调用 `leads_get_scored`，或先对照线索库再决定是否保存。判为目标客户后直接调用 `lead_append_raw` 或 `lead_set_company_intelligence`。返回 `skipped: true` 且 `message` 为「线索已存在」时继续下一家，不要把探索标成 failed。
 - **禁止**把 `facebook.com` / `linkedin.com` 等社媒域名当作 `company.website` 或去重键。
 - **禁止**在 query 里写 `site:` / `intitle:` / `inurl:` / `filetype:`。站点限定只用 `include_domains`。
 
@@ -76,7 +77,7 @@ yaml 中找不到该 `site_id`、或 `include_domains` 为空 → **跳过该词
 | 每词社媒 `num_results` | 任务指令中的 `search_num_results` |
 | 每词二次搜索（无 include 的 `search_web`） | `floor(本词社媒 search_web 实际返回条数 × 0.75)`。摘要里已有官网的条目不补搜、不占次数 |
 
-先按 `max_queries` 截词，再在词内套上表。已解析出的公司官网都打开并判断；同域名已有线索则跳过。不设每词、每轮的官网打开次数上限。
+先按 `max_queries` 截词，再在词内套上表。已解析出的公司官网都打开并判断。判为目标客户后直接调用保存工具；只在原始线索里的同域仍可直接 `lead_set_company_intelligence`。不设每词、每轮的官网打开次数上限。
 
 日限额 `DAILY_LIMIT_EXCEEDED` 或官方通道 402 → 立即停止，`exploration_finish` 保存进度，告知用户。
 
@@ -183,7 +184,7 @@ search-api.search_web({
 
 仅当 Step 2 得到 `website_url`。打开前：
 
-1. `lead-store.lead_list_raw`（不要只查 R2，合并已有 R1/R2）按 **官网域名** 去重；已有则跳过，不打开
+1. 直接打开官网并判断。不要先调用 `leads_get_scored`，也不要先对照线索库再决定是否保存。只在原始线索里的同域仍可在判断为「是」之后直接 `lead_set_company_intelligence`。
 
 使用 **chrome-devtools-mcp**，目标必须是 `website_url`（官网），**禁止**传入社媒 URL：
 
@@ -211,11 +212,13 @@ new_page(url) 或 navigate_page
 - 无法识别为公司网站
 - 页面打不开、登录墙到空白、不是该公司
 
-打不开或否 → **不写** Lead，只记跳过。
+打不开或否 → **不写** Lead，也不调用 `lead_set_company_intelligence`，只记跳过。
 
 chrome-devtools 不可用 → 停止本轮，提示启用 MCP，`exploration_finish`（failed 或 completed 并说明未判断）。
 
 ### Step 4：写入（仅判断为「是」）
+
+在本探索会话里先写好六段和破冰（材料只用本轮摘要、已打开的官网和 `product_get`；没有公开信息的段写「暂无公开信息」）。不要另开会话，不要把 Markdown 另存成画像。判为目标客户后直接调用 `lead_append_raw` 或 `lead_set_company_intelligence`。不要先 `leads_get_scored`。收到 `skipped: true`（「线索已存在」）继续下一家，不把探索标 failed，`leads_found` 不加。只在原始线索里的同域仍可直接覆盖。画像校验失败与跳过要分开：校验失败只重试这一家，不把整次运行标成 failed。
 
 ```
 lead-store.lead_append_raw({
@@ -237,17 +240,43 @@ lead-store.lead_append_raw({
     },
     match_reason: "<须具体：社媒上如何发现 + 官网页上何种业务证据，禁止空泛>",
     contacts: [],
-    raw_score: 70
+    raw_score: 70,
+    companyIntelligence: {
+      businessModel: "商业模式与体量",
+      productsBrands: "主营产品与品牌",
+      targetMarket: "目标市场与客户",
+      supplyChain: "供应链与采购倾向",
+      industryPosition: "行业地位与优势",
+      collabOpportunity: "合作机会与跟进建议",
+      icebreak: "破冰话术"
+    }
   }
+})
+```
+
+只在原始线索、尚未进入线索库的同域，且本次仍是目标客户时，可以直接覆盖：
+
+```
+lead-store.lead_set_company_intelligence({
+  product_id,
+  lead_id: "<已有原始线索 id>",
+  businessModel: "...",
+  productsBrands: "...",
+  targetMarket: "...",
+  supplyChain: "...",
+  industryPosition: "...",
+  collabOpportunity: "...",
+  icebreak: "..."
 })
 ```
 
 - `run_id` **必须**与 Step 0 一致
 - `source.snippet` **必须**以 `发现：` 开头并带上社媒 URL
 - `company.website` 与 `source.url` 必须是官网，不得是社媒
-- `contacts` 仅官网上公开的邮箱/电话等；没有就 `[]`
+- `contacts` 仅官网上公开的邮箱/电话等；没有就 `[]`。不要把邮箱或电话写进画像
+- `companyIntelligence` 只含上面七个字符串，不要传 `status` 或 Markdown 字段
 - 本 Skill **不**调用 `leads_score_and_dedupe`（用户之后按产品跑现网评分即可）
-- `leads_found` +1
+- 新公司 `lead_append_raw` 成功时 `leads_found` +1；`skipped: true`（「线索已存在」）不加；只在原始线索上的覆盖也不加
 
 ### Step 5：每词进度
 

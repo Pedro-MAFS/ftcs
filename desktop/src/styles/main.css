@@ -1981,7 +1981,7 @@ button:focus-visible {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  width: min(480px, 100%);
+  width: min(960px, 100%);
   height: 100%;
   background: var(--bg-elevated);
   border-left: 1px solid var(--border);
@@ -2382,6 +2382,15 @@ button:focus-visible {
   margin: 0;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.lead-drawer__icebreak {
+  margin-top: 12px;
+}
+
+.lead-drawer__icebreak > .lead-drawer__banner,
+.lead-drawer__icebreak > div {
+  grid-column: 1 / -1;
 }
 
 .lead-drawer__breakdown {
@@ -4549,6 +4558,114 @@ textarea.text-input {
   animation: pulse 1.2s ease-in-out infinite;
 }
 
+.agent-panel__pulse.is-awaiting {
+  animation: none;
+  background: var(--warning);
+}
+
+.await-reply {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 42%;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.await-reply__list {
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.await-reply__item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.await-reply__header {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.await-reply__question,
+.await-reply__fallback {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.await-reply__options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.await-reply__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.await-reply__option input[type='radio'],
+.await-reply__option input[type='checkbox'] {
+  margin-top: 2px;
+}
+
+.await-reply__option-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.await-reply__desc {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.await-reply__own {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.await-reply__own:focus {
+  outline: none;
+  color: var(--text);
+}
+
+.await-reply__alert {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.await-reply__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .website-chip__meta {
   flex: 1;
   min-width: 0;
@@ -4833,6 +4950,33 @@ textarea.text-input {
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   box-shadow: 0 16px 48px rgb(0 0 0 / 45%);
+}
+
+.workflow-plan-editor--view .workflow-plan-editor__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-plan-editor__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.workflow-plan-editor__close:hover {
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .workflow-plan-editor__head h2 {
@@ -5394,6 +5538,24 @@ textarea.text-input {
 .kw-editor__foot-actions {
   display: flex;
   gap: 8px;
+}
+
+.diag-details {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.diag-details summary {
+  cursor: pointer;
+}
+
+.diag-details__body {
+  margin: 8px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
 }
 
 

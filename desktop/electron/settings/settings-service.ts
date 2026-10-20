@@ -14,6 +14,11 @@ import {
   getTokenGatewayBaseUrl,
 } from '../gateway/gateway-config'
 import {
+  PLACES_KEY_SOURCE_ENV,
+  placesByokPersistedForChannel,
+  placesSourceForChannel,
+} from '../../src/domain/places-official'
+import {
   CUSTOM_VISION_ENV,
   formatEnvBool,
   parseEnvBool,
@@ -82,6 +87,17 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: PlacesProvider
+  /** 跟模型通道走：official 或 custom。不是单独选择，也不是 Key。 */
+  placesKeySource: 'official' | 'custom'
+  /**
+   * 下面几项只在当次状态查询的 IPC 返回值里有内容。
+   * getSettings 固定为空：不把 Places 状态留在内存缓存或磁盘上。
+   */
+  placesOfficialStatus: string | null
+  placesOfficialReasonMessage: string | null
+  placesOfficialExpectedReadyNote: string | null
+  placesOfficialQueryError: string | null
+  placesOfficialNeedLogin: boolean
   /** Hunter BYOK：至少一个 Key */
   hunterApiKeySet: boolean
   /** 各 Key 掩码后换行拼接，供 textarea 回显 */
@@ -374,6 +390,12 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     placesApiKeyMasked: maskSecret(placesKey),
     placesApiKeySet: Boolean(placesKey),
     placesProvider,
+    placesKeySource: placesSourceForChannel(channelMode),
+    placesOfficialStatus: null,
+    placesOfficialReasonMessage: null,
+    placesOfficialExpectedReadyNote: null,
+    placesOfficialQueryError: null,
+    placesOfficialNeedLogin: false,
     hunterApiKeySet: hunterKeys.length > 0,
     hunterApiKeysMasked: hunterKeys.map((key) => maskSecret(key)).join('\n'),
     hunterApiKeyCount: hunterKeys.length,
@@ -497,7 +519,10 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
 
   const prevPlaces = env[PLACES_KEY_ENV] || ''
   let clearPlacesKey = false
-  if (input.placesApiKey === undefined) {
+  envUpdates[PLACES_KEY_SOURCE_ENV] = placesSourceForChannel(channelMode)
+  if (!placesByokPersistedForChannel(channelMode)) {
+    // 官方通道不写自备 Key，也不把它清掉。磁盘上原有的 BYOK 留着，运行时不用。
+  } else if (input.placesApiKey === undefined) {
     if (prevPlaces) {
       envUpdates[PLACES_KEY_ENV] = prevPlaces
     }
@@ -571,7 +596,7 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
 
   return {
     ok: true,
-    message: '配置已保存。正在重启 OpenCode 使模型与密钥生效…',
+    message: '配置已保存。',
     settings: getSettingsSnapshot(),
   }
 }

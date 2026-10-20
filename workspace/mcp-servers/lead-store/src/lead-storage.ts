@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type {
+  CompanyIntelligence,
   DiscardedLead,
   DiscardedLeadsFile,
   ExplorationRun,
@@ -10,10 +11,13 @@ import type {
   ScoredLeadsFile,
 } from "./lead-types.js";
 import {
+  buildFailedCompanyIntelligence,
+  buildReadyCompanyIntelligence,
   DiscardedLeadsFileSchema,
   ExplorationRunSchema,
   RawLeadSchema,
   ScoredLeadsFileSchema,
+  validateCompanyIntelligenceInput,
 } from "./lead-types.js";
 import { generateLeadId, generateRunId, normalizeDomain } from "./lead-id.js";
 import { createPersonIdAllocator } from "./person-id.js";
@@ -57,6 +61,35 @@ export function appendRawLead(
   mkdirSync(dirname(rawPath), { recursive: true });
   appendFileSync(rawPath, `${JSON.stringify(lead)}\n`, "utf8");
   return lead;
+}
+
+/**
+ * 探索会话调用 lead_append_raw 的落库入口。
+ * 七段校验通过才追加整行；失败不写 jsonl。
+ */
+export function appendRawLeadFromTool(
+  root: string,
+  productId: string,
+  round: RawLead["round"],
+  input: RawLeadInput,
+  companyIntelligenceInput: unknown = input.companyIntelligence,
+): { ok: true; lead: RawLead } | { ok: false; message: string } {
+  const check = validateCompanyIntelligenceInput(companyIntelligenceInput);
+  if (!check.ok) {
+    return { ok: false, message: check.message };
+  }
+  try {
+    const lead = appendRawLead(root, productId, round, {
+      ...input,
+      product_id: productId,
+      round,
+      companyIntelligence: buildReadyCompanyIntelligence(check.texts),
+    });
+    return { ok: true, lead };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, message };
+  }
 }
 
 export function listRawLeads(
@@ -198,6 +231,114 @@ export function loadScoredLeads(root: string, productId: string): ScoredLeadsFil
   return ScoredLeadsFileSchema.parse(JSON.parse(readFileSync(scoredPath, "utf8")));
 }
 
+export const DOMAIN_ALREADY_IN_LIBRARY_REASON = "domain_already_in_library";
+export const LEAD_ALREADY_EXISTS_MESSAGE = "线索已存在";
+
+export type ScoredDomainHit = {
+  leadId: string;
+  dedupeKey: string;
+};
+
+function listScoredLeadsForLookup(root: string, productId: string): ScoredLead[] {
+  const file = loadScoredLeads(root, productId);
+  if (!file || !Array.isArray(file.leads) || file.leads.length === 0) {
+    return [];
+  }
+  return file.leads;
+}
+
+export function findScoredLeadById(
+  root: string,
+  productId: string,
+  leadId: string,
+): ScoredDomainHit | null {
+  const lead = listScoredLeadsForLookup(root, productId).find((item) => item.id === leadId);
+  if (!lead) {
+    return null;
+  }
+  return { leadId: lead.id, dedupeKey: lead.dedupe_key };
+}
+
+export function findScoredLeadForDomain(
+  root: string,
+  productId: string,
+  domain: string,
+): ScoredDomainHit | null {
+  const lead = listScoredLeadsForLookup(root, productId).find((item) => item.dedupe_key === domain);
+  if (!lead) {
+    return null;
+  }
+  return { leadId: lead.id, dedupeKey: lead.dedupe_key };
+}
+
+export type AppendRawSkip = {
+  success: true;
+  skipped: true;
+  reason: typeof DOMAIN_ALREADY_IN_LIBRARY_REASON;
+  domain: string;
+  matched_lead_id: string;
+  wrote: false;
+  message: typeof LEAD_ALREADY_EXISTS_MESSAGE;
+};
+
+/** lead_append_raw 写入前的只读对照。命中返回跳过，不写盘、不生成 id。 */
+export function matchAppendRawSkip(
+  root: string,
+  productId: string,
+  website: string | null | undefined,
+  sourceUrl: string | null | undefined,
+): AppendRawSkip | null {
+  const candidate = website ?? sourceUrl;
+  if (candidate == null) {
+    return null;
+  }
+  const domain = normalizeDomain(candidate);
+  if (domain === null) {
+    return null;
+  }
+  const hit = findScoredLeadForDomain(root, productId, domain);
+  if (!hit) {
+    return null;
+  }
+  return {
+    success: true,
+    skipped: true,
+    reason: DOMAIN_ALREADY_IN_LIBRARY_REASON,
+    domain,
+    matched_lead_id: hit.leadId,
+    wrote: false,
+    message: LEAD_ALREADY_EXISTS_MESSAGE,
+  };
+}
+
+export type CompanyIntelligenceSkip = {
+  success: true;
+  skipped: true;
+  reason: typeof DOMAIN_ALREADY_IN_LIBRARY_REASON;
+  domain: string | null;
+  lead_id: string;
+  matched_lead_id: string;
+  wrote: false;
+  message: typeof LEAD_ALREADY_EXISTS_MESSAGE;
+};
+
+export function toCompanyIntelligenceSkipToolResult(result: {
+  domain: string | null;
+  leadId: string;
+  matchedLeadId: string;
+}): CompanyIntelligenceSkip {
+  return {
+    success: true,
+    skipped: true,
+    reason: DOMAIN_ALREADY_IN_LIBRARY_REASON,
+    domain: result.domain,
+    lead_id: result.leadId,
+    matched_lead_id: result.matchedLeadId,
+    wrote: false,
+    message: LEAD_ALREADY_EXISTS_MESSAGE,
+  };
+}
+
 export function saveScoredLeads(root: string, file: ScoredLeadsFile): ScoredLeadsFile {
   const parsed = ScoredLeadsFileSchema.parse(file);
   const scoredPath = getScoredLeadsPath(root, parsed.product_id);
@@ -276,11 +417,17 @@ export function scoreAndDedupeLeads(root: string, productId: string): {
   const preservedStatusByKey = new Map<string, ScoredLead["status"]>();
   const preservedStatusById = new Map<string, ScoredLead["status"]>();
   const preservedPeopleByKey = new Map<string, ScoredLead["people"]>();
+  const preservedIntelById = new Map<string, CompanyIntelligence>();
+  const preservedIntelByKey = new Map<string, CompanyIntelligence>();
   for (const lead of existing?.leads ?? []) {
     preservedStatusByKey.set(lead.dedupe_key, lead.status);
     preservedStatusById.set(lead.id, lead.status);
     if (lead.people && lead.people.length > 0) {
       preservedPeopleByKey.set(lead.dedupe_key, lead.people);
+    }
+    if (lead.companyIntelligence) {
+      preservedIntelById.set(lead.id, lead.companyIntelligence);
+      preservedIntelByKey.set(lead.dedupe_key, lead.companyIntelligence);
     }
   }
 
@@ -292,6 +439,12 @@ export function scoreAndDedupeLeads(root: string, productId: string): {
         preservedStatusByKey.get(dedupeKey);
       const scored = rawLeadToScoredLead(profile, lead, config, preserved);
       scored.people = preservedPeopleByKey.get(dedupeKey) ?? [];
+      if (!scored.companyIntelligence) {
+        const kept = preservedIntelById.get(lead.id) ?? preservedIntelByKey.get(dedupeKey);
+        if (kept) {
+          scored.companyIntelligence = { ...kept };
+        }
+      }
       return scored;
     })
   );
@@ -439,4 +592,122 @@ export function patchScoredLead(
     people_total: sortedPeople.length,
     contacts_appended: contactsAppended,
   };
+}
+
+function replaceRawLeadCompanyIntelligence(
+  root: string,
+  productId: string,
+  leadId: string,
+  companyIntelligence: CompanyIntelligence,
+): RawLead | null {
+  const rounds: RawLead["round"][] = ["R1", "R2", "R3", "R4"];
+  for (const round of rounds) {
+    const rawPath = getRawLeadsPath(root, productId, round);
+    if (!existsSync(rawPath)) {
+      continue;
+    }
+    const lines = readFileSync(rawPath, "utf8").split("\n");
+    let found: RawLead | null = null;
+    const rewritten: string[] = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+      let parsed: RawLead;
+      try {
+        parsed = RawLeadSchema.parse(JSON.parse(trimmed));
+      } catch {
+        rewritten.push(trimmed);
+        continue;
+      }
+      if (parsed.id !== leadId) {
+        rewritten.push(trimmed);
+        continue;
+      }
+      const updated: RawLead = { ...parsed, companyIntelligence };
+      found = updated;
+      rewritten.push(JSON.stringify(updated));
+    }
+    if (found) {
+      writeFileSync(rawPath, `${rewritten.join("\n")}\n`, "utf8");
+      return found;
+    }
+  }
+  return null;
+}
+
+export type SetLeadCompanyIntelligenceResult =
+  | {
+      ok: true;
+      skipped: true;
+      domain: string | null;
+      leadId: string;
+      matchedLeadId: string;
+    }
+  | { ok: true; leadId: string }
+  | { ok: false; message: string };
+
+/**
+ * 覆盖已有 raw 的画像。
+ * 目标已在线索库，或其域名已在库中：跳过，不写盘。
+ * 解析不出域名时仍可改这条 raw，但不用公司名去改线索库里的其它行。
+ */
+export function setLeadCompanyIntelligence(
+  root: string,
+  productId: string,
+  leadId: string,
+  input: unknown,
+): SetLeadCompanyIntelligenceResult {
+  const existing = listRawLeads(root, productId).find((lead) => lead.id === leadId);
+  if (!existing) {
+    return { ok: false, message: "未找到线索" };
+  }
+
+  const domain = normalizeDomain(existing.company.website ?? existing.source.url);
+  const inLibrary = findScoredLeadById(root, productId, leadId);
+  if (inLibrary) {
+    return { ok: true, skipped: true, domain, leadId, matchedLeadId: leadId };
+  }
+  if (domain !== null) {
+    const domainHit = findScoredLeadForDomain(root, productId, domain);
+    if (domainHit) {
+      return { ok: true, skipped: true, domain, leadId, matchedLeadId: domainHit.leadId };
+    }
+  }
+
+  const check = validateCompanyIntelligenceInput(input);
+  const updatedAt = nowIso();
+  const ready = check.ok ? buildReadyCompanyIntelligence(check.texts, updatedAt) : null;
+  const rawNext = ready ?? buildFailedCompanyIntelligence(existing.companyIntelligence, updatedAt);
+  const updated = replaceRawLeadCompanyIntelligence(root, productId, leadId, rawNext);
+  if (!updated) {
+    return { ok: false, message: "未找到线索" };
+  }
+
+  if (domain !== null) {
+    const dedupeKey = getDedupeKey(existing);
+    const scored = loadScoredLeads(root, productId);
+    if (scored) {
+      let changed = false;
+      for (const lead of scored.leads) {
+        if (lead.id !== leadId && lead.dedupe_key !== dedupeKey) {
+          continue;
+        }
+        lead.companyIntelligence = ready
+          ? { ...ready }
+          : buildFailedCompanyIntelligence(lead.companyIntelligence, updatedAt);
+        changed = true;
+      }
+      if (changed) {
+        scored.updated_at = updatedAt;
+        saveScoredLeads(root, scored);
+      }
+    }
+  }
+
+  if (!check.ok) {
+    return { ok: false, message: check.message };
+  }
+  return { ok: true, leadId: updated.id };
 }

@@ -22,6 +22,8 @@ export interface EnvProbeItem {
   label: string
   status: EnvProbeStatus
   detail: string
+  /** 版本、路径等排障信息，只在诊断信息里展示 */
+  diagnostic?: string
   /** 建议用户打开的安装说明或下载页 */
   installUrl?: string
   /** 可选依赖：不计入 EnvProbeResult.ok */
@@ -155,6 +157,10 @@ async function probeNode(): Promise<EnvProbeItem> {
   }
 }
 
+const AGENT_MISSING =
+  '智能体服务未就绪。请点「一键安装」，或查看安装说明后再检测。'
+const AGENT_BROKEN = '组件未能运行。请重新安装后再检测。'
+
 async function probeOpenCode(): Promise<EnvProbeItem> {
   const manualUrl = getDocsInstallUrl()
 
@@ -170,17 +176,19 @@ async function probeOpenCode(): Promise<EnvProbeItem> {
     } catch {
       return {
         id: 'opencode',
-        label: 'OpenCode CLI',
+        label: '智能体服务',
         status: 'error',
-        detail: `${configured.exe} 存在但无法运行（可能被杀软隔离）。请重新准备。`,
+        detail: AGENT_BROKEN,
+        diagnostic: `${configured.exe} 存在但无法运行。`,
         installUrl: manualUrl,
       }
     }
     return {
       id: 'opencode',
-      label: 'OpenCode CLI',
+      label: '智能体服务',
       status: 'ok',
-      detail: version
+      detail: '就绪',
+      diagnostic: version
         ? `${version} · ${configured.exe}（${configured.source}）`
         : `${configured.exe}（${configured.source}）`,
       installUrl: manualUrl,
@@ -192,10 +200,10 @@ async function probeOpenCode(): Promise<EnvProbeItem> {
     if (!configured) {
       return {
         id: 'opencode',
-        label: 'OpenCode CLI',
+        label: '智能体服务',
         status: 'missing',
-        detail:
-          '应用内 OpenCode 未就绪或文件已缺失。请重新一键准备 OpenCode（下载到应用目录）。',
+        detail: AGENT_MISSING,
+        diagnostic: '应用目录中的组件缺失。',
         installUrl: manualUrl,
       }
     }
@@ -211,10 +219,9 @@ async function probeOpenCode(): Promise<EnvProbeItem> {
   if (!bin) {
     return {
       id: 'opencode',
-      label: 'OpenCode CLI',
+      label: '智能体服务',
       status: 'missing',
-      detail:
-        '未找到 OpenCode CLI。可一键准备到应用目录（无需 npm），或自行安装后重新检测。',
+      detail: AGENT_MISSING,
       installUrl: manualUrl,
     }
   }
@@ -231,9 +238,10 @@ async function probeOpenCode(): Promise<EnvProbeItem> {
 
   return {
     id: 'opencode',
-    label: 'OpenCode CLI',
+    label: '智能体服务',
     status: 'ok',
-    detail: version ? `${version} · ${bin}` : bin,
+    detail: '就绪',
+    diagnostic: version ? `${version} · ${bin}` : bin,
     installUrl: manualUrl,
   }
 }

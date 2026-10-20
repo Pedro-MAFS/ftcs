@@ -46,6 +46,14 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: 'custom' | 'gateway'
+  /** 跟模型通道走：official 或 custom。 */
+  placesKeySource: 'official' | 'custom'
+  /** 仅当次状态查询。getSettings 固定为 null，设置页打开时先显示查询中。 */
+  placesOfficialStatus: string | null
+  placesOfficialReasonMessage: string | null
+  placesOfficialExpectedReadyNote: string | null
+  placesOfficialQueryError: string | null
+  placesOfficialNeedLogin: boolean
   hunterApiKeySet: boolean
   hunterApiKeysMasked: string
   hunterApiKeyCount: number

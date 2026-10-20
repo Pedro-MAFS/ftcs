@@ -43,7 +43,7 @@ describe('formatTaskDoneNotifyBody', () => {
         ok: true,
         message: 'R1 广撒网完成：run_1 · 5 词 · 线索 3',
       }),
-      'R1 广撒网已完成（线索 3）',
+      '全网搜索已完成（线索 3）',
     )
     assert.equal(
       formatTaskDoneNotifyBody({
@@ -51,7 +51,7 @@ describe('formatTaskDoneNotifyBody', () => {
         ok: true,
         message: 'R2 社媒发现完成：run_2 · 2 词 · 线索 1',
       }),
-      'R2 社媒发现已完成（线索 1）',
+      '社媒发现已完成（线索 1）',
     )
     assert.equal(
       formatTaskDoneNotifyBody({
@@ -59,7 +59,7 @@ describe('formatTaskDoneNotifyBody', () => {
         ok: true,
         message: 'done',
       }),
-      'R3 地图发现已完成',
+      '地图发现已完成',
     )
   })
 
@@ -177,7 +177,7 @@ describe('formatTaskDoneNotifyBody', () => {
         ok: false,
         message: 'R1 广撒网失败：run_xxx · 已执行 3 词 · 线索 0',
       }),
-      '失败：R1 广撒网 · 详见应用内时间线',
+      '失败：全网搜索 · 详见应用内时间线',
     )
     assert.equal(
       formatTaskDoneNotifyBody({
@@ -185,7 +185,7 @@ describe('formatTaskDoneNotifyBody', () => {
         ok: false,
         message: 'R3 未完成',
       }),
-      '失败：R3 地图发现 · 详见应用内时间线',
+      '失败：地图发现 · 详见应用内时间线',
     )
   })
 
@@ -196,7 +196,7 @@ describe('formatTaskDoneNotifyBody', () => {
         ok: false,
         message: '等待 OpenCode 会话 idle 超时',
       }),
-      '失败：补全联系人 · 等待 OpenCode 会话 idle 超时',
+      '失败：补全联系人 · 详见应用内时间线',
     )
     assert.equal(
       formatTaskDoneNotifyBody({
@@ -217,7 +217,7 @@ describe('formatTaskDoneNotifyBody', () => {
   })
 
   it('taskLabelForNotify', () => {
-    assert.equal(taskLabelForNotify('discover-leads-r2', ''), 'R2 社媒发现')
+    assert.equal(taskLabelForNotify('discover-leads-r2', ''), '社媒发现')
     assert.equal(
       taskLabelForNotify('draft-outreach-email', '单槽起草完成'),
       '开发信单人起草',

@@ -20,6 +20,7 @@ import {
   type SettingsSaveInput,
 } from './settings/settings-service'
 import {
+  onMainWindowBackgrounded,
   setTaskDoneNotifyMainWindowGetter,
   setWorkflowNotifySuppressed,
   showTaskDoneNotification,
@@ -38,6 +39,14 @@ import {
   openOfficialPortal,
   maybeRefreshUsageAfterRechargeFocus,
 } from './gateway/official-channel-service'
+import {
+  applyPlacesOfficialKey,
+  refreshPlacesOfficialKey,
+  releasePlacesDiscoverRun,
+  resolvePlacesApiKeyForConnectivityTest,
+} from './gateway/places-official-runtime'
+import { placesOfficialKeyMemory } from './gateway/places-official-key-memory'
+import { setPlacesMcpInjection } from './opencode/places-mcp-env'
 import { writeUserPrefs } from './config/user-prefs'
 import { initializeWorkspace, ensureMcpServersReady } from './config/workspace-init'
 import {
@@ -90,7 +99,7 @@ import {
   saveUserWorkflowPlan,
 } from './workflow/workflow-plans'
 import { listLeadsSnapshot } from './leads/leads-reader'
-import { saveRawLead } from './leads/lead-writer'
+import { saveLeadIcebreak, saveRawLead } from './leads/lead-writer'
 import { saveScoredPeople } from './leads/save-scored-people'
 import { verifyPersonEmail } from './leads/verify-person-email'
 import { saveCsvWithDialog } from './leads/export-csv'
@@ -211,9 +220,16 @@ let isQuitting = false
 /** 登录自启 / --hidden：创建后不强制 show */
 let startHidden = false
 
+async function reloadOpenCodeRuntime(): Promise<void> {
+  if (!runtime) runtime = new OpenCodeRuntime()
+  await runtime.restart()
+}
+
 function getAgentRunner(): AgentRunController {
   if (!agentRunner) {
-    agentRunner = new AgentRunController(() => runtime?.getClient() ?? null)
+    agentRunner = new AgentRunController(() => runtime?.getClient() ?? null, {
+      reloadRuntime: reloadOpenCodeRuntime,
+    })
   }
   return agentRunner
 }
@@ -347,6 +363,13 @@ async function createWindow(): Promise<void> {
 
   win.on('focus', () => {
     void maybeRefreshUsageAfterRechargeFocus()
+  })
+
+  win.on('blur', () => {
+    onMainWindowBackgrounded()
+  })
+  win.on('minimize', () => {
+    onMainWindowBackgrounded()
   })
 
   win.on('close', (event) => {
@@ -581,6 +604,10 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.AUTH_LOGOUT, async () => {
     const result = await authLogout()
+    const release = releasePlacesDiscoverRun()
+    if (release.reload && runtime) {
+      await runtime.restart()
+    }
     broadcastAuthChanged()
     return result
   })
@@ -626,7 +653,7 @@ function registerIpcHandlers(): void {
       ok: runtime.getStatus().state === 'running',
       message:
         runtime.getStatus().state === 'running'
-          ? 'OpenCode 已启动'
+          ? '服务已启动'
           : runtime.getStatus().error || '启动失败',
       status: await buildAppStatus(),
     }
@@ -635,7 +662,7 @@ function registerIpcHandlers(): void {
     if (!runtime) {
       return {
         ok: true,
-        message: 'OpenCode 未运行',
+        message: '服务未就绪，请稍后或重启应用',
         status: await buildAppStatus(),
       }
     }
@@ -645,7 +672,7 @@ function registerIpcHandlers(): void {
     await runtime.stop()
     return {
       ok: true,
-      message: 'OpenCode 已停止',
+      message: '服务已停止',
       status: await buildAppStatus(),
     }
   })
@@ -664,7 +691,7 @@ function registerIpcHandlers(): void {
     if (!runtime) {
       return {
         ok: false,
-        message: 'OpenCode 未初始化',
+        message: '暂不支持重新连接，请重启应用',
         status: await buildAppStatus(),
       }
     }
@@ -702,7 +729,16 @@ function registerIpcHandlers(): void {
         mode?: 'off' | 'system' | 'manual'
         manualProxyUrl?: string
       },
-    ) => testGooglePlacesConnectivity(input),
+    ) => {
+      const keyRes = await resolvePlacesApiKeyForConnectivityTest()
+      if (!keyRes.ok) {
+        return { ok: false as const, message: keyRes.message }
+      }
+      return testGooglePlacesConnectivity({
+        ...input,
+        apiKey: keyRes.apiKey,
+      })
+    },
   )
   ipcMain.handle(IPC.SETTINGS_TEST_HUNTER, async () => testHunterConnectivity())
   ipcMain.handle(IPC.ONBOARDING_GET_STATE, () => getOnboardingState())
@@ -813,6 +849,8 @@ function registerIpcHandlers(): void {
   )
   ipcMain.handle(IPC.SETTINGS_SAVE, async (_event, input: SettingsSaveInput) => {
     const result = saveSettings(input)
+    placesOfficialKeyMemory.clear()
+    setPlacesMcpInjection({ kind: 'default' })
     if (!runtime) {
       runtime = new OpenCodeRuntime()
     }
@@ -854,6 +892,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.GATEWAY_OPEN_OFFICIAL_PORTAL, async () => {
     return openOfficialPortal()
   })
+  ipcMain.handle(IPC.PLACES_OFFICIAL_APPLY, async () => applyPlacesOfficialKey())
+  ipcMain.handle(IPC.PLACES_OFFICIAL_REFRESH, async () => refreshPlacesOfficialKey())
   ipcMain.handle(IPC.SETTINGS_PICK_WORKSPACE, async () => {
     const dir = await pickWorkspaceDirectory()
     if (!dir) return { path: null, restarted: false }
@@ -1202,6 +1242,17 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.LEADS_SAVE_RAW, (_event, input: RawLeadSaveInput) => {
     try {
       return saveRawLead(input)
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      }
+    }
+  })
+
+  ipcMain.handle(IPC.LEADS_SAVE_ICEBREAK, (_event, input) => {
+    try {
+      return saveLeadIcebreak(input)
     } catch (err) {
       return {
         ok: false,
@@ -1676,7 +1727,7 @@ function registerIpcHandlers(): void {
 
       return {
         ok: true,
-        message: `正在为 ${productId} 启动 R1 探索…`,
+        message: '正在准备…',
         productId,
       }
     } catch (err) {
@@ -1719,7 +1770,7 @@ function registerIpcHandlers(): void {
 
       return {
         ok: true,
-        message: `正在为 ${productId} 启动 R2 社媒发现…`,
+        message: '正在准备…',
         productId,
       }
     } catch (err) {
@@ -1762,7 +1813,7 @@ function registerIpcHandlers(): void {
 
       return {
         ok: true,
-        message: `正在为 ${productId} 启动 R3 地图发现…`,
+        message: '正在准备…',
         productId,
       }
     } catch (err) {
@@ -1776,6 +1827,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.PROFILE_ABORT, async () => {
     await getAgentRunner().abortCurrent()
     return { ok: true }
+  })
+
+  ipcMain.handle(IPC.AGENT_REPLY_QUESTION, async (_event, input: unknown) => {
+    return getAgentRunner().replyToPendingQuestion(input)
   })
 
   ipcMain.handle(IPC.PROFILE_GENERATE, async (event, input: ProfileGenerateInput) => {

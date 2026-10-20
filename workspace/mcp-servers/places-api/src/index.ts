@@ -53,7 +53,7 @@ function providerGate():
       ok: false,
       response: errorPayload(
         "PLACES_GATEWAY_NOT_READY",
-        "Places 官方网关通道尚未就绪（US-E-10）。请使用 PLACES_PROVIDER=custom 并配置 GOOGLE_PLACES_API_KEY。",
+        "Places 不经服务器代调。请使用直连（PLACES_PROVIDER=custom），并配置官方下发 Key 或自备 Key。",
       ),
     };
   }
@@ -73,7 +73,7 @@ function providerGate():
       ok: false,
       response: errorPayload(
         "MISSING_PLACES_API_KEY",
-        "未配置 GOOGLE_PLACES_API_KEY。请在设置 → 探索中填写 Google Places API Key（仅 R3 需要）。",
+        "当前没有可用的 Places Key。请打开设置 → 探索，申请官方 Places Key 或填写自备 Key。",
       ),
     };
   }

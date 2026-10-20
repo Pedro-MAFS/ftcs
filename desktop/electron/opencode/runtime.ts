@@ -25,6 +25,11 @@ import {
   killProcessTree,
   readOpenCodeConfig,
 } from './resolver'
+import {
+  buildPlacesMcpEnvironment,
+  getPlacesMcpInjection,
+  markPlacesMcpInjectionApplied,
+} from './places-mcp-env'
 
 const MAX_LOG_LINES = 200
 const PORT_SCAN_RANGE = 20
@@ -244,7 +249,7 @@ export class OpenCodeRuntime {
   async reconnectMcp(name: string): Promise<{ ok: boolean; message: string }> {
     const client = this.client
     if (!client || this.status.state !== 'running') {
-      return { ok: false, message: 'OpenCode 未运行，无法重连 MCP' }
+      return { ok: false, message: '暂不支持重新连接，请重启应用' }
     }
     const serverName = name.trim()
     if (!serverName) {
@@ -332,6 +337,7 @@ export class OpenCodeRuntime {
         this.appendLog(
           `已就绪: ${this.status.baseUrl}${health.version ? ` (v${health.version})` : ''}${pid ? ` pid=${pid}` : ''}`,
         )
+        markPlacesMcpInjectionApplied()
         return this.getStatus()
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err)
@@ -482,11 +488,12 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
       }
 
   const placesEnv = {
-    FTCS_WORKSPACE: workspaceRoot,
-    PLACES_PROVIDER: process.env.PLACES_PROVIDER || 'custom',
-    ...(process.env.GOOGLE_PLACES_API_KEY
-      ? { GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY }
-      : {}),
+    ...buildPlacesMcpEnvironment({
+      workspaceRoot,
+      channelMode: process.env.FTCS_CHANNEL_MODE,
+      envByok: process.env.GOOGLE_PLACES_API_KEY,
+      injection: getPlacesMcpInjection(),
+    }),
     ...buildGoogleProxyEnvVars(process.env[GOOGLE_PROXY_RESOLVED_ENV]),
   }
 

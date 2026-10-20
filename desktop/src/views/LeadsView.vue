@@ -6,6 +6,10 @@ import { useWorkspace } from '../composables/useWorkspace'
 import { useWorkflowExecute } from '../composables/useWorkflowExecute'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import { showToast } from '../composables/useToast'
+import {
+  canViewBuiltinWorkflowPlan,
+  type WorkflowPlanEditorMode,
+} from '../composables/useWorkflowPlanEditor'
 import Icon from '../components/shared/Icon.vue'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import WorkflowPlanControl from '../components/workflow/WorkflowPlanControl.vue'
@@ -14,7 +18,7 @@ import WorkflowPlanEditorDialog from '../components/workflow/WorkflowPlanEditorD
 import WorkflowSchedulePanel from '../components/workflow/WorkflowSchedulePanel.vue'
 import LeadDetailDrawer from '../components/shared/LeadDetailDrawer.vue'
 import type { LeadRowDto, LeadsSnapshotDto, WorkflowPlan } from '../types/electron'
-import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonDisplay } from '../utils/leads-export'
+import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonScreen } from '../utils/leads-export'
 import { parseCompanyDomain } from '../utils/parse-company-domain'
 
 const meta = SECTION_META.leads
@@ -438,7 +442,7 @@ async function onWorkflowExecute(planId: string): Promise<void> {
 
 const workflowPlanRef = ref<InstanceType<typeof WorkflowPlanControl> | null>(null)
 const editorOpen = ref(false)
-const editorMode = ref<'create' | 'edit'>('create')
+const editorMode = ref<WorkflowPlanEditorMode>('create')
 const deleteConfirmOpen = ref(false)
 const deleteBusy = ref(false)
 
@@ -449,6 +453,10 @@ const canManageSelectedPlan = computed(() => {
   const plan = selectedWorkflowPlan.value
   return !!plan && !plan.builtin
 })
+
+const canViewSelectedPlan = computed(() =>
+  canViewBuiltinWorkflowPlan(selectedWorkflowPlan.value?.id),
+)
 
 const workflowMenuDisabled = computed(
   () => isWorkflowRunning.value || generating.value,
@@ -474,6 +482,12 @@ function openCreateEditor(): void {
 function openEditEditor(): void {
   if (!canManageSelectedPlan.value) return
   editorMode.value = 'edit'
+  editorOpen.value = true
+}
+
+function openViewEditor(): void {
+  if (!canViewSelectedPlan.value || !selectedWorkflowPlan.value) return
+  editorMode.value = 'view'
   editorOpen.value = true
 }
 
@@ -511,7 +525,7 @@ async function onScoreClick(): Promise<void> {
     return
   }
   if (generating.value) {
-    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    actionMessage.value = '已有任务在运行，请稍候'
     return
   }
 
@@ -544,7 +558,7 @@ async function onScoreClick(): Promise<void> {
 async function startDraftEmails(leadIds?: string[]): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.draftEmails) return
   if (generating.value || isDrafting.value) {
-    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    actionMessage.value = '已有任务在运行，请稍候'
     return
   }
 
@@ -619,7 +633,7 @@ function canEnrichLead(lead: LeadRowDto): boolean {
 async function startEnrichContacts(leadIds: string[]): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.enrichLeadContacts) return
   if (generating.value || isDrafting.value || isEnriching.value) {
-    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    actionMessage.value = '已有任务在运行，请稍候'
     return
   }
   const targets = leadIds.map((id) => id.trim()).filter(Boolean)
@@ -918,7 +932,9 @@ onUnmounted(() => {
               :disabled-reason="workflowMenuDisabledReason"
               :can-edit="canManageSelectedPlan"
               :can-delete="canManageSelectedPlan"
+              :can-view="canViewSelectedPlan"
               @create="openCreateEditor"
+              @view="openViewEditor"
               @edit="openEditEditor"
               @delete="deleteConfirmOpen = true"
             />
@@ -934,7 +950,9 @@ onUnmounted(() => {
     <WorkflowPlanEditorDialog
       :open="editorOpen"
       :mode="editorMode"
-      :initial-plan="editorMode === 'edit' ? selectedWorkflowPlan : undefined"
+      :initial-plan="
+        editorMode === 'edit' || editorMode === 'view' ? selectedWorkflowPlan : undefined
+      "
       :existing-plans="workflowPlans"
       @close="editorOpen = false"
       @saved="onPlanSaved"
@@ -1128,9 +1146,9 @@ onUnmounted(() => {
             </span>
             <span
               class="table-cell leads-table__reason"
-              :title="matchReasonDisplay(row) || row.matchReason"
+              :title="matchReasonScreen(row) || row.matchReason"
             >
-              {{ matchReasonDisplay(row) || '—' }}
+              {{ matchReasonScreen(row) || '—' }}
             </span>
             <span class="table-cell leads-table__actions">
               <button

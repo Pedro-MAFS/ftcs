@@ -442,7 +442,7 @@ async function refreshDrafts(options?: {
 async function onBatchDraft(): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.draftEmails) return
   if (generating.value) {
-    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    actionMessage.value = '已有任务在运行，请稍候'
     return
   }
   if (pendingHigh.value.length <= 0) {
@@ -482,7 +482,7 @@ async function runSlotDraft(): Promise<void> {
     return
   }
   if (generating.value) {
-    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    actionMessage.value = '已有任务在运行，请稍候'
     return
   }
 
@@ -779,7 +779,7 @@ async function onGenerateZh(): Promise<void> {
     return
   }
   if (generating.value) {
-    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    actionMessage.value = '已有任务在运行，请稍候'
     return
   }
   const preflightError = await ensureAgentReady('draft-email')

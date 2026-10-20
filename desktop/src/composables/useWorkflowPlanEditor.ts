@@ -1,7 +1,7 @@
 import { isWorkflowNodeIdValue } from '../constants/workflow-node-labels'
 import type { WorkflowNodeId, WorkflowPlan, WorkflowPlanSaveInput } from '../types/electron'
 
-export type WorkflowPlanEditorMode = 'create' | 'edit'
+export type WorkflowPlanEditorMode = 'create' | 'edit' | 'view'
 
 export type WorkflowPlanEditorStepDraft = {
   key: string
@@ -121,4 +121,31 @@ export function toSaveInput(draft: {
   }
   if (draft.editingId) input.id = draft.editingId
   return input
+}
+
+/** 仅标准获客、高级获客可只读查看。不用 builtin- 前缀，也不认其它 builtin。 */
+export function canViewBuiltinWorkflowPlan(
+  planId: string | null | undefined,
+): boolean {
+  return planId === 'builtin-standard' || planId === 'builtin-advanced'
+}
+
+/** view 不产生保存入参；create / edit 才会。 */
+export function editorModeProducesSaveInput(mode: WorkflowPlanEditorMode): boolean {
+  return mode === 'create' || mode === 'edit'
+}
+
+/**
+ * 按 mode 组装保存入参。view 必须得到 null，不能带上可提交的 name / steps。
+ */
+export function saveInputForEditorMode(
+  mode: WorkflowPlanEditorMode,
+  draft: {
+    name: string
+    steps: WorkflowPlanEditorStepDraft[]
+    editingId?: string
+  },
+): WorkflowPlanSaveInput | null {
+  if (!editorModeProducesSaveInput(mode)) return null
+  return toSaveInput(draft)
 }

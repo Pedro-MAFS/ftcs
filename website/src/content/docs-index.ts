@@ -11,7 +11,7 @@ export const docsIndex: DocMeta[] = [
     title: '快速开始',
     seoTitle: '外贸获客智能体快速开始 | 一次获客闭环',
     description:
-      '用 FTCS 外贸获客智能体走通一次闭环：安装、开通官方通道、产品画像、广撒网或社媒发现与开发信草稿。',
+      '用 FTCS 外贸获客智能体走通一次闭环：安装、开通官方通道、产品画像、全网搜索或社媒发现与开发信草稿。',
   },
   {
     slug: 'install',
@@ -25,7 +25,7 @@ export const docsIndex: DocMeta[] = [
     title: '推荐使用流程',
     seoTitle: '外贸获客标准路径 | 录入到开发信草稿',
     description:
-      'FTCS 外贸获客标准路径：产品录入、产品画像、广撒网与社媒发现、线索评分、可选补全联系人、开发信多收件人与中文对照。',
+      'FTCS 外贸获客标准路径：产品录入、产品画像、全网搜索与社媒发现、线索评分、可选补全联系人、开发信多收件人与中文对照。',
   },
   {
     slug: 'faq',
@@ -37,9 +37,9 @@ export const docsIndex: DocMeta[] = [
   {
     slug: 'places-api-key',
     title: '申请 Places API Key',
-    seoTitle: 'Google Places API Key 申请 | R3 地图发现',
+    seoTitle: 'Google Places API Key 申请 | 地图发现自备 Key',
     description:
-      '在 Google Cloud Console 启用 Places API (New)、创建 API Key 并配置到 FTCS 桌面端，用于 R3 地图发现；含网络合规说明。',
+      '自定义通道在 Google Cloud Console 启用 Places API (New)、创建 API Key 并配置到 FTCS，用于地图发现。官方通道可在应用内申请官方 Places Key。',
   },
   {
     slug: 'hunter-api-key',

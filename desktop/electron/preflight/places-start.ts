@@ -1,4 +1,13 @@
 import type { SettingsSnapshot } from '../settings/settings-service'
+import {
+  BYOK_PLACES_DETAIL,
+  CUSTOM_PLACES_MISSING_MESSAGE,
+  NO_PLACES_KEY_MESSAGE,
+  OFFICIAL_PLACES_DETAIL,
+  placesSourceForChannel,
+  planPlacesRun,
+  type OfficialKeyFailureDetail,
+} from '../../src/domain/places-official'
 
 export type PlacesStartProvider = 'custom' | 'gateway'
 
@@ -8,7 +17,14 @@ export interface PlacesStartResolution {
   provider?: PlacesStartProvider
 }
 
-/** US-E-10 无限期延后：官方 Places 网关不实现，恒 false。 */
+export interface PlacesOfficialFetchOutcome {
+  ok: boolean
+  detail: string
+  needLogin?: boolean
+  failure?: OfficialKeyFailureDetail
+}
+
+/** US-E-10 代调不实现。官方 Key 已开通也不把这里改成 true。 */
 export function isPlacesGatewayReady(
   _settings: Pick<
     SettingsSnapshot,
@@ -18,43 +34,47 @@ export function isPlacesGatewayReady(
   return false
 }
 
-/** R3 启动前 Places 通道判定（Preflight 与详设 §2 决策表一致）。 */
+/**
+ * R3 启动前的同步判定。来源需要官方 Key 时，调用方先取 Key，
+ * 再把结果放进 officialFetch。没有 officialFetch 则视为还不能开跑。
+ */
 export function resolvePlacesStart(
   settings: Pick<
     SettingsSnapshot,
-    | 'channelMode'
-    | 'placesApiKeySet'
-    | 'placesProvider'
-    | 'officialProvisioned'
-  >,
+    'channelMode' | 'placesApiKeySet' | 'placesProvider' | 'officialProvisioned'
+  > & {
+    officialFetch?: PlacesOfficialFetchOutcome | null
+  },
 ): PlacesStartResolution {
-  if (settings.placesApiKeySet) {
+  const plan = planPlacesRun({
+    channelMode: settings.channelMode,
+    byokSet: settings.placesApiKeySet,
+  })
+  if (plan.action === 'use-byok') {
     return {
       ok: true,
       provider: 'custom',
-      detail: 'Google Places API Key 已配置（直连）',
+      detail: BYOK_PLACES_DETAIL,
     }
   }
-  if (
-    settings.channelMode === 'official' &&
-    settings.placesProvider === 'gateway' &&
-    isPlacesGatewayReady(settings)
-  ) {
+  if (plan.action === 'fail') {
+    return { ok: false, detail: plan.detail }
+  }
+  if (settings.officialFetch?.ok) {
     return {
       ok: true,
-      provider: 'gateway',
-      detail: '官方通道 · Places 网关可用',
+      provider: 'custom',
+      detail: settings.officialFetch.detail || OFFICIAL_PLACES_DETAIL,
     }
   }
-  if (settings.channelMode === 'official') {
-    return {
-      ok: false,
-      detail:
-        'R3 需自备 Google Places API Key（设置 → 探索）。官方通道不提供 Places 代调，Places 请用 BYOK 直连 Google。',
-    }
+  if (settings.officialFetch && !settings.officialFetch.ok) {
+    return { ok: false, detail: settings.officialFetch.detail }
   }
   return {
     ok: false,
-    detail: '请先在设置 → 探索中配置 Google Places API Key（仅 R3 需要）',
+    detail:
+      placesSourceForChannel(settings.channelMode) === 'custom'
+        ? CUSTOM_PLACES_MISSING_MESSAGE
+        : NO_PLACES_KEY_MESSAGE,
   }
 }

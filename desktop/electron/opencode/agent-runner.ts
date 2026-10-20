@@ -8,6 +8,12 @@ import {
 import { patchProfileSourceInputs } from '../profile/profile-writer'
 import { loadExpansion, type KeywordExpansion } from '../keywords/keywords-reader'
 import { getWorkspaceRoot } from '../config/paths'
+import { googleRejectionFromToolPart } from '../../src/domain/places-official'
+import {
+  beginPlacesDiscoverRun,
+  explainPlacesGoogleRejection,
+  releasePlacesDiscoverRun,
+} from '../gateway/places-official-runtime'
 import { isEligibleR2Query } from '../exploration/r2-query'
 import {
   formatEnabledR2SitesForPrompt,
@@ -51,6 +57,23 @@ import {
   formatDiscoverPlacesLimits,
   formatDiscoverSearchLimits,
 } from '../explore/discover-search-limits'
+import {
+  armAwaitingReplyNotification,
+  disarmAwaitingReplyNotification,
+} from '../notify/task-done-notify'
+import {
+  AwaitingReplyCoordinator,
+  type AwaitingQuestionClient,
+  type AwaitingReplyView,
+  type ReplyQuestionResult,
+  buildV1QuestionRejectCall,
+  buildV1QuestionReplyCall,
+  buildV2QuestionRejectCall,
+  buildV2QuestionReplyCall,
+  classifyQuestionHttpResult,
+  formatQuestionToolCard,
+  resolveAwaitingReplyTimeoutMs,
+} from './awaiting-reply'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -88,6 +111,10 @@ export type AgentEventPayload =
       explorationRun?: ExplorationRun
       scored?: ScoredLeadsArtifact
       emailDrafts?: EmailDraftsArtifact
+    }
+  | {
+      type: 'awaiting-reply'
+      pending: AwaitingReplyView | null
     }
 
 export type AgentEventSink = (event: AgentEventPayload) => void
@@ -330,6 +357,15 @@ function buildEnrichLeadContactsPrompt(
   ].join('\n')
 }
 
+const DISCOVER_COMPANY_INTELLIGENCE_RULES = [
+  '画像与破冰在本探索会话内完成，不要另开会话，也不要先落一条没有画像的线索。',
+  '判为目标客户后直接调用 lead_append_raw 或 lead_set_company_intelligence。不要先查线索库再决定是否保存，也不要调用 leads_get_scored。先写好六段和破冰。lead.companyIntelligence 必须同时带上 businessModel、productsBrands、targetMarket、supplyChain、industryPosition、collabOpportunity、icebreak 七个非空字符串；没有公开信息的段写「暂无公开信息」。不要传入 status、errorMessage 或 Markdown 字段。',
+  '只在原始线索、尚未进入线索库的同域，且本次仍是目标客户：可以直接 lead_set_company_intelligence（product_id、已有 lead_id，以及同样的七个字符串）。',
+  '不是目标客户：lead_append_raw 和 lead_set_company_intelligence 都不调用。',
+  '工具返回 skipped: true 且 message 为「线索已存在」：这不是校验失败。继续下一家，exploration_finish 用 completed，leads_found 不要加 1。',
+  '工具 isError 且 code 为 INVALID_COMPANY_INTELLIGENCE：改字段再试这一家，不要把整次探索标成 failed，也不要因此停下一家。',
+].join('\n')
+
 function buildDiscoverLeadsR3Prompt(
   productId: string,
   maxQueries: number,
@@ -352,9 +388,11 @@ function buildDiscoverLeadsR3Prompt(
     '2. search-api.search_usage 确认当日配额未用尽（官方通道以余额为准）。',
     '3. lead-store.exploration_start({ product_id, rounds: ["R3"] })，记住 run_id。',
     '4. 只跑 round=R3 且无 site_id 的词，按 priority 取前 max_queries 条。',
-    '5. 对每个词：places_text_search 的 pageSize 用下述 places_result_limit，一次调用即可；过滤后 place_details 不超过 floor(本次实际返回×0.75)。无官网则 Tavily search_web 补搜；chrome 只打开公司官网，对照画像判断是否目标客户，通过才 lead_append_raw（round=R3，run_id 必填，snippet 以「发现：place_id=」开头）。禁止打开 Google 地图，禁止自己翻页。',
+    '5. 对每个词：places_text_search 的 pageSize 用下述 places_result_limit，一次调用即可；过滤后 place_details 不超过 floor(本次实际返回×0.75)。无官网则 Tavily search_web 补搜；chrome 只打开公司官网，对照画像判断是否目标客户。公司名、官网、电话、地址以打开后的官网为准，不要把 Places 的店名和地址写入线索。判为目标客户后直接调用保存工具，校验在工具内。lead_append_raw 使用 round=R3，run_id 必填，snippet 为「发现：Places 候选，经官网核实」，并带 companyIntelligence。收到「线索已存在」继续下一家。只在原始线索里的同域仍可直接 lead_set_company_intelligence。禁止打开 Google 地图，禁止自己翻页。',
     '6. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。全程未通过官网判断也允许 completed 且 0 条线索。',
     '7. 用简短中文汇报：run_id、R3 词数、Places Search/Details 次数、Tavily 补搜/官网打开次数、线索数、跳过原因、3～5 条样例或「无新线索」、下一步 score-and-dedupe。',
+    '',
+    DISCOVER_COMPANY_INTELLIGENCE_RULES,
     '',
     `线索输出：data/leads/${productId}/raw/R3.jsonl`,
     `运行记录：data/exploration/${productId}/runs/`,
@@ -384,9 +422,11 @@ function buildDiscoverLeadsR2Prompt(
     '3. search-api.search_usage 确认当日配额未用尽（官方通道以余额为准）。',
     '4. lead-store.exploration_start({ product_id, rounds: ["R2"] })，记住 run_id。',
     '5. 只跑 round=R2 且带 site_id 的词，按 priority 取前 max_queries 条。无 site_id 的旧 R2 跳过。',
-    '6. 对每个词：search_web 必须带该 site_id 对应的 include_domains；不要打开社媒 URL。抽出公司并解析官网后，chrome 只打开官网，按 R1 口径判断，通过才 lead_append_raw（round=R2，run_id 必填，snippet 以「发现：」+ 社媒 URL 开头）。',
+    '6. 对每个词：search_web 必须带该 site_id 对应的 include_domains；不要打开社媒 URL。抽出公司并解析官网后，chrome 只打开官网，按 R1 口径判断。判为目标客户后直接调用保存工具，校验在工具内。lead_append_raw 使用 round=R2，run_id 必填，snippet 以「发现：」+ 社媒 URL 开头，并带 companyIntelligence。收到「线索已存在」继续下一家。只在原始线索里的同域仍可直接 lead_set_company_intelligence。',
     '7. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。全程未通过官网判断也允许 completed 且 0 条线索。',
     '8. 用简短中文汇报：run_id、R2 词数、社媒/二次搜索/官网打开次数、线索数、跳过原因、3～5 条样例或「无新线索」、下一步 score-and-dedupe。',
+    '',
+    DISCOVER_COMPANY_INTELLIGENCE_RULES,
     '',
     `线索输出：data/leads/${productId}/raw/R2.jsonl`,
     `运行记录：data/exploration/${productId}/runs/`,
@@ -417,9 +457,11 @@ function buildDiscoverLeadsPrompt(
     '2. search-api.search_usage 确认当日配额未用尽。',
     '3. lead-store.exploration_start 创建运行记录，记住 run_id。',
     '4. 从 search_queries 筛选指定 rounds，按 priority（high→medium→low）排序，取前 max_queries 条。',
-    '5. 对每个搜索词：search-api.search_web → chrome-devtools 打开候选页 → 判断是否目标客户 → 是则 lead_append_raw（lead 内必须带本次 run_id）。',
+    '5. 对每个搜索词：search-api.search_web → chrome-devtools 打开候选页 → 判断是否目标客户。判为目标客户后直接调用保存工具，校验在工具内。lead_append_raw 的 lead 内必须带本次 run_id 和 companyIntelligence。收到「线索已存在」继续下一家。只在原始线索里的同域仍可直接 lead_set_company_intelligence。',
     '6. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。',
     '7. 用简短中文汇报：run_id、执行词数、线索数、API 用量、3～5 条代表性线索、下一步 score-and-dedupe。',
+    '',
+    DISCOVER_COMPANY_INTELLIGENCE_RULES,
     '',
     `线索输出：data/leads/${productId}/raw/`,
     `运行记录：data/exploration/${productId}/runs/`,
@@ -539,6 +581,23 @@ function toolPartToTimelineItem(part: ToolPart): AgentTimelineItem {
   if (state.status === 'error') {
     detailParts.push(`错误:\n${state.error || '调用失败'}`)
   }
+  const questionCard = formatQuestionToolCard(
+    part.tool,
+    status,
+    state.input,
+    state.status === 'completed' ? state.output : undefined,
+  )
+  if (questionCard) {
+    return {
+      id: `tool-${part.id}`,
+      kind: 'tool',
+      time: nowTime(),
+      title: questionCard.title,
+      body: questionCard.body,
+      status,
+      collapsed: true,
+    }
+  }
   const body = detailParts.join('\n\n') || '执行中…'
   return {
     id: `tool-${part.id}`,
@@ -638,6 +697,10 @@ export function capDraftOutreachLeadIds(
   return { leadIds: kept, notice }
 }
 
+export interface AgentRunHooks {
+  reloadRuntime?: () => Promise<void>
+}
+
 export class AgentRunController {
   private abort: AbortController | null = null
   private sessionId: string | null = null
@@ -647,8 +710,67 @@ export class AgentRunController {
   private autoAbortReason: string | null = null
   /** session.error / message.updated.info.error 的可读文案，供任务结束读产物失败时使用 */
   private lastModelError: string | null = null
+  /** 本次 R3 用的是官方 Key 时，Google 拒绝只查一次状态。 */
+  private watchPlacesGoogleRejection = false
+  private placesRejectionHandled = false
+  private currentEmit: AgentEventSink | null = null
+  private currentFlush: (() => void) | null = null
+  private awaitTimelineSeq = 0
+  private readonly awaitingReply: AwaitingReplyCoordinator
 
-  constructor(private readonly getClient: () => OpencodeClient | null) {}
+  constructor(
+    private readonly getClient: () => OpencodeClient | null,
+    private readonly hooks: AgentRunHooks = {},
+  ) {
+    this.awaitingReply = new AwaitingReplyCoordinator({
+      timeoutMs: () =>
+        resolveAwaitingReplyTimeoutMs(process.env.FTCS_AWAITING_REPLY_TIMEOUT_MS),
+      schedule: (ms, cb) => {
+        const timer = setTimeout(cb, ms)
+        return { clear: () => clearTimeout(timer) }
+      },
+      emit: (pending) => {
+        this.currentEmit?.({ type: 'awaiting-reply', pending })
+      },
+      timeline: (body) => {
+        this.awaitTimelineSeq += 1
+        this.timeline?.addSuffix({
+          id: `await-reply-${this.awaitTimelineSeq}`,
+          kind: 'system',
+          time: nowTime(),
+          title: '系统',
+          body,
+        })
+        this.currentFlush?.()
+      },
+      logReject: (info) => {
+        console.warn('[ftcs:await-reply] reject', info)
+      },
+      client: () => this.questionClient(),
+      performSessionAbort: () => this.abortCurrent(),
+      onSlotCreated: () => {
+        armAwaitingReplyNotification()
+      },
+      onSlotCleared: () => {
+        disarmAwaitingReplyNotification()
+      },
+    })
+  }
+
+  private async failForPlacesGoogleRejection(googleMessage: string): Promise<void> {
+    let message = googleMessage
+    try {
+      message = await explainPlacesGoogleRejection(googleMessage)
+    } catch {
+      message = googleMessage
+    }
+    this.autoAbortReason = message
+    this.abort?.abort()
+    const client = this.getClient()
+    if (client && this.sessionId) {
+      await client.session.abort({ sessionID: this.sessionId }).catch(() => undefined)
+    }
+  }
 
   private attachTimeline(timeline: TimelineBuilder): void {
     this.timeline = timeline
@@ -661,6 +783,7 @@ export class AgentRunController {
   }
 
   async abortCurrent(): Promise<void> {
+    await this.awaitingReply.endForAbort()
     this.abort?.abort()
     const client = this.getClient()
     if (client && this.sessionId) {
@@ -672,17 +795,104 @@ export class AgentRunController {
     }
   }
 
+  replyToPendingQuestion(input: unknown): Promise<ReplyQuestionResult> {
+    return this.awaitingReply.reply(input)
+  }
+
+  private questionClient(): AwaitingQuestionClient | null {
+    const client = this.getClient()
+    if (!client) return null
+    return {
+      replyV1: async (requestID, answers) => {
+        try {
+          const res = await client.question.reply(buildV1QuestionReplyCall(requestID, answers))
+          return classifyQuestionHttpResult({
+            error: res.error,
+            data: res.data,
+            status: res.response?.status,
+            protocol: 'v1',
+          })
+        } catch (error) {
+          return classifyQuestionHttpResult({
+            error,
+            data: undefined,
+            status: undefined,
+            protocol: 'v1',
+          })
+        }
+      },
+      replyV2: async (sessionID, requestID, answers) => {
+        try {
+          const res = await client.v2.session.question.reply(
+            buildV2QuestionReplyCall(sessionID, requestID, answers),
+          )
+          return classifyQuestionHttpResult({
+            error: res.error,
+            data: res.data,
+            status: res.response?.status,
+            protocol: 'v2',
+          })
+        } catch (error) {
+          return classifyQuestionHttpResult({
+            error,
+            data: undefined,
+            status: undefined,
+            protocol: 'v2',
+          })
+        }
+      },
+      rejectV1: async (requestID) => {
+        try {
+          const res = await client.question.reject(buildV1QuestionRejectCall(requestID))
+          return classifyQuestionHttpResult({
+            error: res.error,
+            data: res.data,
+            status: res.response?.status,
+            protocol: 'v1',
+          })
+        } catch (error) {
+          return classifyQuestionHttpResult({
+            error,
+            data: undefined,
+            status: undefined,
+            protocol: 'v1',
+          })
+        }
+      },
+      rejectV2: async (sessionID, requestID) => {
+        try {
+          const res = await client.v2.session.question.reject(
+            buildV2QuestionRejectCall(sessionID, requestID),
+          )
+          return classifyQuestionHttpResult({
+            error: res.error,
+            data: res.data,
+            status: res.response?.status,
+            protocol: 'v2',
+          })
+        } catch (error) {
+          return classifyQuestionHttpResult({
+            error,
+            data: undefined,
+            status: undefined,
+            protocol: 'v2',
+          })
+        }
+      },
+    }
+  }
+
   async runExpandKeywords(
     productId: string,
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string; expansion?: KeywordExpansion }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const profile = loadProfile(productId)
@@ -795,6 +1005,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -901,12 +1112,12 @@ export class AgentRunController {
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string; scored?: ScoredLeadsArtifact }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const profile = loadProfile(productId)
@@ -1008,6 +1219,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -1115,12 +1327,12 @@ export class AgentRunController {
     options?: { leadIds?: string[] },
   ): Promise<{ ok: boolean; message: string; emailDrafts?: EmailDraftsArtifact }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const profile = loadProfile(productId)
@@ -1262,6 +1474,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -1372,12 +1585,12 @@ export class AgentRunController {
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string; recipientKey?: string }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const productId = options.productId.trim()
@@ -1497,6 +1710,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -1613,12 +1827,12 @@ export class AgentRunController {
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string; recipientKey?: string }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const productId = options.productId.trim()
@@ -1734,6 +1948,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -1842,12 +2057,12 @@ export class AgentRunController {
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const productId = options.productId.trim()
@@ -1982,6 +2197,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -2062,12 +2278,12 @@ export class AgentRunController {
     },
   ): Promise<{ ok: boolean; message: string; explorationRun?: ExplorationRun }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
-    const client = this.getClient()
+    let client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     const profile = loadProfile(productId)
@@ -2091,11 +2307,7 @@ export class AgentRunController {
       : isR2
         ? 'discover-leads-r2'
         : 'discover-leads'
-    const roundName = isR3
-      ? 'R3 地图发现'
-      : isR2
-        ? 'R2 社媒发现'
-        : 'R1 广撒网'
+    const roundName = isR3 ? '地图发现' : isR2 ? '社媒发现' : '全网搜索'
     const rounds = isR3 ? ['R3'] : isR2 ? ['R2'] : ['R1']
     const availableCount = isR3
       ? expansion.search_queries.filter(
@@ -2109,14 +2321,39 @@ export class AgentRunController {
     if (availableCount === 0) {
       throw new Error(
         isR3
-          ? 'expansion.json 中没有 R3 地图发现词，请重新扩展关键词'
+          ? '当前没有地图发现词，请重新扩展关键词'
           : isR2
-            ? 'expansion.json 中没有带站点的 R2 搜索词，请重新扩展关键词'
-            : 'expansion.json 中没有 R1 轮次的搜索词',
+            ? '当前社媒发现词没有指定站点，请重新扩展关键词'
+            : '当前没有全网搜索词，请编辑关键词后重试',
       )
     }
     // 未传 maxQueries 时按当前轮次可用词数全量执行（不再默认截断为 10）
     const maxQueries = Math.max(1, options?.maxQueries ?? availableCount)
+
+    let placesReleaseAfter = false
+    if (isR3) {
+      try {
+        const begun = await beginPlacesDiscoverRun(`r3:${productId}:${Date.now()}`)
+        if (!begun.ok) throw new Error(begun.message)
+        this.watchPlacesGoogleRejection = begun.watchGoogleRejection
+        this.placesRejectionHandled = false
+        placesReleaseAfter = begun.releaseAfter
+        if (begun.reloadBefore) {
+          await this.hooks.reloadRuntime?.()
+          client = this.getClient()
+          if (!client) {
+            throw new Error('服务未就绪，请稍后或重启应用')
+          }
+        }
+      } catch (err) {
+        if (placesReleaseAfter) {
+          const release = releasePlacesDiscoverRun()
+          this.watchPlacesGoogleRejection = false
+          if (release.reload) await this.hooks.reloadRuntime?.()
+        }
+        throw err
+      }
+    }
 
     this.running = true
     this.abort = new AbortController()
@@ -2199,7 +2436,7 @@ export class AgentRunController {
       kind: 'system',
       time: nowTime(),
       title: '系统',
-      body: `准备为 ${productId}（${profile.companyName || '未命名'}）执行 ${roundName} · 最多 ${maxQueries} 词（可用 ${availableCount}）· 每次搜索 ${searchNumResults} 条${isR3 ? ` · 地图每次 ${placesResultLimit} 条` : ''}`,
+      body: `准备为 ${profile.companyName?.trim() || '当前产品'} 执行 ${roundName}。`,
     })
     timeline.addPrefix({
       id: 'user-discover',
@@ -2241,6 +2478,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -2411,6 +2649,12 @@ export class AgentRunController {
       stopEvents?.()
       this.running = false
       this.abort = null
+      if (placesReleaseAfter) {
+        const release = releasePlacesDiscoverRun()
+        this.watchPlacesGoogleRejection = false
+        this.placesRejectionHandled = false
+        if (release.reload) await this.hooks.reloadRuntime?.()
+      }
     }
   }
 
@@ -2419,12 +2663,12 @@ export class AgentRunController {
     emit: AgentEventSink,
   ): Promise<{ ok: boolean; message: string; profile?: ProductProfileDetail }> {
     if (this.running) {
-      throw new Error('已有 Agent 任务在运行，请稍候或先中止')
+      throw new Error('已有任务在运行，请稍候或先中止')
     }
 
     const client = this.getClient()
     if (!client) {
-      throw new Error('OpenCode 未就绪，请先在设置页确认运行时状态')
+      throw new Error('服务未就绪，请稍后或重启应用')
     }
 
     this.running = true
@@ -2536,6 +2780,7 @@ export class AgentRunController {
         timeline,
         flushTimeline,
         promptText,
+        emit,
       )
       stopEvents = bridge.stop
 
@@ -2745,7 +2990,11 @@ export class AgentRunController {
     timeline: TimelineBuilder,
     flush: () => void,
     userPrompt: string,
+    emit: AgentEventSink,
   ): { stop: () => void } {
+    this.currentEmit = emit
+    this.currentFlush = flush
+    this.awaitingReply.resume()
     let stopped = false
     const messageRoles = new Map<string, Message['role']>()
     let retrySince = 0
@@ -2842,7 +3091,7 @@ export class AgentRunController {
         kind: 'error',
         time: nowTime(),
         title: '事件订阅失败',
-        body: `${this.autoAbortReason}\n任务已中止，请检查 OpenCode 运行时状态后重试。`,
+        body: `${this.autoAbortReason}\n任务已中止。请稍后或重启应用后再试。`,
       })
       flush()
       void client.session.abort({ sessionID: sessionId }).catch(() => undefined)
@@ -2881,6 +3130,29 @@ export class AgentRunController {
             .reply({ requestID: event.properties.id, reply: 'always' })
             .catch(() => undefined)
           return
+
+        case 'question.asked':
+        case 'question.v2.asked': {
+          if (event.properties.sessionID !== sessionId) return
+          const side = event.type === 'question.asked' ? 'v1' : 'v2'
+          void this.awaitingReply.ingest(
+            sessionId,
+            side,
+            event.properties.id,
+            event.properties.questions,
+          )
+          return
+        }
+
+        case 'question.replied':
+        case 'question.rejected':
+        case 'question.v2.replied':
+        case 'question.v2.rejected': {
+          if (event.properties.sessionID !== sessionId) return
+          const side = event.type.startsWith('question.v2.') ? 'v2' : 'v1'
+          this.awaitingReply.noteSettled(sessionId, side, event.properties.requestID)
+          return
+        }
 
         case 'message.updated': {
           if (event.properties.sessionID !== sessionId) return
@@ -3007,6 +3279,13 @@ export class AgentRunController {
           }
           if (part.type === 'tool') {
             applySnapshot(toolPartToTimelineItem(part))
+            if (this.watchPlacesGoogleRejection && !this.placesRejectionHandled) {
+              const googleMessage = googleRejectionFromToolPart(part)
+              if (googleMessage) {
+                this.placesRejectionHandled = true
+                void this.failForPlacesGoogleRejection(googleMessage)
+              }
+            }
           }
           return
         }
@@ -3113,6 +3392,7 @@ export class AgentRunController {
       stop: () => {
         stopped = true
         disarmWatchdog()
+        this.awaitingReply.dispose()
         // US-ST-02: 停止时 flush 最后一帧
         flushNow()
       },

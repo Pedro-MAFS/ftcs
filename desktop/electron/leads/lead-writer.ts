@@ -1,7 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { getWorkspaceRoot } from '../config/paths'
-import { listLeadsSnapshot, type LeadRow } from './leads-reader'
+import {
+  getScoredLeadsPath,
+  listLeadsSnapshot,
+  type CompanyIntelligence,
+  type LeadRow,
+} from './leads-reader'
 
 export interface RawLeadContactEdit {
   type: string
@@ -230,5 +235,215 @@ export function saveRawLead(
   return {
     ok: false,
     message: `未在 raw/*.jsonl 中找到线索 ${leadId}（仅支持修改未评分原始线索）`,
+  }
+}
+
+export interface SaveLeadIcebreakInput {
+  productId: string
+  leadId: string
+  icebreak: string
+}
+
+/** 只替换已有画像上的破冰与 updatedAt。六段和 status 不动。 */
+export function applyIcebreakEdit(
+  intelligence: CompanyIntelligence,
+  icebreak: string,
+  updatedAt: string,
+): CompanyIntelligence {
+  return {
+    ...intelligence,
+    icebreak,
+    updatedAt,
+  }
+}
+
+function readIntelligence(value: unknown): CompanyIntelligence | null {
+  const row = asRecord(value)
+  if (!row) return null
+  const status = row.status
+  if (status !== 'pending' && status !== 'ready' && status !== 'failed') return null
+  const errorMessage = typeof row.errorMessage === 'string' ? row.errorMessage : ''
+  const updatedAt = typeof row.updatedAt === 'string' ? row.updatedAt : ''
+  return {
+    businessModel: asText(row.businessModel),
+    productsBrands: asText(row.productsBrands),
+    targetMarket: asText(row.targetMarket),
+    supplyChain: asText(row.supplyChain),
+    industryPosition: asText(row.industryPosition),
+    collabOpportunity: asText(row.collabOpportunity),
+    icebreak: asText(row.icebreak),
+    status,
+    ...(errorMessage ? { errorMessage } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
+  }
+}
+
+function asText(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function normalizeDomain(url: string): string | null {
+  const raw = url.trim()
+  if (!raw) return null
+  try {
+    const hostname = new URL(raw).hostname.toLowerCase()
+    return hostname.startsWith('www.') ? hostname.slice(4) : hostname
+  } catch {
+    return null
+  }
+}
+
+function dedupeKeyOfRaw(row: Record<string, unknown>): string {
+  const company = asRecord(row.company) ?? {}
+  const source = asRecord(row.source) ?? {}
+  const domain = normalizeDomain(cleanString(company.website) || cleanString(source.url))
+  if (domain) return domain
+  const name = cleanString(company.name).toLowerCase()
+  if (name) return name
+  return cleanString(row.id)
+}
+
+function findRawLeadLine(
+  productId: string,
+  leadId: string,
+  workspaceRoot: string,
+): { filePath: string; lines: string[]; index: number; row: Record<string, unknown> } | null {
+  const dir = getRawLeadsDir(productId, workspaceRoot)
+  if (!fs.existsSync(dir)) return null
+  const files = fs
+    .readdirSync(dir)
+    .filter((name) => name.toLowerCase().endsWith('.jsonl'))
+    .sort((a, b) => a.localeCompare(b))
+  for (const file of files) {
+    const filePath = path.join(dir, file)
+    let text = ''
+    try {
+      text = fs.readFileSync(filePath, 'utf8')
+    } catch {
+      continue
+    }
+    const lines = text.split('\n')
+    for (let i = 0; i < lines.length; i += 1) {
+      const trimmed = lines[i]!.trim()
+      if (!trimmed) continue
+      try {
+        const row = asRecord(JSON.parse(trimmed))
+        if (row && cleanString(row.id) === leadId) {
+          return { filePath, lines, index: i, row }
+        }
+      } catch {
+        // skip bad line
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * 只改已有 companyIntelligence 的 icebreak 与 updatedAt。
+ * 同一 id 的 raw 与 scored 一起改；同 dedupe_key 的其它 scored 行也写同一句破冰。
+ */
+export function saveLeadIcebreak(
+  input: SaveLeadIcebreakInput,
+  workspaceRoot = getWorkspaceRoot(),
+): RawLeadSaveResult {
+  const productId = cleanString(input.productId)
+  const leadId = cleanString(input.leadId)
+  if (!productId) {
+    return { ok: false, message: '缺少 productId' }
+  }
+  if (!leadId) {
+    return { ok: false, message: '缺少 leadId' }
+  }
+
+  const rawHit = findRawLeadLine(productId, leadId, workspaceRoot)
+  const scoredPath = getScoredLeadsPath(productId, workspaceRoot)
+  let scoredRoot: Record<string, unknown> | null = null
+  let scoredLeads: Record<string, unknown>[] = []
+  if (fs.existsSync(scoredPath)) {
+    try {
+      scoredRoot = asRecord(JSON.parse(fs.readFileSync(scoredPath, 'utf8')))
+      const leads = scoredRoot && Array.isArray(scoredRoot.leads) ? scoredRoot.leads : []
+      scoredLeads = leads.map((item) => asRecord(item)).filter((item): item is Record<string, unknown> => Boolean(item))
+    } catch {
+      scoredRoot = null
+      scoredLeads = []
+    }
+  }
+  const scoredRow = scoredLeads.find((lead) => cleanString(lead.id) === leadId) ?? null
+  if (!rawHit && !scoredRow) {
+    return { ok: false, message: '未找到线索' }
+  }
+
+  const primary = scoredRow ?? rawHit?.row
+  if (!primary || !Object.prototype.hasOwnProperty.call(primary, 'companyIntelligence') || primary.companyIntelligence == null) {
+    return { ok: false, message: '这条线索还没有目标公司画像' }
+  }
+  const intel = readIntelligence(primary.companyIntelligence)
+  if (!intel || intel.status === 'pending') {
+    return { ok: false, message: '画像状态异常，暂不能改破冰' }
+  }
+  if (intel.status === 'failed' && intel.icebreak.trim().length === 0) {
+    return { ok: false, message: '这条线索没有可保存的破冰' }
+  }
+  const icebreak = cleanString(input.icebreak)
+  if (!icebreak) {
+    return { ok: false, message: '破冰不能为空' }
+  }
+
+  const updatedAt = new Date().toISOString()
+  const dedupeKey = scoredRow
+    ? cleanString(scoredRow.dedupe_key) || (rawHit ? dedupeKeyOfRaw(rawHit.row) : '')
+    : rawHit
+      ? dedupeKeyOfRaw(rawHit.row)
+      : ''
+
+  if (rawHit) {
+    const rawIntel = readIntelligence(rawHit.row.companyIntelligence)
+    if (rawIntel) {
+      rawHit.row.companyIntelligence = applyIcebreakEdit(rawIntel, icebreak, updatedAt)
+      const rewritten: string[] = []
+      for (let i = 0; i < rawHit.lines.length; i += 1) {
+        const trimmed = rawHit.lines[i]!.trim()
+        if (!trimmed) continue
+        if (i === rawHit.index) {
+          rewritten.push(JSON.stringify(rawHit.row))
+          continue
+        }
+        try {
+          JSON.parse(trimmed)
+          rewritten.push(trimmed)
+        } catch {
+          // drop invalid
+        }
+      }
+      fs.writeFileSync(rawHit.filePath, `${rewritten.join('\n')}\n`, 'utf8')
+    }
+  }
+
+  if (scoredRoot) {
+    let changed = false
+    for (const lead of scoredLeads) {
+      const sameId = cleanString(lead.id) === leadId
+      const sameKey = Boolean(dedupeKey) && cleanString(lead.dedupe_key) === dedupeKey
+      if (!sameId && !sameKey) continue
+      const rowIntel = readIntelligence(lead.companyIntelligence)
+      if (!rowIntel) continue
+      lead.companyIntelligence = applyIcebreakEdit(rowIntel, icebreak, updatedAt)
+      changed = true
+    }
+    if (changed) {
+      scoredRoot.leads = scoredLeads
+      scoredRoot.updated_at = updatedAt
+      fs.writeFileSync(scoredPath, `${JSON.stringify(scoredRoot, null, 2)}\n`, 'utf8')
+    }
+  }
+
+  const snapshot = listLeadsSnapshot(productId, workspaceRoot)
+  const lead = snapshot.rows.find((row) => row.id === leadId)
+  return {
+    ok: true,
+    message: '已保存破冰',
+    lead,
   }
 }

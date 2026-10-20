@@ -68,6 +68,22 @@ export interface LeadScoreBreakdown {
   competition: number
 }
 
+export type CompanyIntelligenceStatus = 'pending' | 'ready' | 'failed'
+
+/** 与 lead-store 落盘的六段 + 破冰一致。非法 status 不投影。 */
+export interface CompanyIntelligence {
+  businessModel: string
+  productsBrands: string
+  targetMarket: string
+  supplyChain: string
+  industryPosition: string
+  collabOpportunity: string
+  icebreak: string
+  status: CompanyIntelligenceStatus
+  errorMessage?: string
+  updatedAt?: string
+}
+
 export interface LeadRow {
   id: string
   productId: string
@@ -102,6 +118,8 @@ export interface LeadRow {
   people: LeadPerson[]
   /** 表格主展示：首个姓名，多条时带 · +N */
   peopleLabel: string
+  /** 目标公司画像；无对象或 status 非法时为 undefined */
+  companyIntelligence?: CompanyIntelligence
   /** 落盘原始对象，供抽屉完整展示 */
   record: Record<string, unknown>
 }
@@ -298,6 +316,27 @@ function parseScoreBreakdown(value: unknown): LeadScoreBreakdown | null {
   return any ? (out as LeadScoreBreakdown) : null
 }
 
+export function projectCompanyIntelligence(value: unknown): CompanyIntelligence | undefined {
+  const row = asRecord(value)
+  if (!row) return undefined
+  const status = row.status
+  if (status !== 'pending' && status !== 'ready' && status !== 'failed') return undefined
+  const errorMessage = asString(row.errorMessage)
+  const updatedAt = asString(row.updatedAt)
+  return {
+    businessModel: asString(row.businessModel),
+    productsBrands: asString(row.productsBrands),
+    targetMarket: asString(row.targetMarket),
+    supplyChain: asString(row.supplyChain),
+    industryPosition: asString(row.industryPosition),
+    collabOpportunity: asString(row.collabOpportunity),
+    icebreak: asString(row.icebreak),
+    status,
+    ...(errorMessage ? { errorMessage } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
+  }
+}
+
 function cloneRecord(value: Record<string, unknown>): Record<string, unknown> {
   try {
     return JSON.parse(JSON.stringify(value)) as Record<string, unknown>
@@ -386,6 +425,7 @@ function loadRawLeads(
           contactLabel: formatContactLabel(contacts),
           people: [],
           peopleLabel: '',
+          companyIntelligence: projectCompanyIntelligence(raw.companyIntelligence),
           record: cloneRecord(raw),
         })
       } catch {
@@ -454,6 +494,7 @@ function loadDiscardedLeads(
         contactLabel: formatContactLabel(contacts),
         people: [],
         peopleLabel: '',
+        companyIntelligence: projectCompanyIntelligence(raw.companyIntelligence),
         record: cloneRecord(raw),
       })
     }
@@ -518,6 +559,7 @@ function loadScoredLeads(
         contactLabel: formatContactLabel(contacts),
         people,
         peopleLabel: formatPeopleLabel(people),
+        companyIntelligence: projectCompanyIntelligence(raw.companyIntelligence),
         record: cloneRecord(raw),
       })
     }

@@ -14,6 +14,7 @@ import {
   R3_EMPTY,
   R4_PLANNED_EMPTY,
   ROUND_FILTER_OPTIONS,
+  formatRounds,
   roundLabel,
 } from '../explore/round-labels'
 
@@ -95,7 +96,7 @@ const r2Sites = ref<ExploreR2SiteDto[]>([])
 
 const previewTitle = computed(() => {
   const round =
-    previewRound.value === 'all' ? '全部轮次' : roundLabel(previewRound.value)
+    previewRound.value === 'all' ? '全部' : roundLabel(previewRound.value)
   const dim =
     previewDimension.value === 'all'
       ? '全部维度'
@@ -111,12 +112,11 @@ const previewEmptyText = computed(() => {
 
 function queryPreviewMeta(q: KeywordExpansionDto['search_queries'][number]): string {
   const dim = DIM_LABEL[q.dimension] || q.dimension
-  if (q.round === 'R3') return `${dim} · R3 地图发现`
-  if (q.round !== 'R2') return `${dim} · ${q.round}`
-  const site = r2Sites.value.find((s) => s.id === q.site_id)
-  if (site) return `${dim} · R2 · ${site.label}`
-  if (q.site_id) return `${dim} · R2 · ${q.site_id}`
-  return `${dim} · R2 · 旧格式`
+  if (q.round === 'R2') {
+    const site = r2Sites.value.find((s) => s.id === q.site_id)
+    return site ? `${dim} · ${site.label}` : `${dim} · 未指定站点`
+  }
+  return `${dim} · ${roundLabel(q.round)}`
 }
 
 async function loadR2Sites(): Promise<void> {
@@ -254,7 +254,7 @@ function goLeads(task?: ExploreTaskDto): void {
 async function startScoreAndDedupe(task: ExploreTaskDto): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.scoreAndDedupeLeads) return
   if (generating.value) {
-    actionMessage.value = '已有 Agent 任务在运行，请稍候'
+    actionMessage.value = '已有任务在运行，请稍候'
     return
   }
   if (task.status !== 'completed' || task.leadsFound <= 0) {
@@ -417,7 +417,7 @@ onUnmounted(() => {
               <strong>关键词扩展</strong>
               <span class="explore-status is-accent">扩展中</span>
             </div>
-            <p>正在调用 expand-keywords，完成后将出现在此列表…</p>
+            <p>正在准备…</p>
           </div>
         </button>
         <div class="explore-task__body">
@@ -431,10 +431,10 @@ onUnmounted(() => {
         <button type="button" class="explore-task__head" disabled>
           <div class="explore-task__title-block">
             <div class="explore-task__title-row">
-              <strong>R1 广撒网</strong>
+              <strong>全网搜索</strong>
               <span class="explore-status is-accent">启动中</span>
             </div>
-            <p>正在调用 discover-leads，创建探索运行记录…</p>
+            <p>正在准备…</p>
           </div>
         </button>
         <div class="explore-task__body">
@@ -448,10 +448,10 @@ onUnmounted(() => {
         <button type="button" class="explore-task__head" disabled>
           <div class="explore-task__title-block">
             <div class="explore-task__title-row">
-              <strong>R2 社媒发现</strong>
+              <strong>社媒发现</strong>
               <span class="explore-status is-accent">启动中</span>
             </div>
-            <p>正在调用 discover-leads-r2，创建探索运行记录…</p>
+            <p>正在准备…</p>
           </div>
         </button>
         <div class="explore-task__body">
@@ -465,10 +465,10 @@ onUnmounted(() => {
         <button type="button" class="explore-task__head" disabled>
           <div class="explore-task__title-block">
             <div class="explore-task__title-row">
-              <strong>R3 地图发现</strong>
+              <strong>地图发现</strong>
               <span class="explore-status is-accent">启动中</span>
             </div>
-            <p>正在调用 discover-leads-r3，创建探索运行记录…</p>
+            <p>正在准备…</p>
           </div>
         </button>
         <div class="explore-task__body">
@@ -501,7 +501,7 @@ onUnmounted(() => {
         <div v-if="expandedId === task.id" class="explore-task__body">
           <div class="explore-meta-row">
             <span>关键词 {{ task.totalQueries || '—' }} 条</span>
-            <span>轮次 {{ task.rounds.join('+') || 'R1' }}</span>
+            <span>方式 {{ formatRounds(task.rounds) }}</span>
             <span v-if="task.status === 'running'">
               进度 {{ task.queriesExecuted }}/{{ task.totalQueries || '—' }}
             </span>

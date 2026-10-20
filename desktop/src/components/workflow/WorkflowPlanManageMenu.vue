@@ -9,6 +9,7 @@ const props = withDefaults(
     disabledReason?: string
     canEdit?: boolean
     canDelete?: boolean
+    canView?: boolean
   }>(),
   {
     compact: true,
@@ -16,11 +17,13 @@ const props = withDefaults(
     disabledReason: '',
     canEdit: false,
     canDelete: false,
+    canView: false,
   },
 )
 
 const emit = defineEmits<{
   create: []
+  view: []
   edit: []
   delete: []
 }>()
@@ -49,6 +52,12 @@ function closeMenu(): void {
 function onCreate(): void {
   closeMenu()
   emit('create')
+}
+
+function onView(): void {
+  if (!props.canView) return
+  closeMenu()
+  emit('view')
 }
 
 function onEdit(): void {
@@ -110,6 +119,15 @@ onUnmounted(() => {
     <div v-if="open" class="workflow-plan-manage__panel" role="menu">
       <button type="button" class="workflow-plan-manage__item" role="menuitem" @click="onCreate">
         新建方案…
+      </button>
+      <button
+        v-if="canView"
+        type="button"
+        class="workflow-plan-manage__item"
+        role="menuitem"
+        @click="onView"
+      >
+        查看方案…
       </button>
       <button
         type="button"

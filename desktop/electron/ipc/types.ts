@@ -21,6 +21,8 @@ export const IPC = {
   GATEWAY_REFRESH_OFFICIAL_USAGE: 'gateway:refresh-official-usage',
   GATEWAY_OPEN_OFFICIAL_RECHARGE: 'gateway:open-official-recharge',
   GATEWAY_OPEN_OFFICIAL_PORTAL: 'gateway:open-official-portal',
+  PLACES_OFFICIAL_APPLY: 'places-official:apply',
+  PLACES_OFFICIAL_REFRESH: 'places-official:refresh',
   LIBRARY_LIST: 'library:list',
   LIBRARY_ADD_WEBSITE: 'library:add-website',
   LIBRARY_DELETE_WEBSITE: 'library:delete-website',
@@ -51,6 +53,7 @@ export const IPC = {
   EXPLORATION_SET_R2_SITE_ENABLED: 'exploration:set-r2-site-enabled',
   LEADS_LIST: 'leads:list',
   LEADS_SAVE_RAW: 'leads:save-raw',
+  LEADS_SAVE_ICEBREAK: 'leads:save-icebreak',
   LEADS_SAVE_PEOPLE: 'leads:save-people',
   LEADS_VERIFY_PERSON_EMAIL: 'leads:verify-person-email',
   LEADS_EXPORT_CSV: 'leads:export-csv',
@@ -69,6 +72,7 @@ export const IPC = {
   WORKFLOW_SAVE_PLAN: 'workflow:save-plan',
   WORKFLOW_DELETE_PLAN: 'workflow:delete-plan',
   AGENT_EVENT: 'agent:event',
+  AGENT_REPLY_QUESTION: 'agent:reply-question',
   APP_OPEN_EXTERNAL: 'app:open-external',
   AUTH_GET_SESSION: 'auth:get-session',
   AUTH_LOGIN: 'auth:login',
@@ -153,6 +157,7 @@ export interface EnvProbeItem {
   label: string
   status: EnvProbeStatus
   detail: string
+  diagnostic?: string
   installUrl?: string
   optional?: boolean
 }
@@ -578,6 +583,21 @@ export interface LeadScoreBreakdownDto {
   competition: number
 }
 
+export type CompanyIntelligenceStatusDto = 'pending' | 'ready' | 'failed'
+
+export interface CompanyIntelligenceDto {
+  businessModel: string
+  productsBrands: string
+  targetMarket: string
+  supplyChain: string
+  industryPosition: string
+  collabOpportunity: string
+  icebreak: string
+  status: CompanyIntelligenceStatusDto
+  errorMessage?: string
+  updatedAt?: string
+}
+
 export interface LeadRowDto {
   id: string
   productId: string
@@ -607,6 +627,7 @@ export interface LeadRowDto {
   contactLabel: string
   people: LeadPersonDto[]
   peopleLabel: string
+  companyIntelligence?: CompanyIntelligenceDto
   record: Record<string, unknown>
 }
 
@@ -916,6 +937,18 @@ export interface RawLeadSaveResult {
   lead?: LeadRowDto
 }
 
+export interface SaveLeadIcebreakInput {
+  productId: string
+  leadId: string
+  icebreak: string
+}
+
+export interface SaveLeadIcebreakResult {
+  ok: boolean
+  message: string
+  lead?: LeadRowDto
+}
+
 /** US-C-04：scored people 全量保存 */
 export interface SaveScoredPeoplePersonInput {
   id?: string
@@ -967,6 +1000,28 @@ export type AgentTimelineItem = {
   collapsed?: boolean
 }
 
+export type AwaitingReplyQuestion = {
+  header: string
+  question: string
+  multiple: boolean
+  custom: boolean
+  options: Array<{ label: string; description: string }>
+}
+
+export type AwaitingUserReply = {
+  questions: AwaitingReplyQuestion[]
+  renderable: boolean
+} | null
+
+export interface ReplyQuestionInput {
+  selections: Array<{ optionLabels: string[]; customText: string }>
+}
+
+export interface ReplyQuestionResult {
+  ok: boolean
+  message: string
+}
+
 export type AgentEventPayload =
   | {
       type: 'state'
@@ -989,6 +1044,10 @@ export type AgentEventPayload =
       explorationRun?: ExplorationRunDto
       scored?: ScoredLeadsSummaryDto
       emailDrafts?: EmailDraftsSummaryDto
+    }
+  | {
+      type: 'awaiting-reply'
+      pending: AwaitingUserReply
     }
 
 export type OpenCodeRuntimeState = 'idle' | 'starting' | 'running' | 'error' | 'stopped'
@@ -1096,6 +1155,12 @@ export interface SettingsSnapshot {
   placesApiKeyMasked: string
   placesApiKeySet: boolean
   placesProvider: 'custom' | 'gateway'
+  placesKeySource: 'official' | 'custom'
+  placesOfficialStatus: string | null
+  placesOfficialReasonMessage: string | null
+  placesOfficialExpectedReadyNote: string | null
+  placesOfficialQueryError: string | null
+  placesOfficialNeedLogin: boolean
   hunterApiKeySet: boolean
   hunterApiKeysMasked: string
   hunterApiKeyCount: number
@@ -1175,6 +1240,14 @@ export interface OpenOfficialRechargeResult {
 }
 
 export type OpenOfficialPortalResult = OpenOfficialRechargeResult
+
+export interface PlacesOfficialIpcResult {
+  ok: boolean
+  needLogin: boolean
+  message: string
+  queried: boolean
+  settings: SettingsSnapshot
+}
 
 export interface GoogleProxyDetectResult {
   ok: boolean

@@ -54,7 +54,7 @@ export async function detectSystemGoogleProxy(): Promise<GoogleProxyDetectResult
       ok: true,
       rule,
       url,
-      message: `已检测到系统代理：${url}`,
+      message: '已检测到系统网络设置。',
     }
   }
   return {
@@ -63,8 +63,8 @@ export async function detectSystemGoogleProxy(): Promise<GoogleProxyDetectResult
     url: null,
     message:
       rule.trim().toUpperCase() === 'DIRECT'
-        ? '系统当前为直连（DIRECT），未检测到可用代理。'
-        : `未能解析系统代理规则：${rule}`,
+        ? '当前为直连。'
+        : '未能读取系统网络设置。',
   }
 }
 
@@ -81,7 +81,9 @@ export async function testGooglePlacesConnectivity(options?: {
 
   const resolved = await resolveEffectiveGoogleProxyUrl(env)
   const apiKey =
-    options?.apiKey?.trim() || process.env.GOOGLE_PLACES_API_KEY?.trim() || ''
+    options && 'apiKey' in options
+      ? (options.apiKey || '').trim()
+      : process.env.GOOGLE_PLACES_API_KEY?.trim() || ''
 
   const fetchFn = resolved.url
     ? createFetchWithProxy(resolved.url)
@@ -117,8 +119,7 @@ export async function testGooglePlacesConnectivity(options?: {
     if (!apiKey && (response.status === 401 || response.status === 403)) {
       return {
         ok: true,
-        message:
-          '网络可达 Google Places（返回 401/403，请先配置 API Key 以完成完整校验）。',
+        message: '已连上 Google，但还需要有效的 Key 才能完成校验。',
         proxyUrl: resolved.url,
         systemRule: resolved.systemRule,
         httpStatus: response.status,
@@ -129,7 +130,7 @@ export async function testGooglePlacesConnectivity(options?: {
       return {
         ok: false,
         message:
-          '已连通 Google，但 API Key 被拒绝（403）。请检查 Key、Places API (New) 是否启用。',
+          '已连通 Google，但 Key 被拒绝。请检查 Key，以及 Places API (New) 是否已启用。',
         proxyUrl: resolved.url,
         systemRule: resolved.systemRule,
         httpStatus: response.status,
@@ -138,23 +139,20 @@ export async function testGooglePlacesConnectivity(options?: {
 
     return {
       ok: false,
-      message: `Google Places 返回 HTTP ${response.status}，请检查代理与 Key。`,
+      message: '连接 Google 未成功，请检查网络设置与 Key。',
       proxyUrl: resolved.url,
       systemRule: resolved.systemRule,
       httpStatus: response.status,
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+  } catch {
     const mode = parseGoogleProxyMode(env[GOOGLE_PROXY_MODE_ENV])
     const hint =
       mode === 'off'
-        ? '可在设置中启用「系统代理」或填写手动代理（如 http://127.0.0.1:7890）。'
-        : resolved.url
-          ? `当前代理：${resolved.url}。请确认 Clash 等工具已开启且端口正确。`
-          : '未解析到可用代理。请开启系统代理或改用手动指定。'
+        ? '可在网络设置里选择跟随系统，或填写代理地址。'
+        : '请检查网络设置后重试。'
     return {
       ok: false,
-      message: `无法连接 Google Places：${message}。${hint}`,
+      message: `无法连接 Google。${hint}`,
       proxyUrl: resolved.url,
       systemRule: resolved.systemRule,
     }

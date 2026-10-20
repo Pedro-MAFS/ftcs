@@ -7,10 +7,13 @@ import { useAuth } from '../composables/useAuth'
 import { useSettingsNav } from '../composables/useSettingsNav'
 import { SECTION_META } from '../types/workspace'
 import type { ChannelMode, GoogleProxyMode, SettingsSnapshot } from '../types/settings'
+import PlacesOfficialStatusBlock from '../components/settings/PlacesOfficialStatusBlock.vue'
 import type { ExploreR2SiteDto } from '../types/electron'
 import { OFFICIAL_MODEL_CATALOG } from '../types/settings'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
+import DiagnosticDetails from '../components/shared/DiagnosticDetails.vue'
 import { PRODUCT_LINKS } from '../config/links'
+import { UPDATE_CHECK_FAILED, UPDATE_FAILED, USER_FAILURE } from '../config/user-facing'
 import { shareAppDownload } from '../composables/useShareApp'
 import { useOnboarding } from '../composables/useOnboarding'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
@@ -120,7 +123,7 @@ const form = reactive({
   placesApiKey: '',
   hunterVerifyEmails: true,
   googleProxyMode: 'system' as GoogleProxyMode,
-  googleProxyManualUrl: 'http://127.0.0.1:7890',
+  googleProxyManualUrl: '',
   searchDailyLimit: 50,
   customModelSupportsImage: false,
   emailDraftStylePrompt: '专业，真诚',
@@ -143,17 +146,17 @@ const EXPLORE_INTENSITY_OPTIONS: Array<{
   {
     id: 'low',
     label: '低',
-    summary: 'R1 约 20 词，每个社媒和地图词约 10；搜索每次 3 条；地图每次最多 10 条。',
+    summary: '关键词、结果较少，耗时与费用较低。',
   },
   {
     id: 'medium',
     label: '中',
-    summary: 'R1 约 40 词，每个社媒和地图词约 20；搜索每次 5 条；地图每次最多 20 条。',
+    summary: '关键词与结果适中。',
   },
   {
     id: 'high',
     label: '高',
-    summary: 'R1 约 60 词，每个社媒和地图词约 40；搜索每次 10 条；地图每次最多 40 条。',
+    summary: '关键词更多、结果更多、耗时与费用更高。',
   },
 ]
 
@@ -186,7 +189,7 @@ const categories: Array<{ id: typeof activeCategory.value; label: string }> = [
   { id: 'startup', label: '启动与托盘' },
   { id: 'notifications', label: '通知' },
   { id: 'workspace', label: '工作区' },
-  { id: 'opencode', label: 'OpenCode 运行时' },
+  { id: 'opencode', label: '运行状态' },
   { id: 'about', label: '关于与隐私' },
 ]
 
@@ -281,6 +284,59 @@ const todayCompletionLabel = computed(() => {
   const v = usage.value?.todayCompletionTokens
   return v == null ? '—' : String(v)
 })
+const proxyDiag = ref('')
+const placesTestDiag = ref('')
+const workspaceDiag = ref('')
+const r2SitesDiag = ref('')
+const showTodayUsage = computed(() => {
+  const u = usage.value
+  if (!u) return false
+  return u.todayPromptTokens != null || u.todayCompletionTokens != null
+})
+const runtimeDiagnostic = computed(() => {
+  const oc = status.value?.opencode
+  const lines: string[] = []
+  if (oc?.baseUrl) lines.push(`地址 ${oc.baseUrl}`)
+  if (oc?.version) lines.push(`版本 ${oc.version}`)
+  if (oc?.error) lines.push(oc.error)
+  for (const item of status.value?.mcpServers ?? []) {
+    const err = item.error ? ` ${item.error}` : ''
+    lines.push(`${item.name} ${item.status}${err}`)
+  }
+  return lines.join('\n')
+})
+const aboutDiagnostic = computed(() => {
+  const lines = [
+    '架构 Electron + Vue3 + OpenCode SDK',
+    snapshot.value?.envPath ? `用户偏好 ${snapshot.value.envPath}` : '',
+    snapshot.value?.opencodeConfigPath
+      ? `模板 ${snapshot.value.opencodeConfigPath}`
+      : '',
+    `更新清单 ${PRODUCT_LINKS.updateManifest}`,
+  ]
+  return lines.filter(Boolean).join('\n')
+})
+const updateDiagnostic = computed(() => {
+  if (!updateResult.value.ok && updateResult.value.message.trim()) {
+    const raw = updateResult.value.message.trim()
+    return raw === UPDATE_CHECK_FAILED ? '' : raw
+  }
+  if (downloadState.value.phase === 'failed' && downloadState.value.message.trim()) {
+    const raw = downloadState.value.message.trim()
+    return raw === UPDATE_FAILED ? '' : raw
+  }
+  return ''
+})
+const networkDiagnostic = computed(() => {
+  const lines = [
+    snapshot.value?.googleProxyEffectiveUrl
+      ? `当前生效 ${snapshot.value.googleProxyEffectiveUrl}`
+      : '',
+    proxyDiag.value,
+    placesTestDiag.value,
+  ]
+  return lines.filter(Boolean).join('\n')
+})
 
 /** 需点「保存配置」才落盘的字段快照（不含主题 / 开机自启 / 关闭进托盘） */
 type SaveableSettingsFingerprint = {
@@ -362,8 +418,7 @@ function applySnapshot(data: SettingsSnapshot): void {
   hunterKeySlots.value = maskedSlots.length > 0 ? maskedSlots : ['']
   form.hunterVerifyEmails = data.hunterVerifyEmails
   form.googleProxyMode = data.googleProxyMode
-  form.googleProxyManualUrl =
-    data.googleProxyManualUrl || 'http://127.0.0.1:7890'
+  form.googleProxyManualUrl = data.googleProxyManualUrl || ''
   form.searchDailyLimit = data.searchDailyLimit
   form.customModelSupportsImage = data.customModelSupportsImage
   form.emailDraftStylePrompt =
@@ -494,7 +549,7 @@ async function onProvisionOfficial(reset = false): Promise<void> {
     return
   }
   provisioning.value = true
-  message.value = reset ? '正在重置网关凭证…' : '正在开通官方通道…'
+  message.value = reset ? '正在重置凭证…' : '正在开通官方通道…'
   error.value = ''
   try {
     const res = await window.ftcs.provisionOfficialChannel({ reset })
@@ -576,7 +631,7 @@ async function onSave(): Promise<void> {
       smallModel,
       searchProvider: form.searchProvider,
       tavilyApiKey: form.tavilyApiKey,
-      placesApiKey: form.placesApiKey,
+      ...(form.channelMode === 'custom' ? { placesApiKey: form.placesApiKey } : {}),
       hunterApiKeys: hunterKeySlots.value.map((key) => String(key)),
       hunterVerifyEmails: form.hunterVerifyEmails,
       googleProxyMode: form.googleProxyMode,
@@ -667,6 +722,7 @@ async function onDetectGoogleProxy(): Promise<void> {
   try {
     const result = await window.ftcs.detectGoogleProxy()
     proxyDetectMessage.value = result.message
+    proxyDiag.value = [result.url, result.rule].filter(Boolean).join('\n')
     if (result.url && form.googleProxyMode === 'system') {
       form.googleProxyManualUrl = result.url
     }
@@ -693,6 +749,13 @@ async function onTestGooglePlaces(): Promise<void> {
     })
     placesTestOk.value = result.ok
     placesTestMessage.value = result.message
+    placesTestDiag.value = [
+      result.httpStatus != null ? `HTTP ${result.httpStatus}` : '',
+      result.proxyUrl || '',
+      result.systemRule || '',
+    ]
+      .filter(Boolean)
+      .join('\n')
   } catch (err) {
     placesTestOk.value = false
     placesTestMessage.value =
@@ -750,9 +813,8 @@ async function onPickWorkspace(): Promise<void> {
         result && 'init' in result && result.init && typeof result.init === 'object'
           ? String((result.init as { reason?: string }).reason ?? '')
           : ''
-      message.value = initReason
-        ? `工作区已切换并初始化：${initReason}`
-        : `工作区已切换为 ${result.path}，OpenCode 已重启`
+      workspaceDiag.value = initReason
+      message.value = '工作区已切换'
       await refresh()
       await loadR2Sites()
     }
@@ -775,9 +837,11 @@ async function loadR2Sites(): Promise<void> {
       r2Sites.value = res.sites
       return
     }
-    r2SitesHint.value = res.message || '无法读取 R2 站点'
+    r2SitesDiag.value = res.message || ''
+    r2SitesHint.value = USER_FAILURE
   } catch (err) {
-    r2SitesHint.value = err instanceof Error ? err.message : String(err)
+    r2SitesDiag.value = err instanceof Error ? err.message : String(err)
+    r2SitesHint.value = USER_FAILURE
   }
 }
 
@@ -945,7 +1009,6 @@ async function onCheckUpdate(): Promise<void> {
                 <Icon name="help-circle" :size="14" />
               </button>
             </div>
-            <span class="muted mono">.env · FTCS_CHANNEL_MODE</span>
           </div>
 
           <label class="field-label">通道</label>
@@ -964,18 +1027,19 @@ async function onCheckUpdate(): Promise<void> {
 
           <template v-if="isOfficial">
             <p class="hint-line">
-              经公司 Token 网关调用官方模型（DeepSeek / GLM / Qwen 等，以网关列表为准），费用从账户余额扣除；无需自备上游 API Key。
-              <span v-if="snapshot?.gatewayBaseUrl" class="muted mono">
-                · {{ snapshot.gatewayBaseUrl }}
-              </span>
+              使用官方模型，费用从账户余额扣除，无需自备 Key。
             </p>
+            <DiagnosticDetails
+              v-if="snapshot?.gatewayBaseUrl"
+              :text="snapshot.gatewayBaseUrl"
+            />
             <div class="active-banner">
               <Icon name="info" :size="14" />
               <span v-if="!loggedIn">
-                官方通道需要登录。请先登录用户中心，登录后即可开通。
+                官方通道需要登录。请先登录，登录后即可开通。
               </span>
               <span v-else-if="!snapshot?.officialProvisioned">
-                已登录。请开通官方通道以获取网关凭证。
+                已登录。请开通官方通道。
               </span>
               <span v-else>
                 官方通道已开通
@@ -1011,7 +1075,7 @@ async function onCheckUpdate(): Promise<void> {
                 :disabled="provisioning"
                 @click="confirmResetGateway = true"
               >
-                重置网关凭证
+                重置凭证
               </button>
             </div>
 
@@ -1027,7 +1091,7 @@ async function onCheckUpdate(): Promise<void> {
                 {{ refreshingModels ? '加载中…' : '重试加载模型' }}
               </button>
             </p>
-            <p v-else-if="modelsDisabled" class="hint-line">开通后从网关加载可选模型</p>
+            <p v-else-if="modelsDisabled" class="hint-line">开通后加载可选模型</p>
 
             <div v-if="showUsageCard" class="usage-card">
               <div class="usage-card__head">
@@ -1068,17 +1132,14 @@ async function onCheckUpdate(): Promise<void> {
                   {{ refreshingUsage && !usage ? '…' : balanceDisplay }}
                 </span>
               </div>
-              <div class="usage-card__row">
-                <span class="muted">今日 Token</span>
+              <div v-if="showTodayUsage" class="usage-card__row">
+                <span class="muted">今日用量</span>
                 <span class="mono muted">
                   输入 {{ todayPromptLabel }} · 输出 {{ todayCompletionLabel }}
                 </span>
               </div>
               <p v-if="usage?.error" class="hint-line" style="color: var(--danger, #c44)">
                 {{ usage.error }}
-              </p>
-              <p v-else class="hint-line">
-                余额来自 Token 网关；今日用量即将支持
               </p>
             </div>
 
@@ -1096,7 +1157,7 @@ async function onCheckUpdate(): Promise<void> {
                 </select>
               </div>
               <div>
-                <label class="field-label">轻量模型（small_model）</label>
+                <label class="field-label">轻量模型</label>
                 <select
                   v-model="form.smallModel"
                   class="text-input"
@@ -1112,7 +1173,7 @@ async function onCheckUpdate(): Promise<void> {
 
           <template v-else>
             <p class="hint-line">
-              使用你自己的 OpenAI 兼容接口（含自备 DeepSeek 等）。请求不经过公司网关计费。可在
+              使用你自己的模型接口。费用由模型服务商收取，不从官方余额扣除。可在
               <button
                 type="button"
                 class="text-link-btn"
@@ -1169,8 +1230,7 @@ async function onCheckUpdate(): Promise<void> {
             <label class="settings-checkbox">
               <input v-model="form.customModelSupportsImage" type="checkbox" />
               <span>
-                默认/轻量模型支持读图（多模态）
-                <span class="muted">勾选后 OpenCode 才允许 Read 图片；请确认上游模型具备视觉能力</span>
+                允许识别图片（需所选模型支持图片）
               </span>
             </label>
           </template>
@@ -1184,7 +1244,7 @@ async function onCheckUpdate(): Promise<void> {
                   ? `自定义 · ${form.customModelId || '…'}`
                   : `官方 · ${form.model}`
               }}</code>
-              · 保存后自动重启 OpenCode
+              · 保存后自动生效
             </span>
           </div>
         </section>
@@ -1207,7 +1267,6 @@ async function onCheckUpdate(): Promise<void> {
                 <Icon name="help-circle" :size="14" />
               </button>
             </div>
-            <span class="muted mono">workspace/.env · SEARCH_*</span>
           </div>
 
           <template v-if="isOfficial">
@@ -1218,14 +1277,14 @@ async function onCheckUpdate(): Promise<void> {
             <div class="field-grid">
               <div>
                 <label class="field-label">搜索提供商</label>
-                <input class="text-input" value="官方通道（Token 网关）" disabled />
+                <input class="text-input" value="官方通道" disabled />
               </div>
               <div>
                 <label class="field-label">计费方式</label>
                 <input class="text-input" value="按账户余额计费" disabled />
               </div>
             </div>
-            <label class="field-label">TAVILY_API_KEY</label>
+            <label class="field-label">搜索 Key</label>
             <div class="input-row">
               <input
                 class="text-input"
@@ -1247,7 +1306,7 @@ async function onCheckUpdate(): Promise<void> {
                 </select>
               </div>
               <div>
-                <label class="field-label">日限额 SEARCH_DAILY_LIMIT</label>
+                <label class="field-label">每日搜索上限</label>
                 <input
                   v-model.number="form.searchDailyLimit"
                   class="text-input"
@@ -1258,7 +1317,7 @@ async function onCheckUpdate(): Promise<void> {
               </div>
             </div>
 
-            <label class="field-label">TAVILY_API_KEY</label>
+            <label class="field-label">搜索 Key</label>
             <div class="input-row">
               <input
                 v-model="form.tavilyApiKey"
@@ -1272,7 +1331,7 @@ async function onCheckUpdate(): Promise<void> {
               </button>
             </div>
             <p class="hint-line">
-              自定义通道需自备 Tavily Key（不经官方余额）。免费用户每月约 1000 次调用。前往
+              费用由 Tavily 按其价格收取。前往
               <button
                 type="button"
                 class="text-link-btn"
@@ -1302,12 +1361,11 @@ async function onCheckUpdate(): Promise<void> {
           <div class="settings-block__head">
             <div class="settings-block__title">
               <h3>探索强度</h3>
-              <span class="muted mono">exploreIntensity</span>
             </div>
           </div>
           <p class="hint-line">
             <Icon name="info" :size="12" />
-            更高会多出关键词、每次搜索与地图结果更多，耗时和费用更高。改档后需再次「扩展关键词」才影响词表；不会改已经生成的词。切换后立即生效，不必点上方「保存配置」。
+            改档后重新扩展关键词即可生效。
           </p>
           <div class="theme-mode-row">
             <label
@@ -1331,12 +1389,11 @@ async function onCheckUpdate(): Promise<void> {
           <hr class="settings-divider settings-divider--inner" />
 
           <div class="settings-block__title" style="margin-top: 8px">
-            <h3>R2 社媒站点</h3>
-            <span class="muted mono">data/prefs/explore-r2.json</span>
+            <h3>社媒站点</h3>
           </div>
           <p class="hint-line">
             <Icon name="info" :size="12" />
-            选择 R2 社媒发现要去哪些站点出词。勾选后立即保存，不必点上方「保存配置」。下次生成关键词时生效，不会改已经生成的词。
+            勾选的站点会用于生成社媒关键词。
           </p>
           <div v-if="r2Sites.length" class="settings-r2-sites">
             <label
@@ -1357,12 +1414,19 @@ async function onCheckUpdate(): Promise<void> {
           </div>
           <p v-else class="hint-line">暂无站点登记表，将使用默认的 LinkedIn 公司页与 Facebook 公共主页。</p>
           <p v-if="r2SitesHint" class="hint-line">{{ r2SitesHint }}</p>
+          <DiagnosticDetails v-if="r2SitesDiag" :text="r2SitesDiag" />
 
           <div class="settings-block__sub">
-            <h4>R3 地图发现（Google Places）</h4>
+            <h4>地图发现</h4>
+            <template v-if="isOfficial">
+              <h4>官方 Places Key</h4>
+              <PlacesOfficialStatusBlock />
+            </template>
+            <template v-else>
+            <h4>自备 Places Key</h4>
             <p class="hint-line">
               <Icon name="info" :size="12" />
-              仅在跑 R3 地图发现时需要；只跑 R1/R2 可不填。Key 在
+              仅地图发现需要。费用由 Google 按其价格收取。
               <button
                 type="button"
                 class="text-link-btn"
@@ -1370,8 +1434,6 @@ async function onCheckUpdate(): Promise<void> {
               >
                 Google Cloud Console
               </button>
-              创建，须启用 <strong>Places API (New)</strong>；费用计入你的 GCP 结算账号。
-              申请步骤见
               <button
                 type="button"
                 class="text-link-btn"
@@ -1379,21 +1441,8 @@ async function onCheckUpdate(): Promise<void> {
               >
                 帮助文档
               </button>
-              。
             </p>
-            <p class="hint-line">
-              Places 请求由<strong>本机</strong>直连 Google 服务（不经 FTCS 服务器）。你须在
-              <strong>合法合规、可访问 Google 服务</strong>的网络环境中使用，并遵守当地法规与
-              <button
-                type="button"
-                class="text-link-btn"
-                @click="openProductLink(PRODUCT_LINKS.googlePlacesPolicies)"
-              >
-                Google Places 政策
-              </button>
-              。
-            </p>
-            <label class="field-label">Google Places API Key</label>
+            <label class="field-label">自备 Places Key</label>
             <div class="input-row">
               <input
                 v-model="form.placesApiKey"
@@ -1406,15 +1455,13 @@ async function onCheckUpdate(): Promise<void> {
                 <Icon :name="showPlacesKey ? 'eye' : 'eye-off'" :size="14" />
               </button>
             </div>
-            <p class="hint-line muted">
-              与模型 / Tavily 搜索通道独立；保存后请重启 OpenCode 使 MCP 生效。
-            </p>
+            <p class="hint-line muted">保存后重启应用生效</p>
+            </template>
 
-            <label class="field-label">Google 出站代理（R3 专用）</label>
-            <p class="hint-line">
-              使用 Clash 等<strong>系统代理</strong>但未开 TUN 时，选「跟随系统代理」；也可手动填
-              <code>http://127.0.0.1:7890</code> 或 SOCKS5 地址。仅影响 Places 请求，不改 Tavily。
-            </p>
+            <details class="diag-details">
+              <summary>高级</summary>
+            <label class="field-label">网络设置</label>
+            <p class="hint-line">需可访问相关服务的网络环境。</p>
             <div class="provider-row">
               <button
                 type="button"
@@ -1422,7 +1469,7 @@ async function onCheckUpdate(): Promise<void> {
                 :class="{ 'is-active': form.googleProxyMode === 'system' }"
                 @click="form.googleProxyMode = 'system'"
               >
-                跟随系统代理
+                跟随系统
               </button>
               <button
                 type="button"
@@ -1430,7 +1477,7 @@ async function onCheckUpdate(): Promise<void> {
                 :class="{ 'is-active': form.googleProxyMode === 'manual' }"
                 @click="form.googleProxyMode = 'manual'"
               >
-                手动指定
+                自定义
               </button>
               <button
                 type="button"
@@ -1447,15 +1494,10 @@ async function onCheckUpdate(): Promise<void> {
                 class="text-input"
                 type="text"
                 autocomplete="off"
-                placeholder="http://127.0.0.1:7890 或 socks5://127.0.0.1:7891"
+                placeholder="填写代理地址"
               />
             </div>
-            <p
-              v-if="snapshot?.googleProxyEffectiveUrl"
-              class="hint-line muted"
-            >
-              当前生效代理：{{ snapshot.googleProxyEffectiveUrl }}
-            </p>
+            <DiagnosticDetails v-if="networkDiagnostic" :text="networkDiagnostic" />
             <div class="settings-actions-row">
               <button
                 type="button"
@@ -1482,6 +1524,7 @@ async function onCheckUpdate(): Promise<void> {
             >
               {{ placesTestMessage }}
             </p>
+            </details>
           </div>
         </section>
 
@@ -1491,25 +1534,19 @@ async function onCheckUpdate(): Promise<void> {
         <section id="settings-integrations" class="settings-block">
           <div class="settings-block__head">
             <h3>集成</h3>
-            <span class="muted mono">HUNTER_API_KEYS / HUNTER_VERIFY_EMAILS</span>
           </div>
           <div class="settings-block__sub">
             <h4>Hunter · 补全联系人</h4>
             <p class="hint-line">
               <Icon name="info" :size="12" />
-              可选扩展：仅「补全联系人」需要；未配置不影响探索与开发信。Key 在
+              可填多个 Key，自动轮换；费用由 Hunter 收取。
               <button
                 type="button"
                 class="text-link-btn"
-                @click="openProductLink(PRODUCT_LINKS.hunterApiKeys)"
+                @click="openProductLink(PRODUCT_LINKS.hunterTerms)"
               >
-                Hunter API Keys
+                Hunter 服务条款
               </button>
-              创建；费用计入你的 Hunter 账号。
-            </p>
-            <p class="hint-line">
-              最多 <strong>{{ HUNTER_KEYS_MAX }}</strong> 个 Key，每格一个；可单独删除。系统按顺序使用，额度用尽或无效时自动切换下一个。
-              <strong>Hunter 额度为账号级</strong>：同一账号下多个 Key 共享额度。请仅配置本人/团队合法持有的 Key。
             </p>
             <label class="field-label">
               Hunter API Key
@@ -1564,13 +1601,10 @@ async function onCheckUpdate(): Promise<void> {
               <input v-model="form.hunterVerifyEmails" type="checkbox" />
               <span>
                 补全联系人时验证邮箱
-                <span class="muted">
-                  Domain Search 约 1 credit/次；验邮约 0.5 credit/封。默认开启，一次配置全局生效。
-                </span>
               </span>
             </label>
             <p class="hint-line muted">
-              保存后请重启 OpenCode 使 MCP 生效。
+              保存后重启应用生效。
               尚未注册？
               <button
                 type="button"
@@ -1607,7 +1641,6 @@ async function onCheckUpdate(): Promise<void> {
           <div class="settings-block__head">
             <div class="settings-block__title">
               <h3>开发信行文风格</h3>
-              <span class="muted mono">emailDraftStylePrompt</span>
             </div>
           </div>
           <p class="hint-line">
@@ -1650,7 +1683,6 @@ async function onCheckUpdate(): Promise<void> {
           <div class="settings-block__head">
             <div class="settings-block__title">
               <h3>界面主题</h3>
-              <span class="muted mono">uiThemeMode</span>
             </div>
           </div>
           <p class="hint-line">
@@ -1687,7 +1719,6 @@ async function onCheckUpdate(): Promise<void> {
           <div class="settings-block__head">
             <div class="settings-block__title">
               <h3>开机自启</h3>
-              <span class="muted mono">openAtLogin</span>
             </div>
           </div>
           <p class="hint-line">
@@ -1707,7 +1738,6 @@ async function onCheckUpdate(): Promise<void> {
 
           <div class="settings-block__title" style="margin-top: 8px">
             <h3>关闭窗口行为</h3>
-            <span class="muted mono">closeToTrayEnabled</span>
           </div>
           <p class="hint-line">
             <Icon name="info" :size="12" />
@@ -1730,7 +1760,6 @@ async function onCheckUpdate(): Promise<void> {
           <div class="settings-block__head">
             <div class="settings-block__title">
               <h3>任务完成通知</h3>
-              <span class="muted mono">taskDoneNotificationEnabled</span>
             </div>
           </div>
           <p class="hint-line">
@@ -1752,7 +1781,6 @@ async function onCheckUpdate(): Promise<void> {
         <section id="settings-workspace" class="settings-block">
           <div class="settings-block__head">
             <h3>工作区</h3>
-            <span class="muted mono">FTCS_WORKSPACE</span>
           </div>
           <div class="input-row">
             <input
@@ -1764,16 +1792,16 @@ async function onCheckUpdate(): Promise<void> {
           </div>
           <p class="hint-line">
             <Icon name="info" :size="12" />
-            包含 skills / mcp-servers / config / data · 切换后会重启 OpenCode
+            存放你的资料与设置的文件夹，切换后应用会自动重启
           </p>
+          <DiagnosticDetails v-if="workspaceDiag" :text="workspaceDiag" />
         </section>
 
         <hr class="settings-divider" />
 
-        <!-- OpenCode -->
         <section id="settings-opencode" class="settings-block">
           <div class="settings-block__head">
-            <h3>OpenCode 运行时</h3>
+            <h3>运行状态</h3>
             <button
               type="button"
               class="btn-secondary btn-sm"
@@ -1788,26 +1816,14 @@ async function onCheckUpdate(): Promise<void> {
             <i class="oc-status__dot" />
             <div>
               <div>{{ runtimeLabel }}</div>
-              <div class="mono muted">
-                {{ status?.opencode?.baseUrl ?? '—' }}
-                · v{{ status?.opencode?.version ?? '—' }}
-              </div>
             </div>
           </div>
-
-          <label class="field-label">MCP 服务</label>
-          <ul v-if="status?.mcpServers?.length" class="mcp-list">
-            <li v-for="item in status.mcpServers" :key="item.name">
-              <span class="mono">{{ item.name }}</span>
-              <span class="mcp-badge" :class="{ ok: item.status === 'connected' }">
-                {{ item.status }}
-              </span>
-              <span v-if="item.error" class="muted mcp-error" :title="item.error">
-                {{ item.error }}
-              </span>
-            </li>
-          </ul>
-          <p v-else class="muted">OpenCode 未就绪或 MCP 尚未连接</p>
+          <p v-if="!runtimeHealthy" class="muted">服务未就绪，请稍后或重启应用</p>
+          <DiagnosticDetails
+            v-if="runtimeDiagnostic"
+            title="诊断信息 · 服务连接"
+            :text="runtimeDiagnostic"
+          />
         </section>
 
         <hr class="settings-divider" />
@@ -1819,18 +1835,7 @@ async function onCheckUpdate(): Promise<void> {
             <span class="muted">应用</span>
             <span class="mono">FTCS Desktop {{ appVersion || '—' }}</span>
           </div>
-          <div class="about-row">
-            <span class="muted">架构</span>
-            <span class="mono">Electron + Vue3 + OpenCode SDK</span>
-          </div>
-          <div class="about-row">
-            <span class="muted">用户偏好</span>
-            <span class="mono">{{ snapshot?.envPath ?? '—' }}</span>
-          </div>
-          <div class="about-row">
-            <span class="muted">OpenCode 模板</span>
-            <span class="mono">{{ snapshot?.opencodeConfigPath ?? '—' }}</span>
-          </div>
+          <DiagnosticDetails v-if="aboutDiagnostic" :text="aboutDiagnostic" />
 
           <label class="field-label">软件更新</label>
           <div class="settings-actions-row">
@@ -1886,7 +1891,7 @@ async function onCheckUpdate(): Promise<void> {
             </button>
           </div>
           <p v-if="updateActions.line" class="hint-line">{{ updateActions.line }}</p>
-          <p class="hint-line mono">清单：{{ PRODUCT_LINKS.updateManifest }}</p>
+          <DiagnosticDetails v-if="updateDiagnostic" :text="updateDiagnostic" />
 
           <label class="field-label">首次引导</label>
           <div class="settings-actions-row">
@@ -1907,7 +1912,7 @@ async function onCheckUpdate(): Promise<void> {
               打开业务引导
             </button>
           </div>
-          <p class="hint-line">用于检测 Node / OpenCode / Chrome，以及可选的 OfficeCLI（Word/Excel/PPT 抽文本）；并引导配置密钥与主流程。Windows 上可在引导中一键安装 Node.js、OpenCode 与 OfficeCLI（OpenCode 需先就绪 Node，装完需重启；OfficeCLI 装完无需重启）。</p>
+          <p class="hint-line">检查运行所需组件并引导完成设置</p>
 
           <label class="field-label">官网与帮助</label>
           <div class="settings-actions-row">
@@ -1948,13 +1953,7 @@ async function onCheckUpdate(): Promise<void> {
               分享应用
             </button>
           </div>
-          <p class="hint-line mono">{{ PRODUCT_LINKS.download }}</p>
           <p v-if="shareHint" class="hint-line">{{ shareHint }}</p>
-
-          <p class="settings-foot">
-            <Icon name="info" :size="14" />
-            API Key 与模型偏好均写入本地 workspace/.env；opencode.json 由模板托管，同步不会覆盖你的设置。
-          </p>
         </section>
       </div>
     </div>
@@ -1971,8 +1970,8 @@ async function onCheckUpdate(): Promise<void> {
     />
     <ConfirmDialog
       :open="confirmResetGateway"
-      title="重置网关凭证？"
-      message="将重新签发网关 Key，本机及其它设备上的旧凭证立即失效。是否继续？"
+      title="重置凭证？"
+      message="重新开通后，本机和其它设备上的旧凭证会失效。是否继续？"
       confirm-label="重置"
       danger
       :busy="provisioning"

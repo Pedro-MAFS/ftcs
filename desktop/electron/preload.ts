@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
 import type {
   AgentEventPayload,
+  ReplyQuestionInput,
+  ReplyQuestionResult,
   AppStatus,
   OpenCodeActionResult,
   ExploreTasksSnapshotDto,
@@ -15,6 +17,8 @@ import type {
   LeadsSnapshotDto,
   RawLeadSaveInput,
   RawLeadSaveResult,
+  SaveLeadIcebreakInput,
+  SaveLeadIcebreakResult,
   ExportLeadsCsvInput,
   ExportLeadsCsvResult,
   ScoreAndDedupeResult,
@@ -59,6 +63,7 @@ import type {
   RefreshOfficialUsageResult,
   OpenOfficialRechargeResult,
   OpenOfficialPortalResult,
+  PlacesOfficialIpcResult,
   OnboardingState,
   EnvProbeResult,
   NodeInstallProgress,
@@ -138,6 +143,10 @@ const api = {
     ipcRenderer.invoke(IPC.GATEWAY_OPEN_OFFICIAL_RECHARGE),
   openOfficialPortal: (): Promise<OpenOfficialPortalResult> =>
     ipcRenderer.invoke(IPC.GATEWAY_OPEN_OFFICIAL_PORTAL),
+  applyPlacesOfficialKey: (): Promise<PlacesOfficialIpcResult> =>
+    ipcRenderer.invoke(IPC.PLACES_OFFICIAL_APPLY),
+  refreshPlacesOfficialKey: (): Promise<PlacesOfficialIpcResult> =>
+    ipcRenderer.invoke(IPC.PLACES_OFFICIAL_REFRESH),
   getOnboardingState: (): Promise<OnboardingState> =>
     ipcRenderer.invoke(IPC.ONBOARDING_GET_STATE),
   setOnboardingState: (patch: Partial<OnboardingState>): Promise<OnboardingState> =>
@@ -331,6 +340,8 @@ const api = {
   generateProfile: (input: ProfileGenerateInput): Promise<ProfileGenerateResult> =>
     ipcRenderer.invoke(IPC.PROFILE_GENERATE, input),
   abortProfile: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.PROFILE_ABORT),
+  replyQuestion: (input: ReplyQuestionInput): Promise<ReplyQuestionResult> =>
+    ipcRenderer.invoke(IPC.AGENT_REPLY_QUESTION, input),
   getProfile: (productId: string): Promise<ProfileDetail | null> =>
     ipcRenderer.invoke(IPC.PROFILE_GET, productId),
   listProfiles: (): Promise<ProfileSummary[]> => ipcRenderer.invoke(IPC.PROFILE_LIST),
@@ -374,6 +385,8 @@ const api = {
     ipcRenderer.invoke(IPC.LEADS_LIST, productId),
   saveRawLead: (input: RawLeadSaveInput): Promise<RawLeadSaveResult> =>
     ipcRenderer.invoke(IPC.LEADS_SAVE_RAW, input),
+  saveLeadIcebreak: (input: SaveLeadIcebreakInput): Promise<SaveLeadIcebreakResult> =>
+    ipcRenderer.invoke(IPC.LEADS_SAVE_ICEBREAK, input),
   saveScoredPeople: (
     input: import('./ipc/types').SaveScoredPeopleInput,
   ): Promise<import('./ipc/types').SaveScoredPeopleResult> =>
