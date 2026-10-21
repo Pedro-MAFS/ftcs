@@ -34,7 +34,7 @@ Phase 1 默认执行 **R1 广撒网**。
 ## 前置条件
 
 - MCP `lead-store`、`search-api`（Tavily）已配置
-- MCP `chrome-devtools`（user-chrome-devtools）可用
+- 内置浏览器已就绪，并用 chrome-devtools 打开候选页
 - `data/products/{product_id}/profile.json` 存在且 `status == "ready"`
 - `data/keywords/{product_id}/expansion.json` 已生成
 
@@ -227,7 +227,7 @@ lead-store.exploration_finish({
 | TAVILY_API_KEY 未配置 | 提示配置 `.env` 并重启 MCP |
 | 搜索配额用尽 | 停止探索，保存进度，建议次日继续 |
 | 网站无法打开 | 记录到 `exploration_update.error`，跳过 |
-| chrome-devtools 不可用 | 停止，提示启用 MCP |
+| 内置浏览器不可用 | 停止。告诉用户：内置浏览器未就绪，请重新检测或重启应用 |
 
 ## 数据约定（本 Skill 自洽）
 

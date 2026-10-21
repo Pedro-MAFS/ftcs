@@ -510,6 +510,31 @@ button:focus-visible {
   justify-content: flex-end;
 }
 
+.browser-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.browser-entry.is-live {
+  color: var(--text);
+}
+
+.browser-entry__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
 .oc-status {
   display: inline-flex;
   align-items: center;

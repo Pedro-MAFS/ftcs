@@ -32,7 +32,7 @@ outputs:
 
 - 工作区内存在 `config/scoring-rules.yaml`（就绪度阈值等）
 - MCP `lead-store` 已配置
-- 网站输入时，chrome-devtools MCP 可用
+- 有网站时，内置浏览器已就绪。打开页面仍用 chrome-devtools 的 `new_page` 或 `navigate_page`，然后 `take_snapshot`
 
 ## 输入分流策略
 
@@ -252,7 +252,7 @@ outputs:
 | 情况                  | 处理                                        |
 | ------------------- | ----------------------------------------- |
 | 网站无法访问              | 告知用户检查 URL，建议改提供文本资料                      |
-| chrome-devtools 不可用 | 提示启用 chrome-devtools MCP（桌面 App / Cursor 均可） |
+| 内置浏览器不可用 | 停止打开网站。告诉用户：内置浏览器未就绪，请重新检测或重启应用。已有文本或图片则继续生成 |
 | 特殊文件                | 跳过该文件，有官网或文本则继续生成；不要整次停止           |
 | 画像分数 < 60           | 保存为 `draft`，追问后继续                         |
 

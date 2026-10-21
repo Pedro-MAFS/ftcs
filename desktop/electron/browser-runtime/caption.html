@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>内置浏览器</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #1a1a1a;
+        color: #e4e4e4;
+        font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      }
+      .bar {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 8px;
+        box-sizing: border-box;
+        background: #1a1a1a;
+        border-bottom: 1px solid #3a3a3a;
+        user-select: none;
+        -webkit-app-region: drag;
+      }
+      .grip {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+        background-image: radial-gradient(#6b6b6b 1px, transparent 1.2px);
+        background-size: 4px 4px;
+        background-position: center;
+      }
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #4ade80;
+        flex: 0 0 auto;
+      }
+      .meta {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .title,
+      .url {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .title {
+        max-width: 42%;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .url {
+        flex: 1;
+        font-size: 11px;
+        color: #6b6b6b;
+      }
+      button {
+        -webkit-app-region: no-drag;
+        height: 22px;
+        padding: 0 7px;
+        border: 0;
+        border-radius: 4px;
+        background: #262626;
+        color: #e4e4e4;
+        font: 500 11px/1 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #2a2a2a;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="bar" id="bar">
+      <span class="grip" aria-hidden="true"></span>
+      <span class="dot" aria-hidden="true"></span>
+      <div class="meta">
+        <span class="title" id="title">内置浏览器</span>
+        <span class="url" id="url">尚未打开页面</span>
+      </div>
+      <span id="actions"></span>
+    </header>
+    <script>
+      let mode = 'thumbnail'
+      const titleEl = document.getElementById('title')
+      const urlEl = document.getElementById('url')
+      const actions = document.getElementById('actions')
+
+      function buttonsFor(next) {
+        if (next === 'card') return [
+          ['thumbnail', '展开'],
+          ['expanded', '放大'],
+        ]
+        if (next === 'expanded') return [
+          ['card', '收起'],
+          ['thumbnail', '还原'],
+        ]
+        return [
+          ['card', '收起'],
+          ['expanded', '放大'],
+        ]
+      }
+
+      function render(state) {
+        mode = state.mode || 'thumbnail'
+        titleEl.textContent = state.title || '内置浏览器'
+        urlEl.textContent = state.url || '尚未打开页面'
+        actions.replaceChildren()
+        for (const [next, label] of buttonsFor(mode)) {
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.textContent = label
+          button.addEventListener('click', () => window.ftcsCaption.setMode(next))
+          actions.appendChild(button)
+        }
+      }
+
+      document.getElementById('bar').addEventListener('dblclick', (event) => {
+        if (event.target.closest('button')) return
+        const next = mode === 'card' ? 'thumbnail' : mode === 'thumbnail' ? 'expanded' : 'thumbnail'
+        window.ftcsCaption.setMode(next)
+      })
+
+      window.ftcsCaption.onState(render)
+      render({ mode: 'thumbnail', title: '内置浏览器', url: '尚未打开页面' })
+    </script>
+  </body>
+</html>

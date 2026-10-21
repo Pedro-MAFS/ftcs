@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../shared/Icon.vue'
 import RuntimePopover from './RuntimePopover.vue'
@@ -8,6 +8,7 @@ import { useWorkspace } from '../../composables/useWorkspace'
 import { useUiTheme } from '../../composables/useUiTheme'
 import { oppositeExplicitTheme } from '../../utils/ui-theme'
 import { SECTION_META, type WorkspaceSection } from '../../types/workspace'
+import type { BuiltinBrowserUiState } from '../../types/electron'
 
 defineProps<{
   section: WorkspaceSection
@@ -24,6 +25,41 @@ function toggleTheme(): void {
 }
 
 const steps: WorkspaceSection[] = ['input', 'profile', 'explore', 'leads', 'email']
+
+const browserState = ref<BuiltinBrowserUiState>({
+  alive: false,
+  visible: false,
+  mode: 'thumbnail',
+  title: '内置浏览器',
+  url: '尚未打开页面',
+})
+let stopBrowserState: (() => void) | null = null
+
+const browserLabel = computed(() =>
+  browserState.value.alive && browserState.value.visible ? '浏览中' : '打开浏览窗',
+)
+const browserIcon = computed(() =>
+  browserState.value.visible && browserState.value.mode === 'card' ? 'panel-top' : 'app-window',
+)
+const browserLive = computed(() => browserState.value.alive && browserState.value.visible)
+
+onMounted(() => {
+  if (!window.ftcs?.getBuiltinBrowserState) return
+  void window.ftcs.getBuiltinBrowserState().then((state) => {
+    browserState.value = state
+  })
+  stopBrowserState = window.ftcs.onBuiltinBrowserState((state) => {
+    browserState.value = state
+  })
+})
+
+onUnmounted(() => {
+  stopBrowserState?.()
+})
+
+function openBrowser(): void {
+  void window.ftcs?.showBuiltinBrowser?.()
+}
 
 function go(section: WorkspaceSection): void {
   void router.push({ name: section })
@@ -53,6 +89,17 @@ function go(section: WorkspaceSection): void {
     </nav>
 
     <div class="title-bar__right">
+      <button
+        type="button"
+        class="browser-entry"
+        :class="{ 'is-live': browserLive }"
+        :aria-label="browserLabel"
+        @click="openBrowser"
+      >
+        <Icon :name="browserIcon" :size="14" />
+        <span>{{ browserLabel }}</span>
+        <i v-if="browserLive" class="browser-entry__dot" />
+      </button>
       <button
         type="button"
         class="icon-btn"

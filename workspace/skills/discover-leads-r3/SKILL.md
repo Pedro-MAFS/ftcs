@@ -57,7 +57,7 @@ R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过�
 ## 硬禁令
 
 - **禁止**用 `search_web` + 地图 `include_domains` 作发现（发现只用 Places）。
-- **禁止** chrome 打开 Google 地图（`google.com/maps`、`maps.google.com`、`goo.gl/maps` 等）。
+- **禁止**用内置浏览器或任何页面工具打开 Google 地图（`google.com/maps`、`maps.google.com`、`goo.gl/maps` 等）。
 - **禁止**在未打开官网并判断为「是」时 `lead_append_raw`。
 - **禁止**未经 chrome 验证就把 Places `websiteUri` 写入 `company.website`。
 - **禁止**把整段 Places JSON、店名、地址或 `place_id` 写入 Lead。snippet 固定为「发现：Places 候选，经官网核实」。
@@ -238,11 +238,11 @@ search-api.search_web({
 1. 直接打开官网并判断。不要先调用 `leads_get_scored`，也不要先对照线索库再决定是否保存。只在原始线索里的同域仍可在判断为「是」之后直接 `lead_set_company_intelligence`。
 
 ```
-chrome-devtools: new_page(url) 或 navigate_page → website_url
+在内置浏览器中 chrome-devtools: new_page(url) 或 navigate_page → website_url
 take_snapshot（必要时 evaluate_script）
 ```
 
-`crawl_pages` +1。按 [目标客户判断](#目标客户判断打开官网后) 决策。否或打不开 → 不写 Lead，也不调用 `lead_set_company_intelligence`。chrome 不可用 → 停止并提示启用 MCP。
+`crawl_pages` +1。按 [目标客户判断](#目标客户判断打开官网后) 决策。否或打不开 → 不写 Lead，也不调用 `lead_set_company_intelligence`。内置浏览器不可用 → 告诉用户：内置浏览器未就绪，请重新检测或重启应用。
 
 ### Step 5：写入（仅判断为「是」）
 
@@ -343,7 +343,7 @@ lead-store.exploration_finish({ product_id, run_id, status: "completed" })
 | `PLACES_GATEWAY_NOT_READY` | 停止。Places 不经服务器代调。请使用直连（PLACES_PROVIDER=custom），并配置官方下发 Key 或自备 Key。 |
 | 单词 Search 5xx/超时 | 该词 error，继续 |
 | Details / Tavily / 官网失败 | 跳过 candidate |
-| chrome 不可用 | 停止 |
+| 内置浏览器不可用 | 停止。告诉用户：内置浏览器未就绪，请重新检测或重启应用 |
 
 ## 数据约定
 

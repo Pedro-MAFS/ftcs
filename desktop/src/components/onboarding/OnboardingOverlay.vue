@@ -613,11 +613,9 @@ onMounted(() => {
                   {{
                     item.id === 'node'
                       ? '查看安装说明'
-                      : item.id === 'chrome'
-                        ? '打开 Chrome 下载'
-                        : item.id === 'officecli'
-                          ? '打开安装说明'
-                          : '查看安装说明'
+                      : item.id === 'officecli'
+                        ? '打开安装说明'
+                        : '查看安装说明'
                   }}
                 </button>
               </div>

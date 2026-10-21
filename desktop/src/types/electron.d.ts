@@ -726,6 +726,20 @@ export interface AgentPreflightResult {
   checks: AgentPreflightCheck[]
 }
 
+export interface AgentPreflightOptions {
+  requireBuiltinBrowser?: boolean
+}
+
+export type BuiltinBrowserMode = 'thumbnail' | 'card' | 'expanded'
+
+export interface BuiltinBrowserUiState {
+  alive: boolean
+  visible: boolean
+  mode: BuiltinBrowserMode
+  title: string
+  url: string
+}
+
 export interface RawLeadContactEditDto {
   type: string
   value: string
@@ -827,7 +841,13 @@ declare global {
       platform: NodeJS.Platform
       getAppStatus: () => Promise<AppStatus>
       openExternal: (url: string) => Promise<{ ok: boolean; message: string }>
-      checkAgentPreflight: (kind: AgentPreflightKind) => Promise<AgentPreflightResult>
+      checkAgentPreflight: (
+        kind: AgentPreflightKind,
+        options?: AgentPreflightOptions,
+      ) => Promise<AgentPreflightResult>
+      getBuiltinBrowserState: () => Promise<BuiltinBrowserUiState>
+      showBuiltinBrowser: () => Promise<BuiltinBrowserUiState>
+      onBuiltinBrowserState: (callback: (state: BuiltinBrowserUiState) => void) => () => void
       startOpenCode: () => Promise<OpenCodeActionResult>
       stopOpenCode: () => Promise<OpenCodeActionResult>
       restartOpenCode: () => Promise<AppStatus>

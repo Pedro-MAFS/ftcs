@@ -16,9 +16,9 @@ export const docsIndex: DocMeta[] = [
   {
     slug: 'install',
     title: '安装与前置',
-    seoTitle: '外贸获客系统安装 | Node、Chrome 与 OpenCode',
+    seoTitle: '外贸获客系统安装 | Node 与 OpenCode',
     description:
-      '安装 FTCS 外贸获客系统：Windows 安装包或便携版，以及 Node.js 22+、Google Chrome、OpenCode 与官方通道说明。',
+      '安装 FTCS 外贸获客系统：Windows 安装包或便携版，以及 Node.js 22+、OpenCode 与官方通道说明。内置浏览器随应用提供。',
   },
   {
     slug: 'workflow',
