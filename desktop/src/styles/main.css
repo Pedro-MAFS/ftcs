@@ -3724,6 +3724,74 @@ textarea.text-input {
   color: var(--accent);
 }
 
+.tl-item--subagent .tl-item__badge {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.tl-subagent__status,
+.tl-subagent__current {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tl-subagent__status {
+  color: var(--text-muted);
+}
+
+.tl-subagent__current {
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.tl-subagent__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tl-step {
+  border-left: 2px solid var(--border);
+  background: var(--bg-input);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.tl-step.is-done {
+  border-left-color: var(--success, #3dd68c);
+}
+
+.tl-step.is-error,
+.tl-step.is-running {
+  border-left-color: var(--accent);
+}
+
+.tl-step.is-error {
+  border-left-color: var(--warning, #e2a336);
+}
+
+.tl-step__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tl-step__title {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-subagent__result {
+  margin-top: 4px;
+}
+
 .tl-item--assistant .tl-item__badge {
   color: var(--text);
 }

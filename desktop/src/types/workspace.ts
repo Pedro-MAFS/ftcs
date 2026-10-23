@@ -45,6 +45,27 @@ export interface AgentLogLine {
   message: string
 }
 
+export interface AgentSubagentStep {
+  id: string
+  kind: 'tool' | 'reasoning' | 'error'
+  title: string
+  body: string
+  status?: 'running' | 'done' | 'error'
+}
+
+export interface AgentSubagent {
+  sessionId: string
+  agent: string
+  description: string
+  current: string
+  toolCount: number
+  running: boolean
+  awaiting: boolean
+  startedAt: number
+  finishedAt?: number
+  steps: AgentSubagentStep[]
+}
+
 export interface AgentTimelineItem {
   id: string
   kind: 'user' | 'system' | 'assistant' | 'reasoning' | 'tool' | 'error'
@@ -53,6 +74,7 @@ export interface AgentTimelineItem {
   body: string
   status?: 'running' | 'done' | 'error'
   collapsed?: boolean
+  subagent?: AgentSubagent
 }
 
 export interface AgentMetaItem {
