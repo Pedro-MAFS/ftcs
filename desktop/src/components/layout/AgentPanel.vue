@@ -52,6 +52,58 @@ const timelineEl = ref<HTMLElement | null>(null)
 const composerHint = ref('')
 const pinToBottom = ref(true)
 
+function formatDuration(ms: number): string {
+  const sec = Math.max(1, Math.round(ms / 1000))
+  if (sec < 60) return `${sec} 秒`
+  const min = Math.floor(sec / 60)
+  const rem = sec % 60
+  return rem ? `${min} 分 ${rem} 秒` : `${min} 分`
+}
+
+function agentLabel(agent: string): string {
+  const name = agent.trim()
+  if (!name) return 'General'
+  return name.charAt(0).toUpperCase() + name.slice(1)
+}
+
+function subagentStatus(item: AgentTimelineItem): string {
+  const sub = item.subagent
+  if (!sub) return ''
+  const agent = agentLabel(sub.agent)
+  if (item.status === 'error') return `${agent} · 失败`
+  if (sub.awaiting) return `${agent} · 在等你回复`
+  if (item.status === 'done') {
+    const end = sub.finishedAt ?? Date.now()
+    const dur = sub.startedAt ? formatDuration(end - sub.startedAt) : ''
+    const count = `${sub.toolCount} 次工具`
+    return dur ? `${agent} · 完成 · ${count} · ${dur}` : `${agent} · 完成 · ${count}`
+  }
+  return `${agent} · 进行中`
+}
+
+function subagentCurrent(item: AgentTimelineItem): string {
+  const sub = item.subagent
+  if (!sub) return ''
+  if (sub.current) return `↳ ${sub.current}`
+  if (item.status === 'running') return '↳ 启动中'
+  return `↳ ${sub.toolCount} 次工具`
+}
+
+function stepKey(itemId: string, stepId: string): string {
+  return `step:${itemId}:${stepId}`
+}
+
+function isStepExpanded(itemId: string, stepId: string): boolean {
+  return isTimelineExpanded({
+    id: stepKey(itemId, stepId),
+    kind: 'tool',
+    time: '',
+    title: '',
+    body: '',
+    collapsed: true,
+  })
+}
+
 function kindLabel(kind: AgentTimelineItem['kind']): string {
   switch (kind) {
     case 'user':
@@ -142,15 +194,56 @@ watch(
         v-for="item in agentTimeline"
         :key="item.id"
         class="tl-item"
-        :class="[`tl-item--${item.kind}`, item.status ? `is-${item.status}` : '']"
+        :class="[
+          `tl-item--${item.kind}`,
+          item.status ? `is-${item.status}` : '',
+          item.subagent ? 'tl-item--subagent' : '',
+        ]"
       >
         <div class="tl-item__head">
-          <span class="tl-item__badge">{{ kindLabel(item.kind) }}</span>
-          <span class="tl-item__title">{{ item.title }}</span>
+          <span class="tl-item__badge">{{ item.subagent ? '子代理' : kindLabel(item.kind) }}</span>
+          <span class="tl-item__title">{{ item.subagent?.description || item.title }}</span>
           <span class="tl-item__time">{{ item.time }}</span>
         </div>
 
-        <template v-if="item.collapsed || item.kind === 'reasoning' || item.kind === 'user'">
+        <template v-if="item.subagent">
+          <p class="tl-subagent__status">{{ subagentStatus(item) }}</p>
+          <p class="tl-subagent__current">{{ subagentCurrent(item) }}</p>
+          <button
+            v-if="item.subagent.steps.length || item.body"
+            type="button"
+            class="tl-item__toggle"
+            @click="toggleTimelineExpand(item.id)"
+          >
+            {{ isTimelineExpanded(item) ? '收起' : `展开 ${item.subagent.toolCount} 步` }}
+          </button>
+          <div v-if="isTimelineExpanded(item)" class="tl-subagent__steps">
+            <div
+              v-for="step in item.subagent.steps"
+              :key="step.id"
+              class="tl-step"
+              :class="step.status ? `is-${step.status}` : ''"
+            >
+              <div class="tl-step__head">
+                <span class="tl-step__title">{{ step.title }}</span>
+              </div>
+              <template v-if="step.body">
+                <pre v-if="isStepExpanded(item.id, step.id)" class="tl-item__body">{{ step.body }}</pre>
+                <pre v-else class="tl-item__body tl-item__body--preview">{{ preview(step.body, 80) }}</pre>
+                <button
+                  type="button"
+                  class="tl-item__toggle"
+                  @click="toggleTimelineExpand(stepKey(item.id, step.id))"
+                >
+                  {{ isStepExpanded(item.id, step.id) ? '收起' : '展开' }}
+                </button>
+              </template>
+            </div>
+            <pre v-if="item.body" class="tl-item__body tl-subagent__result">{{ item.body }}</pre>
+          </div>
+        </template>
+
+        <template v-else-if="item.collapsed || item.kind === 'reasoning' || item.kind === 'user'">
           <pre v-if="isTimelineExpanded(item)" class="tl-item__body">{{ item.body }}</pre>
           <pre v-else class="tl-item__body tl-item__body--preview">{{ preview(item.body) }}</pre>
           <button

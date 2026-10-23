@@ -998,6 +998,24 @@ export type AgentTimelineItem = {
   body: string
   status?: 'running' | 'done' | 'error'
   collapsed?: boolean
+  subagent?: {
+    sessionId: string
+    agent: string
+    description: string
+    current: string
+    toolCount: number
+    running: boolean
+    awaiting: boolean
+    startedAt: number
+    finishedAt?: number
+    steps: Array<{
+      id: string
+      kind: 'tool' | 'reasoning' | 'error'
+      title: string
+      body: string
+      status?: 'running' | 'done' | 'error'
+    }>
+  }
 }
 
 export type AwaitingReplyQuestion = {
