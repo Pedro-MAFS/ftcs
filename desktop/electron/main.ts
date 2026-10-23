@@ -114,6 +114,19 @@ import {
   runAgentPreflight,
   type AgentPreflightKind,
 } from './preflight/agent-preflight'
+import type { AgentPreflightOptions } from './ipc/types'
+import {
+  allowCreatedWebContentsDuring,
+  bindBuiltinBrowserMainWindow,
+  ensureBuiltinBrowser,
+  installRemoteDebuggingSwitch,
+  installUnexpectedWebContentsGuard,
+  noteBuiltinBrowserQuitting,
+  registerBuiltinBrowserIpc,
+  reserveLoopbackPort,
+  setInternalDebugPort,
+  shutdownBuiltinBrowser,
+} from './browser-runtime/index'
 import {
   cancelLogin,
   getAuthSession,
@@ -209,6 +222,14 @@ function currentTitleBar(): { bg: string; fg: string; windowBg: string } {
 app.disableHardwareAcceleration()
 app.commandLine.appendSwitch('disable-gpu')
 app.commandLine.appendSwitch('disable-gpu-compositing')
+
+try {
+  const internalDebugPort = await reserveLoopbackPort()
+  installRemoteDebuggingSwitch(internalDebugPort)
+  setInternalDebugPort(internalDebugPort)
+} catch (err) {
+  console.error('[builtin-browser] 内部调试端口没有绑上', err)
+}
 
 let mainWindow: BrowserWindow | null = null
 let runtime: OpenCodeRuntime | null = null
@@ -324,7 +345,7 @@ function getWindowOptions(): BrowserWindowConstructorOptions {
 }
 
 async function createWindow(): Promise<void> {
-  mainWindow = new BrowserWindow(getWindowOptions())
+  mainWindow = allowCreatedWebContentsDuring(() => new BrowserWindow(getWindowOptions()))
   const win = mainWindow
 
   /**
@@ -381,6 +402,7 @@ async function createWindow(): Promise<void> {
     }
     // 未开启「关闭进托盘」：允许销毁并走 before-quit 清理
     isQuitting = true
+    noteBuiltinBrowserQuitting()
   })
 
   setTaskDoneNotifyMainWindowGetter(() =>
@@ -522,11 +544,15 @@ function libraryFail(err: unknown, cwd = '') {
   }
 }
 
-async function gateAgentStart(kind: AgentPreflightKind) {
-  return runAgentPreflight(kind, {
-    runtime,
-    isAgentRunning: () => getAgentRunner().isRunning(),
-  })
+async function gateAgentStart(kind: AgentPreflightKind, options?: AgentPreflightOptions) {
+  return runAgentPreflight(
+    kind,
+    {
+      runtime,
+      isAgentRunning: () => getAgentRunner().isRunning(),
+    },
+    options,
+  )
 }
 
 function broadcastAuthChanged(): void {
@@ -572,6 +598,10 @@ async function runUpdateCheck(opts?: { forceNotify?: boolean }): Promise<UpdateC
 }
 
 function registerIpcHandlers(): void {
+  bindBuiltinBrowserMainWindow(() =>
+    mainWindow && !mainWindow.isDestroyed() ? mainWindow : null,
+  )
+  registerBuiltinBrowserIpc()
   setAuthSessionListener(broadcastAuthChanged)
   bindUpdateDownloadBroadcast((state) => {
     broadcastToWindows(IPC.UPDATE_PROGRESS, state)
@@ -633,9 +663,13 @@ function registerIpcHandlers(): void {
       return ackMessage(input?.messageId ?? '', input?.answers ?? [])
     },
   )
-  ipcMain.handle(IPC.APP_AGENT_PREFLIGHT, async (_event, kind: AgentPreflightKind) => {
+  ipcMain.handle(
+    IPC.APP_AGENT_PREFLIGHT,
+    async (_event, kind: AgentPreflightKind, options?: AgentPreflightOptions) => {
     try {
-      return await gateAgentStart(kind)
+      const requireBuiltinBrowser =
+        options && typeof options === 'object' ? options.requireBuiltinBrowser : undefined
+      return await gateAgentStart(kind, { requireBuiltinBrowser })
     } catch (err) {
       return {
         ok: false,
@@ -1835,7 +1869,9 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.PROFILE_GENERATE, async (event, input: ProfileGenerateInput) => {
     try {
-      const preflight = await gateAgentStart('extract-profile')
+      const preflight = await gateAgentStart('extract-profile', {
+        requireBuiltinBrowser: (input?.websitePaths ?? []).length > 0,
+      })
       if (!preflight.ok) {
         return { ok: false, message: preflight.message }
       }
@@ -1902,6 +1938,7 @@ app.whenReady().then(async () => {
     )
   })
 
+  installUnexpectedWebContentsGuard()
   registerIpcHandlers()
 
   startHidden = shouldStartHidden()
@@ -1918,8 +1955,13 @@ app.whenReady().then(async () => {
     getAppIconPath(),
   )
 
-  // 先开窗口，再启 OpenCode，避免 Server 失败时界面空白，也避免 GPU 日志被误认为 Server 阻塞
+  // 先开窗口，再拉起内置浏览器，再启 OpenCode。网关地址要在改写 MCP 命令之前就绪。
   await createWindow()
+  try {
+    await ensureBuiltinBrowser()
+  } catch (err) {
+    console.error('[builtin-browser] ensure failed', err)
+  }
   void bootstrapOpenCode()
 
   startWorkflowScheduler({
@@ -1949,6 +1991,7 @@ app.on('window-all-closed', () => {
  */
 app.on('before-quit', (event) => {
   isQuitting = true
+  noteBuiltinBrowserQuitting()
   stopWorkflowScheduler()
   destroyAppTray()
   if (isCleaningUp) return
@@ -1957,6 +2000,7 @@ app.on('before-quit', (event) => {
 
   void (async () => {
     try {
+      await shutdownBuiltinBrowser()
       await runtime?.stop()
     } catch (err) {
       console.error('[opencode] cleanup on quit failed:', err)

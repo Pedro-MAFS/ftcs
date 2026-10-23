@@ -12,7 +12,7 @@ export interface OnboardingState {
 export type EnvProbeStatus = 'ok' | 'missing' | 'outdated' | 'error'
 
 export interface EnvProbeItem {
-  id: 'node' | 'opencode' | 'chrome' | 'officecli'
+  id: 'node' | 'opencode' | 'builtin-browser' | 'officecli'
   label: string
   status: EnvProbeStatus
   detail: string
@@ -193,7 +193,7 @@ export const TOUR_STEPS = [
     route: 'explore',
     title: '开始找客户',
     desc: '搜索 + 打开网页核验',
-    detail: '在「探索」页开始找客户。需要可用的搜索和 Chrome。',
+    detail: '在「探索」页开始找客户。需要可用的搜索。打开网页使用内置浏览器。',
   },
   {
     id: 'score',

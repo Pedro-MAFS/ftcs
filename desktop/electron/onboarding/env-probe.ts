@@ -1,6 +1,4 @@
 import { execFile } from 'node:child_process'
-import fs from 'node:fs'
-import path from 'node:path'
 import { promisify } from 'node:util'
 import { getDocsInstallUrl } from '../config/site-origins'
 import {
@@ -18,7 +16,7 @@ const execFileAsync = promisify(execFile)
 export type EnvProbeStatus = 'ok' | 'missing' | 'outdated' | 'error'
 
 export interface EnvProbeItem {
-  id: 'node' | 'opencode' | 'chrome' | 'officecli'
+  id: 'node' | 'opencode' | 'builtin-browser' | 'officecli'
   label: string
   status: EnvProbeStatus
   detail: string
@@ -37,7 +35,6 @@ export interface EnvProbeResult {
 }
 
 const NODE_INSTALL_URL = 'https://nodejs.org/'
-const CHROME_INSTALL_URL = 'https://www.google.com/chrome/'
 
 async function findOnPath(command: string): Promise<string | null> {
   if (process.platform === 'win32') {
@@ -246,86 +243,29 @@ async function probeOpenCode(): Promise<EnvProbeItem> {
   }
 }
 
-function chromeCandidates(): string[] {
-  const localAppData = process.env.LOCALAPPDATA || ''
-  const programFiles = process.env.PROGRAMFILES || 'C:\\Program Files'
-  const programFilesX86 =
-    process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)'
-
-  if (process.platform === 'win32') {
-    return [
-      path.join(programFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-      path.join(programFilesX86, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-      path.join(localAppData, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    ]
-  }
-  if (process.platform === 'darwin') {
-    return ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']
-  }
-  return [
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium',
-  ]
-}
-
-async function probeChrome(): Promise<EnvProbeItem> {
-  for (const candidate of chromeCandidates()) {
-    if (candidate && fs.existsSync(candidate)) {
-      return {
-        id: 'chrome',
-        label: 'Google Chrome',
-        status: 'ok',
-        detail: candidate,
-      }
+async function probeBuiltinBrowser(): Promise<EnvProbeItem> {
+  const { ensureBuiltinBrowser } = await import('../browser-runtime/index')
+  try {
+    let status = await ensureBuiltinBrowser()
+    if (!status.ok && status.windowAlive) {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      status = await ensureBuiltinBrowser()
     }
-  }
-
-  if (process.platform === 'win32') {
-    try {
-      const { stdout } = await execFileAsync(
-        'reg',
-        [
-          'query',
-          'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe',
-          '/ve',
-        ],
-        { windowsHide: true },
-      )
-      const match = stdout.match(/REG_SZ\s+(.+\.exe)/i)
-      const regPath = match?.[1]?.trim()
-      if (regPath && fs.existsSync(regPath)) {
-        return {
-          id: 'chrome',
-          label: 'Google Chrome',
-          status: 'ok',
-          detail: regPath,
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  const onPath = await findOnPath(
-    process.platform === 'win32' ? 'chrome' : 'google-chrome',
-  )
-  if (onPath) {
     return {
-      id: 'chrome',
-      label: 'Google Chrome',
-      status: 'ok',
-      detail: onPath,
+      id: 'builtin-browser',
+      label: '内置浏览器',
+      status: status.ok ? 'ok' : 'error',
+      detail: status.detail,
+      diagnostic: status.diagnostic,
     }
-  }
-
-  return {
-    id: 'chrome',
-    label: 'Google Chrome',
-    status: 'missing',
-    detail: '未检测到 Google Chrome。画像抓站与探索打开网页需要本机 Chrome。',
-    installUrl: CHROME_INSTALL_URL,
+  } catch (err) {
+    return {
+      id: 'builtin-browser',
+      label: '内置浏览器',
+      status: 'error',
+      detail: '内置浏览器没有打开。请点「重新检测」。',
+      diagnostic: err instanceof Error ? err.message : String(err),
+    }
   }
 }
 
@@ -387,12 +327,12 @@ async function probeOfficeCli(): Promise<EnvProbeItem> {
   }
 }
 
-/** 首次引导 / 设置页：探测本机 Node、OpenCode、Chrome、可选 OfficeCLI */
+/** 首次引导 / 设置页：探测本机 Node、OpenCode、内置浏览器、可选 OfficeCLI */
 export async function probeEnvironment(): Promise<EnvProbeResult> {
   const items = await Promise.all([
     probeNode(),
     probeOpenCode(),
-    probeChrome(),
+    probeBuiltinBrowser(),
     probeOfficeCli(),
   ])
   return {

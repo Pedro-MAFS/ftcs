@@ -103,9 +103,9 @@ function hasAnyMirror(mirrors: DownloadMirror[]): boolean {
       </div>
 
       <p class="muted download-prereq">
-        使用前请在本机准备 <strong>Node.js 22+</strong>、<strong>Google Chrome</strong>
-        与 <strong>OpenCode CLI</strong>；推荐登录开通官方通道（无需自备模型 / 搜索
-        Key）。详见
+        使用前请在本机准备 <strong>Node.js 22+</strong> 与
+        <strong>OpenCode CLI</strong>。打开网页使用应用内置浏览器，不必另装 Google
+        Chrome。推荐登录开通官方通道（无需自备模型 / 搜索 Key）。详见
         <RouterLink to="/docs/install">外贸获客系统安装与前置</RouterLink>
         。版本差异见
         <RouterLink to="/changelog">发布日志</RouterLink>。

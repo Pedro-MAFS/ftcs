@@ -27,7 +27,6 @@ export const PRODUCT_LINKS = {
   /** 桌面端检查更新用的版本清单 */
   updateManifest: `${PRODUCT_BASE_URL}/updates/latest.json`,
   nodejs: 'https://nodejs.org/',
-  chrome: 'https://www.google.com/chrome/',
   /** DeepSeek 开放平台（注册与 API Key） */
   deepseek: 'https://platform.deepseek.com/',
   /** Tavily 官网（注册与 API Key） */

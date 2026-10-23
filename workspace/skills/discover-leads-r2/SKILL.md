@@ -48,7 +48,7 @@ outputs:
 
 ## 硬禁令
 
-- **禁止**对社媒 URL 调用 chrome-devtools（`new_page` / `navigate_page`）。社媒只使用 Tavily 的 title / url / content。
+- **禁止**对社媒 URL 调用 chrome-devtools（`new_page` / `navigate_page`）。社媒只使用 Tavily 的 title / url / content。官网只在内置浏览器中打开。
 - **禁止**在未打开官网并判断为「是」时调用 `lead_append_raw` 或 `lead_set_company_intelligence`。
 - **禁止**在保存前调用 `leads_get_scored`，或先对照线索库再决定是否保存。判为目标客户后直接调用 `lead_append_raw` 或 `lead_set_company_intelligence`。返回 `skipped: true` 且 `message` 为「线索已存在」时继续下一家，不要把探索标成 failed。
 - **禁止**把 `facebook.com` / `linkedin.com` 等社媒域名当作 `company.website` 或去重键。
@@ -214,7 +214,7 @@ new_page(url) 或 navigate_page
 
 打不开或否 → **不写** Lead，也不调用 `lead_set_company_intelligence`，只记跳过。
 
-chrome-devtools 不可用 → 停止本轮，提示启用 MCP，`exploration_finish`（failed 或 completed 并说明未判断）。
+内置浏览器不可用 → 停止本轮，告诉用户：内置浏览器未就绪，请重新检测或重启应用。`exploration_finish`（failed 或 completed 并说明未判断）。
 
 ### Step 4：写入（仅判断为「是」）
 
@@ -325,7 +325,7 @@ lead-store.exploration_finish({
 | `DAILY_LIMIT_EXCEEDED` / 官方 402 | 停止，保存进度，告知用户 |
 | 社媒搜索失败 | 该词记 error，继续下一词；连续失败可 `finish` failed |
 | 官网超时 / 打不开 | 跳过该候选，不写 Lead |
-| chrome-devtools 不可用 | 停止，提示启用 MCP |
+| 内置浏览器不可用 | 停止。告诉用户：内置浏览器未就绪，请重新检测或重启应用 |
 
 ## 数据约定
 

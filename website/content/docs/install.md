@@ -10,7 +10,6 @@
 |------|------|------|
 | Windows | 10 / 11，x64 | 运行桌面安装包或便携版 |
 | **Node.js** | **22 及以上** | 运行 MCP、`npx` 等（应用内可一键安装到私有目录） |
-| **Google Chrome** | 已安装并可正常启动 | 画像抓站、全网搜索打开客户官网（社媒发现不打开社媒真页；Electron 内置浏览器不能替代） |
 | **OpenCode CLI** | 本机 PATH 可执行 `opencode`，或应用内一键安装 | 应用通过 SDK 拉起 `opencode serve`（轻量包不内嵌） |
 | 模型 / 搜索 | **官方通道**（登录开通即可）或 **自定义**（自备模型 Key + Tavily） | 画像 / 探索 / 邮件起草 |
 
@@ -19,8 +18,6 @@
 ```powershell
 node -v          # 应显示 v22.x 或更高
 ```
-
-并从开始菜单能正常打开 **Google Chrome**（Windows 上一般没有 `google-chrome` 命令）。
 
 ## 安装方式
 
@@ -59,9 +56,9 @@ npm -v
 
 > **说明**：完成应用内一键安装后，环境检测 **只认应用私有 Node**，不再回退系统 PATH。
 
-## Google Chrome
+## 内置浏览器
 
-请安装正式版 [Google Chrome](https://www.google.com/chrome/)。画像抓站、全网搜索打开客户官网仍依赖本机 Chrome；社媒发现不打开领英 / 脸书真页，但核对公司官网时仍可能用到 Chrome。仅安装本应用**不够**。
+画像抓站和探索打开网页使用应用自带的浏览器，不必另装 Google Chrome。社媒发现不打开社媒真页。
 
 ## OpenCode CLI
 

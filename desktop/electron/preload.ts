@@ -40,7 +40,9 @@ import type {
   ApproveEmailDraftInput,
   ApproveEmailDraftResult,
   AgentPreflightKind,
+  AgentPreflightOptions,
   AgentPreflightResult,
+  BuiltinBrowserUiState,
   AuthActionResult,
   AuthSessionSnapshot,
   InboxAckResult,
@@ -86,8 +88,20 @@ const api = {
   getAppStatus: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.APP_GET_STATUS),
   openExternal: (url: string): Promise<{ ok: boolean; message: string }> =>
     ipcRenderer.invoke(IPC.APP_OPEN_EXTERNAL, url),
-  checkAgentPreflight: (kind: AgentPreflightKind): Promise<AgentPreflightResult> =>
-    ipcRenderer.invoke(IPC.APP_AGENT_PREFLIGHT, kind),
+  checkAgentPreflight: (
+    kind: AgentPreflightKind,
+    options?: AgentPreflightOptions,
+  ): Promise<AgentPreflightResult> =>
+    ipcRenderer.invoke(IPC.APP_AGENT_PREFLIGHT, kind, options),
+  getBuiltinBrowserState: (): Promise<BuiltinBrowserUiState> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_GET_STATE),
+  showBuiltinBrowser: (): Promise<BuiltinBrowserUiState> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_SHOW),
+  onBuiltinBrowserState: (callback: (state: BuiltinBrowserUiState) => void): (() => void) => {
+    const listener = (_event: unknown, state: BuiltinBrowserUiState) => callback(state)
+    ipcRenderer.on(IPC.BUILTIN_BROWSER_STATE, listener)
+    return () => ipcRenderer.removeListener(IPC.BUILTIN_BROWSER_STATE, listener)
+  },
   startOpenCode: (): Promise<OpenCodeActionResult> =>
     ipcRenderer.invoke(IPC.OPENCODE_START),
   stopOpenCode: (): Promise<OpenCodeActionResult> =>

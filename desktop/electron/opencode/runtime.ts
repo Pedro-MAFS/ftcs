@@ -30,6 +30,8 @@ import {
   getPlacesMcpInjection,
   markPlacesMcpInjectionApplied,
 } from './places-mcp-env'
+import { rewriteChromeDevtoolsLaunch } from '../browser-runtime/mcp-launch'
+import { ensureBuiltinBrowser, getBrowserUrl } from '../browser-runtime/index'
 
 const MAX_LOG_LINES = 200
 const PORT_SCAN_RANGE = 20
@@ -144,10 +146,19 @@ export class OpenCodeRuntime {
 
       const binaryPath = await ensureOpenCodeOnPath()
       const configPath = getOpenCodeConfigPath(workspaceRoot)
+      let browserUrl = getBrowserUrl()
+      if (!browserUrl) {
+        await ensureBuiltinBrowser()
+        browserUrl = getBrowserUrl()
+        if (!browserUrl) this.appendLog('内置浏览器调试地址未就绪')
+      }
       const config = applyUserPrefsToOpenCodeConfig(
-        rewriteMcpWorkspaceEnv(
-          readOpenCodeConfig(configPath) as Config,
-          workspaceRoot,
+        rewriteChromeDevtoolsLaunch(
+          rewriteMcpWorkspaceEnv(
+            readOpenCodeConfig(configPath) as Config,
+            workspaceRoot,
+          ),
+          browserUrl,
         ),
         process.env,
       )

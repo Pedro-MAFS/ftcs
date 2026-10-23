@@ -1,6 +1,11 @@
 export const IPC = {
   APP_GET_STATUS: 'app:get-status',
   APP_AGENT_PREFLIGHT: 'app:agent-preflight',
+  BUILTIN_BROWSER_GET_STATE: 'builtin-browser:get-state',
+  BUILTIN_BROWSER_SHOW: 'builtin-browser:show',
+  BUILTIN_BROWSER_SET_MODE: 'builtin-browser:set-mode',
+  BUILTIN_BROWSER_STATE: 'builtin-browser:state',
+  BUILTIN_BROWSER_CAPTION: 'builtin-browser:caption',
   OPENCODE_START: 'opencode:start',
   OPENCODE_STOP: 'opencode:stop',
   OPENCODE_RESTART: 'opencode:restart',
@@ -153,7 +158,7 @@ export interface OnboardingState {
 export type EnvProbeStatus = 'ok' | 'missing' | 'outdated' | 'error'
 
 export interface EnvProbeItem {
-  id: 'node' | 'opencode' | 'chrome' | 'officecli'
+  id: 'node' | 'opencode' | 'builtin-browser' | 'officecli'
   label: string
   status: EnvProbeStatus
   detail: string
@@ -1133,6 +1138,20 @@ export interface AgentPreflightResult {
   ok: boolean
   message: string
   checks: AgentPreflightCheck[]
+}
+
+export interface AgentPreflightOptions {
+  requireBuiltinBrowser?: boolean
+}
+
+export type BuiltinBrowserMode = 'thumbnail' | 'card' | 'expanded'
+
+export interface BuiltinBrowserUiState {
+  alive: boolean
+  visible: boolean
+  mode: BuiltinBrowserMode
+  title: string
+  url: string
 }
 
 export type ChannelMode = 'official' | 'custom'

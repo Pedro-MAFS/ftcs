@@ -10,7 +10,7 @@ Electron + Vue 3 + **OpenCode SDK（Server + Client）**。
 ## 前置条件
 
 1. **Node.js** ≥ 22（跑 OpenCode / MCP / `npx`）
-2. **Google Chrome**（`chrome-devtools` 抓站与探索；Electron 内置浏览器不能替代）
+2. **内置浏览器**（随应用自带，用于画像抓站与探索打开网页。不需要另装 Google Chrome）
 3. **OpenCode CLI** 已安装（`npm install -g opencode-ai`）
 4. 首次启动后在应用「设置」中配置 API Key（或编辑运行时工作区里的 `.env`）
 5. 仓库内先构建一次 MCP **预打包产物**（自包含 `dist/mcp.js`，用户工作区不再 `npm install`）：
@@ -88,7 +88,7 @@ npx electron-builder --win # 产出 release/
 
 ### 安装包使用方前置
 
-1. **Node.js 22+**、**Google Chrome** 已安装
+1. **Node.js 22+** 已安装。打开网页使用应用内置浏览器
 2. 本机安装 OpenCode：`npm install -g opencode-ai`（或设置 `FTCS_OPENCODE_PATH`）
 3. 启动 App → 设置页填写 API Key
 4. 验收：录入 → 探索 → 线索 → 邮件
