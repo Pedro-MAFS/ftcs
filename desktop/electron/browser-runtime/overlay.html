@@ -15,100 +15,129 @@
       }
       #overlay {
         position: relative;
-        -webkit-app-region: drag;
         user-select: none;
         font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
       }
-      #scrim {
+      #bar {
         position: absolute;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.36);
-        opacity: 0;
-        pointer-events: none;
-      }
-      #controls {
-        position: absolute;
+        top: 8px;
         left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
+        transform: translateX(-50%);
+        height: 32px;
         display: flex;
-        gap: 8px;
-        opacity: 0;
-        pointer-events: none;
-        -webkit-app-region: no-drag;
+        align-items: center;
+        gap: 2px;
+        padding: 0 4px 0 8px;
+        border-radius: 8px;
+        background: rgba(28, 28, 28, 0.82);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+        color: #f3f3f3;
+        cursor: grab;
       }
-      #overlay.is-open #scrim,
-      #overlay.is-open #controls {
-        opacity: 1;
+      #overlay.is-dragging #bar {
+        cursor: grabbing;
       }
-      #overlay.is-open #controls {
-        pointer-events: auto;
+      #grip {
+        width: 10px;
+        height: 14px;
+        margin-right: 4px;
+        flex: 0 0 auto;
+        background-image: radial-gradient(rgba(255, 255, 255, 0.78) 0.9px, transparent 1.1px);
+        background-size: 4px 4px;
+        background-position: center;
+        background-repeat: repeat;
       }
       button {
-        -webkit-app-region: no-drag;
-        height: 28px;
-        padding: 0 12px;
+        width: 26px;
+        height: 24px;
+        padding: 0;
         border: 0;
         border-radius: 6px;
-        background: #262626;
-        color: #f5f5f5;
-        font: 500 12px/1 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        background: transparent;
+        color: inherit;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         cursor: pointer;
       }
-      button:hover {
-        background: #333333;
+      button:hover,
+      button:focus-visible {
+        background: rgba(255, 255, 255, 0.14);
+        outline: none;
+      }
+      svg {
+        width: 14px;
+        height: 14px;
+        display: block;
       }
     </style>
   </head>
   <body>
     <div id="overlay">
-      <div id="scrim"></div>
-      <div id="controls">
-        <button type="button" data-mode="hidden">收起</button>
-        <button type="button" data-mode="expanded">放大</button>
-        <button type="button" data-mode="hidden">关闭</button>
+      <div id="bar" role="toolbar" aria-label="浏览窗">
+        <span id="grip" aria-hidden="true"></span>
+        <button type="button" data-mode="hidden" aria-label="收起" title="收起">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="M3 12.5h10" stroke-linecap="round" />
+            <path d="M8 3.2v5.2" stroke-linecap="round" />
+            <path d="M5.4 6.2 8 8.8l2.6-2.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <button type="button" data-mode="expanded" aria-label="放大" title="放大">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="M9.2 3.2H12.8V6.8" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M12.8 3.2 9 7" stroke-linecap="round" />
+            <path d="M6.8 12.8H3.2V9.2" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M3.2 12.8 7 9" stroke-linecap="round" />
+          </svg>
+        </button>
       </div>
     </div>
     <script>
-      const HIDE_MS = 400
       const root = document.getElementById('overlay')
-      let timer = 0
+      let drag = null
 
-      function openControls() {
-        if (timer) {
-          clearTimeout(timer)
-          timer = 0
-        }
-        root.classList.add('is-open')
+      function emit(command) {
+        console.log('FTCS_CHROME ' + JSON.stringify(command))
       }
 
-      function scheduleClose() {
-        if (timer) clearTimeout(timer)
-        timer = setTimeout(() => {
-          timer = 0
-          root.classList.remove('is-open')
-        }, HIDE_MS)
+      function requestMode(mode) {
+        emit({ type: 'mode', mode: mode })
+        if (window.ftcsCaption && window.ftcsCaption.setMode) window.ftcsCaption.setMode(mode)
       }
 
-      root.addEventListener('pointerenter', openControls)
-      root.addEventListener('pointerleave', scheduleClose)
       root.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return
-        openControls()
+        if (event.target.closest('button')) return
+        drag = event.pointerId
+        root.classList.add('is-dragging')
+        if (root.setPointerCapture) root.setPointerCapture(event.pointerId)
+        emit({ type: 'drag-start', screenX: event.screenX, screenY: event.screenY })
       })
-      root.addEventListener('click', (event) => {
-        if (event.button !== 0) return
-        openControls()
+      root.addEventListener('pointermove', (event) => {
+        if (drag !== event.pointerId) return
+        emit({ type: 'drag-move', screenX: event.screenX, screenY: event.screenY })
       })
-      root.addEventListener('contextmenu', (event) => {
-        event.preventDefault()
-      })
+      function endDrag(event) {
+        if (drag !== event.pointerId) return
+        drag = null
+        root.classList.remove('is-dragging')
+        emit({ type: 'drag-end' })
+      }
+      root.addEventListener('pointerup', endDrag)
+      root.addEventListener('pointercancel', endDrag)
+      root.addEventListener('contextmenu', (event) => event.preventDefault())
 
       for (const button of document.querySelectorAll('button[data-mode]')) {
+        button.addEventListener('pointerdown', (event) => {
+          event.stopPropagation()
+        })
         button.addEventListener('click', (event) => {
+          event.preventDefault()
           event.stopPropagation()
           const mode = button.getAttribute('data-mode')
-          if (window.ftcsCaption && mode) window.ftcsCaption.setMode(mode)
+          if (mode) requestMode(mode)
         })
       }
     </script>

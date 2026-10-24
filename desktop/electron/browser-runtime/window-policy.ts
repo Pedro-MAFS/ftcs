@@ -17,6 +17,48 @@ export function isBuiltinBrowserMode(value: unknown): value is BuiltinBrowserMod
   return value === 'hidden' || value === 'thumbnail' || value === 'expanded'
 }
 
+/**
+ * 缩略蒙层是盖在页面上的子 WebContentsView。data URL 上 preload 经常不注入，
+ * `-webkit-app-region: drag` 又会吞掉按钮点击，而且拖不动这扇窗。
+ * 页面脚本用这个前缀打日志，主进程只在标题条和蒙层的 webContents 上解析。
+ */
+export const CHROME_COMMAND_PREFIX = 'FTCS_CHROME '
+
+export type ChromeCommand =
+  | { type: 'mode'; mode: BuiltinBrowserMode }
+  | { type: 'drag-start'; screenX: number; screenY: number }
+  | { type: 'drag-move'; screenX: number; screenY: number }
+  | { type: 'drag-end' }
+
+export function parseChromeCommand(raw: string): ChromeCommand | null {
+  const marker = raw.indexOf(CHROME_COMMAND_PREFIX)
+  if (marker < 0) return null
+  const jsonStart = raw.indexOf('{', marker)
+  const jsonEnd = raw.lastIndexOf('}')
+  if (jsonStart < 0 || jsonEnd < jsonStart) return null
+  let data: unknown
+  try {
+    data = JSON.parse(raw.slice(jsonStart, jsonEnd + 1))
+  } catch {
+    return null
+  }
+  if (!data || typeof data !== 'object') return null
+  const record = data as { type?: unknown; mode?: unknown; screenX?: unknown; screenY?: unknown }
+  if (record.type === 'mode' && isBuiltinBrowserMode(record.mode)) {
+    return { type: 'mode', mode: record.mode }
+  }
+  if (record.type === 'drag-start' || record.type === 'drag-move') {
+    if (!isFiniteCoord(record.screenX) || !isFiniteCoord(record.screenY)) return null
+    return { type: record.type, screenX: record.screenX, screenY: record.screenY }
+  }
+  if (record.type === 'drag-end') return { type: 'drag-end' }
+  return null
+}
+
+function isFiniteCoord(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
 export function isBusinessNavigation(url: string): boolean {
   if (!url || url.startsWith('about:')) return false
   if (url.includes('/__ftcs_builtin_page__')) return false

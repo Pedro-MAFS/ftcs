@@ -15,13 +15,16 @@ import { sendPageCommand, tokenPageUrl } from './cdp-gateway'
 import type { BuiltinBrowserMode, BuiltinBrowserUiState, ScreenRect } from './types'
 import { IPC } from '../ipc/types'
 import {
+  CHROME_COMMAND_PREFIX,
   detachedAfterMode,
   modeAfterEnsure,
   modeAfterUserDismiss,
   navigationMode,
+  parseChromeCommand,
   showsThumbnailOverlay,
   titleBarRequestsRaise,
   viewportForMode,
+  type ChromeCommand,
 } from './window-policy'
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url))
@@ -45,6 +48,7 @@ let expectedBounds: ScreenRect | null = null
 let modeChain: Promise<void> = Promise.resolve()
 let forcingHide = false
 let forcedHides = 0
+let dragOrigin: { screenX: number; screenY: number; x: number; y: number } | null = null
 
 type UiListener = (state: BuiltinBrowserUiState) => void
 const uiListeners = new Set<UiListener>()
@@ -205,6 +209,8 @@ export async function ensureBuiltinBrowserWindow(main: BrowserWindow): Promise<b
     // 透明底失败时缩略页会被蒙层挡住，不因此拆掉窗口
   }
   overlay.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  attachChromeCommands(overlay.webContents)
+  attachChromeCommands(win.webContents)
 
   win.on('moved', () => {
     if (!browserWindow || browserWindow.isDestroyed() || mode !== 'thumbnail') return
@@ -291,6 +297,7 @@ export function destroyBuiltinBrowserWindow(): void {
   mode = modeAfterEnsure()
   detached = false
   lastThumbBounds = null
+  dragOrigin = null
   pageTitle = '内置浏览器'
   pageUrlLabel = '尚未打开页面'
   expectedBounds = null
@@ -308,6 +315,7 @@ async function applyBuiltinBrowserMode(next: BuiltinBrowserMode): Promise<void> 
   pageView?.webContents.setBackgroundThrottling(false)
 
   if (next === 'hidden') {
+    dragOrigin = null
     follow?.setVisibleBefore(false)
     if (!browserWindow || browserWindow.isDestroyed()) return
     browserWindow.hide()
@@ -410,10 +418,76 @@ function layoutViews(next: BuiltinBrowserMode, bounds: ScreenRect): void {
   if (showsThumbnailOverlay(next)) {
     overlayView.setBounds({ x: 0, y: 0, width: THUMB.width, height: THUMB.height })
     overlayView.setVisible(true)
+    raiseOverlay()
     return
   }
   overlayView.setVisible(false)
   overlayView.setBounds({ x: 0, y: 0, width: 0, height: 0 })
+}
+
+function raiseOverlay(): void {
+  const win = browserWindow
+  const overlay = overlayView
+  if (!win || win.isDestroyed() || !overlay) return
+  try {
+    win.contentView.removeChildView(overlay)
+    win.contentView.addChildView(overlay)
+  } catch {
+    // 蒙层已经盖在页面上
+  }
+}
+
+function attachChromeCommands(contents: WebContents): void {
+  contents.on('console-message', (...args: unknown[]) => {
+    const command = parseChromeCommand(consoleText(args))
+    if (command) handleChromeCommand(command)
+  })
+}
+
+function consoleText(args: unknown[]): string {
+  for (const arg of args) {
+    if (typeof arg === 'string' && arg.includes(CHROME_COMMAND_PREFIX)) return arg
+  }
+  for (const arg of args) {
+    if (!arg || typeof arg !== 'object' || !('message' in arg)) continue
+    const message = (arg as { message?: unknown }).message
+    if (typeof message === 'string') return message
+  }
+  return ''
+}
+
+function handleChromeCommand(command: ChromeCommand): void {
+  if (command.type === 'mode') {
+    dragOrigin = null
+    void setBuiltinBrowserMode(command.mode)
+    return
+  }
+  if (mode !== 'thumbnail') return
+  const win = browserWindow
+  if (!win || win.isDestroyed()) return
+  if (command.type === 'drag-start') {
+    const bounds = win.getBounds()
+    dragOrigin = {
+      screenX: command.screenX,
+      screenY: command.screenY,
+      x: bounds.x,
+      y: bounds.y,
+    }
+    return
+  }
+  if (command.type === 'drag-move' && dragOrigin) {
+    const bounds = {
+      x: Math.round(dragOrigin.x + command.screenX - dragOrigin.screenX),
+      y: Math.round(dragOrigin.y + command.screenY - dragOrigin.screenY),
+      width: THUMB.width,
+      height: THUMB.height,
+    }
+    detached = true
+    lastThumbBounds = bounds
+    applyBounds(bounds)
+    return
+  }
+  if (command.type === 'drag-end') dragOrigin = null
 }
 
 function applyBounds(bounds: ScreenRect): void {

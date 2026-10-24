@@ -77,7 +77,6 @@
       </div>
       <button type="button" id="restore">还原</button>
       <button type="button" id="collapse">收起</button>
-      <button type="button" id="close">关闭</button>
     </header>
     <script>
       const titleEl = document.getElementById('title')
@@ -89,12 +88,12 @@
       }
 
       function setMode(mode) {
+        console.log('FTCS_CHROME ' + JSON.stringify({ type: 'mode', mode: mode }))
         if (window.ftcsCaption) window.ftcsCaption.setMode(mode)
       }
 
       document.getElementById('restore').addEventListener('click', () => setMode('thumbnail'))
       document.getElementById('collapse').addEventListener('click', () => setMode('hidden'))
-      document.getElementById('close').addEventListener('click', () => setMode('hidden'))
       document.addEventListener('contextmenu', (event) => event.preventDefault())
 
       if (window.ftcsCaption) window.ftcsCaption.onState(render)
