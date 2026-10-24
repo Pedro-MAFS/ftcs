@@ -11,7 +11,7 @@ const MCP_META: Record<string, string> = {
   'lead-store': '线索读写',
   'search-api': 'Tavily 搜索',
   'places-api': 'Places 地图',
-  'chrome-devtools': '浏览器抓取',
+  'chrome-devtools': '内置浏览器',
 }
 
 const open = ref(false)

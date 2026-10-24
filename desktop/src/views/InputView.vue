@@ -953,7 +953,9 @@ async function openOfficeGateManual() {
 async function runGenerate(websitePaths: string[], fileList: string[]) {
   if (!window.ftcs?.generateProfile) return
 
-  const preflightError = await ensureAgentReady('extract-profile')
+  const preflightError = await ensureAgentReady('extract-profile', {
+    requireBuiltinBrowser: websitePaths.length > 0,
+  })
   if (preflightError) {
     error.value = preflightError
     return

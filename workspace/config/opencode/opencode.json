@@ -52,7 +52,8 @@
         "npx",
         "-y",
         "chrome-devtools-mcp@1.6.0",
-        "--isolated"
+        "--browserUrl",
+        "http://127.0.0.1:0"
       ],
       "enabled": true
     }

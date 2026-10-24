@@ -56,6 +56,7 @@ export default defineConfig(({ mode }) => {
         rollupOptions: {
           input: {
             index: resolve(__dirname, 'electron/preload.ts'),
+            caption: resolve(__dirname, 'electron/browser-runtime/caption-preload.ts'),
           },
         },
       },

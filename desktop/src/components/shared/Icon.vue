@@ -36,6 +36,7 @@ defineProps<{
     | 'sun'
     | 'moon'
     | 'x'
+    | 'app-window'
   size?: number
 }>()
 </script>
@@ -225,6 +226,12 @@ defineProps<{
     <template v-else-if="name === 'x'">
       <path d="M18 6 6 18" />
       <path d="m6 6 12 12" />
+    </template>
+    <template v-else-if="name === 'app-window'">
+      <rect width="20" height="16" x="2" y="4" rx="2" />
+      <path d="M10 4v4" />
+      <path d="M2 8h20" />
+      <path d="M6 4v4" />
     </template>
   </svg>
 </template>

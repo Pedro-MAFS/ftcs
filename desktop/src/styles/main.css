@@ -455,6 +455,11 @@ button:focus-visible {
   flex-shrink: 0;
 }
 
+.title-bar__brand,
+.title-bar__sep {
+  flex-shrink: 0;
+}
+
 .title-bar__brand {
   font-size: 13px;
   font-weight: 600;
@@ -466,6 +471,7 @@ button:focus-visible {
 }
 
 .title-bar__product {
+  min-width: 0;
   font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -507,18 +513,49 @@ button:focus-visible {
   align-items: center;
   gap: 10px;
   flex: 1;
+  min-width: max-content;
   justify-content: flex-end;
+}
+
+.browser-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.browser-entry.is-live {
+  color: var(--text);
+}
+
+.browser-entry__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
 }
 
 .oc-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 8px;
+  height: 26px;
+  padding: 0 8px;
   border-radius: 4px;
   font-size: 11px;
   background: var(--neutral-bg);
   color: var(--neutral);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .oc-status.is-ready {
@@ -584,7 +621,8 @@ button:focus-visible {
   align-items: center;
   gap: 6px;
   max-width: 200px;
-  padding: 4px 8px;
+  height: 26px;
+  padding: 0 8px;
   border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--bg-hover);
@@ -592,6 +630,7 @@ button:focus-visible {
   font-size: 11px;
   cursor: pointer;
   font: inherit;
+  flex-shrink: 0;
 }
 
 .auth-chip--guest {
@@ -3697,6 +3736,74 @@ textarea.text-input {
 
 .tl-item--tool .tl-item__badge {
   color: var(--accent);
+}
+
+.tl-item--subagent .tl-item__badge {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.tl-subagent__status,
+.tl-subagent__current {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tl-subagent__status {
+  color: var(--text-muted);
+}
+
+.tl-subagent__current {
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.tl-subagent__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.tl-step {
+  border-left: 2px solid var(--border);
+  background: var(--bg-input);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.tl-step.is-done {
+  border-left-color: var(--success, #3dd68c);
+}
+
+.tl-step.is-error,
+.tl-step.is-running {
+  border-left-color: var(--accent);
+}
+
+.tl-step.is-error {
+  border-left-color: var(--warning, #e2a336);
+}
+
+.tl-step__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tl-step__title {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-subagent__result {
+  margin-top: 4px;
 }
 
 .tl-item--assistant .tl-item__badge {

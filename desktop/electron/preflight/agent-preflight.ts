@@ -1,5 +1,8 @@
 import { getSettingsSnapshot } from '../settings/settings-service'
 import type { OpenCodeRuntime } from '../opencode/runtime'
+import type { AgentPreflightOptions } from '../ipc/types'
+import { ensureBuiltinBrowser } from '../browser-runtime/index'
+import { needsBuiltinBrowser, resolveBuiltinBrowserCheck } from './builtin-browser-check'
 import { preparePlacesForPreflight } from '../gateway/places-official-runtime'
 import {
   isPlacesGatewayReady,
@@ -49,15 +52,6 @@ function needsSearch(kind: AgentPreflightKind): boolean {
   )
 }
 
-function needsChrome(kind: AgentPreflightKind): boolean {
-  return (
-    kind === 'extract-profile' ||
-    kind === 'discover-leads' ||
-    kind === 'discover-leads-r2' ||
-    kind === 'discover-leads-r3'
-  )
-}
-
 function needsPlaces(kind: AgentPreflightKind): boolean {
   return kind === 'discover-leads-r3'
 }
@@ -88,6 +82,7 @@ function mcpOk(
 export async function runAgentPreflight(
   kind: AgentPreflightKind,
   ctx: AgentPreflightContext,
+  options?: AgentPreflightOptions,
 ): Promise<AgentPreflightResult> {
   const checks: AgentPreflightCheck[] = []
 
@@ -202,16 +197,19 @@ export async function runAgentPreflight(
     })
   }
 
-  if (needsChrome(kind)) {
-    const chrome = mcpOk(mcpServers, 'chrome-devtools')
-    checks.push({
-      id: 'mcp-chrome',
-      label: '浏览器',
-      ok: chrome.ok,
-      detail: chrome.ok
-        ? chrome.detail
-        : '服务未就绪，请稍后或重启应用',
-    })
+  if (needsBuiltinBrowser(kind, options)) {
+    checks.push(
+      await resolveBuiltinBrowserCheck({
+        ensure: async () => {
+          const status = await ensureBuiltinBrowser()
+          return { ok: status.ok }
+        },
+        getServers: async () => (runtime ? runtime.getMcpServers() : []),
+        reconnect: async () => {
+          if (runtime) await runtime.reconnectMcp('chrome-devtools')
+        },
+      }),
+    )
   }
 
   if (needsPlaces(kind)) {

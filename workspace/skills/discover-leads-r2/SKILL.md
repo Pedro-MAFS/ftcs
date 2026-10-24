@@ -1,6 +1,6 @@
 ---
 name: discover-leads-r2
-description: 执行 R2 社媒发现：按站点 include_domains 搜索，从摘要抽公司并解析官网，打开官网按 R1 口径判断后写入 raw/R2.jsonl。用户说开始 R2、社媒获客、discover-leads-r2 时使用。不要用 discover-leads 跑 R2。
+description: 执行 R2 社媒发现：按站点 include_domains 搜索，从摘要抽公司并解析官网，打开官网判断是不是目标客户并了解公司公开信息，再写入 raw/R2.jsonl。用户说开始 R2、社媒获客、discover-leads-r2 时使用。不要用 discover-leads 跑 R2。
 phase: 1
 inputs:
   - name: product_id
@@ -18,7 +18,7 @@ outputs:
 
 # discover-leads-r2
 
-基于关键词中的 **R2 社媒渠道词**执行获客：Tavily（带 `include_domains`）搜社媒摘要 → 抽公司名并解析稳定官网 → chrome 只打开**公司官网** → 按 R1 口径判断 → 在本探索会话里把六段画像与破冰和公司字段一次写入 `raw/R2.jsonl`。判为目标客户后直接调用保存工具。收到「线索已存在」则继续下一家。只在原始线索里的同域仍可直接覆盖画像。
+基于关键词中的 **R2 社媒渠道词**执行获客：Tavily（带 `include_domains`）搜社媒摘要 → 抽公司名并解析稳定官网 → chrome 只打开**公司官网**，判断是不是目标客户并了解这家公司的公开信息 → 在本探索会话里把六段画像与破冰和公司字段一次写入 `raw/R2.jsonl`。判为目标客户后直接调用保存工具。收到「线索已存在」则继续下一家。只在原始线索里的同域仍可直接覆盖画像。
 
 **不要**调用 skill `discover-leads`，也不要给它传 `rounds: ["R2"]`。R1 / R2 不共用同一份 Skill。
 
@@ -48,7 +48,7 @@ outputs:
 
 ## 硬禁令
 
-- **禁止**对社媒 URL 调用 chrome-devtools（`new_page` / `navigate_page`）。社媒只使用 Tavily 的 title / url / content。
+- **禁止**对社媒 URL 调用 chrome-devtools（`new_page` / `navigate_page`）。社媒只使用 Tavily 的 title / url / content。官网只在内置浏览器中打开。
 - **禁止**在未打开官网并判断为「是」时调用 `lead_append_raw` 或 `lead_set_company_intelligence`。
 - **禁止**在保存前调用 `leads_get_scored`，或先对照线索库再决定是否保存。判为目标客户后直接调用 `lead_append_raw` 或 `lead_set_company_intelligence`。返回 `skipped: true` 且 `message` 为「线索已存在」时继续下一家，不要把探索标成 failed。
 - **禁止**把 `facebook.com` / `linkedin.com` 等社媒域名当作 `company.website` 或去重键。
@@ -180,22 +180,25 @@ search-api.search_web({
 
 `linkedin.com`、`facebook.com`、`fb.com`、`instagram.com`、`x.com`、`twitter.com`、`tiktok.com`、`youtube.com`、`wikipedia.org`、`google.`、`reddit.com`、`quora.com`、`pinterest.com`、`amazon.`、`ebay.`
 
-### Step 3：打开官网并判断（E-04）
+### Step 3：打开官网（E-04）
 
-仅当 Step 2 得到 `website_url`。打开前：
+仅当 Step 2 得到 `website_url`。这一趟要做两件事，不要只为了打一个「是/否」：
 
-1. 直接打开官网并判断。不要先调用 `leads_get_scored`，也不要先对照线索库再决定是否保存。只在原始线索里的同域仍可在判断为「是」之后直接 `lead_set_company_intelligence`。
+1. **判断**是不是目标客户
+2. **了解**这家公司：公司名、业务、国家或区域、在卖什么或服务谁，以及页面上公开的邮箱、电话。这些会写进线索和画像；页面上没有的不要编
+
+不要先调用 `leads_get_scored`，也不要先对照线索库再决定是否保存。只在原始线索里的同域仍可在判断为「是」之后直接 `lead_set_company_intelligence`。
 
 使用 **chrome-devtools-mcp**，目标必须是 `website_url`（官网），**禁止**传入社媒 URL：
 
 ```
 new_page(url) 或 navigate_page
-→ take_snapshot（必要时 evaluate_script 提取公司名、业务、国家、公开邮箱）
+→ take_snapshot（必要时 evaluate_script）
 ```
 
-`crawl_pages` +1（只要尝试打开过官网）。
+先看打开的这一页。已经够判断，并且公司事实和公开联系方式也在这页上，就不要再点。不够就在**同一域名**里继续打开能补上缺口的页面（关于、产品或服务、联系我们，或页脚里的这些链接），每页再 `take_snapshot`。够写判断和画像就停。不要把整站点完，不要打开站外链接。每打开一个本站页面，`crawl_pages` +1。
 
-**智能体判断**是否目标客户（口径与 `discover-leads` Step 2b 相同）：
+**智能体判断**是否目标客户（标准与 `discover-leads` 相同）：
 
 **是**，若满足大部分条件：
 
@@ -214,7 +217,7 @@ new_page(url) 或 navigate_page
 
 打不开或否 → **不写** Lead，也不调用 `lead_set_company_intelligence`，只记跳过。
 
-chrome-devtools 不可用 → 停止本轮，提示启用 MCP，`exploration_finish`（failed 或 completed 并说明未判断）。
+内置浏览器不可用 → 停止本轮，告诉用户：内置浏览器未就绪，请重新检测或重启应用。`exploration_finish`（failed 或 completed 并说明未判断）。
 
 ### Step 4：写入（仅判断为「是」）
 
@@ -239,7 +242,7 @@ lead-store.lead_append_raw({
       snippet: "发现：<社媒 URL> <可选：社媒摘要一句>"
     },
     match_reason: "<须具体：社媒上如何发现 + 官网页上何种业务证据，禁止空泛>",
-    contacts: [],
+    contacts: [{ type: "email", value: "sales@...", confidence: "medium" }],
     raw_score: 70,
     companyIntelligence: {
       businessModel: "商业模式与体量",
@@ -273,7 +276,7 @@ lead-store.lead_set_company_intelligence({
 - `run_id` **必须**与 Step 0 一致
 - `source.snippet` **必须**以 `发现：` 开头并带上社媒 URL
 - `company.website` 与 `source.url` 必须是官网，不得是社媒
-- `contacts` 仅官网上公开的邮箱/电话等；没有就 `[]`。不要把邮箱或电话写进画像
+- 邮箱和电话仍只放在 `contacts`，不要写进 `companyIntelligence`。页面上没有就 `[]`
 - `companyIntelligence` 只含上面七个字符串，不要传 `status` 或 Markdown 字段
 - 本 Skill **不**调用 `leads_score_and_dedupe`（用户之后按产品跑现网评分即可）
 - 新公司 `lead_append_raw` 成功时 `leads_found` +1；`skipped: true`（「线索已存在」）不加；只在原始线索上的覆盖也不加
@@ -325,7 +328,7 @@ lead-store.exploration_finish({
 | `DAILY_LIMIT_EXCEEDED` / 官方 402 | 停止，保存进度，告知用户 |
 | 社媒搜索失败 | 该词记 error，继续下一词；连续失败可 `finish` failed |
 | 官网超时 / 打不开 | 跳过该候选，不写 Lead |
-| chrome-devtools 不可用 | 停止，提示启用 MCP |
+| 内置浏览器不可用 | 停止。告诉用户：内置浏览器未就绪，请重新检测或重启应用 |
 
 ## 数据约定
 
@@ -341,6 +344,7 @@ lead-store.exploration_finish({
 | `source.type` | `tavily_search` |
 | `match_reason` | 社媒发现依据 + 官网页业务证据 |
 | `query_id` / `run_id` | 来自搜索词与本次 `exploration_start` |
+| `contacts` | 可选。官网上的邮箱和电话，形如 `{ type, value, confidence }`；没有则 `[]` |
 
 ### 探索运行
 

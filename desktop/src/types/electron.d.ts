@@ -23,6 +23,24 @@ export type AgentTimelineItem = {
   body: string
   status?: 'running' | 'done' | 'error'
   collapsed?: boolean
+  subagent?: {
+    sessionId: string
+    agent: string
+    description: string
+    current: string
+    toolCount: number
+    running: boolean
+    awaiting: boolean
+    startedAt: number
+    finishedAt?: number
+    steps: Array<{
+      id: string
+      kind: 'tool' | 'reasoning' | 'error'
+      title: string
+      body: string
+      status?: 'running' | 'done' | 'error'
+    }>
+  }
 }
 
 export type AwaitingReplyQuestion = {
@@ -726,6 +744,20 @@ export interface AgentPreflightResult {
   checks: AgentPreflightCheck[]
 }
 
+export interface AgentPreflightOptions {
+  requireBuiltinBrowser?: boolean
+}
+
+export type BuiltinBrowserMode = 'hidden' | 'thumbnail' | 'expanded'
+
+export interface BuiltinBrowserUiState {
+  alive: boolean
+  visible: boolean
+  mode: BuiltinBrowserMode
+  title: string
+  url: string
+}
+
 export interface RawLeadContactEditDto {
   type: string
   value: string
@@ -827,7 +859,13 @@ declare global {
       platform: NodeJS.Platform
       getAppStatus: () => Promise<AppStatus>
       openExternal: (url: string) => Promise<{ ok: boolean; message: string }>
-      checkAgentPreflight: (kind: AgentPreflightKind) => Promise<AgentPreflightResult>
+      checkAgentPreflight: (
+        kind: AgentPreflightKind,
+        options?: AgentPreflightOptions,
+      ) => Promise<AgentPreflightResult>
+      getBuiltinBrowserState: () => Promise<BuiltinBrowserUiState>
+      showBuiltinBrowser: () => Promise<BuiltinBrowserUiState>
+      onBuiltinBrowserState: (callback: (state: BuiltinBrowserUiState) => void) => () => void
       startOpenCode: () => Promise<OpenCodeActionResult>
       stopOpenCode: () => Promise<OpenCodeActionResult>
       restartOpenCode: () => Promise<AppStatus>

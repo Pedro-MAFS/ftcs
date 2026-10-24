@@ -74,6 +74,16 @@ import {
   formatQuestionToolCard,
   resolveAwaitingReplyTimeoutMs,
 } from './awaiting-reply'
+import {
+  emptySubagent,
+  mergeSubagent,
+  readTaskIdentity,
+  taskResultBody,
+  withSubagentStep,
+  withoutSubagentStep,
+  type AgentSubagent,
+  type AgentSubagentStep,
+} from './subagent-timeline'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -86,6 +96,8 @@ export type AgentTimelineItem = {
   status?: 'running' | 'done' | 'error'
   /** 默认折叠长内容（如完整用户指令） */
   collapsed?: boolean
+  /** task 工具对应的子会话。步骤不进主时间线。 */
+  subagent?: AgentSubagent
 }
 
 export type AgentEventPayload =
@@ -146,7 +158,7 @@ function buildPrompt(bootstrap: BootstrapResult): string {
     '',
     '执行要求：',
     '1. 调用 lead-store.inputs_ensure_dir（目录已存在亦可）。',
-    '2. 有网站则用 chrome-devtools 按需探索；有文件则读取并提取。两类都有则合并进同一份画像。',
+    '2. 有网站则用内置浏览器按需打开页面；有文件则读取并提取。两类都有则合并进同一份画像。',
     '3. 组装 ProductProfile 后调用 lead-store.product_save（传入上述 product_id）。',
     '4. source_inputs 必须记录：每个官网 URL 一条 type:website；每个已读文件一条 type:file（path 用上面的 inputs 路径）。不要把网站书签 md 写成 type:file。',
     '5. Office（Word/Excel/PPT）与 PDF 已在桌面端抽成 .txt 侧车并列在「输入文件」中，请直接 Read 侧车；不要 Read 原件 .pdf/.docx，不要调用 officecli 或外部 PDF 工具，不要因 file_classify 为 special 而停止整次生成。',
@@ -388,7 +400,7 @@ function buildDiscoverLeadsR3Prompt(
     '2. search-api.search_usage 确认当日配额未用尽（官方通道以余额为准）。',
     '3. lead-store.exploration_start({ product_id, rounds: ["R3"] })，记住 run_id。',
     '4. 只跑 round=R3 且无 site_id 的词，按 priority 取前 max_queries 条。',
-    '5. 对每个词：places_text_search 的 pageSize 用下述 places_result_limit，一次调用即可；过滤后 place_details 不超过 floor(本次实际返回×0.75)。无官网则 Tavily search_web 补搜；chrome 只打开公司官网，对照画像判断是否目标客户。公司名、官网、电话、地址以打开后的官网为准，不要把 Places 的店名和地址写入线索。判为目标客户后直接调用保存工具，校验在工具内。lead_append_raw 使用 round=R3，run_id 必填，snippet 为「发现：Places 候选，经官网核实」，并带 companyIntelligence。收到「线索已存在」继续下一家。只在原始线索里的同域仍可直接 lead_set_company_intelligence。禁止打开 Google 地图，禁止自己翻页。',
+    '5. 对每个词：places_text_search 的 pageSize 用下述 places_result_limit，一次调用即可；过滤后 place_details 不超过 floor(本次实际返回×0.75)。无官网则 Tavily search_web 补搜；内置浏览器打开公司官网，判断是不是目标客户，并在本站了解公司公开信息。当前页不够就继续看同一域名里的关于、产品或联系页。公司名、官网、邮箱和电话以打开过的页面为准，不要把 Places 的店名和地址写入线索。判为目标客户后直接调用保存工具，校验在工具内。lead_append_raw 使用 round=R3，run_id 必填，snippet 为「发现：Places 候选，经官网核实」，并带 companyIntelligence。收到「线索已存在」继续下一家。只在原始线索里的同域仍可直接 lead_set_company_intelligence。禁止打开 Google 地图，禁止自己翻页。',
     '6. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。全程未通过官网判断也允许 completed 且 0 条线索。',
     '7. 用简短中文汇报：run_id、R3 词数、Places Search/Details 次数、Tavily 补搜/官网打开次数、线索数、跳过原因、3～5 条样例或「无新线索」、下一步 score-and-dedupe。',
     '',
@@ -422,7 +434,7 @@ function buildDiscoverLeadsR2Prompt(
     '3. search-api.search_usage 确认当日配额未用尽（官方通道以余额为准）。',
     '4. lead-store.exploration_start({ product_id, rounds: ["R2"] })，记住 run_id。',
     '5. 只跑 round=R2 且带 site_id 的词，按 priority 取前 max_queries 条。无 site_id 的旧 R2 跳过。',
-    '6. 对每个词：search_web 必须带该 site_id 对应的 include_domains；不要打开社媒 URL。抽出公司并解析官网后，chrome 只打开官网，按 R1 口径判断。判为目标客户后直接调用保存工具，校验在工具内。lead_append_raw 使用 round=R2，run_id 必填，snippet 以「发现：」+ 社媒 URL 开头，并带 companyIntelligence。收到「线索已存在」继续下一家。只在原始线索里的同域仍可直接 lead_set_company_intelligence。',
+    '6. 对每个词：search_web 必须带该 site_id 对应的 include_domains；不要打开社媒 URL。抽出公司并解析官网后，内置浏览器只打开官网，按全网搜索的口径判断是不是目标客户，并在本站了解公司公开信息。当前页不够就继续看同一域名里的关于、产品或联系页。判为目标客户后直接调用保存工具，校验在工具内。lead_append_raw 使用 round=R2，run_id 必填，snippet 以「发现：」+ 社媒 URL 开头，并带 companyIntelligence。收到「线索已存在」继续下一家。只在原始线索里的同域仍可直接 lead_set_company_intelligence。',
     '7. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。全程未通过官网判断也允许 completed 且 0 条线索。',
     '8. 用简短中文汇报：run_id、R2 词数、社媒/二次搜索/官网打开次数、线索数、跳过原因、3～5 条样例或「无新线索」、下一步 score-and-dedupe。',
     '',
@@ -457,7 +469,7 @@ function buildDiscoverLeadsPrompt(
     '2. search-api.search_usage 确认当日配额未用尽。',
     '3. lead-store.exploration_start 创建运行记录，记住 run_id。',
     '4. 从 search_queries 筛选指定 rounds，按 priority（high→medium→low）排序，取前 max_queries 条。',
-    '5. 对每个搜索词：search-api.search_web → chrome-devtools 打开候选页 → 判断是否目标客户。判为目标客户后直接调用保存工具，校验在工具内。lead_append_raw 的 lead 内必须带本次 run_id 和 companyIntelligence。收到「线索已存在」继续下一家。只在原始线索里的同域仍可直接 lead_set_company_intelligence。',
+    '5. 对每个搜索词：search-api.search_web → 用内置浏览器打开候选页，判断是否目标客户，并在同站了解公司公开信息。当前页不够就继续看同一域名里的关于、产品或联系页。判为目标客户后直接调用保存工具，校验在工具内。lead_append_raw 的 lead 内必须带本次 run_id 和 companyIntelligence。收到「线索已存在」继续下一家。只在原始线索里的同域仍可直接 lead_set_company_intelligence。',
     '6. 每完成一词 exploration_update；全部结束后 exploration_finish（completed 或 failed）。',
     '7. 用简短中文汇报：run_id、执行词数、线索数、API 用量、3～5 条代表性线索、下一步 score-and-dedupe。',
     '',
@@ -556,6 +568,7 @@ function friendlyRetryReason(raw: string): string {
 }
 
 function toolPartToTimelineItem(part: ToolPart): AgentTimelineItem {
+  if (part.tool === 'task') return taskToolTimelineItem(part)
   const { state } = part
   let status: 'running' | 'done' | 'error' = 'running'
   if (state.status === 'completed') status = 'done'
@@ -610,6 +623,42 @@ function toolPartToTimelineItem(part: ToolPart): AgentTimelineItem {
   }
 }
 
+function taskToolTimelineItem(part: ToolPart): AgentTimelineItem {
+  const { state } = part
+  const status: 'running' | 'done' | 'error' =
+    state.status === 'completed' ? 'done' : state.status === 'error' ? 'error' : 'running'
+  const identity = readTaskIdentity(state) ?? {
+    sessionId: '',
+    agent: 'general',
+    description:
+      (state.status === 'running' || state.status === 'completed' ? state.title : '') || '子代理',
+  }
+  return {
+    id: `tool-${part.id}`,
+    kind: 'tool',
+    time: nowTime(),
+    title: identity.description,
+    body: taskResultBody(state),
+    status,
+    collapsed: true,
+    subagent: {
+      ...emptySubagent(identity, status === 'running', Date.now()),
+      ...(status === 'done' ? { finishedAt: Date.now() } : {}),
+    },
+  }
+}
+
+function childToolStep(part: ToolPart): AgentSubagentStep {
+  const item = toolPartToTimelineItem({ ...part, tool: part.tool === 'task' ? 'task-nested' : part.tool })
+  return {
+    id: part.id,
+    kind: 'tool',
+    title: item.title.replace(/^工具 · /, ''),
+    body: item.body,
+    status: item.status,
+  }
+}
+
 /**
  * 维护有序时间线：本地 prefix / suffix + SSE Part 快照按到达顺序插入。
  */
@@ -648,10 +697,28 @@ class TimelineBuilder {
       existing.status = item.status
       existing.collapsed = item.collapsed ?? existing.collapsed
       existing.time = existing.time || item.time
+      if (item.subagent) {
+        existing.subagent = mergeSubagent(existing.subagent, item.subagent)
+        if (item.status === 'done' && existing.subagent && !existing.subagent.finishedAt) {
+          existing.subagent.finishedAt = Date.now()
+        }
+      }
       return
     }
     this.sessionItems.push(item)
     this.byId.set(item.id, item)
+  }
+
+  patch(id: string, fn: (item: AgentTimelineItem) => void): void {
+    const item = this.byId.get(id)
+    if (!item) return
+    fn(item)
+  }
+
+  /** 还没写上 sessionId 的子代理卡。只有一张时才能安全绑上刚创建的子会话。 */
+  unboundSubagentCard(): AgentTimelineItem | null {
+    const cards = this.sessionItems.filter((item) => item.subagent && !item.subagent.sessionId)
+    return cards.length === 1 ? cards[0]! : null
   }
 
   removeSessionItem(id: string): void {
@@ -663,13 +730,20 @@ class TimelineBuilder {
   snapshot(): AgentTimelineItem[] {
     return [...this.prefix, ...this.sessionItems, ...this.suffix].map((item) => ({
       ...item,
+      subagent: item.subagent
+        ? { ...item.subagent, steps: item.subagent.steps.map((step) => ({ ...step })) }
+        : undefined,
     }))
   }
 
   emitIfChanged(): AgentTimelineItem[] | null {
     const items = this.snapshot()
     const fingerprint = items
-      .map((i) => `${i.id}|${i.status ?? ''}|${i.body.length}|${i.title}`)
+      .map((i) => {
+        const sub = i.subagent
+        const steps = sub?.steps.map((step) => `${step.id}:${step.status ?? ''}:${step.body.length}`).join(',') ?? ''
+        return `${i.id}|${i.status ?? ''}|${i.body.length}|${i.title}|${sub?.current ?? ''}|${sub?.toolCount ?? ''}|${sub?.awaiting ? 1 : 0}|${steps}`
+      })
       .join('||')
     if (fingerprint === this.lastFingerprint) return null
     this.lastFingerprint = fingerprint
@@ -3030,6 +3104,77 @@ export class AgentRunController {
       flushNow()
     }
 
+    const knownChildren = new Set<string>()
+    const childToCard = new Map<string, string>()
+    const stepBuffer = new Map<string, AgentSubagentStep[]>()
+
+    const rememberChild = (childSessionId: string): void => {
+      if (!childSessionId || childSessionId === sessionId) return
+      knownChildren.add(childSessionId)
+    }
+
+    const bindChild = (childSessionId: string, cardId: string): void => {
+      if (!childSessionId || !cardId) return
+      rememberChild(childSessionId)
+      childToCard.set(childSessionId, cardId)
+      const buffered = stepBuffer.get(childSessionId)
+      if (!buffered?.length) return
+      stepBuffer.delete(childSessionId)
+      timeline.patch(cardId, (item) => {
+        if (!item.subagent) return
+        let next = item.subagent
+        for (const step of buffered) next = withSubagentStep(next, step)
+        item.subagent = next
+      })
+      flushNow()
+    }
+
+    const pushChildStep = (childSessionId: string, step: AgentSubagentStep): void => {
+      const cardId = childToCard.get(childSessionId)
+      if (!cardId) {
+        const buffered = stepBuffer.get(childSessionId) ?? []
+        const index = buffered.findIndex((item) => item.id === step.id)
+        if (index >= 0) buffered[index] = step
+        else buffered.push(step)
+        stepBuffer.set(childSessionId, buffered)
+        return
+      }
+      timeline.patch(cardId, (item) => {
+        if (!item.subagent) return
+        item.subagent = withSubagentStep(item.subagent, step)
+      })
+      flushNow()
+    }
+
+    const dropChildStep = (childSessionId: string, stepId: string): void => {
+      const cardId = childToCard.get(childSessionId)
+      if (!cardId) {
+        const buffered = stepBuffer.get(childSessionId)
+        if (buffered) {
+          stepBuffer.set(
+            childSessionId,
+            buffered.filter((item) => item.id !== stepId),
+          )
+        }
+        return
+      }
+      timeline.patch(cardId, (item) => {
+        if (!item.subagent) return
+        item.subagent = withoutSubagentStep(item.subagent, stepId)
+      })
+      flushNow()
+    }
+
+    const patchChild = (childSessionId: string, recipe: (sub: AgentSubagent) => AgentSubagent): void => {
+      const cardId = childToCard.get(childSessionId)
+      if (!cardId) return
+      timeline.patch(cardId, (item) => {
+        if (!item.subagent) return
+        item.subagent = recipe(item.subagent)
+      })
+      flushNow()
+    }
+
     // US-ST-01: delta 追加辅助函数
     const appendDeltaToCard = (
       id: string,
@@ -3123,24 +3268,42 @@ export class AgentRunController {
           failEventBridge(new Error('OpenCode 实例已释放'))
           return
 
+        case 'session.created':
+        case 'session.updated': {
+          const info = event.properties.info
+          if (info.parentID !== sessionId || info.id === sessionId) return
+          rememberChild(info.id)
+          if (!childToCard.has(info.id)) {
+            const card = timeline.unboundSubagentCard()
+            if (card?.subagent) {
+              timeline.patch(card.id, (item) => {
+                if (item.subagent) item.subagent = { ...item.subagent, sessionId: info.id }
+              })
+              bindChild(info.id, card.id)
+            }
+          }
+          return
+        }
+
         case 'permission.asked':
-        case 'permission.v2.asked':
-          if (event.properties.sessionID !== sessionId) return
+        case 'permission.v2.asked': {
+          const sid = event.properties.sessionID
+          if (sid !== sessionId && !knownChildren.has(sid)) return
           void client.permission
             .reply({ requestID: event.properties.id, reply: 'always' })
             .catch(() => undefined)
           return
+        }
 
         case 'question.asked':
         case 'question.v2.asked': {
-          if (event.properties.sessionID !== sessionId) return
+          const sid = event.properties.sessionID
+          if (sid !== sessionId && !knownChildren.has(sid)) return
           const side = event.type === 'question.asked' ? 'v1' : 'v2'
-          void this.awaitingReply.ingest(
-            sessionId,
-            side,
-            event.properties.id,
-            event.properties.questions,
-          )
+          void this.awaitingReply.ingest(sid, side, event.properties.id, event.properties.questions)
+          if (sid !== sessionId) {
+            patchChild(sid, (sub) => ({ ...sub, awaiting: true }))
+          }
           return
         }
 
@@ -3148,13 +3311,30 @@ export class AgentRunController {
         case 'question.rejected':
         case 'question.v2.replied':
         case 'question.v2.rejected': {
-          if (event.properties.sessionID !== sessionId) return
+          const sid = event.properties.sessionID
+          if (sid !== sessionId && !knownChildren.has(sid)) return
           const side = event.type.startsWith('question.v2.') ? 'v2' : 'v1'
-          this.awaitingReply.noteSettled(sessionId, side, event.properties.requestID)
+          this.awaitingReply.noteSettled(sid, side, event.properties.requestID)
+          if (sid !== sessionId) {
+            patchChild(sid, (sub) => ({ ...sub, awaiting: false }))
+          }
           return
         }
 
         case 'message.updated': {
+          if (knownChildren.has(event.properties.sessionID)) {
+            const { info } = event.properties
+            if (info.role === 'assistant' && info.error) {
+              pushChildStep(event.properties.sessionID, {
+                id: `error-${info.id}`,
+                kind: 'error',
+                title: '子代理出错',
+                body: formatMessageError(info.error),
+                status: 'error',
+              })
+            }
+            return
+          }
           if (event.properties.sessionID !== sessionId) return
           const { info } = event.properties
           const wasUnknown = !messageRoles.has(info.id)
@@ -3225,6 +3405,28 @@ export class AgentRunController {
         }
 
         case 'message.part.updated': {
+          if (knownChildren.has(event.properties.sessionID)) {
+            const { part } = event.properties
+            if (part.type === 'tool') {
+              pushChildStep(event.properties.sessionID, childToolStep(part))
+              if (this.watchPlacesGoogleRejection && !this.placesRejectionHandled) {
+                const googleMessage = googleRejectionFromToolPart(part)
+                if (googleMessage) {
+                  this.placesRejectionHandled = true
+                  void this.failForPlacesGoogleRejection(googleMessage)
+                }
+              }
+            } else if (part.type === 'reasoning' && part.text) {
+              pushChildStep(event.properties.sessionID, {
+                id: part.id,
+                kind: 'reasoning',
+                title: '思考',
+                body: part.text,
+                status: 'done',
+              })
+            }
+            return
+          }
           if (event.properties.sessionID !== sessionId) return
           const { part } = event.properties
           const role = messageRoles.get(part.messageID)
@@ -3278,7 +3480,14 @@ export class AgentRunController {
             return
           }
           if (part.type === 'tool') {
-            applySnapshot(toolPartToTimelineItem(part))
+            if (part.tool === 'task') {
+              const card = taskToolTimelineItem(part)
+              applySnapshot(card)
+              const childSessionId = card.subagent?.sessionId ?? ''
+              if (childSessionId) bindChild(childSessionId, card.id)
+            } else {
+              applySnapshot(toolPartToTimelineItem(part))
+            }
             if (this.watchPlacesGoogleRejection && !this.placesRejectionHandled) {
               const googleMessage = googleRejectionFromToolPart(part)
               if (googleMessage) {
@@ -3291,6 +3500,10 @@ export class AgentRunController {
         }
 
         case 'message.part.removed': {
+          if (knownChildren.has(event.properties.sessionID)) {
+            dropChildStep(event.properties.sessionID, event.properties.partID)
+            return
+          }
           if (event.properties.sessionID !== sessionId) return
           const { partID } = event.properties
           timeline.removeSessionItem(`assistant-${partID}`)
@@ -3304,6 +3517,17 @@ export class AgentRunController {
         }
 
         case 'session.error': {
+          if (event.properties.sessionID && knownChildren.has(event.properties.sessionID)) {
+            const err = event.properties.error
+            pushChildStep(event.properties.sessionID, {
+              id: `session-error-${event.properties.sessionID}`,
+              kind: 'error',
+              title: '子代理出错',
+              body: err ? formatMessageError(err) : '子代理调用失败',
+              status: 'error',
+            })
+            return
+          }
           if (event.properties.sessionID && event.properties.sessionID !== sessionId) return
           sawSessionError = true
           const err = event.properties.error
@@ -3332,6 +3556,16 @@ export class AgentRunController {
         }
 
         case 'session.status': {
+          if (knownChildren.has(event.properties.sessionID)) {
+            const { status } = event.properties
+            if (status.type === 'retry') {
+              patchChild(event.properties.sessionID, (sub) => ({
+                ...sub,
+                current: `重试中 · ${friendlyRetryReason(status.message)}`,
+              }))
+            }
+            return
+          }
           if (event.properties.sessionID !== sessionId) return
           const { status } = event.properties
           if (status.type === 'retry') {
