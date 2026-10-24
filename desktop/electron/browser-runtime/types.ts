@@ -1,4 +1,4 @@
-export type BuiltinBrowserMode = 'thumbnail' | 'card' | 'expanded'
+export type BuiltinBrowserMode = 'hidden' | 'thumbnail' | 'expanded'
 
 export interface BuiltinBrowserStatus {
   ok: boolean

@@ -1,7 +1,6 @@
 import type { ScreenRect } from './types'
 
 export const THUMB = { width: 360, height: 240 }
-export const CARD = { width: 360, height: 40 }
 export const MARGIN = 12
 export const EXPANDED_INSET = 48
 /** 与界面 `--titlebar-height` 一致。浏览窗上缘在标题栏之下，避免盖住设置和运行状态。 */

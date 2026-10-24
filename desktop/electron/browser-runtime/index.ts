@@ -19,10 +19,12 @@ import {
   noteBuiltinBrowserQuitting,
   onBuiltinBrowserUi,
   setBuiltinBrowserMode,
+  reinforceBuiltinBrowserViewport,
   showBuiltinBrowserFromTitleBar,
   showBuiltinBrowserInactive,
 } from './builtin-browser-window'
 import type { BuiltinBrowserStatus, BuiltinBrowserUiState } from './types'
+import { isBuiltinBrowserMode, modeAfterEnsure } from './window-policy'
 
 export {
   getBrowserUrl,
@@ -40,7 +42,7 @@ let inflight: Promise<BuiltinBrowserStatus> | null = null
 let lastStatus: BuiltinBrowserStatus = {
   ok: false,
   windowAlive: false,
-  mode: 'thumbnail',
+  mode: modeAfterEnsure(),
   browserUrl: null,
   detail: DETAIL_WINDOW_CLOSED,
 }
@@ -89,6 +91,7 @@ async function doEnsure(): Promise<BuiltinBrowserStatus> {
   }
   const targetId = await waitForBuiltinTarget(3000)
   setBuiltinPageTargetId(targetId)
+  if (targetId) await reinforceBuiltinBrowserViewport()
   if (!targetId) {
     const version = await readGatewayVersion(getBrowserUrl())
     const judged = judgeBuiltinBrowserReady({
@@ -145,9 +148,7 @@ export function registerBuiltinBrowserIpc(): void {
     return getBuiltinBrowserUiState()
   })
   ipcMain.handle(IPC.BUILTIN_BROWSER_SET_MODE, async (_event, next: BuiltinBrowserMode) => {
-    if (next === 'thumbnail' || next === 'card' || next === 'expanded') {
-      await setBuiltinBrowserMode(next)
-    }
+    if (isBuiltinBrowserMode(next)) await setBuiltinBrowserMode(next)
     return getBuiltinBrowserUiState()
   })
 }

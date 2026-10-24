@@ -9,6 +9,7 @@ import { useUiTheme } from '../../composables/useUiTheme'
 import { oppositeExplicitTheme } from '../../utils/ui-theme'
 import { SECTION_META, type WorkspaceSection } from '../../types/workspace'
 import type { BuiltinBrowserUiState } from '../../types/electron'
+import { builtinBrowserEntryLabel } from '../../../electron/browser-runtime/window-policy'
 
 defineProps<{
   section: WorkspaceSection
@@ -29,19 +30,14 @@ const steps: WorkspaceSection[] = ['input', 'profile', 'explore', 'leads', 'emai
 const browserState = ref<BuiltinBrowserUiState>({
   alive: false,
   visible: false,
-  mode: 'thumbnail',
+  mode: 'hidden',
   title: '内置浏览器',
   url: '尚未打开页面',
 })
 let stopBrowserState: (() => void) | null = null
 
-const browserLabel = computed(() =>
-  browserState.value.alive && browserState.value.visible ? '浏览中' : '打开浏览窗',
-)
-const browserIcon = computed(() =>
-  browserState.value.visible && browserState.value.mode === 'card' ? 'panel-top' : 'app-window',
-)
-const browserLive = computed(() => browserState.value.alive && browserState.value.visible)
+const browserLabel = computed(() => builtinBrowserEntryLabel(browserState.value))
+const browserLive = computed(() => browserLabel.value === '浏览中')
 
 onMounted(() => {
   if (!window.ftcs?.getBuiltinBrowserState) return
@@ -96,7 +92,7 @@ function go(section: WorkspaceSection): void {
         :aria-label="browserLabel"
         @click="openBrowser"
       >
-        <Icon :name="browserIcon" :size="14" />
+        <Icon name="app-window" :size="14" />
         <span>{{ browserLabel }}</span>
         <i v-if="browserLive" class="browser-entry__dot" />
       </button>

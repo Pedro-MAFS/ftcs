@@ -37,7 +37,6 @@ defineProps<{
     | 'moon'
     | 'x'
     | 'app-window'
-    | 'panel-top'
   size?: number
 }>()
 </script>
@@ -233,10 +232,6 @@ defineProps<{
       <path d="M10 4v4" />
       <path d="M2 8h20" />
       <path d="M6 4v4" />
-    </template>
-    <template v-else-if="name === 'panel-top'">
-      <rect width="18" height="18" x="3" y="3" rx="2" />
-      <path d="M3 9h18" />
     </template>
   </svg>
 </template>

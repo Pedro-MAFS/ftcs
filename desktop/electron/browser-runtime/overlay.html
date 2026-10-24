@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>浏览窗</title>
+    <style>
+      html,
+      body,
+      #overlay {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+      }
+      #overlay {
+        position: relative;
+        -webkit-app-region: drag;
+        user-select: none;
+        font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      }
+      #scrim {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.36);
+        opacity: 0;
+        pointer-events: none;
+      }
+      #controls {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        gap: 8px;
+        opacity: 0;
+        pointer-events: none;
+        -webkit-app-region: no-drag;
+      }
+      #overlay.is-open #scrim,
+      #overlay.is-open #controls {
+        opacity: 1;
+      }
+      #overlay.is-open #controls {
+        pointer-events: auto;
+      }
+      button {
+        -webkit-app-region: no-drag;
+        height: 28px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 6px;
+        background: #262626;
+        color: #f5f5f5;
+        font: 500 12px/1 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #333333;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="overlay">
+      <div id="scrim"></div>
+      <div id="controls">
+        <button type="button" data-mode="hidden">收起</button>
+        <button type="button" data-mode="expanded">放大</button>
+        <button type="button" data-mode="hidden">关闭</button>
+      </div>
+    </div>
+    <script>
+      const HIDE_MS = 400
+      const root = document.getElementById('overlay')
+      let timer = 0
+
+      function openControls() {
+        if (timer) {
+          clearTimeout(timer)
+          timer = 0
+        }
+        root.classList.add('is-open')
+      }
+
+      function scheduleClose() {
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => {
+          timer = 0
+          root.classList.remove('is-open')
+        }, HIDE_MS)
+      }
+
+      root.addEventListener('pointerenter', openControls)
+      root.addEventListener('pointerleave', scheduleClose)
+      root.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return
+        openControls()
+      })
+      root.addEventListener('click', (event) => {
+        if (event.button !== 0) return
+        openControls()
+      })
+      root.addEventListener('contextmenu', (event) => {
+        event.preventDefault()
+      })
+
+      for (const button of document.querySelectorAll('button[data-mode]')) {
+        button.addEventListener('click', (event) => {
+          event.stopPropagation()
+          const mode = button.getAttribute('data-mode')
+          if (window.ftcsCaption && mode) window.ftcsCaption.setMode(mode)
+        })
+      }
+    </script>
+  </body>
+</html>
