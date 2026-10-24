@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { CARD, THUMB, anchorExpanded, anchorTopRight } from './anchor.ts'
+import { THUMB, anchorExpanded, anchorTopRight } from './anchor.ts'
 
 const workArea = { x: 0, y: 0, width: 1920, height: 1080 }
 
@@ -17,14 +17,6 @@ test('T8 a main window with room below still anchors from the title bar, not the
   assert.equal(box.y, main.y + 56)
   assert.ok(box.y < main.y + main.height - THUMB.height)
   assert.equal(box.x, 200 + 1280 - 16 - 360 - 12 - 360)
-})
-
-test('status card keeps the same top-right anchor at 360x40', () => {
-  const main = { x: 0, y: 0, width: 1280, height: 800 }
-  const box = anchorTopRight(main, CARD, workArea)
-  assert.equal(box.x, 532)
-  assert.equal(box.y, 56)
-  assert.equal(box.height, 40)
 })
 
 test('expanded mode insets the work area by 48 on every side', () => {

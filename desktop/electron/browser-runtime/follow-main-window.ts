@@ -1,7 +1,17 @@
 import type { BrowserWindow } from 'electron'
 import type { BuiltinBrowserMode } from './types'
+import {
+  INITIAL_VISIBLE_BEFORE,
+  shouldFollowMainAnchor,
+  shouldRestoreFloatingWindow,
+  visibleBeforeAfterMainHide,
+} from './window-policy'
 
-const bound = new WeakSet<BrowserWindow>()
+const controllers = new WeakMap<BrowserWindow, MainWindowFollowController>()
+
+export interface MainWindowFollowController {
+  setVisibleBefore(value: boolean): void
+}
 
 export function attachMainWindowFollow(
   main: BrowserWindow,
@@ -14,18 +24,34 @@ export function attachMainWindowFollow(
     hideBrowser: () => void
     onMainClosed: () => void
   },
-): void {
-  if (bound.has(main)) return
-  bound.add(main)
-  let visibleBefore = true
+): MainWindowFollowController {
+  const existing = controllers.get(main)
+  if (existing) return existing
+
+  let visibleBefore = INITIAL_VISIBLE_BEFORE
+  const controller: MainWindowFollowController = {
+    setVisibleBefore(value: boolean) {
+      visibleBefore = value
+    },
+  }
+  controllers.set(main, controller)
 
   const hideWithMain = (): void => {
-    if (hooks.isBrowserVisible()) visibleBefore = true
+    visibleBefore = visibleBeforeAfterMainHide(hooks.isBrowserVisible(), visibleBefore)
     hooks.hideBrowser()
   }
   const restore = (): void => {
-    if (main.isDestroyed() || main.isMinimized() || !main.isVisible()) return
-    if (!visibleBefore) return
+    if (main.isDestroyed()) return
+    if (
+      !shouldRestoreFloatingWindow({
+        mainMinimized: main.isMinimized(),
+        mainVisible: main.isVisible(),
+        mode: hooks.getMode(),
+        visibleBefore,
+      })
+    ) {
+      return
+    }
     hooks.showInactive()
   }
 
@@ -34,10 +60,11 @@ export function attachMainWindowFollow(
   main.on('restore', restore)
   main.on('show', restore)
   const followAnchor = (): void => {
-    if (hooks.isDetached() || hooks.getMode() === 'expanded') return
+    if (!shouldFollowMainAnchor({ detached: hooks.isDetached(), mode: hooks.getMode() })) return
     hooks.reanchor()
   }
   main.on('move', followAnchor)
   main.on('resize', followAnchor)
   main.on('closed', () => hooks.onMainClosed())
+  return controller
 }

@@ -748,7 +748,7 @@ export interface AgentPreflightOptions {
   requireBuiltinBrowser?: boolean
 }
 
-export type BuiltinBrowserMode = 'thumbnail' | 'card' | 'expanded'
+export type BuiltinBrowserMode = 'hidden' | 'thumbnail' | 'expanded'
 
 export interface BuiltinBrowserUiState {
   alive: boolean
