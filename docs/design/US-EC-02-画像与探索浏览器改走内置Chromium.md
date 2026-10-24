@@ -1,13 +1,13 @@
 # US-EC-02 画像与探索的浏览器自动化改走内置 Chromium
 
 > **用户故事**：[../34-需求-Electron自带Chromium替代系统Chrome.md](../34-需求-Electron自带Chromium替代系统Chrome.md) · US-EC-02 · Related #78  
-> **状态**：**待评审**（浏览窗三态改以 US-EC-01 对齐 docs/34 **EC9** 的 `hidden` / `thumbnail` / `expanded` 为准。自动化路径、mcp-launch、预检不在本次改口内。本文件不改 `desktop/`、不改 `docs/34`、不关 #78）  
+> **状态**：**待评审**（浏览窗三态改以 US-EC-01 对齐 docs/34 **EC9** 的 `hidden` / `thumbnail` / `expanded` 为准。控件改引 US-EC-01：蒙层与标题栏无「关闭」。自动化路径、mcp-launch、预检不在本次改口内。本文件不改 `desktop/`、不改 `docs/34`、不关 #78）  
 > **范围**：有网站的画像抓站，以及 R1 / R2 / R3 打开公司官网，改为驱动 [US-EC-01](US-EC-01-探测与引导去掉系统Chrome依赖.md) 的专用窗；预检改为「内置浏览器就绪，且页面工具已连上」  
 > **依赖**：`desktop/electron/browser-runtime/` 的 `getBrowserUrl()` / `ensureBuiltinBrowser()`；现网 MCP `chrome-devtools`；`runAgentPreflight` 的 `needsChrome`；技能 `extract-product-profile`、`discover-leads`、`discover-leads-r2`、`discover-leads-r3`；`agent-runner.ts` 对应提示  
 > **不做**：本故事不验收引导文案（那是 US-EC-01）；不改 R2 社媒真页红线、R3 地图真页红线；不安装系统 Chrome；不关 #78  
 > **文档位置**：`docs/design/`
 
-需求依据只有已合入的 `docs/34-需求-Electron自带Chromium替代系统Chrome.md`（EC1～EC9、US-EC-02 验收、§6、§7）。本文不改该需求正文。马丰顺已锁定 O1～O3，写入 §2，不再开放。浏览窗可见形态以 EC9 为准，细则在 [US-EC-01](US-EC-01-探测与引导去掉系统Chrome依赖.md) §2，本文只引用，不另定，也没有新的未决产品项。
+需求依据只有已合入的 `docs/34-需求-Electron自带Chromium替代系统Chrome.md`（EC1～EC9、US-EC-02 验收、§6、§7）。本文不改该需求正文。马丰顺已锁定 O1～O3，写入 §2，不再开放。浏览窗可见形态以 EC9 为准，细则在 [US-EC-01](US-EC-01-探测与引导去掉系统Chrome依赖.md) §2，本文只引用，不另定，也没有新的未决产品项。控件以 US-EC-01 2026-10-24 定稿为准：缩略蒙层为收起、放大、拖动，放大标题条为还原、收起，两处都没有「关闭」。
 
 硬拦截在两处：专用窗的回环地址，以及 OpenCode 拉起 `chrome-devtools` 时的命令行。只改技能措辞、命令行仍是 `--isolated`，进程仍会去拉系统 Chrome，不算完成。只改预检文案、工具仍去连系统 Chrome，也不算完成。
 
@@ -53,7 +53,7 @@ US-EC-01 已写死：
 | 模块 | `desktop/electron/browser-runtime/` |
 | 浏览 URL | `getBrowserUrl(): string \| null`，形如 `http://127.0.0.1:<端口>`，无末尾斜杠 |
 | 就绪 | `ensureBuiltinBrowser()` / `judgeBuiltinBrowserReady`：窗未销毁，且网关 `GET /json/version` 在 1500ms 内为 200 且 `webSocketDebuggerUrl` 非空 |
-| 窗 | 同一扇 `BrowserWindow`，三态 `hidden` / `thumbnail` / `expanded`（US-EC-01 §2，EC9）。`hidden` 不展示浮动窗，不销毁页面、不拆调试会话。关闭与收起是同一动作。缩略蒙层、放大标题栏、锚点均不在本故事另定 |
+| 窗 | 同一扇 `BrowserWindow`，三态 `hidden` / `thumbnail` / `expanded`（US-EC-01 §2，EC9）。`hidden` 不展示浮动窗，不销毁页面、不拆调试会话。用户入口只有「收起」。缩略蒙层控件为收起、放大、拖动（拖动是手势区）；放大标题条为还原、收起。两处都没有「关闭」。视觉见 US-EC-01 §2.1.1。本故事不另定 |
 | 打开动作 | 网关把 `Target.createTarget` 收成这一页上的 `Page.navigate`。`navigate_page` 也落在这一页 |
 
 本故事不改这张表。预检和 MCP 启动只调用它。
@@ -73,7 +73,7 @@ O1～O3 在 §2 再次写明，避免实现 US-EC-02 时另选一种浏览器。
 | **EC6** | 不读取系统 Chrome 的扩展、Profile、书签。页面分区用 US-EC-01 的内存分区 `ftcs-builtin-browser`。登录、充值、帮助外链不改 |
 | **EC7** | Node / OpenCode / OfficeCLI 的一键安装和探测不改。`npx` 仍靠现网的合格 Node。这不是系统 Chrome 依赖 |
 | **EC8** | 实现落在 `dev-0.5.9` 系分支。Windows 验收。不关 #78 |
-| **O1** | 专用 `BrowserWindow`，`parent` 挂主窗。不附着主界面 webContents，不嵌 Vue，不做侧栏 WebView。仓库无 Playwright，本期不添加。三态为 `hidden` / `thumbnail` / `expanded`：收起是无浮动窗，不是浮动状态条；冷启动不展示；业务开页或标题栏「打开浏览窗」才以缩略 `showInactive`；缩略蒙层与放大标题栏、锚点、标题栏「浏览中 / 打开浏览窗」均以 US-EC-01 §2 为准。本故事不另定尺寸，不把关闭做成销毁会话 |
+| **O1** | 专用 `BrowserWindow`，`parent` 挂主窗。不附着主界面 webContents，不嵌 Vue，不做侧栏 WebView。仓库无 Playwright，本期不添加。三态为 `hidden` / `thumbnail` / `expanded`：收起是无浮动窗，不是浮动状态条；冷启动不展示；业务开页或标题栏「打开浏览窗」才以缩略 `showInactive`；缩略蒙层与放大标题栏、锚点、标题栏「浏览中 / 打开浏览窗」均以 US-EC-01 §2 与 §2.1.1 为准（蒙层：收起、放大、拖动；标题条：还原、收起；均无「关闭」）。本故事不另定尺寸。收起只隐藏浮动窗，不销毁会话 |
 | **O2** | MCP 名保持 `chrome-devtools`。包版本保持 `chrome-devtools-mcp@1.6.0`。启动改为 `--browserUrl` 加上 `getBrowserUrl()`。禁止再依赖系统 `chrome.exe`。模块路径 `desktop/electron/browser-runtime/`。命令改写函数放在该目录的 `mcp-launch.ts` |
 | **O3** | 不把独立 Chromium 打进 `extraResources`。Chromium 跟着现网 Electron ^34。不新开更新通道，不改 `latest.json` |
 | **预检通过** | 内置浏览器就绪，且 MCP `chrome-devtools` 的状态字符串（小写后）为 `connected`。用户看见的是「内置浏览器」和「已就绪」，不看见 MCP 这个词 |
@@ -170,7 +170,7 @@ sequenceDiagram
 
 模型调用 `new_page` 或 `navigate_page` 时，网关按 US-EC-01 §4.2 在专用窗的那一页上导航。不新建第二扇 `BrowserWindow`，不导航主界面。
 
-冷启动默认 `hidden`。用户点过「收起」或「关闭」之后也是 `hidden`：浮动窗不在屏幕上，CDP 不断，page view 不销毁。此时导航仍然发生。US-EC-01 规定：这次若是离开令牌页的业务导航，mode 从 `hidden` 切到 `thumbnail` 并 `showInactive()`（主窗当时不能显示时，等主窗恢复再显示）。不自动放大，也不在收起态里把页面画出来。标题栏从「打开浏览窗」变为「浏览中」。
+冷启动默认 `hidden`。用户点过「收起」之后也是 `hidden`（非退出路径上的浏览窗 `close` 事件同样被收成 `hidden`，界面不提供「关闭」）：浮动窗不在屏幕上，CDP 不断，page view 不销毁。此时导航仍然发生。US-EC-01 规定：这次若是离开令牌页的业务导航，mode 从 `hidden` 切到 `thumbnail` 并 `showInactive()`（主窗当时不能显示时，等主窗恢复再显示）。不自动放大，也不在收起态里把页面画出来。标题栏从「打开浏览窗」变为「浏览中」。
 
 已经是缩略或放大时，导航不改 mode。放大态没有蒙层；缩略态的蒙层按 US-EC-01，本故事不另做一套操作界面。
 
@@ -394,7 +394,7 @@ export function rewriteChromeDevtoolsLaunch(
 
 ## 6. 验收对照
 
-对照 `docs/34` 的 US-EC-02 验收句与 §6。**本 PR 不写代码，这里不声称已通过。** 冷启动不展示、收起等于关闭、缩略蒙层、放大标题栏这四条可见结果的逐步操作在 US-EC-01 的 M5、M7、M13、M14、M15。本故事只验收它们没有把抓站和预检弄断（M1、M8）。mcp-launch、预检文案、技能红线不因 EC9 改口径。
+对照 `docs/34` 的 US-EC-02 验收句与 §6。**本 PR 不写代码，这里不声称已通过。** 冷启动不展示、收起、缩略蒙层、放大标题栏这几条可见结果的逐步操作在 US-EC-01 的 M5、M7、M13、M14、M15。本故事只验收它们没有把抓站和预检弄断（M1、M8）。蒙层和标题栏没有「关闭」。mcp-launch、预检文案、技能红线不因 EC9 改口径。
 
 ### 6.1 建议单测
 
@@ -424,7 +424,7 @@ export function rewriteChromeDevtoolsLaunch(
 | M5 | 未就绪不继续抓站 | 停掉网关或让调试端口失败后点生成（勾选了网站） | 预检失败，说明含重新检测或重启应用。没有开始抓站。界面不把该项显示为已就绪 |
 | M6 | 可重试 | M5 之后到环境检测点「重新检测」恢复，再点生成 | 可以开始。预检不会无限重连，每次点击最多重连一次 |
 | M7 | 纯文件画像 | 不勾选网站，只勾选 txt | 不因浏览器项失败。系统无 Chrome 也能开始读文件 |
-| M8 | 收起不断开（EC9 `hidden`） | 抓站过程中点缩略蒙层「收起」，或在放大标题条上点「关闭」 | 浮动窗消失。标题栏为「打开浏览窗」。没有仍浮在桌面上的状态条。任务不因为收起或关闭而报「未连接」。同一 target 仍在。业务再次开页，或点「打开浏览窗」，以缩略弹出。蒙层、放大标题栏的逐步点击见 US-EC-01 的 M13～M15 |
+| M8 | 收起不断开（EC9 `hidden`） | 抓站过程中点缩略蒙层「收起」，或在放大标题条上点「收起」 | 浮动窗消失。标题栏为「打开浏览窗」。没有仍浮在桌面上的状态条。蒙层和标题栏都没有「关闭」。任务不因为收起而报「未连接」。同一 target 仍在。业务再次开页，或点「打开浏览窗」，以缩略弹出。蒙层、放大标题栏的逐步点击见 US-EC-01 的 M13～M15 |
 | M9 | Node / OpenCode / OfficeCLI | 走一遍一键安装 | 与改前相同，不要求安装 Chrome |
 | M10 | 文案 | 看预检失败、标题栏气泡、时间线里的任务提示 | 无 MCP、无 scored、无「请安装 Google Chrome」、无下载链接 |
 | M11 | 只改技能不算完成 | 代码审查 | `mcp-launch.ts` 在 `start()` 里改写命令；模板无 `--isolated`；预检同时看 `ensureBuiltinBrowser` 和 `connected` |
@@ -438,7 +438,7 @@ export function rewriteChromeDevtoolsLaunch(
 | 项 | 说明 |
 |----|------|
 | 改引导探测文案、标题栏入口布局、窗口三态、蒙层和放大标题条 | US-EC-01。本文只调用 |
-| 把收起做成浮动状态条，或让「关闭」销毁 CDP / page view | EC9 与 US-EC-01。关闭等于收起 |
+| 把收起做成浮动状态条，或让收起销毁 CDP / page view，或在蒙层、标题栏放「关闭」 | EC9 与 US-EC-01。收起只隐藏浮动窗 |
 | 另做一扇窗或换一个模块目录 | O1、O2 |
 | `--isolated`、`--autoConnect`、`--channel`、`--executablePath`、系统 `chrome.exe` | O2 |
 | 升级或替换 `chrome-devtools-mcp@1.6.0` | 钉死现网版本。要升级另开故事 |
@@ -470,7 +470,7 @@ export function rewriteChromeDevtoolsLaunch(
 | 纯文件画像被浏览器故障挡住 | `websitePaths.length === 0` 不检查。T8、M7 |
 | 探索被调用方误传 `requireBuiltinBrowser: false` | 只有 `extract-profile` 认这个开关。T10 |
 | 模型 `new_page` 在 Electron 里打开主界面或第二扇窗 | US-EC-01 网关收成同一页，并关掉名单外的 webContents。M1 看窗的数量 |
-| 用户收起或关闭窗口后快照空白，任务中断并被说成未连接 | US-EC-01 在 `hidden` 保持缩略视口、不断开调试、不销毁 page view。M8 |
+| 用户收起浏览窗后快照空白，任务中断并被说成未连接 | US-EC-01 在 `hidden` 保持缩略视口、不断开调试、不销毁 page view。M8 |
 | MCP 退出时 `closeBrowser` 把专用窗关掉 | 1.6.0 在 connected 模式只 `disconnect()`。窗由本进程的 browser-runtime 持有，不交给 MCP 关 |
 | 时间线气泡出现 chrome-devtools / MCP | §4.5 的四句改口语。技能里「告诉用户」的引语用 §4.7 |
 | 技能仍写「提示启用 MCP」，模型照读给用户 | §4.6 的失败行都改掉。T12 同时看红线还在 |
@@ -486,3 +486,4 @@ export function rewriteChromeDevtoolsLaunch(
 |------|------|
 | 2026-10-21 | 初稿。对齐 docs/34 的 EC1～EC8 与已锁 O1～O3。基线 `dev-0.5.9`（`3b49463`）。核对 `opencode.json` 的 `--isolated`、`rewriteMcpWorkspaceEnv`、`needsChrome`、`chrome-devtools-mcp@1.6.0` 的 `--browserUrl`（标签 `chrome-devtools-mcp-v1.6.0`）。命令改写放在 `desktop/electron/browser-runtime/mcp-launch.ts`。状态：待评审。不关 #78。 |
 | 2026-10-24 | 窗口三态改引 US-EC-01 的 EC9：`hidden` / `thumbnail` / `expanded`。收起与关闭都不展示浮动窗，不断开 CDP。业务导航在 `hidden` 时弹出缩略。M1、M8 与 §3.3 同步。mcp-launch、预检、技能红线不改口径。不关 #78。 |
+| 2026-10-24 | 控件改引 US-EC-01 定稿：蒙层为收起、放大、拖动；放大标题条为还原、收起。删掉「关闭」入口，以及「关闭等于收起」的并列写法。收起语义不变：隐藏浮动窗，不断开 CDP，不销毁 page view。不关 #78。 |
