@@ -1,13 +1,13 @@
 # US-EC-01 探测与引导去掉系统 Chrome 依赖
 
 > **用户故事**：[../34-需求-Electron自带Chromium替代系统Chrome.md](../34-需求-Electron自带Chromium替代系统Chrome.md) · US-EC-01 · Related #78  
-> **状态**：**待评审**（浏览窗三态按 docs/34 **EC9** 改口。探测、网关与 O2～O3 已锁部分不在本次改口内。跟进实现另开 PR；本文件不改 `desktop/`、不改 `docs/34`、不关 #78）  
+> **状态**：**待评审**（浏览窗三态按 docs/34 **EC9** 改口。2026-10-24 控件定稿：缩略蒙层与放大标题栏只留收起和放大／还原，无「关闭」。探测、网关与 O2～O3 已锁部分不在本次改口内。跟进实现另开 PR；本文件不改 `desktop/`、不改 `docs/34`、不关 #78）  
 > **范围**：环境探测与首次引导 / 设置里的同一引导，改为「内置浏览器就绪」；并落地专用浏览窗与回环调试地址，供探测和 [US-EC-02](US-EC-02-画像与探索浏览器改走内置Chromium.md) 使用  
 > **依赖**：现网 `probeChrome` / `probeEnvironment`；`OnboardingOverlay.vue` 环境步；设置页「打开环境与配置引导」  
 > **不做**：本故事不验收画像抓站和 R1 / R2 / R3 已经能打开网页（那是 US-EC-02）；不安装系统 Chrome；不关 #78  
 > **文档位置**：`docs/design/`
 
-需求依据只有已合入的 `docs/34-需求-Electron自带Chromium替代系统Chrome.md`（EC1～EC9、US-EC-01 验收、§6、§7）。本文不改该需求正文。EC9 锁定的可见结果不改写。EC9 留给详设的关闭是否等于收起、蒙层控件、放大标题栏按钮、mode 枚举，在 §2 写死。O1 的进程选型与 O2、O3 仍按本文已锁决定，不回退，也没有新的未决产品项。
+需求依据只有已合入的 `docs/34-需求-Electron自带Chromium替代系统Chrome.md`（EC1～EC9、US-EC-01 验收、§6、§7）。本文不改该需求正文。EC9 锁定的可见结果不改写。docs/34 仍把蒙层上的关闭、拖动和标题栏上的关闭留给详设；2026-10-24 项目组已定稿，本文按定稿写，不等需求侧再改 docs/34。定稿是：缩略蒙层与放大标题栏只留「收起」和「放大／还原」（缩略可保留拖动区），去掉一切「关闭」按钮和文案。收起仍是隐藏浮动窗、保留标题栏入口、不断开 CDP、不销毁 page view。非退出 `close` 仍进 `hidden`，界面不提供关闭入口。蒙层控件、放大标题栏按钮、mode 枚举在 §2 写死。O1 的进程选型与 O2、O3 仍按本文已锁决定，不回退，也没有新的未决产品项。
 
 探测必须看内置浏览器是否真的活着。只改引导文案、回调仍去找 `chrome.exe`，不算完成。只删下载按钮、失败仍被标成 `ok`，也不算完成。
 
@@ -67,8 +67,8 @@ EC1～EC9 与 O1～O3 按需求锁定，实现按下表，不再选择策略。O
 | **EC7** | 不改 Node、OpenCode、OfficeCLI 的探测、一键安装、`userData` 私有目录和 prefs |
 | **EC8** | 实现落在 `dev-0.5.9` 系分支。平台验收以 Windows 为准。不关 Issue #78 |
 | **O1 形态** | 专用 `BrowserWindow`。不附着主界面业务窗的 webContents，不嵌进 Vue DOM，不做主界面内嵌 WebView 侧栏。`parent` 挂主窗。开 remote debugging / CDP。仓库不引入 Playwright |
-| **O1 窗口** | 三态同一扇 `BrowserWindow`，枚举 `hidden \| thumbnail \| expanded`。**收起 / `hidden`**：不展示浮动窗，只留主窗标题栏、主题（日间/黑夜）切换旁的「打开浏览窗」。不断开 CDP，不销毁 page view。**缩略 `thumbnail`**：约 360×240，主内容区右上，业务要用浏览器或用户点「打开浏览窗」时以 `showInactive` 弹出。**放大 `expanded`**：工作区各边内收 48、居中，只有用户点「放大」。禁止默认落在右下角，不压执行记录。主窗最小化、隐藏、恢复时，仅浮动窗当时可见才同步显隐；`hidden` 不因主窗恢复而弹出。真正销毁只在主窗销毁或应用退出。关闭与收起是同一动作 |
-| **O1 操作界面** | 不新建 Vue 组件。缩略用盖在页面之上的 PiP 蒙层（`overlay.html`）：收起、放大、关闭、拖动。放大不用蒙层，按钮在窗标题条 `caption.html`：还原、收起、关闭。界面稿 `docs/design/US-EC-内置浏览器.pen` 里「状态卡片 · 360×40」帧作废，以本节和 EC9 为准；本详设不改 `.pen` |
+| **O1 窗口** | 三态同一扇 `BrowserWindow`，枚举 `hidden \| thumbnail \| expanded`。**收起 / `hidden`**：不展示浮动窗，只留主窗标题栏、主题（日间/黑夜）切换旁的「打开浏览窗」。不断开 CDP，不销毁 page view。**缩略 `thumbnail`**：约 360×240，主内容区右上，业务要用浏览器或用户点「打开浏览窗」时以 `showInactive` 弹出。**放大 `expanded`**：工作区各边内收 48、居中，只有用户点「放大」。禁止默认落在右下角，不压执行记录。主窗最小化、隐藏、恢复时，仅浮动窗当时可见才同步显隐；`hidden` 不因主窗恢复而弹出。真正销毁只在主窗销毁或应用退出。用户隐藏浮动窗的入口只有「收起」，没有「关闭」 |
+| **O1 操作界面** | 不新建 Vue 组件。缩略用盖在页面之上的 PiP 蒙层（`overlay.html`）：收起、放大、拖动（拖动是手势区，不是按钮文案）。放大不用蒙层，按钮在窗标题条 `caption.html`：还原、收起。两处都不提供「关闭」。视觉见 §2.1.1。界面稿 `docs/design/US-EC-内置浏览器.pen` 里「状态卡片 · 360×40」帧作废，以本节和 EC9 为准；本详设不改 `.pen` |
 | **O2** | 模块目录写死为 `desktop/electron/browser-runtime/`。本故事负责把网关 URL 从 `getBrowserUrl()` 交出去。MCP 名仍是 `chrome-devtools`，启动参数改接由 US-EC-02 完成。探测本身不调用 MCP |
 | **O3** | 不把独立 Chromium 打进 `extraResources`。复用 Electron 自带 Chromium（现网 `desktop/package.json` 的 `electron` ^34）。更新跟着现有应用更新通道，不新开浏览器更新清单，不改 `latest.json` 的结构。本故事不单独升级 Electron |
 | **探测 id** | `builtin-browser`。废弃 `chrome` |
@@ -80,7 +80,7 @@ EC9 的可见结果不变。本节把 EC9 留给详设的部分写死。`Builtin
 
 | 态 | 何时 | 用户看见的 | 页面与 CDP |
 |----|------|------------|------------|
-| **收起** `hidden` | 冷启动和 `ensureBuiltinBrowser()` 成功后的第一态。用户点「收起」或「关闭」，或非退出路径上的 `close` | **没有浮动窗**。主窗标题栏、主题（日间/黑夜）切换旁为「打开浏览窗」。不是仍浮在桌面上的条 | `BrowserWindow` 与 page view 保持创建。`hide()`，不 `destroy`、不导航到空白、不拆调试会话、不停网关。设备度量保持缩略视口 360×240，`setBackgroundThrottling(false)`，避免收起后快照变成一条缝或空白。不在这一态里展示页面 |
+| **收起** `hidden` | 冷启动和 `ensureBuiltinBrowser()` 成功后的第一态。用户点「收起」，或非退出路径上的 `close` | **没有浮动窗**。主窗标题栏、主题（日间/黑夜）切换旁为「打开浏览窗」。不是仍浮在桌面上的条 | `BrowserWindow` 与 page view 保持创建。`hide()`，不 `destroy`、不导航到空白、不拆调试会话、不停网关。设备度量保持缩略视口 360×240，`setBackgroundThrottling(false)`，避免收起后快照变成一条缝或空白。不在这一态里展示页面 |
 | **缩略** `thumbnail` | 标题栏「打开浏览窗」，或 mode 为 `hidden` 时发生业务导航（离开令牌页的 http(s)） | 约 360×240 的浮动窗。`showInactive()`，不抢焦点。锚点见下文 | 页面 view 铺满 360×240。其上盖透明 PiP 蒙层。连接保持。度量 360×240 |
 | **放大** `expanded` | 只有用户在缩略蒙层上点「放大」 | 当前显示器工作区各边内收 48，居中。不是 `setFullScreen(true)`，也不走系统最大化。无蒙层 | 可见。标题条高 40，页面视口为外框减去这 40。连接保持。度量改成这一视口 |
 
@@ -88,17 +88,17 @@ EC9 的可见结果不变。本节把 EC9 留给详设的部分写死。`Builtin
 
 已经是 `thumbnail` 或 `expanded` 时，后续导航不改 mode，也不自动放大。只有 `hidden` 遇到业务导航才切到缩略。令牌地址 `http://127.0.0.1:<网关端口>/__ftcs_builtin_page__` 以及 `about:` 不是业务导航，不得因此弹出。
 
-**关闭与收起是同一动作。** 蒙层上的「关闭」、放大标题条上的「关闭」、蒙层或标题条上的「收起」，都调用 `setBuiltinBrowserMode('hidden')`：隐藏浮动窗，保留标题栏入口，不断开 CDP，不销毁 page view。真正销毁只走现有退出路径：主窗 `closed` 或应用退出时的 `noteBuiltinBrowserQuitting`（`follow-main-window.ts` 的 `onMainClosed`，以及 quitting）。那两条允许 `destroy` 并停网关。不要为「关闭」再做一种会结束浏览会话的模式。
+**收起是唯一的隐藏入口。** 蒙层上的「收起」和放大标题条上的「收起」都调用 `setBuiltinBrowserMode('hidden')`：隐藏浮动窗，保留标题栏入口，不断开 CDP，不销毁 page view。缩略蒙层和放大标题条都不提供「关闭」按钮，也不出现「关闭」文案。非退出路径上的浏览窗 `close` 事件（例如 Alt+F4）仍 `preventDefault`，并走同一条 `hidden`，但不因此在界面上放「关闭」。真正销毁只走现有退出路径：主窗 `closed` 或应用退出时的 `noteBuiltinBrowserQuitting`（`follow-main-window.ts` 的 `onMainClosed`，以及 quitting）。那两条允许 `destroy` 并停网关。不要再做一种会结束浏览会话的模式。
 
 **缩略蒙层**（`overlay.html`，无 Vue）盖在页面 view 之上。Electron 里子 `WebContentsView` 在窗体文档上面，蒙层必须是后加入的顶层 view，不能只画在被页面挡住的 `caption.html` 里，也不能把按钮注入页面 DOM（快照会把按钮读进画像）。
 
 - 悬停，或在窗内主键轻点（`pointerdown` / `click`，不是右键）后出现控件。
 - 指针离开蒙层 400ms 后收起控件；400ms 内移回则保持。收起的是控件，不是这扇窗。
-- 控件：收起（→ `hidden`）、放大（→ `expanded`）、关闭（与收起相同，→ `hidden`）。
-- 拖动：按钮以外的区域 `-webkit-app-region: drag`，按钮 `-webkit-app-region: no-drag`。拖的是窗位置，尺寸仍是 360×240。松手后若偏离锚点，记 `detached = true`（现有 `moved` 判断可沿用）。
+- 控件：收起（→ `hidden`）、放大（→ `expanded`）。不提供「关闭」。视觉、热区和「点击必须进主进程」见 §2.1.1。
+- 拖动：按钮以外的区域是拖动手势区（`-webkit-app-region: drag`），不是一枚写着「拖动」的按钮，也不出现「拖动」文案。按钮 `-webkit-app-region: no-drag`。拖的是窗位置，尺寸仍是 360×240。松手后若偏离锚点，记 `detached = true`（现有 `moved` 判断可沿用）。
 - 接受缩略态页面难以滚动、难以点击。滚动交给自动化。
 
-**放大标题条**（`caption.html`，高 40，无 Vue）只在 `expanded` 出现。这一态不盖蒙层。按钮：还原（→ `thumbnail` 并按锚点显示）、收起（→ `hidden`）、关闭（与收起相同，→ `hidden`）。页面区不被蒙层挡住。放大态不把拖动列为操作；位置用下面的 `anchorExpanded`。进入放大时清掉 `detached` 并居中。
+**放大标题条**（`caption.html`，高 40，无 Vue）只在 `expanded` 出现。这一态不盖蒙层。按钮：还原（→ `thumbnail` 并按锚点显示）、收起（→ `hidden`）。不提供「关闭」按钮，也不出现「关闭」文案。还原和收起的点击必须调用 `builtin-browser:set-mode`，由主进程切态，不得只改标题条 UI。页面区不被蒙层挡住。放大态不把拖动列为操作；位置用下面的 `anchorExpanded`。进入放大时清掉 `detached` 并居中。
 
 缩略锚点沿用现网 `desktop/electron/browser-runtime/anchor.ts`。跟进实现删除该文件中的 `CARD`，不要改 `anchorTopRight` / `anchorExpanded` 的公式。
 
@@ -129,6 +129,21 @@ function anchorTopRight(main, size, workArea) {
 
 界面稿 `docs/design/US-EC-内置浏览器.pen` 中「状态卡片 · 360×40」帧作废。验收和实现以本节与 docs/34 EC9 为准。本详设不改该 `.pen` 文件。
 
+### 2.1.1 缩略蒙层视觉规范
+
+给开发跟稿。蒙层是盖在缩略页上的操作条，不是第二张卡片。样式按本节；点击必须进主进程，不得只改蒙层自己的外观。放大态不用这层蒙层，见上文标题条。
+
+| 项 | 定稿 |
+|----|------|
+| 形态 | 半透明简洁条，或一行图标。底为黑色，不透明度约 40%–50%（例如 `rgba(0, 0, 0, 0.45)`），图标为白或浅色。不要重卡片（厚阴影、大圆角实心底），不要大色块上下堆叠 |
+| 出现 | 悬停，或在窗内主键轻点（`pointerdown` / `click`，不是右键）后出现 |
+| 离开 | 指针离开蒙层 400ms 后收起蒙层控件；400ms 内移回则保持。收起的是控件，不是这扇浏览窗 |
+| 控件 | 只有收起、放大。图标优先，文案可以只做 tooltip。不出现「关闭」。拖动是手势区，不是按钮，不写「拖动」文案 |
+| 热区 | 每个可点控件的点击区域至少 32×32 逻辑像素 |
+| 点击 | 必须调用 IPC `builtin-browser:set-mode`，由主进程切态。不得只改蒙层 UI。收起 → `'hidden'`；放大 → `'expanded'` |
+
+收起进入 `hidden` 的结果与 §2.1 相同：隐藏浮动窗，标题栏为「打开浏览窗」，不断开 CDP，不销毁 page view。放大进入 `expanded` 后撤掉蒙层，操作改到标题条上的还原和收起。
+
 ### 2.2 不抢焦点、跟主窗、标题栏入口
 
 - 创建参数：`show: false`、`parent: mainWindow`、`modal: false`、`skipTaskbar: true`、`frame: false`、`focusable: true`（用户要点蒙层或放大标题条上的按钮）、`backgroundColor` 用实色，避免显隐时闪白。
@@ -140,7 +155,7 @@ function anchorTopRight(main, size, workArea) {
 - 主窗 `restore` 或 `show`：主窗未最小化且可见，mode 是 `thumbnail` 或 `expanded`，且 `visibleBefore` 为真，才 `showInactive()`。mode 为 `hidden` 时不弹出。业务导航把 `hidden` 改成 `thumbnail` 时若主窗当时不能显示，把 `visibleBefore` 置为 `true`，等这次恢复再显示。
 - 主窗 `move` / `resize`：未 `detached` 且 mode 为 `thumbnail` 时，重新 `anchorTopRight`。放大态不跟。`hidden` 不因此 `show`；未 `detached` 时可以更新下次缩略要用的锚点。
 - 主窗 `closed` 或应用退出：走现有 `noteBuiltinBrowserQuitting`，允许浏览窗真正 `destroy`，停网关。`parent` 会随主窗销毁而关子窗；退出路径上仍显式销毁并停网关，避免托盘隐藏和真正退出搞混。
-- 非退出时用户触发浏览窗 `close`（例如 Alt+F4）：`preventDefault`，切到 `hidden`，不销毁 webContents，不停网关。与点「关闭」「收起」相同。
+- 非退出时用户触发浏览窗 `close`（例如 Alt+F4）：`preventDefault`，切到 `hidden`，不销毁 webContents，不停网关。与点「收起」相同。界面上没有「关闭」按钮。
 - 标题栏入口写死在 `desktop/src/components/layout/TitleBar.vue`，放在主题（日间/黑夜）切换按钮左侧（现网 `RuntimePopover` 在主题按钮右侧）。引导层和探索页都不是常驻入口。不新建状态卡 Vue 组件，也不按已删除的 `card` 换一套图标。
 
 | 浏览窗 | 按钮文字 | 点击 |
@@ -339,7 +354,7 @@ IPC（名字写进 `desktop/electron/ipc/types.ts`）：
 |------|------|------|
 | `builtin-browser:get-state` | 渲染进程拉取 | `{ alive, visible, mode, title, url }` |
 | `builtin-browser:show` | 渲染进程调用 | §2.2 表格的点击 |
-| `builtin-browser:set-mode` | 蒙层或放大标题条调用 | `'hidden' \| 'thumbnail' \| 'expanded'`。`hidden` 是收起，也是关闭 |
+| `builtin-browser:set-mode` | 蒙层或放大标题条调用 | `'hidden' \| 'thumbnail' \| 'expanded'`。`hidden` 只由「收起」或非退出 `close` 进入。没有单独的关闭入口 |
 | `builtin-browser:state` | 主进程推送 | 态或可见性变化时刷新标题栏按钮 |
 
 `url` 给标题栏按钮不必展示。放大标题条上的标题和 URL 来自页面 `did-navigate` / `page-title-updated`，经主进程推到 `caption.html`。尚无业务导航时，标题为「内置浏览器」，URL 位置写「尚未打开页面」。缩略蒙层不展示这条长 URL。`hidden` 时这些字符串留在内存里，不画成浮动条。
@@ -356,11 +371,11 @@ IPC（名字写进 `desktop/electron/ipc/types.ts`）：
 | 行标题 | 内置浏览器 |
 | 标题栏，`hidden` 或浮动窗不可见 | 打开浏览窗 |
 | 标题栏，`thumbnail` 或 `expanded` 且可见 | 浏览中 |
-| 缩略蒙层按钮 | 收起、放大、关闭 |
-| 放大标题条按钮 | 还原、收起、关闭 |
+| 缩略蒙层按钮 | 收起、放大 |
+| 放大标题条按钮 | 还原、收起 |
 | 业务引导探索详情 | 在「探索」页开始找客户。需要可用的搜索。打开网页使用内置浏览器。 |
 
-这些字符串里不出现：MCP、scored、chrome-devtools、Google Chrome、`https://www.google.com/chrome/`。
+这些字符串里不出现：MCP、scored、chrome-devtools、Google Chrome、`https://www.google.com/chrome/`。缩略蒙层和放大标题条也不出现「关闭」。拖动不是按钮文案。
 
 ---
 
@@ -387,7 +402,7 @@ IPC（名字写进 `desktop/electron/ipc/types.ts`）：
 
 建议单测放在 `desktop/electron/browser-runtime/readiness.test.ts`（及网关过滤的纯函数测试）。测试文件不在本详设里修改。
 
-EC9 的跟进改动落在已经存在的 `desktop/electron/browser-runtime/`，不是再起一个模块。预期再动：`types.ts`（mode 去掉 `card`）、`index.ts`（`set-mode` 接受 `hidden`，不再接受 `card`）、`anchor.ts`（删除 `CARD`，锚点公式不动）、`builtin-browser-window.ts`（`ensure` 后保持 `hidden`；非退出 `close` 切 `hidden`；业务导航或标题栏才缩略 + `showInactive`；缩略蒙层；放大标题条）、`caption.html`（只留还原、收起、关闭）、新建 `overlay.html`、`follow-main-window.ts`（`visibleBefore` 初始为 `false`；`hidden` 不随主窗恢复弹出；quitting 路径保留）、`anchor.test.ts`（去掉 360×40 外框断言）、`TitleBar.vue`（见上表）。本详设 PR 不改这些文件。
+EC9 的跟进改动落在已经存在的 `desktop/electron/browser-runtime/`，不是再起一个模块。预期再动：`types.ts`（mode 去掉 `card`）、`index.ts`（`set-mode` 接受 `hidden`，不再接受 `card`）、`anchor.ts`（删除 `CARD`，锚点公式不动）、`builtin-browser-window.ts`（`ensure` 后保持 `hidden`；非退出 `close` 切 `hidden`；业务导航或标题栏才缩略 + `showInactive`；缩略蒙层；放大标题条）、`caption.html`（只留还原、收起；无「关闭」）、新建 `overlay.html`（收起、放大、拖动区；无「关闭」）、`follow-main-window.ts`（`visibleBefore` 初始为 `false`；`hidden` 不随主窗恢复弹出；quitting 路径保留）、`anchor.test.ts`（去掉 360×40 外框断言）、`TitleBar.vue`（见上表）。本详设 PR 不改这些文件。
 
 **明确不改**：
 
@@ -433,9 +448,9 @@ EC9 的跟进改动落在已经存在的 `desktop/electron/browser-runtime/`，�
 | M5 | 冷启动 / 首次进入默认收起（EC9） | 冷启动进入主界面，尚未有业务开页，也不点「打开浏览窗」 | 屏幕上没有浮动浏览窗。主窗标题栏、主题（日间/黑夜）切换旁是「打开浏览窗」。主窗标题栏仍是焦点。探测仍可按 M2 就绪：窗已创建，只是没显示 |
 | M6 | 跟主窗 | 缩略可见时最小化主窗、从托盘恢复；先收起成 `hidden` 再最小化并恢复；关闭进托盘再打开；退出应用 | 可见的缩略会一起消失，并以缩略回来，焦点在主窗。已经 `hidden` 的，恢复后仍然没有浮动窗。退出后进程里不再留着这扇窗，网关停下 |
 | M7 | 标题栏入口（EC9） | 冷启动看标题栏；点「打开浏览窗」；再点蒙层「收起」 | 未展示时为「打开浏览窗」，点后进入缩略且不抢焦点，文案变为「浏览中」。收起后回到「打开浏览窗」。引导里没有另一套状态卡组件 |
-| M13 | 收起与关闭是同一动作，不断开 CDP（EC9） | 打开缩略后点蒙层「收起」；再打开并放大，点标题条「关闭」；再打开缩略后 Alt+F4 | 三种结果相同：浮动窗消失，标题栏为「打开浏览窗」。调试端口仍是同一 target，page view 未销毁，网关仍在。不是一条仍浮在桌面上的状态条 |
-| M14 | 缩略蒙层与锚点（EC9） | 点「打开浏览窗」，或等一次离开令牌页的业务导航 | 约 360×240。主内容区右上：标题栏下约 12、提示条左侧（1280 宽原点放置时约为 x=532、y=56）。不落右下，不压执行记录。不抢焦点。悬停或轻点出现蒙层，含收起、放大、关闭，并可拖动窗位置。关闭与收起相同。不依赖右键标题菜单。缩略页难滚、难点可以接受 |
-| M15 | 放大在工作区内，操作在标题栏（EC9） | 在缩略蒙层点「放大」，再点「还原」 | 工作区各边内收 48、居中，不是盖住整个系统的独占全屏。页面上没有蒙层。标题条有还原、收起、关闭。还原回到缩略。关闭与收起相同，结果同 M13 |
+| M13 | 收起不断开 CDP；蒙层和标题栏无「关闭」（EC9） | 打开缩略后点蒙层「收起」；再打开并放大，点标题条「收起」；再打开缩略后 Alt+F4。同时看蒙层和标题条文案 | 三种结果相同：浮动窗消失，标题栏为「打开浏览窗」。调试端口仍是同一 target，page view 未销毁，网关仍在。不是一条仍浮在桌面上的状态条。蒙层和标题条上都没有「关闭」字样 |
+| M14 | 缩略蒙层与锚点（EC9） | 点「打开浏览窗」，或等一次离开令牌页的业务导航。悬停或轻点出蒙层，再点收起、放大 | 约 360×240。主内容区右上：标题栏下约 12、提示条左侧（1280 宽原点放置时约为 x=532、y=56）。不落右下，不压执行记录。不抢焦点。蒙层是半透明简洁条或图标行（黑底约 40%–50%，白或浅色图标），不是重卡片，也不是大色块堆叠。控件为收起、放大，可拖动窗位置。没有「关闭」字样。拖动不是按钮文案。点收起进入 `hidden`，点放大进入 `expanded`，不是只变样式。不依赖右键标题菜单。缩略页难滚、难点可以接受 |
+| M15 | 放大在工作区内，操作在标题栏（EC9） | 在缩略蒙层点「放大」，再点「还原」，再点标题条「收起」 | 工作区各边内收 48、居中，不是盖住整个系统的独占全屏。页面上没有蒙层。标题条有还原、收起，没有「关闭」字样。还原回到缩略。收起结果同 M13。点还原、收起会切态，不是只变标题条样式 |
 | M8 | Node / OpenCode / OfficeCLI 不变 | 对照改前的一键安装和探测文案 | 按钮仍是「一键安装 / 重新准备 / 重新安装」。OfficeCLI 仍是 optional。不出现安装系统 Chrome |
 | M9 | 外链仍走系统浏览器 | 设置里打开充值或帮助 | 仍是系统默认浏览器，不是这扇专用窗 |
 | M10 | 安装说明不再把系统 Chrome 写成硬前置 | 看 README、官网安装、FAQ、快速开始、下载页 | 无「内置不能替代」，无 Chrome 下载按钮。FAQ 标题里没有 chrome-devtools |
@@ -460,7 +475,7 @@ EC9 的跟进改动落在已经存在的 `desktop/electron/browser-runtime/`，�
 | 引入 Playwright，或让 MCP 附着主界面 webContents | O1 |
 | 主界面内嵌 WebView 侧栏，或一套 Vue 状态卡，或把收起做成仍浮动的条 | O1、EC9 |
 | 默认把窗放在主窗右下角，或压住执行记录 | O1、EC9 |
-| 收起、关闭或隐藏时拆掉 CDP、销毁页面 view | O1、EC9。真正销毁只在主窗销毁或应用退出 |
+| 收起或隐藏时拆掉 CDP、销毁页面 view，或在蒙层、标题栏放「关闭」 | O1、EC9。真正销毁只在主窗销毁或应用退出。隐藏入口只有「收起」 |
 | 冷启动、重新检测或打开令牌页后自动 `showInactive` | EC9。`ensure` 保持 `hidden` |
 | 用右键标题菜单或双击标题条作为切态入口 | EC9。缩略用蒙层，放大用标题条按钮 |
 | 把 `docs/design/US-EC-内置浏览器.pen` 里已作废的状态卡帧当作实现依据 | 以本节与 EC9 为准。本详设不改 `.pen` |
@@ -486,9 +501,11 @@ EC9 的跟进改动落在已经存在的 `desktop/electron/browser-runtime/`，�
 | 默认锚点被写成右下角，挡住执行记录 | `anchorTopRight` 的 `y` 为主窗顶 + 标题栏 44 + 12，右缘让开提示条。T8、M14 |
 | 托盘隐藏主窗后子窗还留在桌面上 | `hide` 上显式隐藏。M6 |
 | 主窗恢复时把已经收起的浏览窗又弹出来 | mode 为 `hidden` 时恢复路径不 `showInactive`。M6 |
-| Alt+F4 或「关闭」把页毁了，调试会话断开 | 非退出 `close`、蒙层「关闭」、放大标题条「关闭」都切 `hidden`。M13 |
+| Alt+F4 或点「收起」把页毁了，调试会话断开 | 非退出 `close`、蒙层「收起」、放大标题条「收起」都切 `hidden`。浏览窗不提供「关闭」按钮。M13 |
 | 缩略仍要右键标题才找得到收起和放大 | 操作在蒙层。M14 |
 | 放大用蒙层挡住页面 | 放大无蒙层，按钮在标题条。M15 |
+| 蒙层或标题条按钮只改 UI、不调主进程，点了没有收起或放大 | §2.1.1：点击必须 `builtin-browser:set-mode`。收起进 `hidden`，放大进 `expanded`。M14、M15 |
+| 蒙层做成重卡片或大色块，收起旁边又放一枚「关闭」 | §2.1.1：半透明图标条；控件只有收起、放大。M14、M15 |
 | 引导徽章把 `error` 显示成「缺失」，用户以为要安装 | 失败状态只用 `error`。现网 `statusLabel` 对 `error` 已是「异常」 |
 | `PRODUCT_LINKS.chrome` 留着，下次又被接上按钮 | 删除常量。M1 |
 | 官网和 README 仍写必须安装 Chrome | §3.6、M10 |
@@ -505,3 +522,4 @@ EC9 的跟进改动落在已经存在的 `desktop/electron/browser-runtime/`，�
 |------|------|
 | 2026-10-21 | 初稿。对齐 docs/34 的 EC1～EC8 与已锁 O1～O3。基线 `dev-0.5.9`（`3b49463`）。核对 `probeChrome`、`OnboardingOverlay.vue` 环境步、`PRODUCT_LINKS.chrome`、README 与官网安装说明。专用窗与回环网关目录 `desktop/electron/browser-runtime/`。探测 id `builtin-browser`。状态：待评审。不关 #78。 |
 | 2026-10-24 | 对齐 docs/34 EC9（马丰顺 2026-10-24 手测）。收起改为 `hidden`：无浮动窗，标题栏在主题切换旁显示「打开浏览窗／浏览中」。关闭与收起同一动作，不断开 CDP、不销毁 page view。缩略用 PiP 蒙层（收起、放大、关闭、拖动）；放大只用标题条（还原、收起、关闭），无蒙层。`BuiltinBrowserMode` 改为 `hidden \| thumbnail \| expanded`。`ensureBuiltinBrowser` 初始 `hidden`，不自动 `showInactive`。非退出 `close` 切 `hidden`。锚点沿用现网 `anchor.ts`。界面稿「状态卡片 · 360×40」帧作废。探测、网关、O2～O3 不改口。不关 #78。 |
+| 2026-10-24 | 项目组定稿控件：缩略蒙层只留收起、放大和拖动区，放大标题条只留还原、收起。去掉「关闭」按钮和文案。收起仍是隐藏浮动窗、保留标题栏入口、不断开 CDP、不销毁 page view。非退出 `close` 仍 `preventDefault` 进 `hidden`，界面不提供关闭入口。补 §2.1.1 缩略蒙层视觉规范（半透明图标条、热区、点击必须进主进程）。不关 #78。 |
