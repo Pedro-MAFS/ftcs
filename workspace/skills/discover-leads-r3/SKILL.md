@@ -1,6 +1,6 @@
 ---
 name: discover-leads-r3
-description: 执行 R3 地图发现：Google Places 按城市/品类找本地商户，补官网后打开公司站验证并写入 raw/R3.jsonl。用户说开始 R3、地图发现、discover-leads-r3 时使用。
+description: 执行 R3 地图发现：Google Places 按城市/品类找本地商户，补官网后打开公司站，判断是不是目标客户并了解公开信息，再写入 raw/R3.jsonl。用户说开始 R3、地图发现、discover-leads-r3 时使用。
 phase: 1
 inputs:
   - name: product_id
@@ -18,10 +18,10 @@ outputs:
 
 # discover-leads-r3
 
-**R3 地图发现**：用 expansion 里的地图发现词，经 **Google Places API** 找本地商户 → 解析或补全 **公司官网** → **chrome 打开官网** 对照产品画像判断是否目标客户 → 在本探索会话里把六段画像与破冰和公司字段一次写入 `raw/R3.jsonl`。判为目标客户后直接调用保存工具。收到「线索已存在」则继续下一家。只在原始线索里的同域仍可直接覆盖画像。
+**R3 地图发现**：用 expansion 里的地图发现词，经 **Google Places API** 找本地商户 → 解析或补全 **公司官网** → **chrome 打开官网**，判断是不是目标客户并了解这家公司的公开信息 → 在本探索会话里把六段画像与破冰和公司字段一次写入 `raw/R3.jsonl`。判为目标客户后直接调用保存工具。收到「线索已存在」则继续下一家。只在原始线索里的同域仍可直接覆盖画像。
 
 ```text
-R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过滤 → Details（不超过 floor(实际返回×0.75)）→ 官网? → [无则 Tavily 补搜] → chrome 官网 → 判断 → 直接 lead_append_raw 或 lead_set_company_intelligence；「线索已存在」则继续下一家
+R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过滤 → Details（不超过 floor(实际返回×0.75)）→ 官网? → [无则 Tavily 补搜] → chrome 官网（判断并了解）→ 直接 lead_append_raw 或 lead_set_company_intelligence；「线索已存在」则继续下一家
 ```
 
 发现层 **只用 Places**；补官网用 Tavily `search_web`（不带 `include_domains`）。**不**打开 Google 地图页面。
@@ -137,9 +137,14 @@ Places `MISSING_PLACES_API_KEY` / 401 / 403 → **停止整任务**，提示设�
 
 四条里任一条拿不准 → **跳过**该 candidate。
 
-## 目标客户判断（打开官网后）
+## 打开官网后
 
-对照 `profile.json`，读 chrome 快照（必要时 `evaluate_script`）。
+打开官网要做两件事，不要只为了打一个「是/否」：
+
+1. **判断**是不是目标客户。对照 `profile.json` 和你实际打开的页面。
+2. **了解**这家公司：公司名、业务、国家或区域、在卖什么或服务谁，以及页面上公开的邮箱、电话。这些会写进线索和画像；页面上没有的不要编。
+
+先看打开的这一页。已经够判断，并且公司事实和公开联系方式也在这页上，就不要再点。不够就在**同一域名**里继续打开能补上缺口的页面（关于、产品或服务、联系我们，或页脚里的这些链接）。够写判断和画像就停。不要把整站点完，不要打开站外、地图或社媒。
 
 **写入 Lead（是）**，若满足 **大部分**：
 
@@ -231,18 +236,18 @@ search-api.search_web({
 
 按 [Tavily 补官网消歧](#tavily-补官网消歧) 选 URL；`search_calls` +1。失败 → 下一 candidate。
 
-### Step 4：打开官网并判断
+### Step 4：打开官网
 
 有 `website_url` 时：
 
-1. 直接打开官网并判断。不要先调用 `leads_get_scored`，也不要先对照线索库再决定是否保存。只在原始线索里的同域仍可在判断为「是」之后直接 `lead_set_company_intelligence`。
+1. 直接打开官网，按 [打开官网后](#打开官网后) 判断并了解这家公司。不要先调用 `leads_get_scored`，也不要先对照线索库再决定是否保存。只在原始线索里的同域仍可在判断为「是」之后直接 `lead_set_company_intelligence`。
 
 ```
 在内置浏览器中 chrome-devtools: new_page(url) 或 navigate_page → website_url
 take_snapshot（必要时 evaluate_script）
 ```
 
-`crawl_pages` +1。按 [目标客户判断](#目标客户判断打开官网后) 决策。否或打不开 → 不写 Lead，也不调用 `lead_set_company_intelligence`。内置浏览器不可用 → 告诉用户：内置浏览器未就绪，请重新检测或重启应用。
+这一页不够就继续打开本站其他页，每页再 `take_snapshot`。每打开一个本站页面，`crawl_pages` +1。否或打不开 → 不写 Lead，也不调用 `lead_set_company_intelligence`。内置浏览器不可用 → 告诉用户：内置浏览器未就绪，请重新检测或重启应用。
 
 ### Step 5：写入（仅判断为「是」）
 
@@ -267,7 +272,7 @@ lead-store.lead_append_raw({
       snippet: "发现：Places 候选，经官网核实"
     },
     match_reason: "经 Places 发现后，打开官网核实：<官网业务证据，禁止空泛，不要贴 formattedAddress>",
-    contacts: [],
+    contacts: [{ type: "email", value: "sales@...", confidence: "medium" }],
     raw_score: 70,
     companyIntelligence: {
       businessModel: "商业模式与体量",
@@ -303,7 +308,8 @@ lead-store.lead_set_company_intelligence({
 - `company.name` 来自官网页面，不用 Places `displayName` 填这个字段
 - `company.website` / `source.url` 为 **chrome 打开过的官网**，不是地图链
 - `source.type` 固定 `tavily_search`
-- `companyIntelligence` 只含上面七个字符串，不要传 `status` 或 Markdown 字段。邮箱和电话不要写进画像
+- `companyIntelligence` 只含上面七个字符串，不要传 `status` 或 Markdown 字段
+- 邮箱和电话仍只放在 `contacts`，不要写进 `companyIntelligence`。页面上没有就 `[]`
 - 新公司 `lead_append_raw` 成功时 `leads_found` +1；`skipped: true`（「线索已存在」）不加；只在原始线索上的覆盖也不加
 
 ### Step 6：每词进度
@@ -358,6 +364,7 @@ lead-store.exploration_finish({ product_id, run_id, status: "completed" })
 | `source.type` | `tavily_search` |
 | `match_reason` | 经 Places 发现后，打开官网核实，加上官网业务证据 |
 | `query_id` / `run_id` | 搜索词与本次运行 |
+| `contacts` | 可选。官网上的邮箱和电话，形如 `{ type, value, confidence }`；没有则 `[]` |
 
 ### 探索运行 — `data/exploration/{product_id}/runs/{run_id}.json`
 

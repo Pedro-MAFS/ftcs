@@ -1,6 +1,6 @@
 ---
 name: discover-leads
-description: 执行 R1 获客探索：Tavily 搜索候选 URL，chrome-devtools 验证页面，判断目标客户并写入原始线索。用户说开始探索、发现线索、R1 广撒网时使用。
+description: 执行 R1 获客探索：Tavily 搜索候选 URL，chrome-devtools 打开页面，判断是不是目标客户并了解公司公开信息，再写入原始线索。用户说开始探索、发现线索、R1 广撒网时使用。
 phase: 1
 inputs:
   - name: product_id
@@ -21,7 +21,7 @@ outputs:
 
 # discover-leads
 
-基于关键词扩展结果执行**获客探索**：Tavily 搜索 → 打开候选页面 → 判断是否目标客户 → 在同一次写入里带上六段画像与破冰。画像在**本探索会话**内完成，不要另开会话。
+基于关键词扩展结果执行**获客探索**：Tavily 搜索 → 打开候选页面，判断是否目标客户并了解这家公司的公开信息 → 在同一次写入里带上六段画像与破冰。画像在**本探索会话**内完成，不要另开会话。
 
 Phase 1 默认执行 **R1 广撒网**。
 
@@ -93,11 +93,17 @@ search-api.search_web({
 
    同域名不要在打开前跳过。判为目标客户后直接调用 `lead_append_raw` 或 `lead_set_company_intelligence`。不要先调用 `leads_get_scored`，也不要先对照线索库再决定是否保存。
 
-2. 使用 **chrome-devtools-mcp**：
+2. 使用 **chrome-devtools-mcp** 打开候选页。这一趟要做两件事，不要只为了打一个「是/否」：
+
+   - **判断**是不是目标客户
+   - **了解**这家公司：公司名、业务、国家或区域、在卖什么或服务谁，以及页面上公开的邮箱、电话。这些会写进线索和画像；页面上没有的不要编
+
    ```
    new_page(url) 或 navigate_page
-   → take_snapshot（必要时 evaluate_script 提取公司名、业务、国家）
+   → take_snapshot（必要时 evaluate_script）
    ```
+
+   先看打开的这一页。已经够判断，并且公司事实和公开联系方式也在这页上，就不要再点。不够就在**同一域名**里继续打开能补上缺口的页面（关于、产品或服务、联系我们，或页脚里的这些链接），每页再 `take_snapshot`。够写判断和画像就停。不要把整站点完，不要打开站外、新闻列表、招聘或社媒。每打开一个本站页面，`crawl_pages` +1。
 
 3. **智能体判断**是否目标客户：
 
@@ -175,8 +181,6 @@ lead-store.lead_set_company_intelligence({
 `run_id` **必须**与本次 `exploration_start` 返回值一致。  
 `match_reason` **必须具体**，说明为何判断为目标客户（引用网站上的产品/业务证据）。  
 邮箱和电话仍只放在 `contacts`，不要写进 `companyIntelligence`。
-
-5. 记录 `crawl_pages` +1
 
 #### 2c. 更新进度
 
