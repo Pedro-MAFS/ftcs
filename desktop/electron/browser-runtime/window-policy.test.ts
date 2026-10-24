@@ -4,6 +4,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
+  CHROME_COMMAND_PREFIX,
   INITIAL_VISIBLE_BEFORE,
   builtinBrowserEntryLabel,
   detachedAfterMode,
@@ -12,6 +13,7 @@ import {
   modeAfterEnsure,
   modeAfterUserDismiss,
   navigationMode,
+  parseChromeCommand,
   shouldFollowMainAnchor,
   shouldRestoreFloatingWindow,
   showsThumbnailOverlay,
@@ -193,22 +195,61 @@ test('T9 sources have no card mode and no 360x40 floating frame', () => {
   assert.doesNotMatch(read('./follow-main-window.ts'), /visibleBefore = true/)
 })
 
-test('thumbnail overlay and expanded caption expose the EC9 controls', () => {
+test('chrome commands ignore anything except mode and thumbnail drag', () => {
+  assert.equal(parseChromeCommand('普通日志'), null)
+  assert.equal(parseChromeCommand(`${CHROME_COMMAND_PREFIX}{`), null)
+  assert.deepEqual(parseChromeCommand(`${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'mode', mode: 'hidden' })}`), {
+    type: 'mode',
+    mode: 'hidden',
+  })
+  assert.deepEqual(parseChromeCommand(`${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'mode', mode: 'expanded' })}`), {
+    type: 'mode',
+    mode: 'expanded',
+  })
+  assert.equal(parseChromeCommand(`${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'mode', mode: 'card' })}`), null)
+  assert.deepEqual(
+    parseChromeCommand(`${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'drag-move', screenX: 12, screenY: 40 })}`),
+    { type: 'drag-move', screenX: 12, screenY: 40 },
+  )
+  assert.equal(
+    parseChromeCommand(`${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'drag-start', screenX: '12', screenY: 4 })}`),
+    null,
+  )
+  assert.deepEqual(parseChromeCommand(`前缀 ${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'drag-end' })}`), {
+    type: 'drag-end',
+  })
+  assert.deepEqual(
+    parseChromeCommand(
+      `${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'mode', mode: 'thumbnail' })} (data:text/html:12)`,
+    ),
+    { type: 'mode', mode: 'thumbnail' },
+  )
+})
+
+test('thumbnail overlay and expanded caption expose one dismiss control each', () => {
   const overlay = read('./overlay.html')
-  assert.match(overlay, /收起/)
-  assert.match(overlay, /放大/)
-  assert.match(overlay, /关闭/)
-  assert.match(overlay, /HIDE_MS = 400/)
-  assert.match(overlay, /-webkit-app-region:\s*drag/)
-  assert.match(overlay, /-webkit-app-region:\s*no-drag/)
+  assert.equal(overlay.split('data-mode="hidden"').length - 1, 1)
+  assert.equal(overlay.split('data-mode="expanded"').length - 1, 1)
+  assert.match(overlay, /aria-label="收起"/)
+  assert.match(overlay, /aria-label="放大"/)
+  assert.match(overlay, /FTCS_CHROME/)
+  assert.match(overlay, /drag-start/)
+  assert.doesNotMatch(overlay, /关闭/)
+  assert.doesNotMatch(overlay, /-webkit-app-region:\s*drag/)
+  assert.doesNotMatch(overlay, /pointer-events:\s*none/)
   assert.doesNotMatch(overlay, /尚未打开页面/)
   const caption = read('./caption.html')
-  assert.match(caption, /还原/)
-  assert.match(caption, /收起/)
-  assert.match(caption, /关闭/)
+  assert.match(caption, />还原</)
+  assert.match(caption, />收起</)
+  assert.match(caption, /FTCS_CHROME/)
+  assert.doesNotMatch(caption, /关闭/)
   assert.doesNotMatch(caption, /放大/)
   assert.doesNotMatch(caption, /dblclick/)
   assert.doesNotMatch(caption, /['"]card['"]/)
+  const windowSource = read('./builtin-browser-window.ts')
+  assert.match(windowSource, /console-message/)
+  assert.match(windowSource, /parseChromeCommand/)
+  assert.doesNotMatch(windowSource, /setIgnoreMouseEvents/)
   const titleBar = read('../../src/components/layout/TitleBar.vue')
   assert.match(titleBar, /builtinBrowserEntryLabel/)
   assert.doesNotMatch(titleBar, /['"]card['"]/)
