@@ -512,7 +512,8 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 0 0 auto;
+  flex: 1;
+  min-width: max-content;
   justify-content: flex-end;
 }
 
