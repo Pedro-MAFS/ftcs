@@ -30,29 +30,62 @@ test('T6 json list keeps only the token page', () => {
   assert.equal(filtered[0]?.webSocketDebuggerUrl, 'ws://127.0.0.1:43123/devtools/page/page-1')
 })
 
-test('T7 createTarget returns the existing page and does not describe a new window', () => {
+test('json list keeps every browsing page and drops the main window', () => {
+  const filtered = filterJsonList(
+    [
+      { id: 'main', type: 'page', url: 'http://127.0.0.1:5173/', title: 'FTCS' },
+      { id: pageId, type: 'page', url: token, title: '' },
+      { id: 'page-2', type: 'page', url: 'https://northline.example', title: 'Northline' },
+      { id: 'caption', type: 'page', url: 'data:text/html,caption', title: '' },
+    ],
+    new Set([pageId, 'page-2']),
+    43123,
+  )
+  assert.deepEqual(
+    filtered.map((item) => item.id),
+    [pageId, 'page-2'],
+  )
+})
+
+test('T7 createTarget asks for a new tab and does not describe a new window', () => {
   const decision = interpretClientMessage(
     { id: 7, method: 'Target.createTarget', params: { url: 'https://northline.example' } },
     pageId,
-    token,
   )
-  assert.equal(decision.kind, 'navigate')
-  if (decision.kind !== 'navigate') return
+  assert.equal(decision.kind, 'create-tab')
+  if (decision.kind !== 'create-tab') return
   assert.equal(decision.url, 'https://northline.example')
-  assert.deepEqual(decision.response, { id: 7, result: { targetId: pageId } })
+  assert.equal(decision.responseId, 7)
   assert.equal(JSON.stringify(decision).includes('BrowserWindow'), false)
 })
 
-test('closeTarget stays on the token page and reports success', () => {
+test('createTarget before the first page is an error', () => {
   const decision = interpretClientMessage(
+    { id: 7, method: 'Target.createTarget', params: { url: 'https://northline.example' } },
+    null,
+  )
+  assert.equal(decision.kind, 'respond')
+  if (decision.kind !== 'respond') return
+  assert.equal((decision.response.error as { message: string }).message, 'builtin page not ready')
+})
+
+test('closeTarget and activateTarget name the browsing page', () => {
+  const close = interpretClientMessage(
     { id: 8, method: 'Target.closeTarget', params: { targetId: pageId } },
     pageId,
-    token,
   )
-  assert.equal(decision.kind, 'navigate')
-  if (decision.kind !== 'navigate') return
-  assert.equal(decision.url, token)
-  assert.deepEqual(decision.response, { id: 8, result: { success: true } })
+  assert.equal(close.kind, 'close-tab')
+  if (close.kind !== 'close-tab') return
+  assert.equal(close.targetId, pageId)
+  assert.equal(close.responseId, 8)
+
+  const activate = interpretClientMessage(
+    { id: 9, method: 'Target.activateTarget', params: { targetId: 'page-2' } },
+    pageId,
+  )
+  assert.equal(activate.kind, 'activate-tab')
+  if (activate.kind !== 'activate-tab') return
+  assert.equal(activate.targetId, 'page-2')
 })
 
 test('upstream target events drop foreign pages and keep the builtin page', () => {
@@ -106,4 +139,59 @@ test('upstream target events drop foreign pages and keep the builtin page', () =
     listed.result.targetInfos.map((item) => item.targetId),
     ['worker', pageId],
   )
+})
+
+test('while a tab is expected, about:blank is kept and the main window is not', () => {
+  const ids = new Set([pageId])
+  const foreign = new Set<string>()
+  const admission = { expecting: 1, announced: new Set<string>(), pendingUrl: 'about:blank' }
+  const kept = filterUpstreamMessage(
+    {
+      method: 'Target.targetCreated',
+      params: { targetInfo: { targetId: 'page-2', type: 'page', url: 'about:blank' } },
+    },
+    ids,
+    undefined,
+    foreign,
+    admission,
+  )
+  const dropped = filterUpstreamMessage(
+    {
+      method: 'Target.targetCreated',
+      params: { targetInfo: { targetId: 'main', type: 'page', url: 'http://127.0.0.1:5173/' } },
+    },
+    ids,
+    undefined,
+    foreign,
+    admission,
+  )
+  assert.ok(kept)
+  assert.equal(dropped, null)
+  assert.equal(ids.has('page-2'), true)
+  assert.equal(foreign.has('main'), true)
+
+  const duplicate = filterUpstreamMessage(
+    {
+      method: 'Target.targetCreated',
+      params: { targetInfo: { targetId: 'page-2', type: 'page', url: 'about:blank' } },
+    },
+    ids,
+    undefined,
+    foreign,
+    admission,
+  )
+  assert.equal(duplicate, null)
+})
+
+test('an empty url update is not forwarded', () => {
+  const filtered = filterUpstreamMessage(
+    {
+      method: 'Target.targetInfoChanged',
+      params: { targetInfo: { targetId: pageId, type: 'page', url: '' } },
+    },
+    pageId,
+    undefined,
+    new Set(),
+  )
+  assert.equal(filtered, null)
 })

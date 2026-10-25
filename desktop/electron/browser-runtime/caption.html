@@ -53,6 +53,16 @@
         font-size: 11px;
         color: #6b6b6b;
       }
+      .tabs {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        gap: 4px;
+        overflow-x: auto;
+      }
+      .tabs::-webkit-scrollbar {
+        height: 0;
+      }
       button {
         height: 22px;
         padding: 0 7px;
@@ -66,12 +76,49 @@
       button:hover {
         background: #2a2a2a;
       }
+      #restore,
+      #collapse {
+        flex: 0 0 auto;
+      }
+      .tab {
+        flex: 0 1 168px;
+        max-width: 168px;
+        min-width: 72px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid #4a4a4a;
+        border-radius: 6px;
+        background: #2a2a2a;
+        color: #e4e4e4;
+        font: 500 11px/1 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        cursor: pointer;
+      }
+      .tab.active {
+        background: #333333;
+        border-color: #6ee7b7;
+      }
+      .tab .label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .tab .x {
+        flex: 0 0 auto;
+        color: #b5b5b5;
+        font-size: 13px;
+        line-height: 1;
+      }
     </style>
   </head>
   <body>
     <header class="bar">
       <span class="dot" aria-hidden="true"></span>
       <div class="meta">
+        <div class="tabs" id="tabs"></div>
         <span class="title" id="title">内置浏览器</span>
         <span class="url" id="url">尚未打开页面</span>
       </div>
@@ -81,14 +128,56 @@
     <script>
       const titleEl = document.getElementById('title')
       const urlEl = document.getElementById('url')
+      const tabsEl = document.getElementById('tabs')
+      const restoreBtn = document.getElementById('restore')
+      const collapseBtn = document.getElementById('collapse')
+
+      function command(payload) {
+        console.log('FTCS_CHROME ' + JSON.stringify(payload))
+      }
 
       function render(state) {
+        const mode = state && state.mode
+        const showActions = mode !== 'thumbnail' && mode !== 'hidden'
+        restoreBtn.hidden = !showActions
+        collapseBtn.hidden = !showActions
         titleEl.textContent = (state && state.title) || '内置浏览器'
         urlEl.textContent = (state && state.url) || '尚未打开页面'
+        const tabs = (state && state.tabs) || []
+        const hasTabs = tabs.length > 0
+        titleEl.hidden = hasTabs
+        urlEl.hidden = hasTabs
+        tabsEl.replaceChildren()
+        for (const tab of tabs) {
+          const item = document.createElement('button')
+          item.type = 'button'
+          item.className = 'tab' + (tab.active ? ' active' : '')
+          const tip = tab.url && tab.url.indexOf('__ftcs_builtin_page__') < 0 && tab.url.indexOf('about:') !== 0
+            ? tab.url
+            : tab.title || '内置浏览器'
+          item.title = tip
+          const label = document.createElement('span')
+          label.className = 'label'
+          label.textContent = tab.title || '内置浏览器'
+          item.appendChild(label)
+          if (tabs.length > 1) {
+            const close = document.createElement('span')
+            close.className = 'x'
+            close.textContent = '×'
+            close.setAttribute('aria-label', '移除此页')
+            close.addEventListener('click', (event) => {
+              event.stopPropagation()
+              command({ type: 'close-tab', id: tab.id })
+            })
+            item.appendChild(close)
+          }
+          item.addEventListener('click', () => command({ type: 'select-tab', id: tab.id }))
+          tabsEl.appendChild(item)
+        }
       }
 
       function setMode(mode) {
-        console.log('FTCS_CHROME ' + JSON.stringify({ type: 'mode', mode: mode }))
+        command({ type: 'mode', mode: mode })
         if (window.ftcsCaption) window.ftcsCaption.setMode(mode)
       }
 
@@ -96,6 +185,7 @@
       document.getElementById('collapse').addEventListener('click', () => setMode('hidden'))
       document.addEventListener('contextmenu', (event) => event.preventDefault())
 
+      window.__ftcsCaptionRender = render
       if (window.ftcsCaption) window.ftcsCaption.onState(render)
       render({ title: '内置浏览器', url: '尚未打开页面' })
     </script>

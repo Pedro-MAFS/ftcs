@@ -4,6 +4,7 @@ import test from 'node:test'
 import { filterJsonList } from './cdp-filter.ts'
 import {
   getBrowserUrl,
+  setBuiltinBrowserTabHost,
   setBuiltinPageTargetId,
   setInternalDebugPort,
   startCdpGateway,
@@ -11,7 +12,7 @@ import {
 } from './cdp-gateway.ts'
 import { acceptWebSocket, connectWebSocket } from './ws-socket.ts'
 
-test('gateway lists only the builtin page and turns createTarget into navigate', async () => {
+test('gateway lists browsing pages and opens a real tab for createTarget', async () => {
   const browserMessages: string[] = []
   const pageMessages: string[] = []
   let port = 0
@@ -38,6 +39,13 @@ test('gateway lists only the builtin page and turns createTarget into navigate',
             url: 'http://127.0.0.1:9/__ftcs_builtin_page__',
             title: '',
             webSocketDebuggerUrl: `ws://127.0.0.1:${port}/devtools/page/page-1`,
+          },
+          {
+            id: 'page-2',
+            type: 'page',
+            url: 'https://northline.example',
+            title: 'Northline',
+            webSocketDebuggerUrl: `ws://127.0.0.1:${port}/devtools/page/page-2`,
           },
         ]),
       )
@@ -95,13 +103,26 @@ test('gateway lists only the builtin page and turns createTarget into navigate',
     assert.equal(list[0]?.id, 'page-1')
     assert.match(list[0]!.webSocketDebuggerUrl, /\/devtools\/page\/page-1$/)
 
+    const opened: string[] = []
+    const closed: string[] = []
+    setBuiltinBrowserTabHost({
+      async openTab(url: string) {
+        opened.push(url)
+        return { id: 'page-2', url }
+      },
+      async closeTab(targetId: string) {
+        closed.push(targetId)
+        return true
+      },
+      async activateTab() {
+        return true
+      },
+    })
+
     const client = await connectWebSocket(versionBody.webSocketDebuggerUrl)
-    const response = new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('createTarget response timeout')), 4000)
-      client.onMessage((text) => {
-        clearTimeout(timer)
-        resolve(text)
-      })
+    const clientMessages: string[] = []
+    client.onMessage((text) => {
+      clientMessages.push(text)
     })
     client.send(
       JSON.stringify({
@@ -110,18 +131,60 @@ test('gateway lists only the builtin page and turns createTarget into navigate',
         params: { url: 'https://northline.example' },
       }),
     )
-    const raw = await response
-    assert.deepEqual(JSON.parse(raw), { id: 4, result: { targetId: 'page-1' } })
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    const created = await waitForMessage(clientMessages, '"id":4')
+    assert.deepEqual(JSON.parse(created), { id: 4, result: { targetId: 'page-2' } })
+    assert.deepEqual(opened, ['https://northline.example'])
+    assert.equal(
+      clientMessages.some((line) => line.includes('Target.targetCreated') && line.includes('page-2')),
+      true,
+    )
     assert.equal(
       browserMessages.some((line) => line.includes('Target.createTarget')),
       false,
     )
-    assert.equal(pageMessages.some((line) => line.includes('Page.navigate')), true)
-    assert.equal(pageMessages.some((line) => line.includes('https://northline.example')), true)
+    assert.equal(pageMessages.some((line) => line.includes('Page.navigate')), false)
+
+    const listed = await fetch(`${browserUrl}/json/list`)
+    const listedIds = ((await listed.json()) as Array<{ id: string }>).map((item) => item.id)
+    assert.deepEqual(listedIds, ['page-1', 'page-2'])
+
+    client.send(
+      JSON.stringify({
+        id: 5,
+        method: 'Target.closeTarget',
+        params: { targetId: 'page-2' },
+      }),
+    )
+    const closedMessage = await waitForMessage(clientMessages, '"id":5')
+    assert.deepEqual(JSON.parse(closedMessage), { id: 5, result: { success: true } })
+    assert.deepEqual(closed, ['page-2'])
+    assert.equal(
+      browserMessages.some((line) => line.includes('Target.closeTarget')),
+      false,
+    )
     client.close()
   } finally {
+    setBuiltinBrowserTabHost(null)
     await stopCdpGateway()
     await new Promise<void>((resolve) => upstream.close(() => resolve()))
   }
 })
+
+function waitForMessage(messages: string[], marker: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + 4000
+    const check = () => {
+      const hit = messages.find((line) => line.includes(marker))
+      if (hit) {
+        resolve(hit)
+        return
+      }
+      if (Date.now() >= deadline) {
+        reject(new Error(`missing ${marker}`))
+        return
+      }
+      setTimeout(check, 20)
+    }
+    check()
+  })
+}

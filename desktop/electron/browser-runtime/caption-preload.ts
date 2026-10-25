@@ -1,10 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC, type BuiltinBrowserMode } from '../ipc/types'
 
+interface CaptionTab {
+  id: string
+  title: string
+  url?: string
+  active?: boolean
+}
+
 interface CaptionState {
   mode: BuiltinBrowserMode
   title: string
   url: string
+  tabs?: CaptionTab[]
 }
 
 const api = {
