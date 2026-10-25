@@ -13,6 +13,16 @@ export const CHANGELOG_STARTED_AT = '0.5.0'
  */
 export const changelogReleases: ChangelogRelease[] = [
   {
+    version: '0.5.10',
+    releasedAt: '2026-10-25',
+    title: '浏览窗支持多标签',
+    notes: [
+      '浏览窗可以同时打开多个网页。探索再打开下一家公司官网时会新开一页，不再挤在原来那一页上；某一页打开得慢，不会把后面要打开的页面全部卡住',
+      '放大后，浏览窗标题栏会显示标签卡片，可以切换或关掉多余的页，也可以还原成缩略或收起。缩略时看到当前这一页',
+      '主窗口标题栏中间的页面切换保持居中',
+    ],
+  },
+  {
     version: '0.5.9',
     releasedAt: '2026-10-24',
     title: '内置浏览器与探索体验优化',
