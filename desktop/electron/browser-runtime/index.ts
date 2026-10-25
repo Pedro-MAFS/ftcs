@@ -19,6 +19,7 @@ import {
   noteBuiltinBrowserQuitting,
   onBuiltinBrowserUi,
   setBuiltinBrowserMode,
+  notePrimaryBrowserTarget,
   reinforceBuiltinBrowserViewport,
   showBuiltinBrowserFromTitleBar,
   showBuiltinBrowserInactive,
@@ -91,6 +92,7 @@ async function doEnsure(): Promise<BuiltinBrowserStatus> {
   }
   const targetId = await waitForBuiltinTarget(3000)
   setBuiltinPageTargetId(targetId)
+  notePrimaryBrowserTarget(targetId)
   if (targetId) await reinforceBuiltinBrowserViewport()
   if (!targetId) {
     const version = await readGatewayVersion(getBrowserUrl())

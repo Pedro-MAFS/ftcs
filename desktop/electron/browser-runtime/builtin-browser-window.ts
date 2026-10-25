@@ -11,12 +11,24 @@ import captionHtml from './caption.html?raw'
 import overlayHtml from './overlay.html?raw'
 import { CAPTION_HEIGHT, THUMB, anchorExpanded, anchorTopRight } from './anchor'
 import { attachMainWindowFollow, type MainWindowFollowController } from './follow-main-window'
-import { sendPageCommand, tokenPageUrl } from './cdp-gateway'
+import { isAdoptableTabUrl } from './cdp-filter'
+import {
+  beginTabAdoption,
+  endTabAdoption,
+  listBrowserPageIds,
+  listInternalTargets,
+  registerBrowserPage,
+  sendPageCommand,
+  setBuiltinBrowserTabHost,
+  tokenPageUrl,
+  unregisterBrowserPage,
+} from './cdp-gateway'
 import type { BuiltinBrowserMode, BuiltinBrowserUiState, ScreenRect } from './types'
 import { IPC } from '../ipc/types'
 import {
   CHROME_COMMAND_PREFIX,
   detachedAfterMode,
+  isBusinessNavigation,
   modeAfterEnsure,
   modeAfterUserDismiss,
   navigationMode,
@@ -49,6 +61,19 @@ let modeChain: Promise<void> = Promise.resolve()
 let forcingHide = false
 let forcedHides = 0
 let dragOrigin: { screenX: number; screenY: number; x: number; y: number } | null = null
+
+interface BrowserTab {
+  key: string
+  targetId: string | null
+  view: WebContentsView
+  title: string
+  url: string
+}
+
+let tabs: BrowserTab[] = []
+let activeTab: BrowserTab | null = null
+let tabSeq = 0
+let tabQueue: Promise<unknown> = Promise.resolve()
 
 type UiListener = (state: BuiltinBrowserUiState) => void
 const uiListeners = new Set<UiListener>()
@@ -122,6 +147,231 @@ export function getBuiltinBrowserMode(): BuiltinBrowserMode {
   return mode
 }
 
+export function notePrimaryBrowserTarget(id: string | null): void {
+  if (!id) return
+  const tab = tabs[0]
+  if (!tab || tab.targetId) return
+  tab.targetId = id
+  publishUi()
+}
+
+function createBrowserTab(): BrowserTab {
+  const view = allowCreatedWebContentsDuring(
+    () =>
+      new WebContentsView({
+        webPreferences: {
+          partition: 'ftcs-builtin-browser',
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true,
+          webviewTag: false,
+          backgroundThrottling: false,
+        },
+      }),
+  )
+  view.webContents.setBackgroundThrottling(false)
+  const tab: BrowserTab = {
+    key: `tab-${++tabSeq}`,
+    targetId: null,
+    view,
+    title: '内置浏览器',
+    url: '',
+  }
+  bindBrowserTab(tab)
+  tabs.push(tab)
+  return tab
+}
+
+function bindBrowserTab(tab: BrowserTab): void {
+  const contents = tab.view.webContents
+  contents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void openBrowserTab(url)
+    return { action: 'deny' }
+  })
+  contents.on('page-title-updated', (_event, title) => {
+    const next = title.trim()
+    if (next) tab.title = next
+    if (tab === activeTab && next) pageTitle = next
+    publishUi()
+  })
+  const onUrl = (_event: unknown, url: string) => {
+    tab.url = url
+    if (tab === activeTab) applyPageUrl(url)
+    else publishUi()
+  }
+  contents.on('did-navigate', onUrl)
+  contents.on('did-navigate-in-page', onUrl)
+  contents.once('destroyed', () => {
+    if (tabs.includes(tab)) dropTab(tab)
+  })
+}
+
+function openBrowserTab(url: string): Promise<{ id: string; url: string }> {
+  const run = tabQueue.then(
+    () => openBrowserTabNow(url),
+    () => openBrowserTabNow(url),
+  )
+  tabQueue = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}
+
+async function openBrowserTabNow(requested: string): Promise<{ id: string; url: string }> {
+  const win = browserWindow
+  if (!win || win.isDestroyed()) throw new Error('builtin page not ready')
+  const loadedUrl = /^https?:\/\//i.test(requested) ? requested : 'about:blank'
+  beginTabAdoption(loadedUrl)
+  const before = new Set(listBrowserPageIds())
+  let tab: BrowserTab | null = null
+  try {
+    for (const item of await listInternalTargets()) {
+      if (item.id) before.add(item.id)
+    }
+    tab = createBrowserTab()
+    win.contentView.addChildView(tab.view)
+    selectTab(tab)
+    try {
+      await tab.view.webContents.loadURL(loadedUrl)
+    } catch {
+      // 加载失败也先认目标，随后打开网址会按自己的超时返回
+    }
+    const id = await waitForNewTarget(before, loadedUrl)
+    if (!id) throw new Error('new tab did not appear')
+    tab.targetId = id
+    registerBrowserPage(id)
+    publishUi()
+    applyCurrentMetrics()
+    return { id, url: loadedUrl }
+  } catch (err) {
+    for (const id of listBrowserPageIds()) {
+      if (!before.has(id)) unregisterBrowserPage(id)
+    }
+    if (tab) dropTab(tab)
+    throw err
+  } finally {
+    endTabAdoption()
+  }
+}
+
+async function closeBrowserTab(id: string): Promise<boolean> {
+  const tab = findTab(id)
+  if (!tab || tabs.length <= 1) return false
+  dropTab(tab)
+  return true
+}
+
+async function activateBrowserTab(id: string): Promise<boolean> {
+  const tab = findTab(id)
+  if (!tab) return false
+  selectTab(tab)
+  return true
+}
+
+function registerTabHost(): void {
+  setBuiltinBrowserTabHost({
+    openTab: openBrowserTab,
+    closeTab: closeBrowserTab,
+    activateTab: activateBrowserTab,
+  })
+}
+
+function findTab(id: string): BrowserTab | undefined {
+  return tabs.find((tab) => tab.key === id || tab.targetId === id)
+}
+
+function selectTab(tab: BrowserTab): void {
+  activeTab = tab
+  pageView = tab.view
+  if (tab.title.trim()) pageTitle = tab.title
+  const win = browserWindow
+  if (win && !win.isDestroyed()) {
+    const bounds = mode === 'expanded' ? win.getBounds() : { x: 0, y: 0, width: THUMB.width, height: THUMB.height }
+    layoutViews(mode, bounds)
+  }
+  applyPageUrl(tab.url || '')
+  applyCurrentMetrics()
+}
+
+function dropTab(tab: BrowserTab): void {
+  const index = tabs.indexOf(tab)
+  if (index < 0) return
+  const wasActive = activeTab === tab
+  tabs.splice(index, 1)
+  if (tab.targetId) unregisterBrowserPage(tab.targetId)
+  const win = browserWindow
+  if (win && !win.isDestroyed()) {
+    try {
+      win.contentView.removeChildView(tab.view)
+    } catch {
+      // 这一页已经不在窗口上
+    }
+  }
+  if (!tab.view.webContents.isDestroyed()) {
+    try {
+      tab.view.webContents.close()
+    } catch {
+      // 页面已经关掉
+    }
+  }
+  if (!wasActive) {
+    publishUi()
+    return
+  }
+  const next = tabs[Math.min(index, tabs.length - 1)]
+  if (next) {
+    selectTab(next)
+    return
+  }
+  activeTab = null
+  pageView = null
+  pageTitle = '内置浏览器'
+  pageUrlLabel = '尚未打开页面'
+  publishUi()
+}
+
+async function waitForNewTarget(before: Set<string>, requested: string): Promise<string | null> {
+  const deadline = Date.now() + 4000
+  while (Date.now() < deadline) {
+    const list = await listInternalTargets()
+    const hit = list.find((item) => {
+      if (item.type && item.type !== 'page') return false
+      if (!item.id || before.has(item.id)) return false
+      return isAdoptableTabUrl(item.url, requested)
+    })
+    if (hit?.id) return hit.id
+    await delay(50)
+  }
+  return null
+}
+
+function tabLabel(tab: BrowserTab): string {
+  const title = tab.title.trim()
+  if (isBusinessNavigation(tab.url)) {
+    if (title && title !== '内置浏览器') return title
+    try {
+      return new URL(tab.url).host || '内置浏览器'
+    } catch {
+      return title || '内置浏览器'
+    }
+  }
+  return title || '内置浏览器'
+}
+
+function captionTabs(): Array<{ id: string; title: string; url: string; active: boolean }> {
+  return tabs.map((tab) => ({
+    id: tab.targetId || tab.key,
+    title: tabLabel(tab),
+    url: tab.url,
+    active: tab === activeTab,
+  }))
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export async function ensureBuiltinBrowserWindow(main: BrowserWindow): Promise<boolean> {
   if (appQuitting) return false
   if (browserWindow && !browserWindow.isDestroyed()) return false
@@ -158,35 +408,10 @@ export async function ensureBuiltinBrowserWindow(main: BrowserWindow): Promise<b
   win.on('hide', publishUi)
   if (win.isVisible()) win.hide()
 
-  const view = allowCreatedWebContentsDuring(
-    () =>
-      new WebContentsView({
-        webPreferences: {
-          partition: 'ftcs-builtin-browser',
-          nodeIntegration: false,
-          contextIsolation: true,
-          sandbox: true,
-          webviewTag: false,
-          backgroundThrottling: false,
-        },
-      }),
-  )
-  pageView = view
-  view.webContents.setBackgroundThrottling(false)
-  win.contentView.addChildView(view)
-  view.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) void view.webContents.loadURL(url)
-    return { action: 'deny' }
-  })
-  view.webContents.on('page-title-updated', (_event, title) => {
-    pageTitle = title.trim() || '内置浏览器'
-    publishUi()
-  })
-  const onUrl = (_event: unknown, url: string) => {
-    applyPageUrl(url)
-  }
-  view.webContents.on('did-navigate', onUrl)
-  view.webContents.on('did-navigate-in-page', onUrl)
+  const tab = createBrowserTab()
+  win.contentView.addChildView(tab.view)
+  activeTab = tab
+  pageView = tab.view
 
   const overlay = allowCreatedWebContentsDuring(
     () =>
@@ -243,7 +468,8 @@ export async function ensureBuiltinBrowserWindow(main: BrowserWindow): Promise<b
   await win.loadURL(dataHtml(captionHtml))
   await overlay.webContents.loadURL(dataHtml(overlayHtml))
   const token = tokenPageUrl()
-  if (token) await view.webContents.loadURL(token)
+  if (token) await tab.view.webContents.loadURL(token)
+  registerTabHost()
   await setBuiltinBrowserMode(modeAfterEnsure())
   return true
 }
@@ -260,7 +486,7 @@ export function setBuiltinBrowserMode(next: BuiltinBrowserMode): Promise<void> {
 export async function reinforceBuiltinBrowserViewport(): Promise<void> {
   const win = browserWindow
   if (!win || win.isDestroyed()) return
-  pageView?.webContents.setBackgroundThrottling(false)
+  keepTabsAwake()
   const viewport = viewportForMode(mode, win.getBounds())
   await applyDeviceMetrics(viewport.width, viewport.height)
 }
@@ -294,6 +520,9 @@ export function destroyBuiltinBrowserWindow(): void {
   browserWindow = null
   pageView = null
   overlayView = null
+  tabs = []
+  activeTab = null
+  setBuiltinBrowserTabHost(null)
   mode = modeAfterEnsure()
   detached = false
   lastThumbBounds = null
@@ -312,7 +541,7 @@ async function applyBuiltinBrowserMode(next: BuiltinBrowserMode): Promise<void> 
   mode = next
   detached = detachedAfterMode(detached, next)
   if (next !== 'hidden') forcedHides = 0
-  pageView?.webContents.setBackgroundThrottling(false)
+  keepTabsAwake()
 
   if (next === 'hidden') {
     dragOrigin = null
@@ -372,16 +601,38 @@ function onBrowserShow(): void {
   publishUi()
 }
 
+function keepTabsAwake(): void {
+  for (const tab of tabs) {
+    if (!tab.view.webContents.isDestroyed()) tab.view.webContents.setBackgroundThrottling(false)
+  }
+}
+
+function applyCurrentMetrics(): void {
+  const win = browserWindow
+  if (!win || win.isDestroyed()) return
+  const frame = mode === 'expanded' ? win.getBounds() : THUMB
+  const viewport = viewportForMode(mode, frame)
+  void applyDeviceMetrics(viewport.width, viewport.height)
+}
+
 async function applyDeviceMetrics(width: number, height: number): Promise<void> {
-  try {
-    await sendPageCommand('Emulation.setDeviceMetricsOverride', {
-      width,
-      height,
-      deviceScaleFactor: 1,
-      mobile: false,
-    })
-  } catch {
-    // 视口度量失败不拆掉页面
+  const ids = listBrowserPageIds()
+  const targets = ids.length > 0 ? ids : [null]
+  for (const id of targets) {
+    try {
+      await sendPageCommand(
+        'Emulation.setDeviceMetricsOverride',
+        {
+          width,
+          height,
+          deviceScaleFactor: 1,
+          mobile: false,
+        },
+        id,
+      )
+    } catch {
+      // 视口度量失败不拆掉页面
+    }
   }
 }
 
@@ -402,27 +653,47 @@ function boundsFor(next: BuiltinBrowserMode): ScreenRect {
 }
 
 function layoutViews(next: BuiltinBrowserMode, bounds: ScreenRect): void {
-  if (pageView) {
-    if (next === 'expanded') {
-      pageView.setBounds({
-        x: 0,
-        y: CAPTION_HEIGHT,
-        width: bounds.width,
-        height: Math.max(0, bounds.height - CAPTION_HEIGHT),
-      })
-    } else {
-      pageView.setBounds({ x: 0, y: 0, width: THUMB.width, height: THUMB.height })
-    }
-  }
+  const pageBounds =
+    next === 'expanded'
+      ? {
+          x: 0,
+          y: CAPTION_HEIGHT,
+          width: bounds.width,
+          height: Math.max(0, bounds.height - CAPTION_HEIGHT),
+        }
+      : {
+          x: 0,
+          y: CAPTION_HEIGHT,
+          width: THUMB.width,
+          height: Math.max(0, THUMB.height - CAPTION_HEIGHT),
+        }
+  if (overlayView) overlayView.setVisible(showsThumbnailOverlay(next))
+  raiseActivePage()
+  if (showsThumbnailOverlay(next)) raiseOverlay()
+  for (const tab of tabs) tab.view.setBounds(pageBounds)
   if (!overlayView) return
   if (showsThumbnailOverlay(next)) {
-    overlayView.setBounds({ x: 0, y: 0, width: THUMB.width, height: THUMB.height })
-    overlayView.setVisible(true)
-    raiseOverlay()
+    overlayView.setBounds({
+      x: 0,
+      y: CAPTION_HEIGHT,
+      width: THUMB.width,
+      height: Math.max(0, THUMB.height - CAPTION_HEIGHT),
+    })
     return
   }
-  overlayView.setVisible(false)
   overlayView.setBounds({ x: 0, y: 0, width: 0, height: 0 })
+}
+
+function raiseActivePage(): void {
+  const win = browserWindow
+  const view = activeTab?.view
+  if (!win || win.isDestroyed() || !view) return
+  try {
+    win.contentView.removeChildView(view)
+    win.contentView.addChildView(view)
+  } catch {
+    // 当前页已经在最上面
+  }
 }
 
 function raiseOverlay(): void {
@@ -460,6 +731,15 @@ function handleChromeCommand(command: ChromeCommand): void {
   if (command.type === 'mode') {
     dragOrigin = null
     void setBuiltinBrowserMode(command.mode)
+    return
+  }
+  if (command.type === 'select-tab') {
+    const tab = findTab(command.id)
+    if (tab) selectTab(tab)
+    return
+  }
+  if (command.type === 'close-tab') {
+    void closeBrowserTab(command.id)
     return
   }
   if (mode !== 'thumbnail') return
@@ -521,13 +801,22 @@ function applyPageUrl(url: string): void {
 
 function publishUi(): void {
   const state = getBuiltinBrowserUiState()
-  if (browserWindow && !browserWindow.isDestroyed()) {
-    try {
-      browserWindow.webContents.send(IPC.BUILTIN_BROWSER_CAPTION, {
-        mode: state.mode,
-        title: state.title,
-        url: state.url,
+  const caption = {
+    mode: state.mode,
+    title: state.title,
+    url: state.url,
+    tabs: captionTabs(),
+  }
+  const win = browserWindow
+  if (win && !win.isDestroyed()) {
+    const payload = JSON.stringify(caption)
+    void win.webContents
+      .executeJavaScript(`window.__ftcsCaptionRender && window.__ftcsCaptionRender(${payload})`)
+      .catch(() => {
+        // 标题条还没装上
       })
+    try {
+      win.webContents.send(IPC.BUILTIN_BROWSER_CAPTION, caption)
     } catch {
       // 标题条还没装上
     }

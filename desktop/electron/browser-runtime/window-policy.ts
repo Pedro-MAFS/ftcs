@@ -29,6 +29,8 @@ export type ChromeCommand =
   | { type: 'drag-start'; screenX: number; screenY: number }
   | { type: 'drag-move'; screenX: number; screenY: number }
   | { type: 'drag-end' }
+  | { type: 'select-tab'; id: string }
+  | { type: 'close-tab'; id: string }
 
 export function parseChromeCommand(raw: string): ChromeCommand | null {
   const marker = raw.indexOf(CHROME_COMMAND_PREFIX)
@@ -43,9 +45,19 @@ export function parseChromeCommand(raw: string): ChromeCommand | null {
     return null
   }
   if (!data || typeof data !== 'object') return null
-  const record = data as { type?: unknown; mode?: unknown; screenX?: unknown; screenY?: unknown }
+  const record = data as {
+    type?: unknown
+    mode?: unknown
+    screenX?: unknown
+    screenY?: unknown
+    id?: unknown
+  }
   if (record.type === 'mode' && isBuiltinBrowserMode(record.mode)) {
     return { type: 'mode', mode: record.mode }
+  }
+  if (record.type === 'select-tab' || record.type === 'close-tab') {
+    if (typeof record.id !== 'string' || !record.id.trim()) return null
+    return { type: record.type, id: record.id }
   }
   if (record.type === 'drag-start' || record.type === 'drag-move') {
     if (!isFiniteCoord(record.screenX) || !isFiniteCoord(record.screenY)) return null
@@ -90,7 +102,10 @@ export function viewportForMode(
       height: Math.max(1, frame.height - CAPTION_HEIGHT),
     }
   }
-  return { width: THUMB.width, height: THUMB.height }
+  return {
+    width: THUMB.width,
+    height: Math.max(1, THUMB.height - CAPTION_HEIGHT),
+  }
 }
 
 export function showsThumbnailOverlay(mode: BuiltinBrowserMode): boolean {

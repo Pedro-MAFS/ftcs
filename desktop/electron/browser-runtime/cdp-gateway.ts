@@ -8,6 +8,7 @@ import {
   interpretClientMessage,
   rewriteVersionBody,
   type ListedTarget,
+  type TargetAdmission,
 } from './cdp-filter'
 import { acceptWebSocket, connectWebSocket, type WsSocket } from './ws-socket'
 
@@ -19,6 +20,22 @@ let upstreamBrowserPath = '/devtools/browser'
 
 const sockets = new Set<WsSocket>()
 const foreignPageIds = new Set<string>()
+const browserPageIds = new Set<string>()
+const browserClients = new Set<WsSocket>()
+const controlSockets = new Map<string, WsSocket>()
+const admission: TargetAdmission = {
+  expecting: 0,
+  announced: new Set<string>(),
+  pendingUrl: 'about:blank',
+}
+
+export interface BuiltinTabHost {
+  openTab(url: string): Promise<{ id: string; url: string }>
+  closeTab(targetId: string): Promise<boolean>
+  activateTab(targetId: string): Promise<boolean>
+}
+
+let tabHost: BuiltinTabHost | null = null
 
 export function setInternalDebugPort(port: number): void {
   internalPort = port
@@ -39,6 +56,53 @@ export function getBuiltinPageTargetId(): string | null {
 
 export function setBuiltinPageTargetId(id: string | null): void {
   pageTargetId = id
+  if (id) {
+    browserPageIds.add(id)
+    return
+  }
+  browserPageIds.clear()
+  admission.announced.clear()
+  admission.expecting = 0
+  admission.pendingUrl = 'about:blank'
+}
+
+export function registerBrowserPage(id: string): void {
+  if (!id) return
+  browserPageIds.add(id)
+  if (!pageTargetId) pageTargetId = id
+}
+
+export function unregisterBrowserPage(id: string): void {
+  browserPageIds.delete(id)
+  admission.announced.delete(id)
+  const socket = controlSockets.get(id)
+  if (socket) {
+    controlSockets.delete(id)
+    socket.close()
+  }
+  if (pageTargetId === id) pageTargetId = firstBrowserPageId()
+}
+
+export function listBrowserPageIds(): string[] {
+  return [...browserPageIds]
+}
+
+export function setBuiltinBrowserTabHost(host: BuiltinTabHost | null): void {
+  tabHost = host
+}
+
+export function beginTabAdoption(url: string): void {
+  admission.expecting += 1
+  admission.pendingUrl = url || 'about:blank'
+}
+
+export function endTabAdoption(): void {
+  admission.expecting = Math.max(0, admission.expecting - 1)
+}
+
+function firstBrowserPageId(): string | null {
+  const next = browserPageIds.values().next()
+  return next.done ? null : next.value
 }
 
 export function tokenPageUrl(): string | null {
@@ -71,7 +135,12 @@ export async function startCdpGateway(): Promise<string> {
 
 export async function stopCdpGateway(): Promise<void> {
   pageTargetId = null
+  browserPageIds.clear()
+  admission.announced.clear()
+  admission.expecting = 0
   foreignPageIds.clear()
+  browserClients.clear()
+  controlSockets.clear()
   for (const socket of sockets) socket.close()
   sockets.clear()
   const current = server
@@ -127,7 +196,7 @@ export async function waitForBuiltinTarget(timeoutMs = 3000): Promise<string | n
   while (Date.now() < deadline) {
     const id = await resolveBuiltinTargetOnce()
     if (id) {
-      pageTargetId = id
+      setBuiltinPageTargetId(id)
       return id
     }
     await delay(100)
@@ -138,10 +207,12 @@ export async function waitForBuiltinTarget(timeoutMs = 3000): Promise<string | n
 export async function sendPageCommand(
   method: string,
   params: Record<string, unknown>,
+  targetId?: string | null,
 ): Promise<void> {
-  if (!pageTargetId || !internalPort) return
-  const socket = await pageControl()
-  const id = nextCommandId()
+  const id = targetId || pageTargetId
+  if (!id || !internalPort) return
+  const socket = await pageControl(id)
+  const commandId = nextCommandId()
   await new Promise<void>((resolve) => {
     let done = false
     const finish = () => {
@@ -155,17 +226,15 @@ export async function sendPageCommand(
     const unsubscribe = socket.onMessage((text) => {
       try {
         const data = JSON.parse(text) as { id?: number }
-        if (data.id === id) finish()
+        if (data.id === commandId) finish()
       } catch {
         // 忽略非 JSON
       }
     })
-    socket.send(JSON.stringify({ id, method, params }))
+    socket.send(JSON.stringify({ id: commandId, method, params }))
   })
 }
 
-let controlSocket: WsSocket | null = null
-let controlTarget = ''
 let commandSeq = 1
 
 function nextCommandId(): number {
@@ -173,21 +242,59 @@ function nextCommandId(): number {
   return commandSeq
 }
 
-async function pageControl(): Promise<WsSocket> {
-  if (controlSocket && controlTarget === pageTargetId) return controlSocket
-  controlSocket?.close()
-  controlTarget = pageTargetId || ''
+async function pageControl(targetId: string): Promise<WsSocket> {
+  const existing = controlSockets.get(targetId)
+  if (existing) return existing
   const socket = await connectWebSocket(
-    `ws://127.0.0.1:${internalPort}/devtools/page/${pageTargetId}`,
+    `ws://127.0.0.1:${internalPort}/devtools/page/${targetId}`,
     { Origin: `http://127.0.0.1:${internalPort}` },
   )
   sockets.add(socket)
+  controlSockets.set(targetId, socket)
   socket.onClose(() => {
     sockets.delete(socket)
-    if (controlSocket === socket) controlSocket = null
+    if (controlSockets.get(targetId) === socket) controlSockets.delete(targetId)
   })
-  controlSocket = socket
   return socket
+}
+
+export async function listInternalTargets(): Promise<ListedTarget[]> {
+  if (!internalPort) return []
+  try {
+    const res = await fetch(`http://127.0.0.1:${internalPort}/json/list`)
+    if (!res.ok) return []
+    return (await res.json()) as ListedTarget[]
+  } catch {
+    return []
+  }
+}
+
+export function announceBrowserPage(targetId: string, url: string): void {
+  if (!targetId) return
+  const info = {
+    targetId,
+    type: 'page',
+    title: '',
+    url: url.trim() || 'about:blank',
+    attached: false,
+    canAccessOpener: false,
+  }
+  if (!admission.announced.has(targetId)) {
+    admission.announced.add(targetId)
+    broadcastBrowser({ method: 'Target.targetCreated', params: { targetInfo: info } })
+  }
+  broadcastBrowser({ method: 'Target.targetInfoChanged', params: { targetInfo: info } })
+}
+
+function broadcastBrowser(payload: unknown): void {
+  const text = JSON.stringify(payload)
+  for (const client of browserClients) {
+    try {
+      client.send(text)
+    } catch {
+      // 这条浏览器通道已经断了
+    }
+  }
 }
 
 async function resolveBuiltinTargetOnce(): Promise<string | null> {
@@ -236,7 +343,7 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse): Promise<vo
         return
       }
       const list = JSON.parse(upstream.body) as ListedTarget[]
-      const filtered = filterJsonList(list, pageTargetId, gatewayPort)
+      const filtered = filterJsonList(list, browserPageIds, gatewayPort)
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify(filtered))
       return
@@ -277,7 +384,7 @@ async function handleUpgrade(req: IncomingMessage, socket: import('node:net').So
   try {
     if (path.startsWith('/devtools/page/')) {
       const id = decodeURIComponent(path.slice('/devtools/page/'.length))
-      if (!pageTargetId || id !== pageTargetId) {
+      if (!browserPageIds.has(id)) {
         client.close()
         return
       }
@@ -326,29 +433,15 @@ function bridgeBrowser(
   bindClient: (handler: (text: string) => void) => void,
 ): void {
   const pending = new Map<number, string>()
+  browserClients.add(client)
+  let chain = Promise.resolve()
   bindClient((text) => {
-    let message: unknown
-    try {
-      message = JSON.parse(text)
-    } catch {
-      upstream.send(text)
-      return
-    }
-    const decision = interpretClientMessage(message, pageTargetId, tokenPageUrl() || TOKEN_PATH)
-    if (decision.kind === 'forward') {
-      const msg = message as { id?: unknown; method?: unknown }
-      if (typeof msg.id === 'number' && typeof msg.method === 'string') {
-        pending.set(msg.id, msg.method)
-      }
-      upstream.send(text)
-      return
-    }
-    const respond = () => client.send(JSON.stringify(decision.response))
-    if (decision.kind === 'navigate') {
-      void sendPageCommand('Page.navigate', { url: decision.url }).finally(respond)
-      return
-    }
-    respond()
+    chain = chain
+      .then(() => handleBrowserClientMessage(client, upstream, pending, text))
+      .then(
+        () => undefined,
+        () => undefined,
+      )
   })
   upstream.onMessage((text) => {
     let message: unknown
@@ -361,12 +454,77 @@ function bridgeBrowser(
     const id = (message as { id?: unknown }).id
     const method = typeof id === 'number' ? pending.get(id) : undefined
     if (typeof id === 'number') pending.delete(id)
-    const filtered = filterUpstreamMessage(message, pageTargetId, method, foreignPageIds)
+    const filtered = filterUpstreamMessage(message, browserPageIds, method, foreignPageIds, admission)
     if (filtered == null) return
     client.send(JSON.stringify(filtered))
   })
-  client.onClose(() => upstream.close())
+  client.onClose(() => {
+    browserClients.delete(client)
+    upstream.close()
+  })
   upstream.onClose(() => client.close())
+}
+
+async function handleBrowserClientMessage(
+  client: WsSocket,
+  upstream: WsSocket,
+  pending: Map<number, string>,
+  text: string,
+): Promise<void> {
+  let message: unknown
+  try {
+    message = JSON.parse(text)
+  } catch {
+    upstream.send(text)
+    return
+  }
+  const decision = interpretClientMessage(message, pageTargetId)
+  if (decision.kind === 'forward') {
+    const msg = message as { id?: unknown; method?: unknown }
+    if (typeof msg.id === 'number' && typeof msg.method === 'string') pending.set(msg.id, msg.method)
+    upstream.send(text)
+    return
+  }
+  if (decision.kind === 'respond') {
+    client.send(JSON.stringify(decision.response))
+    return
+  }
+  if (decision.kind === 'create-tab') {
+    try {
+      if (!tabHost || !pageTargetId) throw new Error('builtin page not ready')
+      const opened = await tabHost.openTab(decision.url)
+      registerBrowserPage(opened.id)
+      announceBrowserPage(opened.id, opened.url)
+      client.send(JSON.stringify({ id: decision.responseId, result: { targetId: opened.id } }))
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : String(err)
+      client.send(
+        JSON.stringify({
+          id: decision.responseId,
+          error: { code: -32000, message: messageText },
+        }),
+      )
+    }
+    return
+  }
+  if (decision.kind === 'close-tab') {
+    let success = false
+    try {
+      success = tabHost ? await tabHost.closeTab(decision.targetId) : false
+    } catch {
+      success = false
+    }
+    client.send(JSON.stringify({ id: decision.responseId, result: { success } }))
+    return
+  }
+  if (decision.kind === 'activate-tab') {
+    try {
+      if (tabHost) await tabHost.activateTab(decision.targetId)
+    } catch {
+      // 切标签失败也要先把这条命令回掉
+    }
+    client.send(JSON.stringify({ id: decision.responseId, result: {} }))
+  }
 }
 
 function headerOne(value: string | string[] | undefined): string | undefined {

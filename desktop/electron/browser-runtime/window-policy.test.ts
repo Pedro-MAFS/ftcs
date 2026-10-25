@@ -55,14 +55,14 @@ test('dismiss keeps a dragged thumbnail position and expand clears it', () => {
   assert.equal(detachedAfterMode(true, 'expanded'), false)
 })
 
-test('hidden and thumbnail keep a 360x240 viewport; expand subtracts the caption', () => {
+test('thumbnail page sits below the tab strip; expand subtracts the caption', () => {
   assert.deepEqual(viewportForMode('hidden', { width: 1824, height: 984 }), {
     width: 360,
-    height: 240,
+    height: 200,
   })
   assert.deepEqual(viewportForMode('thumbnail', { width: 360, height: 240 }), {
     width: 360,
-    height: 240,
+    height: 200,
   })
   assert.deepEqual(viewportForMode('expanded', { width: 1824, height: 984 }), {
     width: 1824,
@@ -195,7 +195,7 @@ test('T9 sources have no card mode and no 360x40 floating frame', () => {
   assert.doesNotMatch(read('./follow-main-window.ts'), /visibleBefore = true/)
 })
 
-test('chrome commands ignore anything except mode and thumbnail drag', () => {
+test('chrome commands accept mode, thumbnail drag, and tab switching', () => {
   assert.equal(parseChromeCommand('普通日志'), null)
   assert.equal(parseChromeCommand(`${CHROME_COMMAND_PREFIX}{`), null)
   assert.deepEqual(parseChromeCommand(`${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'mode', mode: 'hidden' })}`), {
@@ -218,6 +218,15 @@ test('chrome commands ignore anything except mode and thumbnail drag', () => {
   assert.deepEqual(parseChromeCommand(`前缀 ${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'drag-end' })}`), {
     type: 'drag-end',
   })
+  assert.deepEqual(
+    parseChromeCommand(`${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'select-tab', id: 'page-2' })}`),
+    { type: 'select-tab', id: 'page-2' },
+  )
+  assert.deepEqual(
+    parseChromeCommand(`${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'close-tab', id: 'page-2' })}`),
+    { type: 'close-tab', id: 'page-2' },
+  )
+  assert.equal(parseChromeCommand(`${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'select-tab', id: '' })}`), null)
   assert.deepEqual(
     parseChromeCommand(
       `${CHROME_COMMAND_PREFIX}${JSON.stringify({ type: 'mode', mode: 'thumbnail' })} (data:text/html:12)`,
@@ -242,6 +251,7 @@ test('thumbnail overlay and expanded caption expose one dismiss control each', (
   assert.match(caption, />还原</)
   assert.match(caption, />收起</)
   assert.match(caption, /FTCS_CHROME/)
+  assert.match(caption, /select-tab/)
   assert.doesNotMatch(caption, /关闭/)
   assert.doesNotMatch(caption, /放大/)
   assert.doesNotMatch(caption, /dblclick/)
