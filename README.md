@@ -22,7 +22,9 @@ Business data stays on your computer.
 
 1. 录入资料。2. 探索客户。3. 查看线索。
 
-演示公司、域名和邮箱都是虚构的。
+Screenshots are from the product UI (same assets as the website).
+
+截图来自产品界面（与官网素材同源）。
 
 ## Download
 
