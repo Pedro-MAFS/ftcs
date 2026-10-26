@@ -20,7 +20,9 @@ Business data stays on your computer.
 
 ## 三步看看
 
-1. 录入资料。2. 探索客户。3. 查看线索。
+| 1. 录入资料 | 2. 探索客户 | 3. 查看线索 |
+| --- | --- | --- |
+| ![录入资料](website/public/screenshots/ftcs-录入.png) | ![探索客户](website/public/screenshots/ftcs-线索探索.png) | ![查看线索](website/public/screenshots/ftcs-线索.png) |
 
 Screenshots are from the product UI (same assets as the website).
 
