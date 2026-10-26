@@ -12,6 +12,18 @@ Business data stays on your computer.
 开发信先写成可改的草稿，由你确认后再用。
 业务数据留在你的电脑上。
 
+## See it in 3 steps
+
+| 1. Add materials | 2. Discover leads | 3. Review the list |
+| --- | --- | --- |
+| ![Add materials](website/public/screenshots/ftcs-录入.png) | ![Discover leads](website/public/screenshots/ftcs-线索探索.png) | ![Review the list](website/public/screenshots/ftcs-线索.png) |
+
+## 三步看看
+
+1. 录入资料。2. 探索客户。3. 查看线索。
+
+演示公司、域名和邮箱都是虚构的。
+
 ## Download
 
 - [Windows Setup](https://github.com/Pedro-MAFS/ftcs/releases/latest) — on the latest release, download the asset whose name contains `Setup`.
