@@ -1,6 +1,63 @@
-# 外贸获客智能体系统（Foreign Trade Customer Search）
+# 外贸获客智能体（FTCS）
 
-基于现代 AI 智能体（Cursor、Codex、Claude Code、OpenCode 等）的外贸获客工作流系统。
+FTCS is a Windows desktop agent for foreign-trade teams.
+Hand it your product pages and documents.
+It builds a product profile, looks through public web pages, and returns scored leads.
+Outreach starts as a draft you can edit. You decide when to send.
+Business data stays on your computer.
+
+外贸获客（FTCS）是跑在 Windows 上的外贸获客智能体。
+把产品官网和说明书交给它。
+它生成产品画像，在公开网页里寻找潜在客户，并给出带评分的线索。
+开发信先写成可改的草稿，由你确认后再用。
+业务数据留在你的电脑上。
+
+## See it in 3 steps
+
+| 1. Add materials | 2. Discover leads | 3. Review the list |
+| --- | --- | --- |
+| ![Add materials](website/public/screenshots/ftcs-录入.png) | ![Discover leads](website/public/screenshots/ftcs-线索探索.png) | ![Review the list](website/public/screenshots/ftcs-线索.png) |
+
+## 三步看看
+
+| 1. 录入资料 | 2. 探索客户 | 3. 查看线索 |
+| --- | --- | --- |
+| ![录入资料](website/public/screenshots/ftcs-录入.png) | ![探索客户](website/public/screenshots/ftcs-线索探索.png) | ![查看线索](website/public/screenshots/ftcs-线索.png) |
+
+Screenshots are from the product UI (same assets as the website).
+
+截图来自产品界面（与官网素材同源）。
+
+## Download
+
+- [Windows Setup](https://github.com/Pedro-MAFS/ftcs/releases/latest) — on the latest release, download the asset whose name contains `Setup`.
+- [Windows Portable](https://github.com/Pedro-MAFS/ftcs/releases/latest) — same page; asset name contains `Portable`.
+
+## 下载
+
+- [Windows 安装包（Setup）](https://github.com/Pedro-MAFS/ftcs/releases/latest)：在最新 Release 页下载文件名含 `Setup` 的安装包。
+- [Windows 便携版（Portable）](https://github.com/Pedro-MAFS/ftcs/releases/latest)：同一页，下载文件名含 `Portable` 的程序。
+
+## Website
+
+Product site: https://ftcs.ai-utills.com
+
+## 官网
+
+产品站：https://ftcs.ai-utills.com
+
+## License
+
+Licensed under the [Apache License, Version 2.0](./LICENSE).
+
+## 许可
+
+以 [Apache License 2.0](./LICENSE) 授权。
+
+<details>
+<summary>开发者 / For developers</summary>
+
+Developer docs below are in Chinese.
 
 ## 项目目标
 
@@ -35,12 +92,9 @@
 
 Token 网关已迁至**独立 Git 仓库**维护；本仓仅保留桌面端对接说明（见 docs/11、docs/12）。
 
-
 ## 当前阶段
 
-**桌面已可跑通**（**v0.5.4**）：录入工程树与 Office 抽取、画像、关键词、广撒网 / 社媒发现 / R3 地图发现、任务编排、线索、开发信草稿；官方通道支持网关同步模型列表（含 GLM / Qwen 读图）与新版透明计价。
-
-本期需求见 [docs/17-需求-业务效率工具.md](docs/17-需求-业务效率工具.md)（录入 US-I 随 0.5.0 交付；探索 R2 随 0.5.1；R3 随 0.5.2；任务编排 US-W 随 0.5.3 交付）。发信 / 定时探索暂非主线。任务清单见 [docs/04-实施计划.md](docs/04-实施计划.md)。
+桌面端已可跑通录入工程树与 Office 抽取、画像、关键词、广撒网 / 社媒发现 / 地图发现、任务编排、线索、开发信草稿。版本以 [最新 Release](https://github.com/Pedro-MAFS/ftcs/releases/latest) 与官网发布日志为准。发信 / 定时探索暂非主线。本期需求见 [docs/17-需求-业务效率工具.md](docs/17-需求-业务效率工具.md)。任务清单见 [docs/04-实施计划.md](docs/04-实施计划.md)。
 
 **标准工作流目录**：[`workspace/`](workspace/) — Skills、MCP、配置、`data/`、`.env` 的**唯一维护位置**。应用壳在 `desktop/`。产品官网在 [`website/`](website/)（Vue3 静态站）。Token 网关已迁出本仓（独立仓库）；桌面端对接见 [`docs/11-官方模型通道对接.md`](docs/11-官方模型通道对接.md)。`.cursor/`、`.opencode/` 为本机 IDE/工具临时目录（**不进 Git**）。
 
@@ -67,4 +121,5 @@ Token 网关已迁至**独立 Git 仓库**维护；本仓仅保留桌面端对�
 - [x] Phase 2.1 外贸 Web UI（P0）
 - [ ] Phase 2.4 审核与发送 / email-sender
 - [ ] Phase 2 scheduler 定时探索
-- [ ] 
+
+</details>
