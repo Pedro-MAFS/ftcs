@@ -34,12 +34,20 @@ import {
   navigationMode,
   parseChromeCommand,
   showsThumbnailOverlay,
+  shouldRepaintBuiltinBrowser,
   titleBarRequestsRaise,
   viewportForMode,
   type ChromeCommand,
 } from './window-policy'
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url))
+
+/** 与放大标题条一致的实色。WebContentsView 默认是白底，失焦后合成层丢掉就会露白。 */
+const BROWSER_CHROME_BG = '#1A1A1A'
+/** 缩略蒙层必须透出页面。alpha 为 0 时，获焦后若退回默认白底，会整页盖成白。 */
+const OVERLAY_CHROME_BG = '#00000000'
+
+let repaintGeneration = 0
 
 const allowedWebContents = new Set<number>()
 let constructing = 0
@@ -169,7 +177,7 @@ function createBrowserTab(): BrowserTab {
         },
       }),
   )
-  view.webContents.setBackgroundThrottling(false)
+  applyPageChrome(view)
   const tab: BrowserTab = {
     key: `tab-${++tabSeq}`,
     targetId: null,
@@ -390,7 +398,7 @@ export async function ensureBuiltinBrowserWindow(main: BrowserWindow): Promise<b
         maximizable: false,
         fullscreenable: false,
         focusable: true,
-        backgroundColor: '#1A1A1A',
+        backgroundColor: BROWSER_CHROME_BG,
         roundedCorners: true,
         title: '内置浏览器',
         webPreferences: {
@@ -406,6 +414,11 @@ export async function ensureBuiltinBrowserWindow(main: BrowserWindow): Promise<b
   mode = modeAfterEnsure()
   win.on('show', onBrowserShow)
   win.on('hide', publishUi)
+  win.on('focus', scheduleBuiltinBrowserRepaint)
+  main.on('focus', scheduleBuiltinBrowserRepaint)
+  win.once('closed', () => {
+    if (!main.isDestroyed()) main.removeListener('focus', scheduleBuiltinBrowserRepaint)
+  })
   if (win.isVisible()) win.hide()
 
   const tab = createBrowserTab()
@@ -428,11 +441,7 @@ export async function ensureBuiltinBrowserWindow(main: BrowserWindow): Promise<b
   overlayView = overlay
   overlay.setVisible(false)
   win.contentView.addChildView(overlay)
-  try {
-    overlay.setBackgroundColor('#00000000')
-  } catch {
-    // 透明底失败时缩略页会被蒙层挡住，不因此拆掉窗口
-  }
+  applyOverlayChrome()
   overlay.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   attachChromeCommands(overlay.webContents)
   attachChromeCommands(win.webContents)
@@ -599,11 +608,88 @@ function onBrowserShow(): void {
   }
   forcedHides = 0
   publishUi()
+  scheduleBuiltinBrowserRepaint()
 }
 
 function keepTabsAwake(): void {
+  const win = browserWindow
+  if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+    win.webContents.setBackgroundThrottling(false)
+  }
+  if (overlayView && !overlayView.webContents.isDestroyed()) {
+    overlayView.webContents.setBackgroundThrottling(false)
+  }
   for (const tab of tabs) {
     if (!tab.view.webContents.isDestroyed()) tab.view.webContents.setBackgroundThrottling(false)
+  }
+}
+
+/**
+ * 切出再切回时，子 WebContentsView 的合成层会被 Windows 丢掉。
+ * 页面 view 露出默认白底，透明蒙层也会退回白底盖住页面。
+ * 这里只重刷底色并请求重绘：不 show / hide、不 focus、不改三态。
+ */
+function scheduleBuiltinBrowserRepaint(): void {
+  const win = browserWindow
+  if (!win || win.isDestroyed()) return
+  if (!shouldRepaintBuiltinBrowser({ mode, visible: win.isVisible() })) return
+  const generation = ++repaintGeneration
+  repaintBuiltinBrowserSurface()
+  setTimeout(() => {
+    if (generation !== repaintGeneration) return
+    const current = browserWindow
+    if (!current || current.isDestroyed() || current !== win) return
+    if (!shouldRepaintBuiltinBrowser({ mode, visible: current.isVisible() })) return
+    repaintBuiltinBrowserSurface()
+  }, 48)
+}
+
+function repaintBuiltinBrowserSurface(): void {
+  const win = browserWindow
+  if (!win || win.isDestroyed()) return
+  if (!shouldRepaintBuiltinBrowser({ mode, visible: win.isVisible() })) return
+  keepTabsAwake()
+  try {
+    win.setBackgroundColor(BROWSER_CHROME_BG)
+  } catch {
+    // 窗正在销毁
+  }
+  refreshBuiltinBrowserContents(win.webContents)
+  for (const tab of tabs) {
+    applyPageChrome(tab.view)
+    refreshBuiltinBrowserContents(tab.view.webContents)
+  }
+  applyOverlayChrome()
+  if (overlayView) refreshBuiltinBrowserContents(overlayView.webContents)
+}
+
+function refreshBuiltinBrowserContents(contents: WebContents): void {
+  if (contents.isDestroyed()) return
+  try {
+    contents.invalidate()
+  } catch {
+    // 这一帧没排上，下一轮获焦还会再试
+  }
+}
+
+function applyPageChrome(view: WebContentsView): void {
+  if (view.webContents.isDestroyed()) return
+  try {
+    view.setBackgroundColor(BROWSER_CHROME_BG)
+    view.webContents.setBackgroundThrottling(false)
+  } catch {
+    // 页面底色失败仍保留这一页
+  }
+}
+
+function applyOverlayChrome(): void {
+  const overlay = overlayView
+  if (!overlay || overlay.webContents.isDestroyed()) return
+  try {
+    overlay.setBackgroundColor(OVERLAY_CHROME_BG)
+    overlay.webContents.setBackgroundThrottling(false)
+  } catch {
+    // 透明底失败时缩略页会被蒙层挡住，不因此拆掉窗口
   }
 }
 
