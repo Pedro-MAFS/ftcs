@@ -1,6 +1,8 @@
 import { withBase } from '../lib/base'
 
 export const casePath = '/cases/product-to-outreach'
+export const caseVideoId = 'BV1Zbxc6aEu7'
+export const caseVideoUrl = `https://www.bilibili.com/video/${caseVideoId}/`
 export const caseAsset = (name: string) => withBase(`cases/product-to-outreach/${name}`)
 export const caseSteps = [
   { time: 6, label: '00:06', title: '先让 AI 读懂你的产品', action: '输入官网，检查产品画像，并补充目标市场。', result: '产品、卖点、目标买家与市场方向。', check: '产品描述和买家类型，是否符合你的实际业务？', image: '01-product-profile.jpg' },

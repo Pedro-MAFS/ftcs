@@ -141,4 +141,4 @@ Markdown 源文件：`content/docs/*.md`
 
 ## 操作案例页
 
-`/cases/product-to-outreach` 展示从产品官网到开发信审核的五步案例。共用文案在 `src/content/case-study.ts`，案例页为 `src/views/CaseStudyView.vue`。素材在 `public/cases/product-to-outreach/`，截图取自 `docs/cases/export-workflow/assets/workflow-anonymized-134s.mp4` 的当前版本，原素材未覆盖。播放器不预加载完整视频，章节按钮可跳到相应时间；结果为累计线索库快照，不代表单轮新增、采购意向或成交。
+`/cases/product-to-outreach` 展示从产品官网到开发信审核的五步案例。共用文案及 B 站视频 ID 在 `src/content/case-study.ts`，案例页为 `src/views/CaseStudyView.vue`。截图在 `public/cases/product-to-outreach/`，取自 `docs/cases/export-workflow/assets/workflow-anonymized-134s.mp4`，原素材保留，但官网不再打包 MP4。访客点击封面或章节后才加载 B 站官方播放器，关闭弹幕；章节按钮通过官方 `t` 参数重新加载指定起播位置，也可直接前往 B 站观看。播放与清晰度由 B 站控制。结果为累计线索库快照，不代表单轮新增、采购意向或成交。

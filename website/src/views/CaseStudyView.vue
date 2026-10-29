@@ -1,23 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { casePath, caseAsset, caseSteps } from '../content/case-study'
+import { computed, ref } from 'vue'
+import { casePath, caseAsset, caseSteps, caseVideoId, caseVideoUrl } from '../content/case-study'
 import { usePageSeo } from '../composables/usePageSeo'
-const player = ref<HTMLVideoElement | null>(null)
-const status = ref('')
-let pendingSeek: number | null = null
-function seekWhenReady() {
-  if (player.value && pendingSeek !== null) {
-    player.value.currentTime = pendingSeek
-    pendingSeek = null
-  }
-}
+const player = ref<HTMLDivElement | null>(null)
+const startTime = ref<number | null>(null)
+const playerKey = ref(0)
+const playerSrc = computed(() => `https://player.bilibili.com/player.html?bvid=${caseVideoId}&p=1&autoplay=1&danmaku=0&t=${startTime.value ?? 0}`)
+const watchUrl = computed(() => `${caseVideoUrl}?t=${startTime.value ?? 0}`)
 function jumpTo(seconds: number) {
-  const video = player.value
-  if (!video) return
-  pendingSeek = seconds
-  if (video.readyState >= 1) seekWhenReady()
-  video.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  void video.play().catch(() => { status.value = '点击播放器的播放按钮继续观看。' })
+  startTime.value = seconds
+  // The official embed supports an initial time; remount even when replaying the same chapter.
+  playerKey.value += 1
+  player.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 usePageSeo({ title: '从产品官网到开发信草稿：外贸获客操作案例', description: '看一家宠物配饰与生活方式用品企业，如何使用 FTCS 检查画像、发现企业、评分去重并审核开发信草稿。含 2 分 14 秒视频与五步图文。', path: casePath })
 </script>
@@ -26,8 +20,14 @@ usePageSeo({ title: '从产品官网到开发信草稿：外贸获客操作案�
   <div class="case-page">
     <header class="case-page__header section--inverse"><div class="container"><RouterLink class="case-back" to="/">← 返回首页</RouterLink><p class="section__eyebrow">使用案例 / 宠物配饰与生活方式用品</p><h1>从一个产品官网，<br />到一封有依据的开发信。</h1><p class="case-deck">跟着一次实际操作，看产品资料如何变成搜索方向、候选企业和经过人工审核的开发信草稿。</p><div class="case-tags"><span>匿名企业实录</span><span>五步完整流程</span><span>视频 02:14</span></div></div></header>
     <section class="section"><div class="container">
-      <video id="case-video" ref="player" @loadedmetadata="seekWhenReady" class="case-video" controls playsinline preload="none" :poster="caseAsset('04-scored-leads.jpg')" :src="caseAsset('workflow.mp4')" aria-label="FTCS 从产品官网到开发信审核操作演示" @error="status = '视频暂时无法播放，请稍后重试，或继续阅读下方图文步骤。'">你的浏览器暂不支持视频播放，请阅读下方图文步骤。</video>
-      <p v-if="status" role="status">{{ status }}</p>
+      <div id="case-video" ref="player" class="case-video">
+        <button v-if="startTime === null" class="case-video__cover" aria-label="播放完整案例视频" @click="jumpTo(0)">
+          <img :src="caseAsset('04-scored-leads.jpg')" alt="FTCS 线索评分操作预览" width="1920" height="1080" />
+          <span>▶ 播放完整案例 · 02:14</span>
+        </button>
+        <iframe v-else :key="playerKey" :src="playerSrc" title="FTCS 从产品官网到开发信审核操作演示（B站播放器）" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      </div>
+      <p class="small-note">视频由哔哩哔哩提供。无法播放？<a :href="watchUrl" target="_blank" rel="noopener noreferrer">前往 B 站观看 ↗</a></p>
       <div class="chapter-nav" aria-label="视频章节"><button v-for="(step, i) in caseSteps" :key="step.time" @click="jumpTo(step.time)"><span>{{ step.label }}</span>{{ ['产品画像', '搜索方向', '发现企业', '评分核验', '开发信审核'][i] }}</button></div>
       <p class="small-note">视频省略了等待过程，2 分 14 秒为剪辑时长，不代表任务实际耗时。<a href="#case-results">查看本次结果口径 ↓</a></p>
     </div></section>

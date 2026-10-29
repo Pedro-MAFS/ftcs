@@ -10,7 +10,7 @@ const pages = [
     file: path.join('cases', 'product-to-outreach', 'index.html'),
     titleIncludes: ['外贸获客操作案例'],
     h1Includes: ['产品官网', '开发信'],
-    bodyIncludes: ['Inca Jewellery', '89', '86', 'workflow.mp4'],
+    bodyIncludes: ['Inca Jewellery', '89', '86', 'https://www.bilibili.com/video/BV1Zbxc6aEu7/'],
     needCanonical: true,
   },
   {
