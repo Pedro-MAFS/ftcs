@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { OnboardingState } from '../ipc/types'
+import type { BusinessGuideState, OnboardingState } from '../ipc/types'
 
 interface UserPrefs {
   workspaceRoot?: string
@@ -24,6 +24,8 @@ interface UserPrefs {
   /** 探索强度：low | medium | high；缺省 medium */
   exploreIntensity?: 'low' | 'medium' | 'high'
   onboarding?: OnboardingState
+  /** 业务流程聚光灯。缺省视为 pending，且 get 不会把 pending 写回。 */
+  businessGuide?: BusinessGuideState
   update?: {
     dismissedVersion?: string
     snoozeUntil?: string

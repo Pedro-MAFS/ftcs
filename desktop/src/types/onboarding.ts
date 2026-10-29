@@ -9,6 +9,12 @@ export interface OnboardingState {
   updatedAt: string
 }
 
+export interface BusinessGuideState {
+  version: 1
+  disposition: 'pending' | 'completed' | 'skipped'
+  updatedAt: string
+}
+
 export type EnvProbeStatus = 'ok' | 'missing' | 'outdated' | 'error'
 
 export interface EnvProbeItem {

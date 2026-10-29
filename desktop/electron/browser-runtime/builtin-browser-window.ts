@@ -39,6 +39,14 @@ import {
   viewportForMode,
   type ChromeCommand,
 } from './window-policy'
+import {
+  BUILTIN_TAB_CAP_MESSAGE,
+  closeTaskTabs,
+  getCurrentBrowserTaskId,
+  reclaimBeforeOpen,
+  setTabCloseHost,
+  type TabOrigin,
+} from './tab-lifecycle'
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -76,6 +84,8 @@ interface BrowserTab {
   view: WebContentsView
   title: string
   url: string
+  origin: TabOrigin
+  taskId: string | null
 }
 
 let tabs: BrowserTab[] = []
@@ -163,7 +173,7 @@ export function notePrimaryBrowserTarget(id: string | null): void {
   publishUi()
 }
 
-function createBrowserTab(): BrowserTab {
+function createBrowserTab(origin: TabOrigin, taskId: string | null): BrowserTab {
   const view = allowCreatedWebContentsDuring(
     () =>
       new WebContentsView({
@@ -184,6 +194,8 @@ function createBrowserTab(): BrowserTab {
     view,
     title: '内置浏览器',
     url: '',
+    origin,
+    taskId,
   }
   bindBrowserTab(tab)
   tabs.push(tab)
@@ -238,6 +250,16 @@ function openBrowserTab(url: string): Promise<{ id: string; url: string }> {
 async function openBrowserTabNow(requested: string): Promise<{ id: string; url: string }> {
   const win = browserWindow
   if (!win || win.isDestroyed()) throw new Error('builtin page not ready')
+  const taskId = getCurrentBrowserTaskId()
+  const plan = reclaimBeforeOpen(
+    tabs.map((tab) => ({ id: tab.key, origin: tab.origin, taskId: tab.taskId })),
+    taskId,
+  )
+  for (const id of plan.droppedIds) {
+    const stale = tabs.find((tab) => tab.key === id)
+    if (stale) dropTab(stale)
+  }
+  if (plan.reject) throw new Error(BUILTIN_TAB_CAP_MESSAGE)
   const loadedUrl = /^https?:\/\//i.test(requested) ? requested : 'about:blank'
   beginTabAdoption(loadedUrl)
   const before = new Set(listBrowserPageIds())
@@ -246,7 +268,7 @@ async function openBrowserTabNow(requested: string): Promise<{ id: string; url: 
     for (const item of await listInternalTargets()) {
       if (item.id) before.add(item.id)
     }
-    tab = createBrowserTab()
+    tab = createBrowserTab(taskId ? 'task' : 'user', taskId)
     win.contentView.addChildView(tab.view)
     selectTab(tab)
     try {
@@ -270,6 +292,43 @@ async function openBrowserTabNow(requested: string): Promise<{ id: string; url: 
   } finally {
     endTabAdoption()
   }
+}
+
+export async function closeTabsForTask(
+  taskId: string,
+): Promise<{ closed: number; remaining: number }> {
+  const planned = closeTaskTabs(
+    tabs.map((tab) => ({ id: tab.key, origin: tab.origin, taskId: tab.taskId })),
+    taskId,
+  )
+  const keep = new Set(planned.tabs.map((tab) => tab.id))
+  for (const tab of tabs.filter((item) => !keep.has(item.key))) {
+    dropTab(tab)
+  }
+  for (const record of planned.tabs) {
+    const tab = tabs.find((item) => item.key === record.id)
+    if (!tab) continue
+    const becameSeed = tab.origin !== 'seed' && record.origin === 'seed'
+    tab.origin = record.origin
+    tab.taskId = record.taskId
+    if (!becameSeed) continue
+    tab.title = '内置浏览器'
+    const token = tokenPageUrl()
+    if (token) {
+      try {
+        await tab.view.webContents.loadURL(token)
+      } catch {
+        // 令牌页加载失败时仍保留这枚页
+      }
+      tab.url = token
+    }
+    if (activeTab === tab) {
+      pageTitle = '内置浏览器'
+      pageUrlLabel = '尚未打开页面'
+      publishUi()
+    }
+  }
+  return { closed: planned.closed, remaining: tabs.length }
 }
 
 async function closeBrowserTab(id: string): Promise<boolean> {
@@ -430,7 +489,7 @@ export async function ensureBuiltinBrowserWindow(main: BrowserWindow): Promise<b
   })
   if (win.isVisible()) win.hide()
 
-  const tab = createBrowserTab()
+  const tab = createBrowserTab('seed', null)
   win.contentView.addChildView(tab.view)
   activeTab = tab
   pageView = tab.view
@@ -931,3 +990,5 @@ function captionPreloadPath(): string {
 function dataHtml(html: string): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
 }
+
+setTabCloseHost((taskId) => closeTabsForTask(taskId))

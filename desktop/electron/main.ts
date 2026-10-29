@@ -147,6 +147,14 @@ import {
   patchOnboardingState,
   type OnboardingState,
 } from './onboarding/onboarding-service'
+import {
+  getBusinessGuideState,
+  markBusinessGuide,
+} from './onboarding/business-guide-service'
+import {
+  commitDefaultLanding,
+  peekDefaultLanding,
+} from './default-landing'
 import { probeEnvironment } from './onboarding/env-probe'
 import { installNodeRuntime } from './runtime/install-node-portable-service'
 import { installOpenCodeRuntime } from './runtime/install-opencode-binary-service'
@@ -783,6 +791,15 @@ function registerIpcHandlers(): void {
     (_event, patch: Partial<OnboardingState>) => patchOnboardingState(patch ?? {}),
   )
   ipcMain.handle(IPC.ONBOARDING_PROBE_ENV, () => probeEnvironment())
+  ipcMain.handle(IPC.BUSINESS_GUIDE_GET, () => getBusinessGuideState())
+  ipcMain.handle(IPC.BUSINESS_GUIDE_MARK, (_event, disposition: 'completed' | 'skipped') =>
+    markBusinessGuide(disposition),
+  )
+  ipcMain.handle(IPC.DEFAULT_LANDING_PEEK, () => ({ consumed: peekDefaultLanding() }))
+  ipcMain.handle(IPC.DEFAULT_LANDING_COMMIT, () => {
+    commitDefaultLanding()
+    return { consumed: true as const }
+  })
   ipcMain.handle(
     IPC.RUNTIME_INSTALL_NODE,
     async (event, options?: { forceReinstall?: boolean }) => {
