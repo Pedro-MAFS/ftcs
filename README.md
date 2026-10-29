@@ -28,6 +28,18 @@ Screenshots are from the product UI (same assets as the website).
 
 截图来自产品界面（与官网素材同源）。
 
+## Case study / 使用案例
+
+**FMICC：从产品官网到海外客户开发信草稿。**
+
+录屏结束时累计 89 条线索记录，评分去重后保留 86 条，其中 A 级 10 条；随后为 Inca Jewellery 生成并审核一封开发信。案例展示官网录入、画像修改、多渠道探索、线索检查与邮件审核的完整操作链路。
+
+**FMICC: from a product website to a reviewed outreach draft.** The recorded lead pool contained 89 entries; scoring and deduplication retained 86, including 10 in tier A. The walkthrough then prepared and approved one draft for Inca Jewellery. These are recorded workflow results, not verified buying intent or sales outcomes.
+
+[![FMICC 案例：评分去重后的线索库](docs/cases/fmicc/assets/04-scored-leads.jpg)](docs/cases/fmicc/README.md)
+
+[阅读完整案例 / Read the case study](docs/cases/fmicc/README.md) · [观看 2 分 14 秒中文讲解演示 / Watch the narrated walkthrough](docs/cases/fmicc/assets/fmicc-workflow-narrated-134s.mp4)
+
 ## Download
 
 - [Windows Setup](https://github.com/Pedro-MAFS/ftcs/releases/latest) — on the latest release, download the asset whose name contains `Setup`.
