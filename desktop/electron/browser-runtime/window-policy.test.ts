@@ -15,6 +15,7 @@ import {
   navigationMode,
   parseChromeCommand,
   shouldFollowMainAnchor,
+  shouldRepaintBuiltinBrowser,
   shouldRestoreFloatingWindow,
   showsThumbnailOverlay,
   titleBarRequestsRaise,
@@ -151,6 +152,32 @@ test('main-window restore does not pop a hidden browser', () => {
     }),
     true,
   )
+})
+
+test('focus repaint stays on a visible thumbnail or expanded window', () => {
+  assert.equal(shouldRepaintBuiltinBrowser({ mode: 'hidden', visible: false }), false)
+  assert.equal(shouldRepaintBuiltinBrowser({ mode: 'hidden', visible: true }), false)
+  assert.equal(shouldRepaintBuiltinBrowser({ mode: 'thumbnail', visible: false }), false)
+  assert.equal(shouldRepaintBuiltinBrowser({ mode: 'expanded', visible: false }), false)
+  assert.equal(shouldRepaintBuiltinBrowser({ mode: 'thumbnail', visible: true }), true)
+  assert.equal(shouldRepaintBuiltinBrowser({ mode: 'expanded', visible: true }), true)
+})
+
+test('focus repaint does not show, hide, or steal focus', () => {
+  const source = read('./builtin-browser-window.ts')
+  const start = source.indexOf('function repaintBuiltinBrowserSurface')
+  const end = source.indexOf('function refreshBuiltinBrowserContents')
+  assert.ok(start >= 0 && end > start)
+  const body = source.slice(start, end)
+  assert.match(body, /shouldRepaintBuiltinBrowser/)
+  assert.match(body, /setBackgroundColor/)
+  assert.doesNotMatch(body, /\.show\(/)
+  assert.doesNotMatch(body, /\.showInactive\(/)
+  assert.doesNotMatch(body, /\.hide\(/)
+  assert.doesNotMatch(body, /\.focus\(/)
+  assert.doesNotMatch(body, /setBuiltinBrowserMode/)
+  assert.match(source, /main\.on\('focus', scheduleBuiltinBrowserRepaint\)/)
+  assert.match(source, /win\.on\('focus', scheduleBuiltinBrowserRepaint\)/)
 })
 
 test('only an attached thumbnail follows the main window', () => {
