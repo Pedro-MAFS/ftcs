@@ -3,6 +3,7 @@ import App from './App.vue'
 import { routes } from './router/routes'
 import { initClarity } from './lib/clarity'
 import './styles/main.css'
+import './styles/cases.css'
 
 export const createApp = ViteSSG(
   App,

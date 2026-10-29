@@ -7,6 +7,13 @@ const dist = path.join(root, 'dist')
 
 const pages = [
   {
+    file: path.join('cases', 'product-to-outreach', 'index.html'),
+    titleIncludes: ['外贸获客操作案例'],
+    h1Includes: ['产品官网', '开发信'],
+    bodyIncludes: ['Inca Jewellery', '89', '86', 'workflow.mp4'],
+    needCanonical: true,
+  },
+  {
     file: 'index.html',
     titleIncludes: ['外贸获客系统'],
     titleIncludesAny: ['智能体', 'Agent'],

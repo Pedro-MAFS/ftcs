@@ -138,3 +138,7 @@ Markdown 源文件：`content/docs/*.md`
 |------|------|
 | `ftcs-线索.png` | Hero 主图 + 线索步骤 |
 | `ftcs-录入.png` / `ftcs-产品画像.png` / `ftcs-线索探索.png` / `ftcs-邮件.png` | 功能展示 |
+
+## 操作案例页
+
+`/cases/product-to-outreach` 展示从产品官网到开发信审核的五步案例。共用文案在 `src/content/case-study.ts`，案例页为 `src/views/CaseStudyView.vue`。素材在 `public/cases/product-to-outreach/`，截图取自 `docs/cases/export-workflow/assets/workflow-anonymized-134s.mp4` 的当前版本，原素材未覆盖。播放器不预加载完整视频，章节按钮可跳到相应时间；结果为累计线索库快照，不代表单轮新增、采购意向或成交。

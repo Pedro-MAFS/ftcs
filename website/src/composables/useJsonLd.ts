@@ -40,10 +40,10 @@ function softwareNode() {
   }
 }
 
-function faqPageNode(faqs: GeoFaqItem[]) {
+function faqPageNode(faqs: GeoFaqItem[], pagePath: string) {
   return {
     '@type': 'FAQPage',
-    '@id': `${absoluteUrl('/docs/faq')}#faq`,
+    '@id': `${absoluteUrl(pagePath)}#faq`,
     mainEntity: faqs.map((item) => ({
       '@type': 'Question',
       name: item.question,
@@ -73,13 +73,13 @@ export function useSiteJsonLd() {
 }
 
 /** 首页 / FAQ 页：追加 FAQPage（与 geoFaqs 同一套问答） */
-export function useFaqJsonLd(get: MaybeRefOrGetter<GeoFaqItem[] | null | undefined> = geoFaqs) {
+export function useFaqJsonLd(get: MaybeRefOrGetter<GeoFaqItem[] | null | undefined> = geoFaqs, pagePath = '/docs/faq') {
   useHead(
     computed(() => {
       const faqs = toValue(get)
       if (!faqs?.length) return {}
       return {
-        script: [graphScript([faqPageNode(faqs)])],
+        script: [graphScript([faqPageNode(faqs, pagePath)])],
       }
     }),
   )
