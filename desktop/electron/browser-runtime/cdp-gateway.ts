@@ -6,7 +6,12 @@ import {
   filterJsonList,
   filterUpstreamMessage,
   interpretClientMessage,
+  isShellPageUrl,
+  navigationNeedsDebuggerResume,
+  relaxDebuggerPause,
   rewriteVersionBody,
+  sessionNeedsDebuggerResume,
+  shellAttachToRelease,
   type ListedTarget,
   type TargetAdmission,
 } from './cdp-filter'
@@ -21,6 +26,11 @@ let upstreamBrowserPath = '/devtools/browser'
 const sockets = new Set<WsSocket>()
 const foreignPageIds = new Set<string>()
 const browserPageIds = new Set<string>()
+const pageBridges = new Map<string, Set<WsSocket>>()
+const retractedShellIds = new Set<string>()
+const gatewayCommandIds = new Set<number>()
+const resumeTimers = new Set<ReturnType<typeof setTimeout>>()
+let gatewayCommandSeq = 9_000_000_000
 const browserClients = new Set<WsSocket>()
 const controlSockets = new Map<string, WsSocket>()
 const admission: TargetAdmission = {
@@ -105,6 +115,101 @@ function firstBrowserPageId(): string | null {
   return next.done ? null : next.value
 }
 
+function watchPageBridge(id: string, socket: WsSocket): void {
+  let group = pageBridges.get(id)
+  if (!group) {
+    group = new Set()
+    pageBridges.set(id, group)
+  }
+  group.add(socket)
+  socket.onClose(() => {
+    group?.delete(socket)
+    if (group && group.size === 0) pageBridges.delete(id)
+  })
+}
+
+/** 主窗或标题条被收成浏览页时，从列表里拿掉，并通知调试端这页已经不在。 */
+function retractShellPage(targetId: string): void {
+  if (!targetId) return
+  if (browserPageIds.has(targetId) || admission.announced.has(targetId)) unregisterBrowserPage(targetId)
+  foreignPageIds.add(targetId)
+  const group = pageBridges.get(targetId)
+  if (group) {
+    for (const socket of [...group]) socket.close()
+    pageBridges.delete(targetId)
+  }
+  if (retractedShellIds.has(targetId)) return
+  retractedShellIds.add(targetId)
+  broadcastBrowser({ method: 'Target.targetDestroyed', params: { targetId } })
+}
+
+function nextGatewayCommandId(): number {
+  gatewayCommandSeq += 1
+  return gatewayCommandSeq
+}
+
+function sendGatewayCommand(
+  upstream: WsSocket,
+  method: string,
+  params?: Record<string, unknown>,
+  sessionId?: string,
+): void {
+  const id = nextGatewayCommandId()
+  gatewayCommandIds.add(id)
+  const payload: Record<string, unknown> = { id, method }
+  if (params) payload.params = params
+  if (sessionId) payload.sessionId = sessionId
+  upstream.send(JSON.stringify(payload))
+}
+
+function takeGatewayResponse(message: unknown): boolean {
+  if (!message || typeof message !== 'object') return false
+  const id = (message as { id?: unknown }).id
+  if (typeof id !== 'number' || !gatewayCommandIds.has(id)) return false
+  gatewayCommandIds.delete(id)
+  return true
+}
+
+/** 页面被调试器停住时，脚本调用会一直等；快照不跑脚本，所以仍能返回。 */
+function resumeIfWaiting(upstream: WsSocket, sessionId?: string): void {
+  sendGatewayCommand(upstream, 'Runtime.runIfWaitingForDebugger', undefined, sessionId)
+}
+
+function scheduleSessionResume(upstream: WsSocket, sessionId: string): void {
+  for (const delayMs of [100, 400, 1200]) {
+    const timer = setTimeout(() => {
+      resumeTimers.delete(timer)
+      resumeIfWaiting(upstream, sessionId)
+    }, delayMs)
+    resumeTimers.add(timer)
+  }
+}
+
+function retractListedShellPages(list: ListedTarget[]): void {
+  for (const item of list) {
+    if (item.type != null && item.type !== 'page') continue
+    if (!item.id || !isShellPageUrl(item.url)) continue
+    retractShellPage(item.id)
+  }
+}
+
+async function isOpenBrowserTarget(targetId: string): Promise<boolean> {
+  const list = await listInternalTargets()
+  const hit = list.find((item) => item.id === targetId)
+  if (!hit || !isShellPageUrl(hit.url)) return true
+  retractShellPage(targetId)
+  return false
+}
+
+function shellTargetId(message: unknown): string | null {
+  if (!message || typeof message !== 'object') return null
+  const info = (
+    message as { params?: { targetInfo?: { targetId?: unknown; type?: unknown; url?: unknown } } }
+  ).params?.targetInfo
+  if (!info || info.type !== 'page' || typeof info.url !== 'string' || !isShellPageUrl(info.url)) return null
+  return typeof info.targetId === 'string' ? info.targetId : null
+}
+
 export function tokenPageUrl(): string | null {
   const base = getBrowserUrl()
   if (!base) return null
@@ -141,6 +246,11 @@ export async function stopCdpGateway(): Promise<void> {
   foreignPageIds.clear()
   browserClients.clear()
   controlSockets.clear()
+  pageBridges.clear()
+  retractedShellIds.clear()
+  gatewayCommandIds.clear()
+  for (const timer of resumeTimers) clearTimeout(timer)
+  resumeTimers.clear()
   for (const socket of sockets) socket.close()
   sockets.clear()
   const current = server
@@ -211,28 +321,32 @@ export async function sendPageCommand(
 ): Promise<void> {
   const id = targetId || pageTargetId
   if (!id || !internalPort) return
-  const socket = await pageControl(id)
-  const commandId = nextCommandId()
-  await new Promise<void>((resolve) => {
-    let done = false
-    const finish = () => {
-      if (done) return
-      done = true
-      clearTimeout(timer)
-      unsubscribe()
-      resolve()
-    }
-    const timer = setTimeout(finish, 2000)
-    const unsubscribe = socket.onMessage((text) => {
-      try {
-        const data = JSON.parse(text) as { id?: number }
-        if (data.id === commandId) finish()
-      } catch {
-        // 忽略非 JSON
+  try {
+    const socket = await pageControl(id)
+    const commandId = nextCommandId()
+    await new Promise<void>((resolve) => {
+      let done = false
+      const finish = () => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        unsubscribe()
+        resolve()
       }
+      const timer = setTimeout(finish, 2000)
+      const unsubscribe = socket.onMessage((text) => {
+        try {
+          const data = JSON.parse(text) as { id?: number }
+          if (data.id === commandId) finish()
+        } catch {
+          // 忽略非 JSON
+        }
+      })
+      socket.send(JSON.stringify({ id: commandId, method, params }))
     })
-    socket.send(JSON.stringify({ id: commandId, method, params }))
-  })
+  } catch {
+    // 标题条或主窗不接调试，单次命令失败也不影响浏览页
+  }
 }
 
 let commandSeq = 1
@@ -243,6 +357,7 @@ function nextCommandId(): number {
 }
 
 async function pageControl(targetId: string): Promise<WsSocket> {
+  if (!(await isOpenBrowserTarget(targetId))) throw new Error('shell page')
   const existing = controlSockets.get(targetId)
   if (existing) return existing
   const socket = await connectWebSocket(
@@ -343,6 +458,7 @@ async function handleHttp(req: IncomingMessage, res: ServerResponse): Promise<vo
         return
       }
       const list = JSON.parse(upstream.body) as ListedTarget[]
+      retractListedShellPages(list)
       const filtered = filterJsonList(list, browserPageIds, gatewayPort)
       res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
       res.end(JSON.stringify(filtered))
@@ -384,7 +500,7 @@ async function handleUpgrade(req: IncomingMessage, socket: import('node:net').So
   try {
     if (path.startsWith('/devtools/page/')) {
       const id = decodeURIComponent(path.slice('/devtools/page/'.length))
-      if (!browserPageIds.has(id)) {
+      if (!browserPageIds.has(id) || !(await isOpenBrowserTarget(id))) {
         client.close()
         return
       }
@@ -392,6 +508,8 @@ async function handleUpgrade(req: IncomingMessage, socket: import('node:net').So
         Origin: `http://127.0.0.1:${internalPort}`,
       })
       sockets.add(upstream)
+      watchPageBridge(id, client)
+      watchPageBridge(id, upstream)
       pipe(client, upstream, (handler) => {
         onClient = handler
       })
@@ -422,7 +540,22 @@ function pipe(
   bindClient: (handler: (text: string) => void) => void,
 ): void {
   bindClient((text) => upstream.send(text))
-  upstream.onMessage((text) => client.send(text))
+  upstream.onMessage((text) => {
+    let message: unknown
+    try {
+      message = JSON.parse(text)
+    } catch {
+      client.send(text)
+      return
+    }
+    if (takeGatewayResponse(message)) return
+    client.send(text)
+    const method = (message as { method?: string }).method
+    if (method === 'Page.loadEventFired' || method === 'Page.frameStoppedLoading') {
+      resumeIfWaiting(upstream)
+    }
+  })
+  resumeIfWaiting(upstream)
   client.onClose(() => upstream.close())
   upstream.onClose(() => client.close())
 }
@@ -451,9 +584,27 @@ function bridgeBrowser(
       client.send(text)
       return
     }
+    if (takeGatewayResponse(message)) return
     const id = (message as { id?: unknown }).id
     const method = typeof id === 'number' ? pending.get(id) : undefined
     if (typeof id === 'number') pending.delete(id)
+    const held = shellAttachToRelease(message)
+    if (held) {
+      if (held.targetId) retractShellPage(held.targetId)
+      resumeIfWaiting(upstream, held.sessionId)
+      sendGatewayCommand(upstream, 'Target.detachFromTarget', { sessionId: held.sessionId })
+    }
+    const shellId = shellTargetId(message)
+    if (shellId) retractShellPage(shellId)
+    const event = message as { method?: string; sessionId?: unknown }
+    if (
+      typeof event.sessionId === 'string' &&
+      event.sessionId &&
+      event.method &&
+      navigationNeedsDebuggerResume(event.method)
+    ) {
+      resumeIfWaiting(upstream, event.sessionId)
+    }
     const filtered = filterUpstreamMessage(message, browserPageIds, method, foreignPageIds, admission)
     if (filtered == null) return
     client.send(JSON.stringify(filtered))
@@ -480,9 +631,16 @@ async function handleBrowserClientMessage(
   }
   const decision = interpretClientMessage(message, pageTargetId)
   if (decision.kind === 'forward') {
-    const msg = message as { id?: unknown; method?: unknown }
+    const forwarded = relaxDebuggerPause(message)
+    const msg = forwarded as { id?: unknown; method?: unknown; sessionId?: unknown }
     if (typeof msg.id === 'number' && typeof msg.method === 'string') pending.set(msg.id, msg.method)
-    upstream.send(text)
+    if (typeof msg.sessionId === 'string' && msg.sessionId && typeof msg.method === 'string') {
+      if (sessionNeedsDebuggerResume(msg.method)) resumeIfWaiting(upstream, msg.sessionId)
+      if (msg.method === 'Page.navigate' || msg.method === 'Page.reload' || msg.method === 'Page.navigateToHistoryEntry') {
+        scheduleSessionResume(upstream, msg.sessionId)
+      }
+    }
+    upstream.send(JSON.stringify(forwarded))
     return
   }
   if (decision.kind === 'respond') {

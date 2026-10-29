@@ -4,6 +4,8 @@ import {
   filterJsonList,
   filterUpstreamMessage,
   interpretClientMessage,
+  relaxDebuggerPause,
+  sessionNeedsDebuggerResume,
 } from './cdp-filter.ts'
 
 const pageId = 'page-1'
@@ -194,4 +196,131 @@ test('an empty url update is not forwarded', () => {
     new Set(),
   )
   assert.equal(filtered, null)
+})
+
+test('a shell page auto-attach is not given to the browser tool', () => {
+  const ids = new Set([pageId])
+  const foreign = new Set<string>()
+  const admission = { expecting: 1, announced: new Set<string>(), pendingUrl: 'https://www.fmicc.com' }
+  const dropped = filterUpstreamMessage(
+    {
+      method: 'Target.attachedToTarget',
+      params: {
+        sessionId: 'sess-main',
+        targetInfo: {
+          targetId: 'main',
+          type: 'page',
+          url: 'http://localhost:5173/#/profile',
+        },
+      },
+    },
+    ids,
+    undefined,
+    foreign,
+    admission,
+  )
+  assert.equal(dropped, null)
+  assert.equal(ids.has('main'), false)
+  assert.equal(foreign.has('main'), true)
+
+  const kept = filterUpstreamMessage(
+    {
+      method: 'Target.attachedToTarget',
+      params: {
+        sessionId: 'sess-site',
+        targetInfo: {
+          targetId: 'page-2',
+          type: 'page',
+          url: 'https://www.fmicc.com/',
+        },
+      },
+    },
+    ids,
+    undefined,
+    foreign,
+    admission,
+  )
+  assert.ok(kept)
+  assert.equal(ids.has('page-2'), false)
+})
+
+test('auto-attach no longer pauses the next document', () => {
+  const relaxed = relaxDebuggerPause({
+    id: 4,
+    method: 'Target.setAutoAttach',
+    sessionId: 'sess-site',
+    params: { autoAttach: true, waitForDebuggerOnStart: true, flatten: true, filter: [{}] },
+  }) as { params: { waitForDebuggerOnStart: boolean; autoAttach: boolean }; sessionId: string }
+  assert.equal(relaxed.params.waitForDebuggerOnStart, false)
+  assert.equal(relaxed.params.autoAttach, true)
+  assert.equal(relaxed.sessionId, 'sess-site')
+  assert.equal(sessionNeedsDebuggerResume('Runtime.evaluate'), true)
+  assert.equal(sessionNeedsDebuggerResume('Accessibility.getFullAXTree'), false)
+})
+
+test('an empty url is not adopted as a new tab', () => {
+  const ids = new Set([pageId])
+  const foreign = new Set<string>()
+  const admission = { expecting: 1, announced: new Set<string>(), pendingUrl: 'https://fmicc.com' }
+  const dropped = filterUpstreamMessage(
+    {
+      method: 'Target.targetCreated',
+      params: { targetInfo: { targetId: 'main', type: 'page', url: '' } },
+    },
+    ids,
+    undefined,
+    foreign,
+    admission,
+  )
+  assert.equal(dropped, null)
+  assert.equal(ids.has('main'), false)
+  assert.equal(foreign.has('main'), true)
+})
+
+test('the app window stays hidden even if its id was recorded', () => {
+  const ids = new Set([pageId, 'main'])
+  const filtered = filterJsonList(
+    [
+      {
+        id: 'main',
+        type: 'page',
+        url: 'file:///F:/ft/install/@ftcsdesktop/resources/app.asar/out/renderer/index.html#/profile',
+        title: '外贸获客智能体',
+      },
+      { id: pageId, type: 'page', url: 'https://fmicc.com/', title: 'FMICC' },
+    ],
+    ids,
+    43123,
+  )
+  assert.deepEqual(
+    filtered.map((item) => item.id),
+    [pageId],
+  )
+  assert.equal(ids.has('main'), false)
+})
+
+test('a recorded page that later shows the app url is forgotten', () => {
+  const ids = new Set([pageId, 'main'])
+  const foreign = new Set<string>()
+  const admission = { expecting: 0, announced: new Set(['main']), pendingUrl: 'https://fmicc.com' }
+  const dropped = filterUpstreamMessage(
+    {
+      method: 'Target.targetInfoChanged',
+      params: {
+        targetInfo: {
+          targetId: 'main',
+          type: 'page',
+          url: 'file:///app/index.html',
+        },
+      },
+    },
+    ids,
+    undefined,
+    foreign,
+    admission,
+  )
+  assert.equal(dropped, null)
+  assert.equal(ids.has('main'), false)
+  assert.equal(admission.announced.has('main'), false)
+  assert.equal(foreign.has('main'), true)
 })

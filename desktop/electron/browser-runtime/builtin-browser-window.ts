@@ -199,8 +199,17 @@ function bindBrowserTab(tab: BrowserTab): void {
     if (tab === activeTab) applyPageUrl(url)
     else publishUi()
   }
-  contents.on('did-navigate', onUrl)
+  contents.on('did-navigate', (event, url) => {
+    onUrl(event, url)
+    if (!tab.targetId) return
+    void sendPageCommand('Runtime.runIfWaitingForDebugger', {}, tab.targetId)
+  })
   contents.on('did-navigate-in-page', onUrl)
+  contents.on('did-finish-load', () => {
+    if (!tab.targetId) return
+    void sendPageCommand('Runtime.runIfWaitingForDebugger', {}, tab.targetId)
+    void sendPageCommand('Page.setWebLifecycleState', { state: 'active' }, tab.targetId)
+  })
   contents.once('destroyed', () => {
     if (tabs.includes(tab)) dropTab(tab)
   })
@@ -620,6 +629,7 @@ async function applyDeviceMetrics(width: number, height: number): Promise<void> 
   const targets = ids.length > 0 ? ids : [null]
   for (const id of targets) {
     try {
+      await sendPageCommand('Page.setWebLifecycleState', { state: 'active' }, id)
       await sendPageCommand(
         'Emulation.setDeviceMetricsOverride',
         {

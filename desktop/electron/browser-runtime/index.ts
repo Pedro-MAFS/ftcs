@@ -34,7 +34,11 @@ export {
   showBuiltinBrowserInactive,
 }
 export { installUnexpectedWebContentsGuard, allowCreatedWebContentsDuring } from './builtin-browser-window'
-export { installRemoteDebuggingSwitch, reserveLoopbackPort } from './remote-debugging'
+export {
+  installBuiltinBrowserBackgroundSwitches,
+  installRemoteDebuggingSwitch,
+  reserveLoopbackPort,
+} from './remote-debugging'
 export { setInternalDebugPort } from './cdp-gateway'
 export { judgeBuiltinBrowserReady } from './readiness'
 
