@@ -1,5 +1,6 @@
 import net from 'node:net'
 import { app } from 'electron'
+import { applyBrowserBackgroundSwitches } from './browser-background'
 
 export function reserveLoopbackPort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -10,6 +11,14 @@ export function reserveLoopbackPort(): Promise<number> {
       const port = typeof address === 'object' && address ? address.port : 0
       server.close((err) => (err ? reject(err) : resolve(port)))
     })
+  })
+}
+
+/** 必须在 app.whenReady() 之前调用，否则被挡住的浏览页会冻住脚本。 */
+export function installBuiltinBrowserBackgroundSwitches(): void {
+  applyBrowserBackgroundSwitches((name, value) => {
+    if (value === undefined) app.commandLine.appendSwitch(name)
+    else app.commandLine.appendSwitch(name, value)
   })
 }
 

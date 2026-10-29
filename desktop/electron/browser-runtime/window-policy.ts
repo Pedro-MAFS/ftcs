@@ -157,3 +157,15 @@ export function shouldFollowMainAnchor(input: {
 }): boolean {
   return !input.detached && input.mode === 'thumbnail'
 }
+
+/**
+ * 应用失焦再获焦时，只重绘已经显示的缩略或放大。
+ * 收起态、以及当时不可见的窗，不要被这次重绘唤起。
+ */
+export function shouldRepaintBuiltinBrowser(input: {
+  mode: BuiltinBrowserMode
+  visible: boolean
+}): boolean {
+  if (!input.visible) return false
+  return input.mode === 'thumbnail' || input.mode === 'expanded'
+}

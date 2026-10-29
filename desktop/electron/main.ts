@@ -119,6 +119,7 @@ import {
   allowCreatedWebContentsDuring,
   bindBuiltinBrowserMainWindow,
   ensureBuiltinBrowser,
+  installBuiltinBrowserBackgroundSwitches,
   installRemoteDebuggingSwitch,
   installUnexpectedWebContentsGuard,
   noteBuiltinBrowserQuitting,
@@ -222,6 +223,7 @@ function currentTitleBar(): { bg: string; fg: string; windowBg: string } {
 app.disableHardwareAcceleration()
 app.commandLine.appendSwitch('disable-gpu')
 app.commandLine.appendSwitch('disable-gpu-compositing')
+installBuiltinBrowserBackgroundSwitches()
 
 try {
   const internalDebugPort = await reserveLoopbackPort()
