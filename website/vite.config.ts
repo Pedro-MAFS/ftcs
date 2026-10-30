@@ -23,6 +23,7 @@ export default defineConfig({
     includedRoutes() {
       return [
         '/',
+        '/cases/product-to-outreach',
         '/download',
         '/changelog',
         '/docs',

@@ -1019,6 +1019,7 @@ onUnmounted(() => {
           <button
             type="button"
             class="btn-primary"
+            data-guide="og-input-generate"
             :disabled="!canGenerate"
             :title="generateButtonTitle"
             @click="generateProfile"

@@ -39,6 +39,14 @@ import {
   viewportForMode,
   type ChromeCommand,
 } from './window-policy'
+import {
+  BUILTIN_TAB_CAP_MESSAGE,
+  closeTaskTabs,
+  getCurrentBrowserTaskId,
+  reclaimBeforeOpen,
+  setTabCloseHost,
+  type TabOrigin,
+} from './tab-lifecycle'
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url))
 
@@ -48,6 +56,16 @@ const BROWSER_CHROME_BG = '#1A1A1A'
 const OVERLAY_CHROME_BG = '#00000000'
 
 let repaintGeneration = 0
+/** 切模式的 await 期间不要改外框，避免和正在进行的 layout 抢尺寸。 */
+let applyingBrowserMode = false
+/** 主窗和浏览窗都不在前台之后才做合成微扰，避免在两个窗之间点一下就抖。 */
+let builtinBrowserCompositorStale = false
+/** 微扰的 48ms 补绘还没跑完时，普通 invalidate 不能把它顶掉。 */
+let nudgeFollowupPending = false
+/** setBounds ±1 触发的 moved 不要把缩略窗记成用户拖走。 */
+let ignoreBuiltinBrowserMoveUntil = 0
+/** 第一帧合成层可能还没回来，约三帧后再补一次。 */
+const REPAINT_FOLLOWUP_MS = 48
 
 const allowedWebContents = new Set<number>()
 let constructing = 0
@@ -76,6 +94,8 @@ interface BrowserTab {
   view: WebContentsView
   title: string
   url: string
+  origin: TabOrigin
+  taskId: string | null
 }
 
 let tabs: BrowserTab[] = []
@@ -163,7 +183,7 @@ export function notePrimaryBrowserTarget(id: string | null): void {
   publishUi()
 }
 
-function createBrowserTab(): BrowserTab {
+function createBrowserTab(origin: TabOrigin, taskId: string | null): BrowserTab {
   const view = allowCreatedWebContentsDuring(
     () =>
       new WebContentsView({
@@ -184,6 +204,8 @@ function createBrowserTab(): BrowserTab {
     view,
     title: '内置浏览器',
     url: '',
+    origin,
+    taskId,
   }
   bindBrowserTab(tab)
   tabs.push(tab)
@@ -238,6 +260,16 @@ function openBrowserTab(url: string): Promise<{ id: string; url: string }> {
 async function openBrowserTabNow(requested: string): Promise<{ id: string; url: string }> {
   const win = browserWindow
   if (!win || win.isDestroyed()) throw new Error('builtin page not ready')
+  const taskId = getCurrentBrowserTaskId()
+  const plan = reclaimBeforeOpen(
+    tabs.map((tab) => ({ id: tab.key, origin: tab.origin, taskId: tab.taskId })),
+    taskId,
+  )
+  for (const id of plan.droppedIds) {
+    const stale = tabs.find((tab) => tab.key === id)
+    if (stale) dropTab(stale)
+  }
+  if (plan.reject) throw new Error(BUILTIN_TAB_CAP_MESSAGE)
   const loadedUrl = /^https?:\/\//i.test(requested) ? requested : 'about:blank'
   beginTabAdoption(loadedUrl)
   const before = new Set(listBrowserPageIds())
@@ -246,7 +278,7 @@ async function openBrowserTabNow(requested: string): Promise<{ id: string; url: 
     for (const item of await listInternalTargets()) {
       if (item.id) before.add(item.id)
     }
-    tab = createBrowserTab()
+    tab = createBrowserTab(taskId ? 'task' : 'user', taskId)
     win.contentView.addChildView(tab.view)
     selectTab(tab)
     try {
@@ -270,6 +302,43 @@ async function openBrowserTabNow(requested: string): Promise<{ id: string; url: 
   } finally {
     endTabAdoption()
   }
+}
+
+export async function closeTabsForTask(
+  taskId: string,
+): Promise<{ closed: number; remaining: number }> {
+  const planned = closeTaskTabs(
+    tabs.map((tab) => ({ id: tab.key, origin: tab.origin, taskId: tab.taskId })),
+    taskId,
+  )
+  const keep = new Set(planned.tabs.map((tab) => tab.id))
+  for (const tab of tabs.filter((item) => !keep.has(item.key))) {
+    dropTab(tab)
+  }
+  for (const record of planned.tabs) {
+    const tab = tabs.find((item) => item.key === record.id)
+    if (!tab) continue
+    const becameSeed = tab.origin !== 'seed' && record.origin === 'seed'
+    tab.origin = record.origin
+    tab.taskId = record.taskId
+    if (!becameSeed) continue
+    tab.title = '内置浏览器'
+    const token = tokenPageUrl()
+    if (token) {
+      try {
+        await tab.view.webContents.loadURL(token)
+      } catch {
+        // 令牌页加载失败时仍保留这枚页
+      }
+      tab.url = token
+    }
+    if (activeTab === tab) {
+      pageTitle = '内置浏览器'
+      pageUrlLabel = '尚未打开页面'
+      publishUi()
+    }
+  }
+  return { closed: planned.closed, remaining: tabs.length }
 }
 
 async function closeBrowserTab(id: string): Promise<boolean> {
@@ -425,12 +494,17 @@ export async function ensureBuiltinBrowserWindow(main: BrowserWindow): Promise<b
   win.on('hide', publishUi)
   win.on('focus', scheduleBuiltinBrowserRepaint)
   main.on('focus', scheduleBuiltinBrowserRepaint)
+  win.on('blur', noteBuiltinBrowserBackgrounded)
+  main.on('blur', noteBuiltinBrowserBackgrounded)
   win.once('closed', () => {
-    if (!main.isDestroyed()) main.removeListener('focus', scheduleBuiltinBrowserRepaint)
+    if (!main.isDestroyed()) {
+      main.removeListener('focus', scheduleBuiltinBrowserRepaint)
+      main.removeListener('blur', noteBuiltinBrowserBackgrounded)
+    }
   })
   if (win.isVisible()) win.hide()
 
-  const tab = createBrowserTab()
+  const tab = createBrowserTab('seed', null)
   win.contentView.addChildView(tab.view)
   activeTab = tab
   pageView = tab.view
@@ -456,6 +530,7 @@ export async function ensureBuiltinBrowserWindow(main: BrowserWindow): Promise<b
   attachChromeCommands(win.webContents)
 
   win.on('moved', () => {
+    if (Date.now() < ignoreBuiltinBrowserMoveUntil) return
     if (!browserWindow || browserWindow.isDestroyed() || mode !== 'thumbnail') return
     const bounds = browserWindow.getBounds()
     if (expectedBounds && near(bounds, expectedBounds)) return
@@ -556,37 +631,42 @@ export function destroyBuiltinBrowserWindow(): void {
 async function applyBuiltinBrowserMode(next: BuiltinBrowserMode): Promise<void> {
   const win = browserWindow
   if (!win || win.isDestroyed()) return
-  mode = next
-  detached = detachedAfterMode(detached, next)
-  if (next !== 'hidden') forcedHides = 0
-  keepTabsAwake()
+  applyingBrowserMode = true
+  try {
+    mode = next
+    detached = detachedAfterMode(detached, next)
+    if (next !== 'hidden') forcedHides = 0
+    keepTabsAwake()
 
-  if (next === 'hidden') {
-    dragOrigin = null
-    follow?.setVisibleBefore(false)
-    if (!browserWindow || browserWindow.isDestroyed()) return
-    browserWindow.hide()
-    publishUi()
-    const viewport = viewportForMode('hidden', THUMB)
+    if (next === 'hidden') {
+      dragOrigin = null
+      follow?.setVisibleBefore(false)
+      if (!browserWindow || browserWindow.isDestroyed()) return
+      browserWindow.hide()
+      publishUi()
+      const viewport = viewportForMode('hidden', THUMB)
+      await applyDeviceMetrics(viewport.width, viewport.height)
+      if (!browserWindow || browserWindow.isDestroyed()) return
+      layoutViews('hidden', { x: 0, y: 0, width: THUMB.width, height: THUMB.height })
+      return
+    }
+
+    const bounds = boundsFor(next)
+    const viewport = viewportForMode(next, bounds)
     await applyDeviceMetrics(viewport.width, viewport.height)
     if (!browserWindow || browserWindow.isDestroyed()) return
-    layoutViews('hidden', { x: 0, y: 0, width: THUMB.width, height: THUMB.height })
-    return
+    if (next === 'expanded') {
+      layoutViews(next, bounds)
+      applyBounds(bounds)
+    } else {
+      applyBounds(bounds)
+      layoutViews(next, bounds)
+    }
+    presentFloatingWindow()
+    publishUi()
+  } finally {
+    applyingBrowserMode = false
   }
-
-  const bounds = boundsFor(next)
-  const viewport = viewportForMode(next, bounds)
-  await applyDeviceMetrics(viewport.width, viewport.height)
-  if (!browserWindow || browserWindow.isDestroyed()) return
-  if (next === 'expanded') {
-    layoutViews(next, bounds)
-    applyBounds(bounds)
-  } else {
-    applyBounds(bounds)
-    layoutViews(next, bounds)
-  }
-  presentFloatingWindow()
-  publishUi()
 }
 
 function presentFloatingWindow(): void {
@@ -617,7 +697,7 @@ function onBrowserShow(): void {
   }
   forcedHides = 0
   publishUi()
-  scheduleBuiltinBrowserRepaint()
+  scheduleBuiltinBrowserPaint()
 }
 
 function keepTabsAwake(): void {
@@ -634,30 +714,70 @@ function keepTabsAwake(): void {
 }
 
 /**
- * 切出再切回时，子 WebContentsView 的合成层会被 Windows 丢掉。
- * 页面 view 露出默认白底，透明蒙层也会退回白底盖住页面。
- * 这里只重刷底色并请求重绘：不 show / hide、不 focus、不改三态。
+ * 切出再切回时，Windows DWM 会丢掉子 WebContentsView 的合成层。
+ * invalidate 只把还在的层标脏；层已经没了，页面和透明蒙层都会露出默认白底。
+ * 应用真正离开前台再回来时，除了重刷底色，再做一次不抢焦点的合成微扰：
+ * 窗口和子视图高度 ±1px 后回到微扰前的外框，透明度先到 0.99，约 48ms 再回到 1，
+ * 并按当前 mode 重新 layoutViews。不 show / hide、不 focus、不改三态、不重新加载页面。
+ * 收起和不可见不走这里。主窗和浏览窗之间切换只 invalidate。打开窗口也不做微扰。
  */
+function noteBuiltinBrowserBackgrounded(): void {
+  setTimeout(() => {
+    if (builtinBrowserInForeground()) return
+    builtinBrowserCompositorStale = true
+  }, 0)
+}
+
+function builtinBrowserInForeground(): boolean {
+  const win = browserWindow
+  if (win && !win.isDestroyed() && win.isFocused()) return true
+  const main = win && !win.isDestroyed() ? win.getParentWindow() : null
+  return Boolean(main && !main.isDestroyed() && main.isFocused())
+}
+
 function scheduleBuiltinBrowserRepaint(): void {
+  const nudge = builtinBrowserCompositorStale
+  if (nudge) builtinBrowserCompositorStale = false
+  scheduleBuiltinBrowserSurface(nudge)
+}
+
+function scheduleBuiltinBrowserPaint(): void {
+  scheduleBuiltinBrowserSurface(false)
+}
+
+function scheduleBuiltinBrowserSurface(nudge: boolean): void {
   const win = browserWindow
   if (!win || win.isDestroyed()) return
   if (!shouldRepaintBuiltinBrowser({ mode, visible: win.isVisible() })) return
+  if (!nudge && nudgeFollowupPending) return
   const generation = ++repaintGeneration
-  repaintBuiltinBrowserSurface()
+  nudgeFollowupPending = nudge
+  repaintBuiltinBrowserSurface(nudge ? 'now' : 'paint')
   setTimeout(() => {
     if (generation !== repaintGeneration) return
+    nudgeFollowupPending = false
     const current = browserWindow
     if (!current || current.isDestroyed() || current !== win) return
-    if (!shouldRepaintBuiltinBrowser({ mode, visible: current.isVisible() })) return
-    repaintBuiltinBrowserSurface()
-  }, 48)
+    if (shouldRepaintBuiltinBrowser({ mode, visible: current.isVisible() })) {
+      repaintBuiltinBrowserSurface(nudge ? 'followup' : 'paint')
+    }
+    // 这一轮如果把透明度降到过 0.99，这里收回来。没降过再设回 1 也无妨。
+    restoreBuiltinBrowserOpacity(current)
+  }, REPAINT_FOLLOWUP_MS)
 }
 
-function repaintBuiltinBrowserSurface(): void {
+function repaintBuiltinBrowserSurface(phase: 'now' | 'followup' | 'paint'): void {
   const win = browserWindow
   if (!win || win.isDestroyed()) return
   if (!shouldRepaintBuiltinBrowser({ mode, visible: win.isVisible() })) return
   keepTabsAwake()
+  applyBuiltinBrowserRepaintChrome(win)
+  if (phase === 'paint' || process.platform !== 'win32') return
+  nudgeBuiltinBrowserCompositor(win, phase)
+  applyBuiltinBrowserRepaintChrome(win)
+}
+
+function applyBuiltinBrowserRepaintChrome(win: BrowserWindow): void {
   try {
     win.setBackgroundColor(BROWSER_CHROME_BG)
   } catch {
@@ -670,6 +790,89 @@ function repaintBuiltinBrowserSurface(): void {
   }
   applyOverlayChrome()
   if (overlayView) refreshBuiltinBrowserContents(overlayView.webContents)
+}
+
+function nudgeBuiltinBrowserCompositor(win: BrowserWindow, phase: 'now' | 'followup'): void {
+  if (applyingBrowserMode || dragOrigin) return
+  const restore = currentCompositorBounds(win)
+  if (!restore) return
+  ignoreBuiltinBrowserMoveUntil = Date.now() + REPAINT_FOLLOWUP_MS + 32
+  try {
+    win.setBounds({
+      x: restore.x,
+      y: restore.y,
+      width: restore.width,
+      height: restore.height + 1,
+    })
+    win.setBounds(restore)
+  } catch {
+    // 窗正在销毁
+  }
+  bumpBuiltinBrowserViewSurfaces()
+  if (phase === 'now') {
+    try {
+      win.setOpacity(0.99)
+    } catch {
+      // 透明度微扰失败仍继续排版
+    }
+  }
+  try {
+    layoutViews(mode, restore)
+  } catch {
+    // 重新排版失败时，底色和 invalidate 仍保留
+  }
+}
+
+function currentCompositorBounds(win: BrowserWindow): ScreenRect | null {
+  try {
+    const live = win.getBounds()
+    if (live.width < 1 || live.height < 1) return null
+    // 微扰前的外框。设回去，避免把 +1 写进 expectedBounds，也不要把窗拉回旧锚点。
+    return {
+      x: live.x,
+      y: live.y,
+      width: live.width,
+      height: live.height,
+    }
+  } catch {
+    return null
+  }
+}
+
+function bumpBuiltinBrowserViewSurfaces(): void {
+  for (const tab of tabs) bumpBuiltinBrowserViewSurface(tab.view)
+  if (overlayView && showsThumbnailOverlay(mode)) bumpBuiltinBrowserViewSurface(overlayView)
+}
+
+function bumpBuiltinBrowserViewSurface(view: WebContentsView): void {
+  if (view.webContents.isDestroyed()) return
+  try {
+    const bounds = view.getBounds()
+    if (bounds.width < 1 || bounds.height < 1) return
+    view.setBounds({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height + 1,
+    })
+    view.setBounds({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+    })
+  } catch {
+    // 这一页正在关闭
+  }
+}
+
+function restoreBuiltinBrowserOpacity(win: BrowserWindow): void {
+  if (process.platform !== 'win32') return
+  try {
+    win.setOpacity(1)
+  } catch {
+    // 窗正在销毁
+  }
 }
 
 function refreshBuiltinBrowserContents(contents: WebContents): void {
@@ -931,3 +1134,5 @@ function captionPreloadPath(): string {
 function dataHtml(html: string): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
 }
+
+setTabCloseHost((taskId) => closeTabsForTask(taskId))

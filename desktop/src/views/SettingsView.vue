@@ -16,6 +16,7 @@ import { PRODUCT_LINKS } from '../config/links'
 import { UPDATE_CHECK_FAILED, UPDATE_FAILED, USER_FAILURE } from '../config/user-facing'
 import { shareAppDownload } from '../composables/useShareApp'
 import { useOnboarding } from '../composables/useOnboarding'
+import { useBusinessGuide } from '../composables/useBusinessGuide'
 import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { showToast } from '../composables/useToast'
 import { useUiTheme } from '../composables/useUiTheme'
@@ -43,6 +44,7 @@ const {
 } = useAuth()
 const { activeCategory, setCategory } = useSettingsNav()
 const { reopen: reopenOnboarding } = useOnboarding()
+const { replay: replayBusinessGuide } = useBusinessGuide()
 const {
   appVersion,
   checking: updateChecking,
@@ -1906,7 +1908,7 @@ async function onCheckUpdate(): Promise<void> {
             <button
               type="button"
               class="btn-secondary btn-sm"
-              @click="reopenOnboarding('tour')"
+              @click="replayBusinessGuide()"
             >
               <Icon name="sparkles" :size="12" />
               打开业务引导

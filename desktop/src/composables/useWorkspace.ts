@@ -25,7 +25,7 @@ const exploreTasks = ref<ExploreTasksSnapshotDto | null>(null)
 const leadsSnapshot = ref<LeadsSnapshotDto | null>(null)
 const emailDraftsSnapshot = ref<EmailDraftsSnapshotDto | null>(null)
 
-const pipelineSteps = ref<PipelineStep[]>(pendingPipelineSteps())
+export const pipelineSteps = ref<PipelineStep[]>(pendingPipelineSteps())
 
 const agentSkill = ref('extract-product-profile')
 const agentStatus = ref<'idle' | 'running' | 'done' | 'error'>('idle')
@@ -55,6 +55,7 @@ const SECTION_SKILL: Partial<Record<WorkspaceSection, string>> = {
 
 let agentBound = false
 let productsLoaded = false
+let pipelineReady: Promise<void> | null = null
 
 const PRODUCT_PREVIEW_COUNT = 3
 
@@ -262,8 +263,16 @@ function ensureWorkspaceBindings(): void {
   }
   if (!productsLoaded) {
     productsLoaded = true
-    void refreshProducts()
+    pipelineReady = refreshProducts().then(
+      () => undefined,
+      () => undefined,
+    )
   }
+}
+
+export function whenPipelineReady(): Promise<void> {
+  ensureWorkspaceBindings()
+  return pipelineReady ?? Promise.resolve()
 }
 
 export function useWorkspace() {

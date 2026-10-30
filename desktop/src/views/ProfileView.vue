@@ -379,6 +379,7 @@ async function createExploreTask(): Promise<void> {
         <button
           type="button"
           class="btn-primary"
+          data-guide="og-profile-new-explore"
           :disabled="!canCreateExplore"
           :title="
             dirty

@@ -11,8 +11,9 @@ const props = withDefaults(
     disabledReason: string
     busy: boolean
     compact?: boolean
+    anchorGuide?: boolean
   }>(),
-  { compact: false },
+  { compact: false, anchorGuide: false },
 )
 
 const emit = defineEmits<{
@@ -59,6 +60,7 @@ const runTitle = computed(() => {
       type="button"
       class="btn-primary explore-start__run"
       :class="{ 'btn-secondary--sm': props.compact }"
+      :data-guide="props.anchorGuide ? 'og-explore-start' : undefined"
       :disabled="props.disabled"
       :title="runTitle"
       @click="emit('start')"

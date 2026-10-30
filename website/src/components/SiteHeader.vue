@@ -22,23 +22,8 @@ import { siteConfig } from '../config/site'
       </div>
       <nav class="nav" aria-label="主导航">
         <RouterLink :to="{ path: '/', hash: '#pipeline' }">功能</RouterLink>
-        <RouterLink :to="{ path: '/', hash: '#fit' }">场景</RouterLink>
-        <RouterLink class="nav--page" to="/docs">帮助</RouterLink>
-        <a
-          class="nav--page"
-          :href="siteConfig.issuesUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          进度
-        </a>
-        <a
-          :href="siteConfig.brandSiteUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          品牌站
-        </a>
+        <RouterLink class="nav--page" to="/cases/product-to-outreach">使用案例</RouterLink>
+        <RouterLink class="nav--page nav-guide" to="/docs">使用指南</RouterLink>
         <RouterLink class="nav__cta" to="/download">下载桌面版</RouterLink>
       </nav>
     </div>

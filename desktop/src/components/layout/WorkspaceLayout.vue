@@ -8,11 +8,13 @@ import AgentPanel from './AgentPanel.vue'
 import StatusBar from './StatusBar.vue'
 import UpdateBanner from '../update/UpdateBanner.vue'
 import { useWorkspace } from '../../composables/useWorkspace'
+import { useDefaultLanding } from '../../composables/useDefaultLanding'
 import { useUpdateCheck } from '../../composables/useUpdateCheck'
 import type { WorkspaceSection } from '../../types/workspace'
 
 const route = useRoute()
 const { setAgentContext } = useWorkspace()
+const { settle } = useDefaultLanding()
 const { bootstrapUpdateCheck } = useUpdateCheck()
 
 const section = computed(() => (route.name as WorkspaceSection) ?? 'leads')
@@ -27,6 +29,7 @@ watch(
 
 onMounted(() => {
   void bootstrapUpdateCheck()
+  void settle()
 })
 </script>
 

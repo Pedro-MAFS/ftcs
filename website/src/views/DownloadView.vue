@@ -103,12 +103,13 @@ function hasAnyMirror(mirrors: DownloadMirror[]): boolean {
       </div>
 
       <p class="muted download-prereq">
-        使用前请在本机准备 <strong>Node.js 22+</strong> 与
-        <strong>OpenCode CLI</strong>。打开网页使用应用内置浏览器，不必另装 Google
-        Chrome。推荐登录开通官方通道（无需自备模型 / 搜索 Key）。详见
-        <RouterLink to="/docs/install">外贸获客系统安装与前置</RouterLink>
-        。版本差异见
-        <RouterLink to="/changelog">发布日志</RouterLink>。
+        适用于 <strong>Windows 10 / 11（64位）</strong>。安装后按首次引导
+        <strong>一键准备运行环境</strong>，再开通官方通道或配置自定义服务。
+        官方通道的模型与搜索按账户用量计费，价格与余额可在应用内查看。
+        地图发现需单独开通相关能力，联系人补全属于可选服务。
+        <RouterLink to="/docs/getting-started">查看快速开始</RouterLink> ·
+        <RouterLink to="/docs/install">安装说明</RouterLink> ·
+        <RouterLink to="/cases/product-to-outreach">先看完整操作案例</RouterLink>
       </p>
     </div>
   </div>
