@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuth } from '../../composables/useAuth'
 import { useOnboarding } from '../../composables/useOnboarding'
 import { PRODUCT_LINKS } from '../../config/links'
@@ -9,7 +8,6 @@ import {
   type ChannelMode,
   type SettingsSnapshot,
 } from '../../types/settings'
-import { TOUR_STEPS } from '../../types/onboarding'
 import type {
   EnvProbeItem,
   NodeInstallResult,
@@ -20,11 +18,9 @@ import Icon from '../shared/Icon.vue'
 import DiagnosticDetails from '../shared/DiagnosticDetails.vue'
 import PlacesOfficialStatusBlock from '../settings/PlacesOfficialStatusBlock.vue'
 
-const router = useRouter()
 const {
   open,
   phase,
-  tourStep,
   probe,
   probing,
   busy,
@@ -34,9 +30,7 @@ const {
   skipAll,
   goPhase,
   completeAll,
-  setTourStep,
   runProbe,
-  persist,
 } = useOnboarding()
 const {
   loggedIn,
@@ -97,7 +91,6 @@ const channels: Array<{ id: ChannelMode; label: string }> = [
 const phases = [
   { id: 'env' as const, label: '1  环境监测' },
   { id: 'keys' as const, label: '2  模型通道' },
-  { id: 'tour' as const, label: '3  业务引导' },
 ]
 
 const isOfficial = computed(() => form.channelMode === 'official')
@@ -118,27 +111,17 @@ const smallModelOptions = computed(() => {
   if (fromSnap && fromSnap.length > 0) return fromSnap
   return OFFICIAL_MODEL_CATALOG.small
 })
-const currentTour = computed(() => TOUR_STEPS[tourStep.value] ?? TOUR_STEPS[0])
-
 const header = computed(() => {
   if (phase.value === 'keys') {
     return {
-      eyebrow: 'FTCS 首次设置 · 步骤 2 / 3',
+      eyebrow: 'FTCS 首次设置 · 步骤 2 / 2',
       title: '选择模型通道并配置密钥',
       subtitle:
         '地图发现可选。',
     }
   }
-  if (phase.value === 'tour') {
-    return {
-      eyebrow: 'FTCS 首次设置 · 步骤 3 / 3',
-      title: '走一遍获客主流程',
-      subtitle:
-        '不必一次做完。点选步骤可跳到对应页面；也可先结束引导，稍后在设置中重新打开。',
-    }
-  }
   return {
-    eyebrow: 'FTCS 首次设置 · 步骤 1 / 3',
+    eyebrow: 'FTCS 首次设置 · 步骤 1 / 2',
     title: '先检查运行环境',
     subtitle:
       '安装以下组件后即可使用。',
@@ -435,7 +418,7 @@ async function onSaveKeys(andContinue: boolean): Promise<void> {
     })
     applySnapshot(result.settings)
     keysMessage.value = result.message
-    if (andContinue) await goPhase('tour')
+    if (andContinue) await completeAll()
   } catch (err) {
     keysError.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -446,17 +429,6 @@ async function onSaveKeys(andContinue: boolean): Promise<void> {
 async function onEnvContinue(): Promise<void> {
   await goPhase('keys')
   await loadSettings()
-}
-
-async function onOpenTourPage(): Promise<void> {
-  const step = currentTour.value
-  open.value = false
-  await persist({ phase: 'tour', tourStep: tourStep.value })
-  await router.push({ name: step.route })
-}
-
-async function onFinishTour(): Promise<void> {
-  await completeAll()
 }
 
 watch(phase, async (p) => {
@@ -960,39 +932,6 @@ onMounted(() => {
             <p v-if="keysMessage" class="onboarding__ok">{{ keysMessage }}</p>
             <p v-if="keysError" class="onboarding__error">{{ keysError }}</p>
           </template>
-
-          <!-- 业务 -->
-          <template v-else>
-            <p class="onboarding__section-label">推荐路径</p>
-            <div class="onboarding__tour">
-              <div class="onboarding__tour-list">
-                <button
-                  v-for="(step, index) in TOUR_STEPS"
-                  :key="step.id"
-                  type="button"
-                  class="onboarding__tour-item"
-                  :class="{ 'is-active': tourStep === index }"
-                  @click="setTourStep(index)"
-                >
-                  <span class="onboarding__tour-num">{{ String(index + 1).padStart(2, '0') }}</span>
-                  <span>
-                    <strong>{{ step.title }}</strong>
-                    <small>{{ step.desc }}</small>
-                  </span>
-                </button>
-              </div>
-              <div class="onboarding__tour-detail">
-                <p class="onboarding__eyebrow">
-                  当前步骤 · {{ String(tourStep + 1).padStart(2, '0') }}
-                </p>
-                <h3>{{ currentTour.title }}</h3>
-                <p>{{ currentTour.detail }}</p>
-                <button type="button" class="btn-primary" @click="onOpenTourPage">
-                  打开{{ currentTour.title }}页
-                </button>
-              </div>
-            </div>
-          </template>
         </div>
 
         <footer class="onboarding__footer">
@@ -1000,9 +939,9 @@ onMounted(() => {
             type="button"
             class="onboarding__skip"
             :disabled="busy || savingKeys"
-            @click="phase === 'tour' ? onFinishTour() : skipAll()"
+            @click="skipAll()"
           >
-            {{ phase === 'tour' ? '结束引导' : '稍后配置（可随时在设置中重新打开）' }}
+            稍后配置（可随时在设置中重新打开）
           </button>
           <div class="onboarding__footer-actions">
             <template v-if="phase === 'env'">
@@ -1060,19 +999,6 @@ onMounted(() => {
                   {{ savingKeys ? '保存中…' : '保存并继续' }}
                 </button>
               </template>
-            </template>
-            <template v-else>
-              <button
-                type="button"
-                class="btn-secondary"
-                :disabled="busy"
-                @click="onFinishTour"
-              >
-                结束引导
-              </button>
-              <button type="button" class="btn-primary" @click="onOpenTourPage">
-                开始：{{ currentTour.title }}
-              </button>
             </template>
           </div>
         </footer>

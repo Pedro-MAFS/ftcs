@@ -66,6 +66,7 @@ import type {
   OpenOfficialRechargeResult,
   OpenOfficialPortalResult,
   PlacesOfficialIpcResult,
+  BusinessGuideState,
   OnboardingState,
   EnvProbeResult,
   NodeInstallProgress,
@@ -165,6 +166,16 @@ const api = {
     ipcRenderer.invoke(IPC.ONBOARDING_GET_STATE),
   setOnboardingState: (patch: Partial<OnboardingState>): Promise<OnboardingState> =>
     ipcRenderer.invoke(IPC.ONBOARDING_SET_STATE, patch),
+  getBusinessGuideState: (): Promise<BusinessGuideState> =>
+    ipcRenderer.invoke(IPC.BUSINESS_GUIDE_GET),
+  markBusinessGuide: (
+    disposition: 'completed' | 'skipped',
+  ): Promise<BusinessGuideState> =>
+    ipcRenderer.invoke(IPC.BUSINESS_GUIDE_MARK, disposition),
+  peekDefaultLanding: (): Promise<{ consumed: boolean }> =>
+    ipcRenderer.invoke(IPC.DEFAULT_LANDING_PEEK),
+  commitDefaultLanding: (): Promise<{ consumed: true }> =>
+    ipcRenderer.invoke(IPC.DEFAULT_LANDING_COMMIT),
   probeEnvironment: (): Promise<EnvProbeResult> =>
     ipcRenderer.invoke(IPC.ONBOARDING_PROBE_ENV),
   installNode: (options?: { forceReinstall?: boolean }): Promise<NodeInstallResult> =>

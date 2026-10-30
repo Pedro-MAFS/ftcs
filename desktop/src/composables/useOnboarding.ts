@@ -61,7 +61,11 @@ async function bootstrapOnboarding(): Promise<void> {
   if (!window.ftcs?.getOnboardingState) return
   try {
     const next = await refreshState()
-    if (!next.completed && !next.skipped) {
+    if (
+      !next.completed &&
+      !next.skipped &&
+      (next.phase === 'env' || next.phase === 'keys')
+    ) {
       open.value = true
       if (next.phase === 'env') await runProbe()
     }

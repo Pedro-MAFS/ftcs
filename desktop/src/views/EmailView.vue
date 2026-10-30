@@ -866,6 +866,7 @@ onUnmounted(() => {
         <button
           type="button"
           class="btn-secondary"
+          data-guide="og-email-batch-draft"
           :disabled="!canBatchDraft"
           :title="
             pendingHigh.length > 0

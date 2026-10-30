@@ -905,6 +905,7 @@ onUnmounted(() => {
         <button
           type="button"
           class="btn-primary"
+          data-guide="og-leads-score"
           :disabled="!canScore"
           :title="
             (generating || isScoring || isDrafting || isEnriching || isWorkflowRunning)

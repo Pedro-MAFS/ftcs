@@ -2,6 +2,8 @@
 import { onMounted, ref } from 'vue'
 import { RouterView } from 'vue-router'
 import OnboardingOverlay from './components/onboarding/OnboardingOverlay.vue'
+import BusinessGuideOverlay from './components/guide/BusinessGuideOverlay.vue'
+import { useBusinessGuide } from './composables/useBusinessGuide'
 import InboxToast from './components/inbox/InboxToast.vue'
 import AppToast from './components/shared/AppToast.vue'
 import ConfirmDialog from './components/shared/ConfirmDialog.vue'
@@ -11,6 +13,8 @@ import { useScheduleRunner } from './composables/useScheduleRunner'
 import { ensureUiThemeListener, useUiTheme } from './composables/useUiTheme'
 
 const platform = ref('win32')
+const { armAuto } = useBusinessGuide()
+armAuto()
 useInbox()
 useScheduleRunner()
 ensureUiThemeListener()
@@ -39,6 +43,7 @@ onMounted(async () => {
   <div class="app-root" :data-platform="platform">
     <RouterView />
     <OnboardingOverlay />
+    <BusinessGuideOverlay />
     <AppToast />
     <InboxToast />
     <ConfirmDialog

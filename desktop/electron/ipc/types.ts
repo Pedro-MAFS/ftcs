@@ -91,6 +91,10 @@ export const IPC = {
   ONBOARDING_GET_STATE: 'onboarding:get-state',
   ONBOARDING_SET_STATE: 'onboarding:set-state',
   ONBOARDING_PROBE_ENV: 'onboarding:probe-env',
+  BUSINESS_GUIDE_GET: 'business-guide:get',
+  BUSINESS_GUIDE_MARK: 'business-guide:mark',
+  DEFAULT_LANDING_PEEK: 'default-landing:peek',
+  DEFAULT_LANDING_COMMIT: 'default-landing:commit',
   RUNTIME_INSTALL_NODE: 'runtime:install-node',
   RUNTIME_INSTALL_NODE_PROGRESS: 'runtime:install-node-progress',
   RUNTIME_INSTALL_OPENCODE: 'runtime:install-opencode',
@@ -152,6 +156,14 @@ export interface OnboardingState {
   skipped: boolean
   phase: OnboardingPhase
   tourStep: number
+  updatedAt: string
+}
+
+export type BusinessGuideDisposition = 'pending' | 'completed' | 'skipped'
+
+export interface BusinessGuideState {
+  version: 1
+  disposition: BusinessGuideDisposition
   updatedAt: string
 }
 

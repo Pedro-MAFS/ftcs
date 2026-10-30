@@ -380,6 +380,7 @@ onUnmounted(() => {
           停止
         </button>
         <ExploreStartControl
+          anchor-guide
           :round="exploreRound"
           :disabled="!canStartSelected"
           :disabled-reason="startDisabledReason"

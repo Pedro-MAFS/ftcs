@@ -6,6 +6,7 @@ import type {
   EnvProbeResult,
   NodeInstallProgress,
   NodeInstallResult,
+  BusinessGuideState,
   OnboardingState,
   OpenCodeInstallProgress,
   OpenCodeInstallResult,
@@ -917,6 +918,12 @@ declare global {
       }>
       getOnboardingState: () => Promise<OnboardingState>
       setOnboardingState: (patch: Partial<OnboardingState>) => Promise<OnboardingState>
+      getBusinessGuideState: () => Promise<BusinessGuideState>
+      markBusinessGuide: (
+        disposition: 'completed' | 'skipped',
+      ) => Promise<BusinessGuideState>
+      peekDefaultLanding: () => Promise<{ consumed: boolean }>
+      commitDefaultLanding: () => Promise<{ consumed: true }>
       probeEnvironment: () => Promise<EnvProbeResult>
       installNode: (options?: { forceReinstall?: boolean }) => Promise<NodeInstallResult>
       onNodeInstallProgress: (handler: (progress: NodeInstallProgress) => void) => () => void

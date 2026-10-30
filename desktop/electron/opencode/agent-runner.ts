@@ -41,6 +41,11 @@ import {
   type EmailDraftsArtifact,
 } from '../emails/emails-reader'
 import { clearEmailDraftZh } from '../emails/emails-writer'
+import {
+  beginBrowserTask,
+  endBrowserTask,
+  nextBrowserTaskId,
+} from '../browser-runtime/tab-lifecycle'
 import { formatEmailStylePromptBlock, resolveEmailDraftStylePrompt } from '../settings/email-draft-style'
 import { readUserPrefs } from '../config/user-prefs'
 import {
@@ -779,6 +784,8 @@ export class AgentRunController {
   private abort: AbortController | null = null
   private sessionId: string | null = null
   private running = false
+  /** 本次已经 beginBrowserTask 的任务 id。没有登记时 finally 不收标签。 */
+  private browserTaskId: string | null = null
   private timeline: TimelineBuilder | null = null
   /** 看门狗自动中止的原因（模型持续重试不可用）；非空则中止分支按失败展示 */
   private autoAbortReason: string | null = null
@@ -954,6 +961,19 @@ export class AgentRunController {
         }
       },
     }
+  }
+
+  private beginTrackedBrowserTask(skill: string): void {
+    const id = nextBrowserTaskId(skill)
+    beginBrowserTask(id)
+    this.browserTaskId = id
+  }
+
+  private async endTrackedBrowserTask(): Promise<void> {
+    const id = this.browserTaskId
+    if (!id) return
+    this.browserTaskId = null
+    await endBrowserTask(id)
   }
 
   async runExpandKeywords(
@@ -2429,6 +2449,7 @@ export class AgentRunController {
       }
     }
 
+    this.beginTrackedBrowserTask(skillName)
     this.running = true
     this.abort = new AbortController()
     const signal = this.abort.signal
@@ -2478,6 +2499,8 @@ export class AgentRunController {
       })
     }
 
+    let stopEvents: (() => void) | null = null
+    try {
     const exploreIntensity = getExploreIntensity()
     const exploreLimits = getExploreIntensityLimits(exploreIntensity)
     const searchNumResults = exploreLimits.searchNumResults
@@ -2523,9 +2546,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
-    try {
       const created = await client.session.create({
         title: `${skillName} · ${productId}`,
       })
@@ -2721,6 +2741,7 @@ export class AgentRunController {
       return { ok: false, message, explorationRun: failedRun ?? undefined }
     } finally {
       stopEvents?.()
+      await this.endTrackedBrowserTask()
       this.running = false
       this.abort = null
       if (placesReleaseAfter) {
@@ -2745,6 +2766,10 @@ export class AgentRunController {
       throw new Error('服务未就绪，请稍后或重启应用')
     }
 
+    // 纯文件画像的 websiteUrls 为空，不登记浏览器任务。
+    if (bootstrap.websiteUrls.length > 0) {
+      this.beginTrackedBrowserTask('extract-product-profile')
+    }
     this.running = true
     this.abort = new AbortController()
     const signal = this.abort.signal
@@ -2786,6 +2811,8 @@ export class AgentRunController {
       })
     }
 
+    let stopEvents: (() => void) | null = null
+    try {
     const promptText = buildPrompt(bootstrap)
     this.attachTimeline(timeline)
     timeline.reset()
@@ -2825,9 +2852,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
-    try {
       const created = await client.session.create({
         title: `extract-product-profile · ${bootstrap.productId}`,
       })
@@ -2949,6 +2973,7 @@ export class AgentRunController {
       return { ok: false, message }
     } finally {
       stopEvents?.()
+      await this.endTrackedBrowserTask()
       this.running = false
       this.abort = null
     }

@@ -6,6 +6,7 @@ import ExploreView from '../views/ExploreView.vue'
 import LeadsView from '../views/LeadsView.vue'
 import EmailView from '../views/EmailView.vue'
 import SettingsView from '../views/SettingsView.vue'
+import BootLanding from '../views/BootLanding.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -13,8 +14,8 @@ const router = createRouter({
     {
       path: '/',
       component: WorkspaceLayout,
-      redirect: { name: 'leads' },
       children: [
+        { path: '', name: 'boot', component: BootLanding },
         { path: 'input', name: 'input', component: InputView },
         { path: 'profile', name: 'profile', component: ProfileView },
         { path: 'explore', name: 'explore', component: ExploreView },
