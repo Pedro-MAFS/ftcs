@@ -3,19 +3,24 @@ import { afterEach, describe, it } from 'node:test'
 import type { AwaitingUserReply } from '../../types/electron'
 import type { AgentSubagent, AgentTimelineItem } from '../../types/workspace'
 import {
+  CLIP_SAVE_FAIL,
   COPY_EMPTY,
   COPY_FAIL,
   COPY_OK,
   COPY_SESSION_CHAR_LIMIT,
-  COPY_TRUNCATED,
   SKILL_LABELS,
-  applyCopyLimit,
   buildCopySessionText,
+  clipSavedLine,
+  copySaveFailToast,
+  copySavedToast,
   createCopySessionController,
   formatCopyTimestamp,
+  formatSessionDownloadName,
   redactSecrets,
   writeClipboardText,
   type CopySessionSource,
+  type SaveTextToDownloadsInput,
+  type SaveTextToDownloadsResult,
 } from './copy-agent-session'
 
 const SECRET_STRINGS = [
@@ -68,6 +73,29 @@ function source(partial: Partial<CopySessionSource> = {}): CopySessionSource {
 function build(partial: Partial<CopySessionSource> = {}, appVersion = '0.6.1') {
   const snap = source(partial)
   return buildCopySessionText({ ...snap, appVersion })
+}
+
+/** 拼出脱敏后长度恰好为 length 的快照。版本与点击时间固定，方便和控制器对照。 */
+function sourceOfLength(length: number, bodySuffix = ''): CopySessionSource {
+  const copiedAt = new Date(2026, 10, 1, 15, 30, 45)
+  const probeBody = bodySuffix || 'A'
+  const probe = buildCopySessionText({
+    ...source({
+      items: [item({ id: 'u', kind: 'user', body: probeBody })],
+      copiedAt,
+    }),
+    appVersion: '0.6.1',
+  })
+  const pad = length - probe.text.length
+  assert.ok(pad >= 0, `body shorter than target: ${probe.text.length} > ${length}`)
+  return source({
+    items: [item({ id: 'u', kind: 'user', body: `${'A'.repeat(pad)}${probeBody}` })],
+    copiedAt,
+  })
+}
+
+function refuseSave(): Promise<SaveTextToDownloadsResult> {
+  return Promise.reject(new Error('should not save'))
 }
 
 describe('redactSecrets', () => {
@@ -332,7 +360,6 @@ Research · 进行中
 - 只要地板
 - 地板和围栏：围栏套件一并出词
 - 输入自己的答案`
-    assert.equal(built.truncated, false)
     assert.equal(built.text, expected)
     for (const secret of SECRET_STRINGS) assert.equal(built.text.includes(secret), false)
     for (const placeholder of PLACEHOLDERS) assert.equal(built.text.includes(placeholder), false)
@@ -559,43 +586,51 @@ Research · 进行中
   })
 })
 
-describe('applyCopyLimit', () => {
-  function textOfLength(length: number): string {
-    const head = '## 元信息\n- 应用版本：1\n\n## 会话正文\n'
-    assert.ok(length > head.length)
-    return head + 'A'.repeat(length - head.length)
-  }
+describe('formatSessionDownloadName', () => {
+  it('uses zero-padded local time and a fixed txt extension', () => {
+    assert.equal(
+      formatSessionDownloadName(new Date(2026, 10, 1, 15, 30, 45)),
+      'ftcs-session-20261101-153045.txt',
+    )
+    assert.equal(
+      formatSessionDownloadName(new Date(2026, 0, 2, 3, 4, 5)),
+      'ftcs-session-20260102-030405.txt',
+    )
+  })
+})
 
-  it('leaves a 200000-character text unchanged', () => {
-    const text = textOfLength(200_000)
-    const limited = applyCopyLimit(text)
-    assert.equal(limited.truncated, false)
-    assert.equal(limited.text, text)
-    assert.equal(limited.text.includes('已截断'), false)
+describe('buildCopySessionText length', () => {
+  it('does not invent placeholder sentences for an empty timeline', () => {
+    const built = build({ items: [] })
+    for (const placeholder of PLACEHOLDERS) assert.equal(built.text.includes(placeholder), false)
+    assert.equal(built.text.includes('当前没有可复制的会话'), false)
+    assert.equal(built.text.includes('已截断'), false)
   })
 
-  it('notes N=200001 and keeps the first 200000 characters', () => {
-    const text = textOfLength(200_001)
-    const limited = applyCopyLimit(text)
-    assert.equal(limited.truncated, true)
-    assert.equal(limited.text.length, COPY_SESSION_CHAR_LIMIT)
-    assert.equal(limited.text.includes('已截断，原长 200001，保留前 200000'), true)
-    assert.equal(limited.text.indexOf('已截断') < limited.text.indexOf('## 会话正文'), true)
-    assert.equal(limited.text.endsWith('A'.repeat(200_001 - '## 元信息\n- 应用版本：1\n\n## 会话正文\n'.length)), false)
+  it('leaves N=200000 unchanged, with no truncation note and no path line', () => {
+    const snap = sourceOfLength(COPY_SESSION_CHAR_LIMIT)
+    const built = buildCopySessionText({ ...snap, appVersion: '0.6.1' })
+    assert.equal(built.text.length, COPY_SESSION_CHAR_LIMIT)
+    assert.equal(built.text.includes('已截断'), false)
+    assert.equal(built.text.includes('全文已保存'), false)
   })
 
-  it('notes N=250400 the same way', () => {
-    const text = textOfLength(250_400)
-    const limited = applyCopyLimit(text)
-    assert.equal(limited.text.length, 200_000)
-    assert.equal(limited.text.includes('已截断，原长 250400，保留前 200000'), true)
+  it('keeps N=200001 in full and does not slice', () => {
+    const snap = sourceOfLength(200_001, 'ENDMARK')
+    const built = buildCopySessionText({ ...snap, appVersion: '0.6.1' })
+    assert.equal(built.text.length, 200_001)
+    assert.equal(built.text.endsWith('ENDMARK'), true)
+    assert.equal(built.text.includes('已截断'), false)
+    assert.equal(built.text.includes('全文已保存'), false)
+    assert.equal(built.text.includes('会话过长'), false)
   })
 })
 
 describe('createCopySessionController', () => {
-  it('toasts on an empty timeline and does not read the version or clipboard', async () => {
+  it('toasts on an empty timeline and does not read the version, clipboard, or downloads', async () => {
     let versionCalls = 0
     const writes: string[] = []
+    const saves: SaveTextToDownloadsInput[] = []
     const toasts: Array<{ message: string; tone?: string }> = []
     const ctl = createCopySessionController({
       readAppVersion: async () => {
@@ -605,6 +640,10 @@ describe('createCopySessionController', () => {
       writeClipboard: async (text) => {
         writes.push(text)
         return true
+      },
+      saveTextToDownloads: async (input) => {
+        saves.push(input)
+        return { ok: true, path: 'should-not-save.txt' }
       },
       showToast: (message, options) => {
         toasts.push({ message, tone: options?.tone })
@@ -618,6 +657,7 @@ describe('createCopySessionController', () => {
     assert.deepEqual(toasts, [{ message: COPY_EMPTY, tone: undefined }])
     assert.equal(versionCalls, 0)
     assert.deepEqual(writes, [])
+    assert.deepEqual(saves, [])
   })
 
   it('keeps the click snapshot while the version request is in flight', async () => {
@@ -632,6 +672,7 @@ describe('createCopySessionController', () => {
         written = text
         return true
       },
+      saveTextToDownloads: refuseSave,
       showToast: () => {},
     })
     const snap = source({
@@ -648,27 +689,199 @@ describe('createCopySessionController', () => {
     assert.match(written, /^- 应用版本：9\.9\.9$/m)
   })
 
-  it('uses the truncated toast when the redacted text is over the limit', async () => {
-    const toasts: string[] = []
-    let written = ''
+  it('copies the full text at N=200000 and does not save a file', async () => {
+    const writes: string[] = []
+    const saves: SaveTextToDownloadsInput[] = []
+    const toasts: Array<{ message: string; tone?: string }> = []
     const ctl = createCopySessionController({
       readAppVersion: async () => '0.6.1',
       writeClipboard: async (text) => {
-        written = text
+        writes.push(text)
         return true
       },
-      showToast: (message) => {
-        toasts.push(message)
+      saveTextToDownloads: async (input) => {
+        saves.push(input)
+        return { ok: true, path: 'should-not-save.txt' }
+      },
+      showToast: (message, options) => {
+        toasts.push({ message, tone: options?.tone })
       },
     })
-    await ctl.copy(
-      source({
-        items: [item({ id: 'u', kind: 'user', body: 'A'.repeat(COPY_SESSION_CHAR_LIMIT) })],
-      }),
-    )
-    assert.deepEqual(toasts, [COPY_TRUNCATED])
-    assert.equal(written.length, COPY_SESSION_CHAR_LIMIT)
-    assert.match(written, /已截断，原长 \d+，保留前 200000/)
+    const snap = sourceOfLength(COPY_SESSION_CHAR_LIMIT)
+    const expected = buildCopySessionText({ ...snap, appVersion: '0.6.1' }).text
+    await ctl.copy(snap)
+    assert.deepEqual(saves, [])
+    assert.deepEqual(writes, [expected])
+    assert.equal(writes[0]?.length, COPY_SESSION_CHAR_LIMIT)
+    assert.equal(writes[0]?.includes('已截断'), false)
+    assert.equal(writes[0]?.includes('全文已保存'), false)
+    assert.deepEqual(toasts, [{ message: COPY_OK, tone: 'success' }])
+  })
+
+  it('saves the full text when N=200001 and puts only the path line on the clipboard', async () => {
+    const writes: string[] = []
+    const saves: SaveTextToDownloadsInput[] = []
+    const toasts: Array<{ message: string; tone?: string }> = []
+    const savedPath = 'D:\\Users\\me\\Downloads\\ftcs-session-20261101-153045-1.txt'
+    const ctl = createCopySessionController({
+      readAppVersion: async () => '0.6.1',
+      writeClipboard: async (text) => {
+        writes.push(text)
+        return true
+      },
+      saveTextToDownloads: async (input) => {
+        saves.push({ suggestedName: input.suggestedName, content: input.content })
+        return { ok: true, path: savedPath }
+      },
+      showToast: (message, options) => {
+        toasts.push({ message, tone: options?.tone })
+      },
+    })
+    const snap = sourceOfLength(200_001, 'ENDMARK')
+    const full = buildCopySessionText({ ...snap, appVersion: '0.6.1' }).text
+    await ctl.copy(snap)
+    assert.equal(saves.length, 1)
+    assert.equal(saves[0]?.suggestedName, 'ftcs-session-20261101-153045.txt')
+    assert.equal(saves[0]?.content, full)
+    assert.equal(saves[0]?.content.length, 200_001)
+    assert.equal(saves[0]?.content.endsWith('ENDMARK'), true)
+    assert.equal(saves[0]?.content.includes('已截断'), false)
+    assert.equal(saves[0]?.content.includes('sk-test-FAKEKEY123456'), false)
+    assert.deepEqual(writes, [clipSavedLine(savedPath)])
+    assert.equal(writes[0], `会话过长，全文已保存到：${savedPath}`)
+    assert.equal(writes[0]?.includes('\n'), false)
+    assert.equal(writes[0]?.includes('应用版本'), false)
+    assert.equal(writes[0]?.includes('ENDMARK'), false)
+    assert.equal(writes[0]?.includes('已截断'), false)
+    assert.notEqual(writes[0]?.length, COPY_SESSION_CHAR_LIMIT)
+    assert.deepEqual(toasts, [{ message: copySavedToast(savedPath), tone: 'success' }])
+    assert.equal(toasts[0]?.message, `内容过长，已保存全文到 ${savedPath}`)
+  })
+
+  it('keeps the success toast when the one-line clipboard write fails', async () => {
+    const writes: string[] = []
+    const savedPath = '/home/me/Downloads/ftcs-session-20261101-153045.txt'
+    const toasts: Array<{ message: string; tone?: string }> = []
+    const ctl = createCopySessionController({
+      readAppVersion: async () => '0.6.1',
+      writeClipboard: async (text) => {
+        writes.push(text)
+        return false
+      },
+      saveTextToDownloads: async () => ({ ok: true, path: savedPath }),
+      showToast: (message, options) => {
+        toasts.push({ message, tone: options?.tone })
+      },
+    })
+    await ctl.copy(sourceOfLength(200_001))
+    assert.deepEqual(writes, [clipSavedLine(savedPath)])
+    assert.deepEqual(toasts, [{ message: copySavedToast(savedPath), tone: 'success' }])
+    assert.equal(toasts.some((toast) => toast.message === COPY_FAIL), false)
+  })
+
+  it('toasts the save error and copies only the failure line', async () => {
+    const writes: string[] = []
+    const saves: SaveTextToDownloadsInput[] = []
+    const toasts: Array<{ message: string; tone?: string }> = []
+    const ctl = createCopySessionController({
+      readAppVersion: async () => '0.6.1',
+      writeClipboard: async (text) => {
+        writes.push(text)
+        return true
+      },
+      saveTextToDownloads: async (input) => {
+        saves.push(input)
+        return { ok: false, error: '磁盘已满' }
+      },
+      showToast: (message, options) => {
+        toasts.push({ message, tone: options?.tone })
+      },
+    })
+    const snap = sourceOfLength(200_001, 'ENDMARK')
+    const before = JSON.stringify(snap)
+    await ctl.copy(snap)
+    assert.equal(saves[0]?.content.length, 200_001)
+    assert.equal(saves[0]?.content.includes('已截断'), false)
+    assert.deepEqual(writes, [CLIP_SAVE_FAIL])
+    assert.equal(writes[0], '会话过长，全文保存失败')
+    assert.equal(writes[0]?.includes('\n'), false)
+    assert.equal(writes[0]?.includes('ENDMARK'), false)
+    assert.deepEqual(toasts, [{ message: copySaveFailToast('磁盘已满'), tone: 'error' }])
+    assert.equal(toasts[0]?.message, '保存全文失败：磁盘已满')
+    assert.equal(toasts.some((toast) => toast.message === COPY_FAIL), false)
+    assert.equal(JSON.stringify(snap), before)
+  })
+
+  it('keeps the save-failure toast when the failure line cannot be copied', async () => {
+    const writes: string[] = []
+    const toasts: Array<{ message: string; tone?: string }> = []
+    const ctl = createCopySessionController({
+      readAppVersion: async () => '0.6.1',
+      writeClipboard: async (text) => {
+        writes.push(text)
+        return false
+      },
+      saveTextToDownloads: async () => ({ ok: false, error: '权限不足' }),
+      showToast: (message, options) => {
+        toasts.push({ message, tone: options?.tone })
+      },
+    })
+    await ctl.copy(sourceOfLength(200_001))
+    assert.deepEqual(writes, [CLIP_SAVE_FAIL])
+    assert.deepEqual(toasts, [{ message: '保存全文失败：权限不足', tone: 'error' }])
+  })
+
+  it('uses the first line of a thrown save error and does not copy the long text', async () => {
+    const writes: string[] = []
+    const toasts: Array<{ message: string; tone?: string }> = []
+    const ctl = createCopySessionController({
+      readAppVersion: async () => '0.6.1',
+      writeClipboard: async (text) => {
+        writes.push(text)
+        throw new Error('clipboard down')
+      },
+      saveTextToDownloads: async () => {
+        throw new Error(`${'错'.repeat(150)}\n    at saveTextToDownloads`)
+      },
+      showToast: (message, options) => {
+        toasts.push({ message, tone: options?.tone })
+      },
+    })
+    await ctl.copy(sourceOfLength(200_001))
+    const reason = '错'.repeat(120)
+    assert.deepEqual(toasts, [{ message: `保存全文失败：${reason}`, tone: 'error' }])
+    assert.equal(toasts[0]?.message.includes('\n'), false)
+    assert.equal(toasts[0]?.message.includes('at saveTextToDownloads'), false)
+    assert.deepEqual(writes, [CLIP_SAVE_FAIL])
+    assert.equal(ctl.isCopying(), false)
+  })
+
+  it('redacts secrets in the saved text and leaves them off the one-line clipboard', async () => {
+    const secret = 'sk-test-FAKEKEY123456'
+    const writes: string[] = []
+    let saved = ''
+    const ctl = createCopySessionController({
+      readAppVersion: async () => '0.6.1',
+      writeClipboard: async (text) => {
+        writes.push(text)
+        return true
+      },
+      saveTextToDownloads: async (input) => {
+        saved = input.content
+        return { ok: true, path: '/tmp/ftcs-session-20261101-153045.txt' }
+      },
+      showToast: () => {},
+    })
+    const base = sourceOfLength(200_001 + secret.length)
+    const body = base.items[0]?.body ?? ''
+    base.items[0]!.body = `${secret}\n${body.slice(secret.length + 1)}`
+    await ctl.copy(base)
+    assert.equal(saved.includes(secret), false)
+    assert.equal(saved.includes('[REDACTED]'), true)
+    assert.equal(saved.length > COPY_SESSION_CHAR_LIMIT, true)
+    assert.equal(writes[0]?.includes(secret), false)
+    assert.equal(writes[0]?.includes('[REDACTED]'), false)
+    assert.equal(writes[0]?.includes('\n'), false)
   })
 
   it('ignores a second click until the first copy finishes', async () => {
@@ -680,6 +893,7 @@ describe('createCopySessionController', () => {
     const ctl = createCopySessionController({
       readAppVersion: () => version,
       writeClipboard: async () => true,
+      saveTextToDownloads: refuseSave,
       showToast: (message) => {
         toasts.push(message)
       },
@@ -694,6 +908,37 @@ describe('createCopySessionController', () => {
     assert.equal(ctl.isCopying(), false)
   })
 
+  it('ignores a second click while an over-limit save is in flight', async () => {
+    let release: (result: SaveTextToDownloadsResult) => void = () => {}
+    const gate = new Promise<SaveTextToDownloadsResult>((resolve) => {
+      release = resolve
+    })
+    const saves: string[] = []
+    const toasts: string[] = []
+    const ctl = createCopySessionController({
+      readAppVersion: async () => '0.6.1',
+      writeClipboard: async () => true,
+      saveTextToDownloads: async (input) => {
+        saves.push(input.suggestedName)
+        return gate
+      },
+      showToast: (message) => {
+        toasts.push(message)
+      },
+    })
+    const first = ctl.copy(sourceOfLength(200_001))
+    const second = ctl.copy(sourceOfLength(200_001))
+    await Promise.resolve()
+    assert.equal(ctl.isCopying(), true)
+    assert.equal(saves.length, 1)
+    release({ ok: true, path: '/tmp/ftcs-session-20261101-153045.txt' })
+    await first
+    await second
+    assert.deepEqual(saves, ['ftcs-session-20261101-153045.txt'])
+    assert.deepEqual(toasts, [copySavedToast('/tmp/ftcs-session-20261101-153045.txt')])
+    assert.equal(ctl.isCopying(), false)
+  })
+
   it('toasts failure without changing the source timeline', async () => {
     const snap = source()
     const before = JSON.stringify(snap)
@@ -703,6 +948,7 @@ describe('createCopySessionController', () => {
         throw new Error('version down')
       },
       writeClipboard: async () => false,
+      saveTextToDownloads: refuseSave,
       showToast: (message, options) => {
         toasts.push({ message, tone: options?.tone })
       },
@@ -724,6 +970,7 @@ describe('createCopySessionController', () => {
         written = text
         return true
       },
+      saveTextToDownloads: refuseSave,
       showToast: (message) => {
         toasts.push(message)
       },
@@ -876,6 +1123,7 @@ describe('writeClipboardText', () => {
       const ctl = createCopySessionController({
         readAppVersion: async () => '0.6.1',
         writeClipboard: writeClipboardText,
+        saveTextToDownloads: refuseSave,
         showToast: (message, options) => {
           toasts.push({ message, tone: options?.tone })
         },
@@ -898,6 +1146,7 @@ describe('writeClipboardText', () => {
     const ctl = createCopySessionController({
       readAppVersion: async () => '0.6.1',
       writeClipboard: writeClipboardText,
+      saveTextToDownloads: refuseSave,
       showToast: (message, options) => {
         toasts.push({ message, tone: options?.tone })
       },

@@ -10,7 +10,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadDesktopEnvFile } from './config/load-desktop-env'
 import { IPC } from './ipc/types'
-import type { AppStatus } from './ipc/types'
+import type { AppStatus, SaveTextToDownloadsInput } from './ipc/types'
+import { saveTextToDownloads } from './session/save-text-to-downloads'
 import { getWorkspaceRoot } from './config/paths'
 import { OpenCodeRuntime } from './opencode/runtime'
 import {
@@ -844,6 +845,11 @@ function registerIpcHandlers(): void {
     return { ok: true }
   })
   ipcMain.handle(IPC.APP_GET_VERSION, () => getAppVersion())
+  ipcMain.handle(
+    IPC.APP_SAVE_TEXT_TO_DOWNLOADS,
+    (_event, input: SaveTextToDownloadsInput) =>
+      saveTextToDownloads(app.getPath('downloads'), input),
+  )
   ipcMain.handle(IPC.UPDATE_CHECK, async (_event, opts?: { forceNotify?: boolean }) =>
     runUpdateCheck(opts),
   )

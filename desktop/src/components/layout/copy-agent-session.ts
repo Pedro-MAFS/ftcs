@@ -10,8 +10,32 @@ export const COPY_SESSION_CHAR_LIMIT = 200_000
 
 export const COPY_EMPTY = '当前没有可复制的会话'
 export const COPY_OK = '已复制会话'
-export const COPY_TRUNCATED = '已复制（内容过长已截断）'
 export const COPY_FAIL = '复制失败，剪贴板不可用，请再试一次'
+export const CLIP_SAVE_FAIL = '会话过长，全文保存失败'
+
+export function copySavedToast(absPath: string): string {
+  return `内容过长，已保存全文到 ${absPath}`
+}
+
+export function copySaveFailToast(reason: string): string {
+  return `保存全文失败：${reason}`
+}
+
+export function clipSavedLine(absPath: string): string {
+  return `会话过长，全文已保存到：${absPath}`
+}
+
+/** 与元信息「复制时间」同一时刻。本地时间，不含空格、冒号和时区。 */
+export function formatSessionDownloadName(copiedAt: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  const y = copiedAt.getFullYear()
+  const m = pad(copiedAt.getMonth() + 1)
+  const d = pad(copiedAt.getDate())
+  const hh = pad(copiedAt.getHours())
+  const mm = pad(copiedAt.getMinutes())
+  const ss = pad(copiedAt.getSeconds())
+  return `ftcs-session-${y}${m}${d}-${hh}${mm}${ss}.txt`
+}
 
 export const SKILL_LABELS: Record<string, string> = {
   'extract-product-profile': '画像生成',
@@ -48,12 +72,21 @@ export interface CopySessionBuildInput extends CopySessionSource {
 
 export interface CopySessionText {
   text: string
-  truncated: boolean
 }
+
+export interface SaveTextToDownloadsInput {
+  suggestedName: string
+  content: string
+}
+
+export type SaveTextToDownloadsResult =
+  | { ok: true; path: string }
+  | { ok: false; error: string }
 
 export interface CopySessionRuntime {
   readAppVersion: () => Promise<string | null | undefined>
   writeClipboard: (text: string) => Promise<boolean>
+  saveTextToDownloads: (input: SaveTextToDownloadsInput) => Promise<SaveTextToDownloadsResult>
   showToast: (
     message: string,
     options?: { tone?: 'info' | 'success' | 'error' },
@@ -297,17 +330,6 @@ function metaBlock(input: CopySessionBuildInput): string {
   return ['## 元信息', ...lines.map((line) => `- ${line}`)].join('\n')
 }
 
-export function applyCopyLimit(text: string): CopySessionText {
-  const limit = COPY_SESSION_CHAR_LIMIT
-  const originalLength = text.length
-  if (originalLength <= limit) return { text, truncated: false }
-  const note = `- 已截断，原长 ${originalLength}，保留前 ${limit}`
-  const marker = '\n## 会话正文'
-  const at = text.indexOf(marker)
-  const withNote = at === -1 ? `${text}\n${note}` : `${text.slice(0, at)}\n${note}${text.slice(at)}`
-  return { text: withNote.slice(0, limit), truncated: true }
-}
-
 export function buildCopySessionText(input: CopySessionBuildInput): CopySessionText {
   const body = input.items
     .map((item, index) =>
@@ -317,7 +339,14 @@ export function buildCopySessionText(input: CopySessionBuildInput): CopySessionT
   const sections = ['# FTCS 智能体会话', metaBlock(input), `## 会话正文\n\n${body}`]
   const waiting = formatAwaiting(input.awaiting)
   if (waiting) sections.push(waiting)
-  return applyCopyLimit(redactSecrets(sections.join('\n\n')))
+  return { text: redactSecrets(sections.join('\n\n')) }
+}
+
+function thrownSaveReason(error: unknown): string {
+  const raw = error instanceof Error ? error.message : ''
+  const line = (raw.split(/\r?\n/, 1)[0] ?? '').trim()
+  const text = line || '保存通道不可用'
+  return text.length > 120 ? text.slice(0, 120) : text
 }
 
 export async function writeClipboardText(text: string): Promise<boolean> {
@@ -382,16 +411,44 @@ export function createCopySessionController(runtime: CopySessionRuntime): {
         } catch {
           appVersion = ''
         }
-        const built = buildCopySessionText({ ...snap, appVersion })
-        let ok = false
-        try {
-          ok = await runtime.writeClipboard(built.text)
-        } catch {
-          ok = false
+        const text = buildCopySessionText({ ...snap, appVersion }).text
+        if (text.length <= COPY_SESSION_CHAR_LIMIT) {
+          let ok = false
+          try {
+            ok = await runtime.writeClipboard(text)
+          } catch {
+            ok = false
+          }
+          runtime.showToast(ok ? COPY_OK : COPY_FAIL, {
+            tone: ok ? 'success' : 'error',
+          })
+          return
         }
-        runtime.showToast(ok ? (built.truncated ? COPY_TRUNCATED : COPY_OK) : COPY_FAIL, {
-          tone: ok ? 'success' : 'error',
-        })
+
+        let saved: SaveTextToDownloadsResult
+        try {
+          saved = await runtime.saveTextToDownloads({
+            suggestedName: formatSessionDownloadName(snap.copiedAt),
+            content: text,
+          })
+        } catch (error) {
+          saved = { ok: false, error: thrownSaveReason(error) }
+        }
+        if (saved.ok) {
+          try {
+            await runtime.writeClipboard(clipSavedLine(saved.path))
+          } catch {
+            // 路径行写不进剪贴板时，保持点击前的内容。
+          }
+          runtime.showToast(copySavedToast(saved.path), { tone: 'success' })
+          return
+        }
+        runtime.showToast(copySaveFailToast(saved.error), { tone: 'error' })
+        try {
+          await runtime.writeClipboard(CLIP_SAVE_FAIL)
+        } catch {
+          // 失败行也写不上则保持点击前的剪贴板，不再提示第二条。
+        }
       } finally {
         copying = false
       }

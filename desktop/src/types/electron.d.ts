@@ -854,6 +854,15 @@ export interface ExportLeadsCsvResult {
   message: string
 }
 
+export interface SaveTextToDownloadsInput {
+  suggestedName: string
+  content: string
+}
+
+export type SaveTextToDownloadsResult =
+  | { ok: true; path: string }
+  | { ok: false; error: string }
+
 declare global {
   interface Window {
     ftcs?: {
@@ -940,6 +949,9 @@ declare global {
       getOfficeCliReady: () => Promise<OfficeCliReadyResult>
       quitApp: () => Promise<{ ok: boolean }>
       getAppVersion: () => Promise<string>
+      saveTextToDownloads: (
+        input: SaveTextToDownloadsInput,
+      ) => Promise<SaveTextToDownloadsResult>
       checkForUpdate: (opts?: { forceNotify?: boolean }) => Promise<UpdateCheckResult>
       snoozeUpdate: () => Promise<{ ok: boolean }>
       dismissUpdate: (version: string) => Promise<{ ok: boolean }>
