@@ -3584,9 +3584,11 @@ textarea.text-input {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .agent-panel__title {
@@ -3595,6 +3597,16 @@ textarea.text-input {
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
+  flex-shrink: 0;
+}
+
+.agent-panel__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
 }
 
 .agent-panel__pulse {
@@ -3608,6 +3620,26 @@ textarea.text-input {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-panel .btn-ghost {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.agent-panel .btn-ghost:hover {
+  color: var(--text);
 }
 
 .agent-panel__meta {

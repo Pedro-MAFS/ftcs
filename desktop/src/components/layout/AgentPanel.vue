@@ -2,10 +2,20 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import Icon from '../shared/Icon.vue'
 import AgentAwaitingReplyCard from './AgentAwaitingReplyCard.vue'
+import { showToast } from '../../composables/useToast'
 import { useWorkspace } from '../../composables/useWorkspace'
-import type { AgentTimelineItem } from '../../types/workspace'
+import {
+  createCopySessionController,
+  kindLabel,
+  skillDisplayName,
+  subagentCurrent,
+  subagentStatus,
+  writeClipboardText,
+  type CopySessionSource,
+} from './copy-agent-session'
 
 const {
+  activeProductId,
   agentSkill,
   agentMeta,
   agentTimeline,
@@ -17,20 +27,16 @@ const {
   isTimelineExpanded,
 } = useWorkspace()
 
-const SKILL_LABELS: Record<string, string> = {
-  'extract-product-profile': '画像生成',
-  'expand-keywords': '关键词扩展',
-  'discover-leads': '全网搜索',
-  'discover-leads-r2': '社媒发现',
-  'discover-leads-r3': '地图发现',
-  'score-and-dedupe': '评分去重',
-  'enrich-lead-contacts': '补全联系人',
-  'draft-outreach-email': '起草开发信',
-  'translate-outreach-email': '翻译对照',
-  idle: '空闲',
-}
-
-const skillLabel = computed(() => SKILL_LABELS[agentSkill.value] || '任务')
+const skillLabel = computed(() => skillDisplayName(agentSkill.value))
+const copySession = createCopySessionController({
+  async readAppVersion() {
+    const read = window.ftcs?.getAppVersion
+    if (!read) return ''
+    return read()
+  },
+  writeClipboard: writeClipboardText,
+  showToast,
+})
 const awaitingCardKey = computed(() => {
   const pending = awaitingUserReply.value
   if (!pending) return 'none'
@@ -52,41 +58,22 @@ const timelineEl = ref<HTMLElement | null>(null)
 const composerHint = ref('')
 const pinToBottom = ref(true)
 
-function formatDuration(ms: number): string {
-  const sec = Math.max(1, Math.round(ms / 1000))
-  if (sec < 60) return `${sec} 秒`
-  const min = Math.floor(sec / 60)
-  const rem = sec % 60
-  return rem ? `${min} 分 ${rem} 秒` : `${min} 分`
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
 }
 
-function agentLabel(agent: string): string {
-  const name = agent.trim()
-  if (!name) return 'General'
-  return name.charAt(0).toUpperCase() + name.slice(1)
-}
-
-function subagentStatus(item: AgentTimelineItem): string {
-  const sub = item.subagent
-  if (!sub) return ''
-  const agent = agentLabel(sub.agent)
-  if (item.status === 'error') return `${agent} · 失败`
-  if (sub.awaiting) return `${agent} · 在等你回复`
-  if (item.status === 'done') {
-    const end = sub.finishedAt ?? Date.now()
-    const dur = sub.startedAt ? formatDuration(end - sub.startedAt) : ''
-    const count = `${sub.toolCount} 次工具`
-    return dur ? `${agent} · 完成 · ${count} · ${dur}` : `${agent} · 完成 · ${count}`
+function onCopySession(): void {
+  if (copySession.isCopying()) return
+  const source: CopySessionSource = {
+    items: cloneJson(agentTimeline.value),
+    meta: cloneJson(agentMeta.value),
+    skill: agentSkill.value,
+    status: agentStatus.value,
+    awaiting: cloneJson(awaitingUserReply.value),
+    productId: activeProductId.value,
+    copiedAt: new Date(),
   }
-  return `${agent} · 进行中`
-}
-
-function subagentCurrent(item: AgentTimelineItem): string {
-  const sub = item.subagent
-  if (!sub) return ''
-  if (sub.current) return `↳ ${sub.current}`
-  if (item.status === 'running') return '↳ 启动中'
-  return `↳ ${sub.toolCount} 次工具`
+  void copySession.copy(source)
 }
 
 function stepKey(itemId: string, stepId: string): string {
@@ -102,25 +89,6 @@ function isStepExpanded(itemId: string, stepId: string): boolean {
     body: '',
     collapsed: true,
   })
-}
-
-function kindLabel(kind: AgentTimelineItem['kind']): string {
-  switch (kind) {
-    case 'user':
-      return '你'
-    case 'system':
-      return '系统'
-    case 'assistant':
-      return '回复'
-    case 'reasoning':
-      return '思考'
-    case 'tool':
-      return '工具'
-    case 'error':
-      return '错误'
-    default:
-      return kind
-  }
 }
 
 function preview(body: string, max = 160): string {
@@ -169,7 +137,17 @@ watch(
         />
         <span>智能体</span>
       </div>
-      <span class="agent-panel__skill">{{ skillLabel }}</span>
+      <div class="agent-panel__actions">
+        <span class="agent-panel__skill">{{ skillLabel }}</span>
+        <button
+          type="button"
+          class="btn-ghost"
+          aria-label="复制当前会话"
+          @click="onCopySession"
+        >
+          复制会话
+        </button>
+      </div>
     </div>
 
     <div class="agent-panel__meta">
