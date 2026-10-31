@@ -121,6 +121,7 @@ export const IPC = {
   SCHEDULE_MARK_RUN: 'schedule:mark-run',
   SCHEDULE_TRIGGER: 'schedule:trigger',
   APP_GET_VERSION: 'app:get-version',
+  APP_SAVE_TEXT_TO_DOWNLOADS: 'app:save-text-to-downloads',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_GET_LOGS */
@@ -131,6 +132,15 @@ export type {
   UpdateDownloadPhase,
   UpdateDownloadState,
 } from '../update/update-download-types'
+
+export interface SaveTextToDownloadsInput {
+  suggestedName: string
+  content: string
+}
+
+export type SaveTextToDownloadsResult =
+  | { ok: true; path: string }
+  | { ok: false; error: string }
 
 export interface UpdateCheckResult {
   ok: boolean

@@ -36,6 +36,11 @@ const copySession = createCopySessionController({
   },
   writeClipboard: writeClipboardText,
   showToast,
+  saveTextToDownloads(input) {
+    const save = window.ftcs?.saveTextToDownloads
+    if (!save) return Promise.resolve({ ok: false as const, error: '保存通道不可用' })
+    return save(input)
+  },
 })
 const awaitingCardKey = computed(() => {
   const pending = awaitingUserReply.value

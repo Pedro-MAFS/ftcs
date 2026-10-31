@@ -78,6 +78,8 @@ import type {
   OfficeCliReadyResult,
   UpdateCheckResult,
   UpdateDownloadState,
+  SaveTextToDownloadsInput,
+  SaveTextToDownloadsResult,
   WorkflowDeletePlanResult,
   WorkflowListPlansResult,
   WorkflowPlanSaveInput,
@@ -232,6 +234,10 @@ const api = {
     ipcRenderer.invoke(IPC.RUNTIME_OFFICECLI_READY),
   quitApp: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.APP_QUIT),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke(IPC.APP_GET_VERSION),
+  saveTextToDownloads: (
+    input: SaveTextToDownloadsInput,
+  ): Promise<SaveTextToDownloadsResult> =>
+    ipcRenderer.invoke(IPC.APP_SAVE_TEXT_TO_DOWNLOADS, input),
   checkForUpdate: (opts?: { forceNotify?: boolean }): Promise<UpdateCheckResult> =>
     ipcRenderer.invoke(IPC.UPDATE_CHECK, opts ?? {}),
   snoozeUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.UPDATE_SNOOZE),
