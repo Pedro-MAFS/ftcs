@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { useMainViewTabs } from '../composables/useMainViewTabs'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
@@ -14,9 +15,10 @@ import type {
   EmailRecipientPoolItemDto,
 } from '../types/electron'
 
+defineOptions({ name: 'EmailView' })
 const meta = SECTION_META.email
 const route = useRoute()
-const router = useRouter()
+const { openPageTab } = useMainViewTabs()
 const {
   activeProductId,
   generating,
@@ -687,9 +689,7 @@ function openRejectAllConfirm(): void {
 
 function goToLead(): void {
   if (!selected.value?.leadId) return
-  router
-    .push({ name: 'leads', query: { leadId: selected.value.leadId } })
-    .catch(() => undefined)
+  void openPageTab('leads', { leadId: selected.value.leadId })
 }
 
 async function runReject(scope: 'slot' | 'lead'): Promise<void> {

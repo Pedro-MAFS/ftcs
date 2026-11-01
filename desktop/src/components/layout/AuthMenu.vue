@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import Icon from '../shared/Icon.vue'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import { useAuth } from '../../composables/useAuth'
+import { useMainViewTabs } from '../../composables/useMainViewTabs'
 import { openInboxPanel, useInbox } from '../../composables/useInbox'
 import { useSettingsNav } from '../../composables/useSettingsNav'
 import { PRODUCT_LINKS } from '../../config/links'
@@ -16,7 +16,6 @@ const confirmLoginForInbox = ref(false)
 const hint = ref('')
 const rootEl = ref<HTMLElement | null>(null)
 
-const router = useRouter()
 const { setCategory } = useSettingsNav()
 const {
   session,
@@ -66,7 +65,7 @@ async function onCancelLogin(): Promise<void> {
 function goAccount(): void {
   setCategory('account')
   close()
-  void router.push({ name: 'settings' }).then(() => {
+  void useMainViewTabs().openSettings().then(() => {
     void nextTick(() => {
       document
         .getElementById('settings-account')

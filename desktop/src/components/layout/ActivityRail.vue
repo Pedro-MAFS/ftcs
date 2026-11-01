@@ -1,42 +1,41 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { computed } from 'vue'
 import Icon from '../shared/Icon.vue'
-import type { WorkspaceSection } from '../../types/workspace'
+import { useMainViewTabs, type PageKey } from '../../composables/useMainViewTabs'
 
-defineProps<{
-  section: WorkspaceSection
-}>()
-
-const router = useRouter()
+const { activeTab, settingsCover, openPageTab, openSettings } = useMainViewTabs()
 
 const items: Array<{
-  section: WorkspaceSection
-  icon: 'package' | 'file-text' | 'radar' | 'users' | 'mail' | 'sliders'
+  page: PageKey
+  icon: 'package' | 'file-text' | 'radar' | 'users' | 'mail'
   label: string
 }> = [
-  { section: 'input', icon: 'package', label: '录入' },
-  { section: 'profile', icon: 'file-text', label: '画像' },
-  { section: 'explore', icon: 'radar', label: '探索' },
-  { section: 'leads', icon: 'users', label: '线索' },
-  { section: 'email', icon: 'mail', label: '邮件' },
+  { page: 'input', icon: 'package', label: '录入' },
+  { page: 'profile', icon: 'file-text', label: '画像' },
+  { page: 'explore', icon: 'radar', label: '探索' },
+  { page: 'leads', icon: 'users', label: '线索' },
+  { page: 'email', icon: 'mail', label: '邮件' },
 ]
 
-function go(section: WorkspaceSection): void {
-  void router.push({ name: section })
-}
+const highlighted = computed(() => {
+  if (settingsCover.value) return null
+  const tab = activeTab.value
+  if (!tab || tab.kind !== 'page' || tab.page === 'home') return null
+  return tab.page
+})
 </script>
 
 <template>
   <aside class="activity-rail" aria-label="模块导航">
     <button
       v-for="item in items"
-      :key="item.section"
+      :key="item.page"
       type="button"
       class="rail-btn"
-      :class="{ 'is-active': section === item.section }"
+      :class="{ 'is-active': highlighted === item.page }"
       :title="item.label"
       :aria-label="item.label"
-      @click="go(item.section)"
+      @click="openPageTab(item.page)"
     >
       <Icon :name="item.icon" :size="18" />
     </button>
@@ -44,10 +43,10 @@ function go(section: WorkspaceSection): void {
     <button
       type="button"
       class="rail-btn"
-      :class="{ 'is-active': section === 'settings' }"
+      :class="{ 'is-active': settingsCover }"
       title="设置"
       aria-label="设置"
-      @click="go('settings')"
+      @click="openSettings"
     >
       <Icon name="sliders" :size="18" />
     </button>

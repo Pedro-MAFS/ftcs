@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { useMainViewTabs } from '../composables/useMainViewTabs'
 import { useWorkflowExecute } from '../composables/useWorkflowExecute'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import { showToast } from '../composables/useToast'
@@ -21,9 +22,11 @@ import type { LeadRowDto, LeadsSnapshotDto, WorkflowPlan } from '../types/electr
 import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonScreen } from '../utils/leads-export'
 import { parseCompanyDomain } from '../utils/parse-company-domain'
 
+defineOptions({ name: 'LeadsView' })
 const meta = SECTION_META.leads
 const route = useRoute()
 const router = useRouter()
+const { openPageTab } = useMainViewTabs()
 const {
   activeProductId,
   exploreTasks,
@@ -693,13 +696,11 @@ function onEnrichLead(lead: LeadRowDto): void {
 }
 
 function goEmail(): void {
-  router.push({ name: 'email' }).catch(() => undefined)
+  void openPageTab('email')
 }
 
 function goEmailLead(lead: LeadRowDto): void {
-  router
-    .push({ name: 'email', query: { leadId: lead.id } })
-    .catch(() => undefined)
+  void openPageTab('email', { leadId: lead.id })
 }
 
 async function onExportCsv(): Promise<void> {

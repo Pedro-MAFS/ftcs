@@ -1,28 +1,27 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import Icon from '../shared/Icon.vue'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import { useWorkspace } from '../../composables/useWorkspace'
 import { useWorkspaceLayout } from '../../composables/useWorkspaceLayout'
+import { isPageKey, useMainViewTabs } from '../../composables/useMainViewTabs'
 import { useSettingsNav } from '../../composables/useSettingsNav'
 import { productAvatarGlyph } from './product-avatar'
 import {
   PIPELINE_TO_SECTION,
   type PipelineStepStatus,
   type ProductStatusTone,
-  type WorkspaceSection,
 } from '../../types/workspace'
 import type { SettingsCategory } from '../../types/settings'
 
 defineProps<{
-  section: WorkspaceSection
+  settings: boolean
 }>()
-
-const router = useRouter()
 const { products, activeProductId, pipelineSteps, selectProduct, deleteProduct, createDraftProduct } =
   useWorkspace()
-const { widths, pipelineCollapsed, togglePipelineCollapsed } = useWorkspaceLayout()
+const { widths, pipelineColumnCollapsed, collapsePipelineColumn, expandPipelineColumn } =
+  useWorkspaceLayout()
+const { openPageTab } = useMainViewTabs()
 const { activeCategory, setCategory } = useSettingsNav()
 
 const deletingId = ref('')
@@ -56,7 +55,7 @@ function productToneClass(tone: ProductStatusTone): string {
 
 function onPipelineClick(stepId: string): void {
   const target = PIPELINE_TO_SECTION[stepId as keyof typeof PIPELINE_TO_SECTION]
-  if (target) void router.push({ name: target })
+  if (target && isPageKey(target)) void openPageTab(target)
 }
 
 function onSettingsCat(id: SettingsCategory): void {
@@ -118,7 +117,7 @@ async function onCreateDraft(): Promise<void> {
       deleteError.value = res.message
       return
     }
-    await router.push({ name: 'profile' })
+    await openPageTab('profile')
   } catch (err) {
     deleteError.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -130,17 +129,29 @@ async function onCreateDraft(): Promise<void> {
 <template>
   <aside
     class="sidebar"
-    :class="{ 'is-collapsed': pipelineCollapsed }"
+    :class="{ 'is-collapsed': pipelineColumnCollapsed }"
     :style="{ width: `${widths.pipeline}px` }"
-    :aria-label="pipelineCollapsed ? '产品' : section === 'settings' ? '设置分类' : '产品与流水线'"
+    :aria-label="pipelineColumnCollapsed ? (settings ? '设置分类' : '产品') : settings ? '设置分类' : '产品与流水线'"
   >
-    <template v-if="pipelineCollapsed">
+    <template v-if="pipelineColumnCollapsed && settings">
+      <button
+        type="button"
+        class="icon-btn"
+        title="展开"
+        aria-label="展开设置分类"
+        @click="expandPipelineColumn"
+      >
+        <Icon name="panel-left-open" :size="14" />
+      </button>
+    </template>
+
+    <template v-else-if="pipelineColumnCollapsed">
       <button
         type="button"
         class="icon-btn"
         title="展开"
         aria-label="展开产品栏"
-        @click="togglePipelineCollapsed"
+        @click="expandPipelineColumn"
       >
         <Icon name="panel-left-open" :size="14" />
       </button>
@@ -159,15 +170,15 @@ async function onCreateDraft(): Promise<void> {
       </div>
     </template>
 
-    <template v-else-if="section === 'settings'">
+    <template v-else-if="settings">
       <div class="sidebar__head">
         <span>设置分类</span>
         <button
           type="button"
           class="icon-btn"
           title="收起"
-          aria-label="收起产品栏"
-          @click="togglePipelineCollapsed"
+          aria-label="收起设置分类"
+          @click="collapsePipelineColumn"
         >
           <Icon name="panel-left-close" :size="14" />
         </button>
@@ -203,7 +214,7 @@ async function onCreateDraft(): Promise<void> {
             class="icon-btn"
             title="收起"
             aria-label="收起产品栏"
-            @click="togglePipelineCollapsed"
+            @click="collapsePipelineColumn"
           >
             <Icon name="panel-left-close" :size="14" />
           </button>

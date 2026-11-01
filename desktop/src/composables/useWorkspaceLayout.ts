@@ -254,14 +254,25 @@ export function createWorkspaceLayout(options: WorkspaceLayoutOptions = {}) {
   const bodyWidth = ref(options.bodyWidth ?? initialBodyWidth())
   const preview = ref<LayoutRatios | null>(null)
   const draggingSide = ref<SplitterSide | null>(null)
+  /** 进入设置时按展开宽度画分类，不改 pipelineCollapsed。 */
+  const relaxPipelineCollapse = ref(false)
+  let settingsOpen = false
   let dragOrigin: { x: number; pixels: LayoutRatios } | null = null
 
   function readLayout(): MainViewLayout {
     return cloneLayout(state)
   }
 
-  function displayedWidths(): ColumnWidths {
+  function pixelLayout(): MainViewLayout {
     const layout = readLayout()
+    if (relaxPipelineCollapse.value && layout.fill === 'none') {
+      return { ...layout, pipelineCollapsed: false }
+    }
+    return layout
+  }
+
+  function displayedWidths(): ColumnWidths {
+    const layout = pixelLayout()
     const base = computeColumnPixels(bodyWidth.value, layout)
     if (!preview.value || layout.fill !== 'none') return base
     return {
@@ -295,11 +306,34 @@ export function createWorkspaceLayout(options: WorkspaceLayoutOptions = {}) {
     bodyWidth.value = next
   }
 
-  function togglePipelineCollapsed(): void {
+  function noteSettingsOpen(open: boolean): void {
+    settingsOpen = open
+    relaxPipelineCollapse.value = open
+  }
+
+  function collapsePipelineColumn(): void {
     if (state.fill !== 'none') return
     clearDrag()
-    state.pipelineCollapsed = !state.pipelineCollapsed
-    commit()
+    relaxPipelineCollapse.value = false
+    if (!state.pipelineCollapsed) {
+      state.pipelineCollapsed = true
+      commit()
+    }
+  }
+
+  function expandPipelineColumn(): void {
+    if (state.fill !== 'none') return
+    clearDrag()
+    if (settingsOpen) relaxPipelineCollapse.value = true
+    if (state.pipelineCollapsed) {
+      state.pipelineCollapsed = false
+      commit()
+    }
+  }
+
+  function togglePipelineCollapsed(): void {
+    if (state.pipelineCollapsed) expandPipelineColumn()
+    else collapsePipelineColumn()
   }
 
   function toggleAgentCollapsed(): void {
@@ -336,14 +370,15 @@ export function createWorkspaceLayout(options: WorkspaceLayoutOptions = {}) {
   }
 
   function canDragSplitter(side: SplitterSide): boolean {
-    if (state.fill !== 'none') return false
-    if (side === 'left') return !state.pipelineCollapsed
-    return !state.agentCollapsed
+    const layout = pixelLayout()
+    if (layout.fill !== 'none') return false
+    if (side === 'left') return !layout.pipelineCollapsed
+    return !layout.agentCollapsed
   }
 
   function beginSplitterDrag(side: SplitterSide, clientX: number): void {
     if (dragOrigin || !canDragSplitter(side)) return
-    const current = computeColumnPixels(bodyWidth.value, readLayout())
+    const current = computeColumnPixels(bodyWidth.value, pixelLayout())
     const pixels = {
       pipeline: current.pipeline,
       main: current.main,
@@ -370,9 +405,10 @@ export function createWorkspaceLayout(options: WorkspaceLayoutOptions = {}) {
       pixels.main !== origin.pixels.main ||
       pixels.agent !== origin.pixels.agent
     if (!changed) return
+    const shown = pixelLayout()
     state.ratios = ratiosFromExpandedPixels(state.ratios, pixels, {
-      pipeline: state.pipelineCollapsed,
-      agent: state.agentCollapsed,
+      pipeline: shown.pipelineCollapsed,
+      agent: shown.agentCollapsed,
     })
     commit()
   }
@@ -380,10 +416,14 @@ export function createWorkspaceLayout(options: WorkspaceLayoutOptions = {}) {
   return {
     fill: computed(() => state.fill),
     pipelineCollapsed: computed(() => state.pipelineCollapsed),
+    pipelineColumnCollapsed: computed(() => state.pipelineCollapsed && !relaxPipelineCollapse.value),
     agentCollapsed: computed(() => state.agentCollapsed),
     widths,
     draggingSide,
     setBodyWidth,
+    noteSettingsOpen,
+    collapsePipelineColumn,
+    expandPipelineColumn,
     togglePipelineCollapsed,
     toggleAgentCollapsed,
     enterFill,

@@ -172,4 +172,25 @@ describe('createWorkspaceLayout', () => {
     assert.equal(layout.getLayout().pipelineCollapsed, false)
     assert.equal(layout.getLayout().agentCollapsed, false)
   })
+
+  it('draws the pipeline expanded while settings is open without changing the collapsed bit', () => {
+    const { layout, writes } = layoutAt(1180)
+    layout.togglePipelineCollapsed()
+    assert.equal(layout.getWidths().pipeline, 44)
+    const written = writes.length
+    layout.noteSettingsOpen(true)
+    assert.equal(layout.getLayout().pipelineCollapsed, true)
+    assert.equal(layout.pipelineColumnCollapsed.value, false)
+    assert.equal(layout.getWidths().pipeline, 236)
+    assert.equal(writes.length, written)
+
+    layout.collapsePipelineColumn()
+    assert.equal(layout.getLayout().pipelineCollapsed, true)
+    assert.equal(layout.getWidths().pipeline, 44)
+    assert.equal(writes.length, written)
+
+    layout.noteSettingsOpen(false)
+    assert.equal(layout.getWidths().pipeline, 44)
+    assert.equal(layout.getLayout().pipelineCollapsed, true)
+  })
 })

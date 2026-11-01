@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { useMainViewTabs } from '../composables/useMainViewTabs'
 import { useExploreStart } from '../composables/useExploreStart'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import { showToast } from '../composables/useToast'
@@ -18,8 +18,9 @@ import {
   roundLabel,
 } from '../explore/round-labels'
 
+defineOptions({ name: 'ExploreView' })
+const { openPageTab } = useMainViewTabs()
 const meta = SECTION_META.explore
-const router = useRouter()
 const {
   activeProductId,
   activeProduct,
@@ -243,12 +244,10 @@ async function startExplore(): Promise<void> {
 
 function goLeads(task?: ExploreTaskDto): void {
   if (task && task.status !== 'keywords_ready') {
-    router
-      .push({ name: 'leads', query: { runId: task.id } })
-      .catch(() => undefined)
+    void openPageTab('leads', { runId: task.id })
     return
   }
-  router.push({ name: 'leads' }).catch(() => undefined)
+  void openPageTab('leads')
 }
 
 async function startScoreAndDedupe(task: ExploreTaskDto): Promise<void> {

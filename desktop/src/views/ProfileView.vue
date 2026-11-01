@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { useMainViewTabs } from '../composables/useMainViewTabs'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
 import type { ProfileDetail, ProfileSaveInput } from '../types/electron'
 
-const router = useRouter()
+defineOptions({ name: 'ProfileView' })
+const { openPageTab } = useMainViewTabs()
 const meta = SECTION_META.profile
 const {
   currentProfile,
@@ -343,7 +344,7 @@ async function createExploreTask(): Promise<void> {
       agentStatus.value = 'error'
       return
     }
-    await router.push({ name: 'explore' })
+    await openPageTab('explore')
   } catch (err) {
     expandError.value = err instanceof Error ? err.message : String(err)
     agentStatus.value = 'error'

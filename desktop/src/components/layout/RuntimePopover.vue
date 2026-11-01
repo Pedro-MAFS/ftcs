@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import Icon from '../shared/Icon.vue'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import DiagnosticDetails from '../shared/DiagnosticDetails.vue'
 import { useAppStatus } from '../../composables/useAppStatus'
+import { useMainViewTabs } from '../../composables/useMainViewTabs'
 import { useSettingsNav } from '../../composables/useSettingsNav'
 
 const MCP_META: Record<string, string> = {
@@ -20,7 +20,6 @@ const actionMessage = ref('')
 const reconnecting = ref('')
 const rootEl = ref<HTMLElement | null>(null)
 
-const router = useRouter()
 const { setCategory } = useSettingsNav()
 const {
   status,
@@ -171,7 +170,7 @@ async function onReconnect(name: string): Promise<void> {
 function goSettings(): void {
   setCategory('opencode')
   close()
-  void router.push({ name: 'settings' }).then(() => {
+  void useMainViewTabs().openSettings().then(() => {
     void nextTick(() => {
       document
         .getElementById('settings-opencode')

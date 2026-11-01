@@ -1,22 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import Icon from '../shared/Icon.vue'
 import RuntimePopover from './RuntimePopover.vue'
 import AuthMenu from './AuthMenu.vue'
 import { useWorkspace } from '../../composables/useWorkspace'
+import { useMainViewTabs } from '../../composables/useMainViewTabs'
 import { useUiTheme } from '../../composables/useUiTheme'
 import { oppositeExplicitTheme } from '../../utils/ui-theme'
-import { SECTION_META, type WorkspaceSection } from '../../types/workspace'
 import type { BuiltinBrowserUiState } from '../../types/electron'
 import { builtinBrowserEntryLabel } from '../../../electron/browser-runtime/window-policy'
 
-defineProps<{
-  section: WorkspaceSection
-}>()
-
-const router = useRouter()
 const { activeProduct } = useWorkspace()
+const { openSettings } = useMainViewTabs()
 const { effective, setMode } = useUiTheme()
 const nextTheme = computed(() => oppositeExplicitTheme(effective.value))
 const themeLabel = computed(() => (nextTheme.value === 'light' ? '切换到日间' : '切换到暗黑'))
@@ -25,7 +20,9 @@ function toggleTheme(): void {
   void setMode(nextTheme.value)
 }
 
-const steps: WorkspaceSection[] = ['input', 'profile', 'explore', 'leads', 'email']
+function openBrowser(): void {
+  void window.ftcs?.showBuiltinBrowser?.()
+}
 
 const browserState = ref<BuiltinBrowserUiState>({
   alive: false,
@@ -52,14 +49,6 @@ onMounted(() => {
 onUnmounted(() => {
   stopBrowserState?.()
 })
-
-function openBrowser(): void {
-  void window.ftcs?.showBuiltinBrowser?.()
-}
-
-function go(section: WorkspaceSection): void {
-  void router.push({ name: section })
-}
 </script>
 
 <template>
@@ -70,19 +59,6 @@ function go(section: WorkspaceSection): void {
       <span class="title-bar__sep">/</span>
       <span class="title-bar__product">{{ activeProduct?.name ?? '未选择产品' }}</span>
     </div>
-
-    <nav class="title-bar__pipeline" aria-label="流水线">
-      <button
-        v-for="step in steps"
-        :key="step"
-        type="button"
-        class="pipeline-chip"
-        :class="{ 'is-active': section === step }"
-        @click="go(step)"
-      >
-        {{ SECTION_META[step].label }}
-      </button>
-    </nav>
 
     <div class="title-bar__right">
       <button
@@ -112,7 +88,7 @@ function go(section: WorkspaceSection): void {
         class="icon-btn"
         title="设置"
         aria-label="设置"
-        @click="go('settings')"
+        @click="openSettings"
       >
         <Icon name="settings" :size="16" />
       </button>

@@ -2,6 +2,7 @@ import { nextTick, ref, watch, type Ref } from 'vue'
 import type { Router } from 'vue-router'
 import { useRouter } from 'vue-router'
 import { landingSettled, onLandingSettled } from './useDefaultLanding'
+import { useMainViewTabs } from './useMainViewTabs'
 import { useOnboarding } from './useOnboarding'
 
 export interface GuideStepSpec {
@@ -160,7 +161,7 @@ async function revealStep(
   if (!spec || !router || token !== showToken) return 'cancelled'
   if (useOnboarding().open.value) return 'blocked'
   if (router.currentRoute.value.name !== spec.route) {
-    await router.push({ name: spec.route })
+    await useMainViewTabs().openPageTab(spec.route)
   }
   if (token !== showToken) return 'cancelled'
   if (useOnboarding().open.value) return 'blocked'

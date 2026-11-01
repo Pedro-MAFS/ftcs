@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import type { LibrarySnapshot, LibraryTreeNode } from '../types/library'
 import { useWorkspace } from '../composables/useWorkspace'
+import { useMainViewTabs } from '../composables/useMainViewTabs'
 import { ensureAgentReady } from '../composables/useAgentPreflight'
 import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
@@ -33,7 +33,8 @@ import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import OfficeCliGenerateGateDialog from '../components/library/OfficeCliGenerateGateDialog.vue'
 
 const meta = SECTION_META.input
-const router = useRouter()
+defineOptions({ name: 'InputView' })
+const { openPageTab } = useMainViewTabs()
 const { resetAgentForGenerate, clearAgentStartFailed, generating } = useWorkspace()
 
 const websiteUrl = ref('')
@@ -982,7 +983,7 @@ async function runGenerate(websitePaths: string[], fileList: string[]) {
     if (res.skipped?.length) {
       message.value += `（跳过：${res.skipped.join('；')}）`
     }
-    await router.push({ name: 'profile' })
+    await openPageTab('profile')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
     clearAgentStartFailed()
