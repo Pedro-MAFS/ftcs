@@ -319,18 +319,20 @@ watch(
           <template v-else-if="agentStatus === 'done'"> · 完成</template>
           <template v-else-if="agentStatus === 'error'"> · 异常</template>
         </span>
-        <button
-          v-if="generating"
-          type="button"
-          class="btn-secondary btn-sm"
-          @click="onAbort"
-        >
-          中止
-        </button>
-        <button type="button" class="btn-primary btn-sm" :disabled="generating" @click="onSend">
-          <Icon name="send" :size="12" />
-          发送
-        </button>
+        <div class="composer-buttons">
+          <button
+            v-if="generating"
+            type="button"
+            class="btn-secondary btn-sm"
+            @click="onAbort"
+          >
+            中止
+          </button>
+          <button type="button" class="btn-primary btn-sm" :disabled="generating" @click="onSend">
+            <Icon name="send" :size="12" />
+            发送
+          </button>
+        </div>
       </div>
     </div>
     </template>

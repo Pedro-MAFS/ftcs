@@ -27,6 +27,7 @@ defineProps<{
     | 'chevron-right'
     | 'chevron-down'
     | 'refresh-cw'
+    | 'lock'
     | 'square'
     | 'user'
     | 'log-in'
@@ -181,6 +182,10 @@ defineProps<{
     </template>
     <template v-else-if="name === 'chevron-down'">
       <path d="m6 9 6 6 6-6" />
+    </template>
+    <template v-else-if="name === 'lock'">
+      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </template>
     <template v-else-if="name === 'refresh-cw'">
       <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />

@@ -42,6 +42,8 @@ import type {
   AgentPreflightKind,
   AgentPreflightOptions,
   AgentPreflightResult,
+  BuiltinBrowserSlot,
+  BuiltinBrowserTabsPayload,
   BuiltinBrowserUiState,
   AuthActionResult,
   AuthSessionSnapshot,
@@ -105,6 +107,22 @@ const api = {
     ipcRenderer.on(IPC.BUILTIN_BROWSER_STATE, listener)
     return () => ipcRenderer.removeListener(IPC.BUILTIN_BROWSER_STATE, listener)
   },
+  getBuiltinBrowserTabs: (): Promise<BuiltinBrowserTabsPayload> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_GET_TABS),
+  onBuiltinBrowserTabs: (callback: (payload: BuiltinBrowserTabsPayload) => void): (() => void) => {
+    const listener = (_event: unknown, payload: BuiltinBrowserTabsPayload) => callback(payload)
+    ipcRenderer.on(IPC.BUILTIN_BROWSER_TABS, listener)
+    return () => ipcRenderer.removeListener(IPC.BUILTIN_BROWSER_TABS, listener)
+  },
+  openBuiltinBrowserTab: (): Promise<{ key: string }> => ipcRenderer.invoke(IPC.BUILTIN_BROWSER_OPEN),
+  closeBuiltinBrowserTab: (key: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_CLOSE, key),
+  navigateBuiltinBrowser: (key: string, url: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_NAVIGATE, key, url),
+  controlBuiltinBrowser: (key: string, action: 'back' | 'forward' | 'reload'): Promise<void> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_CONTROL, key, action),
+  setBuiltinBrowserSlot: (slot: BuiltinBrowserSlot): Promise<void> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_SET_SLOT, slot),
   startOpenCode: (): Promise<OpenCodeActionResult> =>
     ipcRenderer.invoke(IPC.OPENCODE_START),
   stopOpenCode: (): Promise<OpenCodeActionResult> =>

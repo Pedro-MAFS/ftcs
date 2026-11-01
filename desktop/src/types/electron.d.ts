@@ -759,6 +759,30 @@ export interface BuiltinBrowserUiState {
   url: string
 }
 
+export interface BuiltinBrowserSlot {
+  x: number
+  y: number
+  width: number
+  height: number
+  visible: boolean
+  browserKey: string
+}
+
+export interface BuiltinBrowserTabSnapshot {
+  browserKey: string
+  title: string
+  url: string
+  origin: 'user' | 'task'
+  taskId: string | null
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
+export interface BuiltinBrowserTabsPayload {
+  tabs: BuiltinBrowserTabSnapshot[]
+  focusKey: string | null
+}
+
 export interface RawLeadContactEditDto {
   type: string
   value: string
@@ -876,6 +900,13 @@ declare global {
       getBuiltinBrowserState: () => Promise<BuiltinBrowserUiState>
       showBuiltinBrowser: () => Promise<BuiltinBrowserUiState>
       onBuiltinBrowserState: (callback: (state: BuiltinBrowserUiState) => void) => () => void
+      getBuiltinBrowserTabs: () => Promise<BuiltinBrowserTabsPayload>
+      onBuiltinBrowserTabs: (callback: (payload: BuiltinBrowserTabsPayload) => void) => () => void
+      openBuiltinBrowserTab: () => Promise<{ key: string }>
+      closeBuiltinBrowserTab: (key: string) => Promise<boolean>
+      navigateBuiltinBrowser: (key: string, url: string) => Promise<boolean>
+      controlBuiltinBrowser: (key: string, action: 'back' | 'forward' | 'reload') => Promise<void>
+      setBuiltinBrowserSlot: (slot: BuiltinBrowserSlot) => Promise<void>
       startOpenCode: () => Promise<OpenCodeActionResult>
       stopOpenCode: () => Promise<OpenCodeActionResult>
       restartOpenCode: () => Promise<AppStatus>

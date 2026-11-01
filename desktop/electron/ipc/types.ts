@@ -6,6 +6,13 @@ export const IPC = {
   BUILTIN_BROWSER_SET_MODE: 'builtin-browser:set-mode',
   BUILTIN_BROWSER_STATE: 'builtin-browser:state',
   BUILTIN_BROWSER_CAPTION: 'builtin-browser:caption',
+  BUILTIN_BROWSER_TABS: 'builtin-browser:tabs',
+  BUILTIN_BROWSER_GET_TABS: 'builtin-browser:get-tabs',
+  BUILTIN_BROWSER_OPEN: 'builtin-browser:open',
+  BUILTIN_BROWSER_CLOSE: 'builtin-browser:close',
+  BUILTIN_BROWSER_NAVIGATE: 'builtin-browser:navigate',
+  BUILTIN_BROWSER_CONTROL: 'builtin-browser:control',
+  BUILTIN_BROWSER_SET_SLOT: 'builtin-browser:set-slot',
   OPENCODE_START: 'opencode:start',
   OPENCODE_STOP: 'opencode:stop',
   OPENCODE_RESTART: 'opencode:restart',
@@ -1174,6 +1181,30 @@ export interface BuiltinBrowserUiState {
   mode: BuiltinBrowserMode
   title: string
   url: string
+}
+
+export interface BuiltinBrowserSlot {
+  x: number
+  y: number
+  width: number
+  height: number
+  visible: boolean
+  browserKey: string
+}
+
+export interface BuiltinBrowserTabSnapshot {
+  browserKey: string
+  title: string
+  url: string
+  origin: 'user' | 'task'
+  taskId: string | null
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
+export interface BuiltinBrowserTabsPayload {
+  tabs: BuiltinBrowserTabSnapshot[]
+  focusKey: string | null
 }
 
 export type ChannelMode = 'official' | 'custom'

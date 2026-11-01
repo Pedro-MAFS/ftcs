@@ -19,7 +19,7 @@ function tabSelected(id: string): boolean {
         :key="tab.id"
         class="main-tab"
         role="tab"
-        :class="{ 'is-active': tabSelected(tab.id) }"
+        :class="{ 'is-active': tabSelected(tab.id), 'is-pinned': tab.id === 'page:home' }"
         :aria-selected="tabSelected(tab.id)"
         tabindex="0"
         @click="activateTab(tab.id)"
@@ -27,6 +27,7 @@ function tabSelected(id: string): boolean {
       >
         <span class="main-tab__title">{{ tab.title }}</span>
         <button
+          v-if="tab.id !== 'page:home'"
           type="button"
           class="main-tab__close"
           :aria-label="`关闭${tab.title}`"
