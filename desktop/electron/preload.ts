@@ -45,6 +45,7 @@ import type {
   BuiltinBrowserSlot,
   BuiltinBrowserTabsPayload,
   BuiltinBrowserUiState,
+  MainViewLayout,
   AuthActionResult,
   AuthSessionSnapshot,
   InboxAckResult,
@@ -123,6 +124,9 @@ const api = {
     ipcRenderer.invoke(IPC.BUILTIN_BROWSER_CONTROL, key, action),
   setBuiltinBrowserSlot: (slot: BuiltinBrowserSlot): Promise<void> =>
     ipcRenderer.invoke(IPC.BUILTIN_BROWSER_SET_SLOT, slot),
+  getMainViewLayout: (): Promise<MainViewLayout | null> => ipcRenderer.invoke(IPC.LAYOUT_GET),
+  setMainViewLayout: (layout: MainViewLayout): Promise<MainViewLayout | null> =>
+    ipcRenderer.invoke(IPC.LAYOUT_SET, layout),
   startOpenCode: (): Promise<OpenCodeActionResult> =>
     ipcRenderer.invoke(IPC.OPENCODE_START),
   stopOpenCode: (): Promise<OpenCodeActionResult> =>

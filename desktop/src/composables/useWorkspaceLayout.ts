@@ -235,12 +235,10 @@ function initialBodyWidth(): number {
 }
 
 function persistToHost(layout: MainViewLayout): void {
-  if (typeof window === 'undefined' || !window.ftcs) return
-  const write = (
-    window.ftcs as { setMainViewLayout?: (value: MainViewLayout) => Promise<unknown> }
-  ).setMainViewLayout
+  if (typeof window === 'undefined') return
+  const write = window.ftcs?.setMainViewLayout
   if (!write) return
-  void Promise.resolve(write(layout)).catch(() => {})
+  void write(layout).catch(() => {})
 }
 
 function setDragCursor(active: boolean): void {
@@ -290,6 +288,21 @@ export function createWorkspaceLayout(options: WorkspaceLayoutOptions = {}) {
     const snapshot = readLayout()
     options.write?.(cloneLayout(snapshot))
     persistToHost(cloneLayout(snapshot))
+  }
+
+  function replaceLayout(layout: MainViewLayout): void {
+    state.ratios = { ...layout.ratios }
+    state.pipelineCollapsed = layout.pipelineCollapsed
+    state.agentCollapsed = layout.agentCollapsed
+    state.fill = layout.fill
+    state.beforeFill = layout.beforeFill
+      ? {
+          ratios: { ...layout.beforeFill.ratios },
+          pipelineCollapsed: layout.beforeFill.pipelineCollapsed,
+          agentCollapsed: layout.beforeFill.agentCollapsed,
+        }
+      : null
+    clearDrag()
   }
 
   function clearDrag(): void {
@@ -434,6 +447,7 @@ export function createWorkspaceLayout(options: WorkspaceLayoutOptions = {}) {
     endSplitterDrag,
     getLayout: readLayout,
     getWidths: displayedWidths,
+    replaceLayout,
   }
 }
 

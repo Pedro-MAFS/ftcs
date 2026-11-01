@@ -1,3 +1,5 @@
+export type { MainViewLayout } from '../config/main-view-layout'
+
 export const IPC = {
   APP_GET_STATUS: 'app:get-status',
   APP_AGENT_PREFLIGHT: 'app:agent-preflight',
@@ -19,6 +21,8 @@ export const IPC = {
   OPENCODE_GET_LOGS: 'opencode:get-logs',
   OPENCODE_MCP_RECONNECT: 'opencode:mcp-reconnect',
   SETTINGS_GET: 'settings:get',
+  LAYOUT_GET: 'layout:get',
+  LAYOUT_SET: 'layout:set',
   SETTINGS_SAVE: 'settings:save',
   SETTINGS_PICK_WORKSPACE: 'settings:pick-workspace',
   SETTINGS_SET_OPEN_AT_LOGIN: 'settings:set-open-at-login',

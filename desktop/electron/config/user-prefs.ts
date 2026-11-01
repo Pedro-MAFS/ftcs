@@ -2,6 +2,7 @@ import { app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { BusinessGuideState, OnboardingState } from '../ipc/types'
+import type { MainViewLayout } from './main-view-layout'
 
 interface UserPrefs {
   workspaceRoot?: string
@@ -26,6 +27,8 @@ interface UserPrefs {
   onboarding?: OnboardingState
   /** 业务流程聚光灯。缺省视为 pending，且 get 不会把 pending 写回。 */
   businessGuide?: BusinessGuideState
+  /** 主视图栏宽、收起和占满。缺省不写，设置页不展示。 */
+  mainViewLayout?: MainViewLayout
   update?: {
     dismissedVersion?: string
     snoozeUntil?: string

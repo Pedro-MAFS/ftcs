@@ -783,6 +783,18 @@ export interface BuiltinBrowserTabsPayload {
   focusKey: string | null
 }
 
+export interface MainViewLayoutPrefs {
+  ratios: { pipeline: number; main: number; agent: number }
+  pipelineCollapsed: boolean
+  agentCollapsed: boolean
+  fill: 'none' | 'main' | 'agent'
+  beforeFill: {
+    ratios: { pipeline: number; main: number; agent: number }
+    pipelineCollapsed: boolean
+    agentCollapsed: boolean
+  } | null
+}
+
 export interface RawLeadContactEditDto {
   type: string
   value: string
@@ -907,6 +919,8 @@ declare global {
       navigateBuiltinBrowser: (key: string, url: string) => Promise<boolean>
       controlBuiltinBrowser: (key: string, action: 'back' | 'forward' | 'reload') => Promise<void>
       setBuiltinBrowserSlot: (slot: BuiltinBrowserSlot) => Promise<void>
+      getMainViewLayout: () => Promise<MainViewLayoutPrefs | null>
+      setMainViewLayout: (layout: MainViewLayoutPrefs) => Promise<MainViewLayoutPrefs | null>
       startOpenCode: () => Promise<OpenCodeActionResult>
       stopOpenCode: () => Promise<OpenCodeActionResult>
       restartOpenCode: () => Promise<AppStatus>

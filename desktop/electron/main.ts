@@ -48,7 +48,8 @@ import {
 } from './gateway/places-official-runtime'
 import { placesOfficialKeyMemory } from './gateway/places-official-key-memory'
 import { setPlacesMcpInjection } from './opencode/places-mcp-env'
-import { writeUserPrefs } from './config/user-prefs'
+import { writeUserPrefs, readUserPrefs } from './config/user-prefs'
+import { storedMainViewLayout, writableMainViewLayout } from './config/main-view-layout'
 import { initializeWorkspace, ensureMcpServersReady } from './config/workspace-init'
 import {
   addWebsite,
@@ -748,6 +749,13 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettingsSnapshot())
+  ipcMain.handle(IPC.LAYOUT_GET, () => storedMainViewLayout(readUserPrefs().mainViewLayout))
+  ipcMain.handle(IPC.LAYOUT_SET, (_event, input: unknown) => {
+    const next = writableMainViewLayout(input)
+    if (!next) return storedMainViewLayout(readUserPrefs().mainViewLayout)
+    const saved = writeUserPrefs({ mainViewLayout: next })
+    return storedMainViewLayout(saved.mainViewLayout)
+  })
   ipcMain.handle(IPC.SETTINGS_SET_OPEN_AT_LOGIN, (_event, enabled: boolean) => {
     applyOpenAtLogin(Boolean(enabled))
     return { ok: true as const, openAtLogin: Boolean(enabled) }

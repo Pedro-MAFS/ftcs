@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, RouterView } from 'vue-router'
 import TitleBar from './TitleBar.vue'
 import ActivityRail from './ActivityRail.vue'
@@ -19,10 +19,11 @@ const route = useRoute()
 const { setAgentContext } = useWorkspace()
 const { settle } = useDefaultLanding()
 const { bootstrapUpdateCheck } = useUpdateCheck()
-const { fill, widths, setBodyWidth, noteSettingsOpen } = useWorkspaceLayout()
+const { fill, widths, setBodyWidth, noteSettingsOpen, replaceLayout } = useWorkspaceLayout()
 const { activeTab, settingsCover, cachedViewNames, applyPublishedTabs } = useMainViewTabs()
 
 const bodyRef = ref<HTMLElement | null>(null)
+const layoutReady = ref(false)
 let bodyObserver: ResizeObserver | null = null
 let stopBrowserTabs: (() => void) | null = null
 const settingsOpen = computed(() => route.name === 'settings' || settingsCover.value)
@@ -64,18 +65,31 @@ onMounted(() => {
   void bootstrapUpdateCheck()
   void settle()
   const apply = window.ftcs?.onBuiltinBrowserTabs
-  if (apply) stopBrowserTabs = apply((payload) => {
-    void applyPublishedTabs(payload)
-  })
+  if (apply) {
+    stopBrowserTabs = apply((payload) => {
+      void applyPublishedTabs(payload)
+    })
+  }
   void window.ftcs?.getBuiltinBrowserTabs?.().then((payload) => {
     void applyPublishedTabs(payload)
   })
-  const el = bodyRef.value
-  if (!el || typeof ResizeObserver === 'undefined') return
-  const publish = () => setBodyWidth(el.clientWidth)
-  bodyObserver = new ResizeObserver(publish)
-  bodyObserver.observe(el)
-  publish()
+  void (async () => {
+    try {
+      const stored = await window.ftcs?.getMainViewLayout?.()
+      if (stored) replaceLayout(stored)
+    } catch {
+      // 读失败按默认比例显示，不把默认值写回去。
+    } finally {
+      layoutReady.value = true
+    }
+    await nextTick()
+    const el = bodyRef.value
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const publish = () => setBodyWidth(el.clientWidth)
+    bodyObserver = new ResizeObserver(publish)
+    bodyObserver.observe(el)
+    publish()
+  })()
 })
 
 onUnmounted(() => {
@@ -90,7 +104,7 @@ onUnmounted(() => {
   <div class="workspace">
     <TitleBar />
     <UpdateBanner />
-    <div ref="bodyRef" class="workspace__body">
+    <div v-if="layoutReady" ref="bodyRef" class="workspace__body">
       <ActivityRail v-if="fill === 'none'" />
       <Sidebar v-if="fill === 'none'" :settings="settingsOpen" />
       <LayoutSplitter v-if="fill === 'none'" side="left" />

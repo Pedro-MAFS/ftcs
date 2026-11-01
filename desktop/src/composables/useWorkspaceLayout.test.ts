@@ -28,6 +28,7 @@ describe('computeColumnPixels', () => {
   }
 
   it('uses 236 / 544 / 340 on the default 1180 window', () => {
+    assert.deepEqual(DEFAULT_RATIOS, { pipeline: 0.2107, main: 0.4857, agent: 0.3036 })
     const widths = computeColumnPixels(1180, open)
     assert.deepEqual(widths, {
       rail: 48,
@@ -192,5 +193,37 @@ describe('createWorkspaceLayout', () => {
     layout.noteSettingsOpen(false)
     assert.equal(layout.getWidths().pipeline, 44)
     assert.equal(layout.getLayout().pipelineCollapsed, true)
+  })
+
+  it('applies a stored layout without writing it back', () => {
+    const { layout, writes } = layoutAt(1180)
+    layout.replaceLayout({
+      ratios: { pipeline: 0.25, main: 0.45, agent: 0.3 },
+      pipelineCollapsed: false,
+      agentCollapsed: true,
+      fill: 'main',
+      beforeFill: {
+        ratios: { pipeline: 0.25, main: 0.45, agent: 0.3 },
+        pipelineCollapsed: false,
+        agentCollapsed: true,
+      },
+    })
+    assert.equal(writes.length, 0)
+    assert.equal(layout.getLayout().fill, 'main')
+    assert.equal(layout.getLayout().agentCollapsed, true)
+    assert.equal(layout.getWidths().main, 1180)
+    assert.equal(layout.getWidths().agent, 0)
+    layout.exitFill()
+    assert.equal(writes.length, 1)
+    assert.equal(layout.getWidths().agent, 44)
+    assert.equal(layout.getLayout().fill, 'none')
+  })
+
+  it('does not write when the window width changes', () => {
+    const { layout, writes } = layoutAt(1180)
+    layout.setBodyWidth(1400)
+    assert.equal(writes.length, 0)
+    assert.notEqual(layout.getWidths().main, 544)
+    assert.equal(layout.getLayout().ratios.main, DEFAULT_RATIOS.main)
   })
 })
