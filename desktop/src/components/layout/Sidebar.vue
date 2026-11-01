@@ -4,7 +4,9 @@ import { useRouter } from 'vue-router'
 import Icon from '../shared/Icon.vue'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import { useWorkspace } from '../../composables/useWorkspace'
+import { useWorkspaceLayout } from '../../composables/useWorkspaceLayout'
 import { useSettingsNav } from '../../composables/useSettingsNav'
+import { productAvatarGlyph } from './product-avatar'
 import {
   PIPELINE_TO_SECTION,
   type PipelineStepStatus,
@@ -20,6 +22,7 @@ defineProps<{
 const router = useRouter()
 const { products, activeProductId, pipelineSteps, selectProduct, deleteProduct, createDraftProduct } =
   useWorkspace()
+const { widths, pipelineCollapsed, togglePipelineCollapsed } = useWorkspaceLayout()
 const { activeCategory, setCategory } = useSettingsNav()
 
 const deletingId = ref('')
@@ -125,10 +128,49 @@ async function onCreateDraft(): Promise<void> {
 </script>
 
 <template>
-  <aside class="sidebar" :aria-label="section === 'settings' ? '设置分类' : '产品与流水线'">
-    <template v-if="section === 'settings'">
+  <aside
+    class="sidebar"
+    :class="{ 'is-collapsed': pipelineCollapsed }"
+    :style="{ width: `${widths.pipeline}px` }"
+    :aria-label="pipelineCollapsed ? '产品' : section === 'settings' ? '设置分类' : '产品与流水线'"
+  >
+    <template v-if="pipelineCollapsed">
+      <button
+        type="button"
+        class="icon-btn"
+        title="展开"
+        aria-label="展开产品栏"
+        @click="togglePipelineCollapsed"
+      >
+        <Icon name="panel-left-open" :size="14" />
+      </button>
+      <div class="sidebar__avatars">
+        <button
+          v-for="product in products"
+          :key="product.id"
+          type="button"
+          class="product-avatar"
+          :class="{ 'is-current': product.id === activeProductId }"
+          :title="product.name"
+          @click="selectProduct(product.id)"
+        >
+          {{ productAvatarGlyph(product.name) }}
+        </button>
+      </div>
+    </template>
+
+    <template v-else-if="section === 'settings'">
       <div class="sidebar__head">
         <span>设置分类</span>
+        <button
+          type="button"
+          class="icon-btn"
+          title="收起"
+          aria-label="收起产品栏"
+          @click="togglePipelineCollapsed"
+        >
+          <Icon name="panel-left-close" :size="14" />
+        </button>
       </div>
       <button
         v-for="cat in settingsCats"
@@ -145,16 +187,27 @@ async function onCreateDraft(): Promise<void> {
     <template v-else>
       <div class="sidebar__head">
         <span>产品</span>
-        <button
-          type="button"
-          class="icon-btn"
-          title="新建空白草稿"
-          aria-label="新建空白草稿"
-          :disabled="creatingDraft"
-          @click="onCreateDraft"
-        >
-          <Icon name="plus" :size="14" />
-        </button>
+        <div class="sidebar__head-actions">
+          <button
+            type="button"
+            class="icon-btn"
+            title="新建空白草稿"
+            aria-label="新建空白草稿"
+            :disabled="creatingDraft"
+            @click="onCreateDraft"
+          >
+            <Icon name="plus" :size="14" />
+          </button>
+          <button
+            type="button"
+            class="icon-btn"
+            title="收起"
+            aria-label="收起产品栏"
+            @click="togglePipelineCollapsed"
+          >
+            <Icon name="panel-left-close" :size="14" />
+          </button>
+        </div>
       </div>
 
       <p v-if="deleteError" class="sidebar__error">{{ deleteError }}</p>

@@ -4,6 +4,7 @@ import Icon from '../shared/Icon.vue'
 import AgentAwaitingReplyCard from './AgentAwaitingReplyCard.vue'
 import { showToast } from '../../composables/useToast'
 import { useWorkspace } from '../../composables/useWorkspace'
+import { useWorkspaceLayout } from '../../composables/useWorkspaceLayout'
 import {
   createCopySessionController,
   kindLabel,
@@ -26,6 +27,9 @@ const {
   toggleTimelineExpand,
   isTimelineExpanded,
 } = useWorkspace()
+const { fill, widths, agentCollapsed, toggleAgentCollapsed, enterFill, exitFill } = useWorkspaceLayout()
+const collapsedStrip = computed(() => fill.value === 'none' && agentCollapsed.value)
+const agentFilled = computed(() => fill.value === 'agent')
 
 const skillLabel = computed(() => skillDisplayName(agentSkill.value))
 const copySession = createCopySessionController({
@@ -130,7 +134,23 @@ watch(
 </script>
 
 <template>
-  <aside class="agent-panel" aria-label="智能体">
+  <aside
+    class="agent-panel"
+    :class="{ 'is-collapsed': collapsedStrip }"
+    :style="{ width: `${widths.agent}px` }"
+    aria-label="智能体"
+  >
+    <button
+      v-if="collapsedStrip"
+      type="button"
+      class="icon-btn"
+      title="展开"
+      aria-label="展开智能体"
+      @click="toggleAgentCollapsed"
+    >
+      <Icon name="panel-right-open" :size="14" />
+    </button>
+    <template v-else>
     <div class="agent-panel__head">
       <div class="agent-panel__title">
         <i
@@ -152,6 +172,36 @@ watch(
         >
           复制会话
         </button>
+        <button
+          v-if="agentFilled"
+          type="button"
+          class="btn-ghost"
+          aria-label="退出占满"
+          @click="exitFill"
+        >
+          <Icon name="minimize-2" :size="14" />
+          退出占满
+        </button>
+        <template v-else>
+          <button
+            type="button"
+            class="icon-btn"
+            title="收起"
+            aria-label="收起智能体"
+            @click="toggleAgentCollapsed"
+          >
+            <Icon name="panel-right-close" :size="14" />
+          </button>
+          <button
+            type="button"
+            class="icon-btn"
+            title="占满"
+            aria-label="智能体占满"
+            @click="enterFill('agent')"
+          >
+            <Icon name="maximize-2" :size="14" />
+          </button>
+        </template>
       </div>
     </div>
 
@@ -283,5 +333,6 @@ watch(
         </button>
       </div>
     </div>
+    </template>
   </aside>
 </template>

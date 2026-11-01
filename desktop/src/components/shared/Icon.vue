@@ -37,6 +37,12 @@ defineProps<{
     | 'moon'
     | 'x'
     | 'app-window'
+    | 'panel-left-open'
+    | 'panel-left-close'
+    | 'panel-right-open'
+    | 'panel-right-close'
+    | 'maximize-2'
+    | 'minimize-2'
   size?: number
 }>()
 </script>
@@ -232,6 +238,38 @@ defineProps<{
       <path d="M10 4v4" />
       <path d="M2 8h20" />
       <path d="M6 4v4" />
+    </template>
+    <template v-else-if="name === 'panel-left-open'">
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
+      <path d="m14 9 3 3-3 3" />
+    </template>
+    <template v-else-if="name === 'panel-left-close'">
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
+      <path d="m16 15-3-3 3-3" />
+    </template>
+    <template v-else-if="name === 'panel-right-open'">
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M15 3v18" />
+      <path d="m10 15-3-3 3-3" />
+    </template>
+    <template v-else-if="name === 'panel-right-close'">
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M15 3v18" />
+      <path d="m8 9 3 3-3 3" />
+    </template>
+    <template v-else-if="name === 'maximize-2'">
+      <path d="M15 3h6v6" />
+      <path d="m21 3-7 7" />
+      <path d="m3 21 7-7" />
+      <path d="M9 21H3v-6" />
+    </template>
+    <template v-else-if="name === 'minimize-2'">
+      <path d="m14 10 7-7" />
+      <path d="M20 10h-6V4" />
+      <path d="m3 21 7-7" />
+      <path d="M4 14h6v6" />
     </template>
   </svg>
 </template>

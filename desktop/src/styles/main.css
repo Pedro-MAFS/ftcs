@@ -39,8 +39,6 @@
   --titlebar-height: 44px;
   --statusbar-height: 28px;
   --rail-width: 48px;
-  --sidebar-width: 236px;
-  --agent-width: 340px;
   --titlebar-controls-width: 138px;
 
   --font-sans:
@@ -398,11 +396,69 @@ button:focus-visible {
 }
 
 .workspace__main {
-  flex: 1;
+  position: relative;
+  flex: 0 0 auto;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-app);
+}
+
+.workspace__fill {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  height: 36px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.workspace__fill-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.workspace__fill-exit:hover {
+  color: var(--text);
+}
+
+.layout-splitter {
+  position: relative;
+  flex: 0 0 6px;
+  width: 6px;
+  touch-action: none;
+  background: transparent;
+}
+
+.layout-splitter::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: var(--border);
+}
+
+.layout-splitter.is-active {
+  cursor: col-resize;
+}
+
+.layout-splitter.is-active:hover::before,
+.layout-splitter.is-dragging::before {
+  width: 2px;
+  background: var(--accent);
 }
 
 /* —— Title bar —— */
@@ -1161,15 +1217,61 @@ button:focus-visible {
 
 /* —— Sidebar —— */
 .sidebar {
-  width: var(--sidebar-width);
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 12px 10px;
   background: var(--bg-panel);
-  border-right: 1px solid var(--border);
   overflow-y: auto;
+  flex: 0 0 auto;
+}
+
+.sidebar.is-collapsed {
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  overflow: hidden;
+}
+
+.sidebar__avatars {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 0;
+  padding-bottom: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.product-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #262626;
+  color: #e4e4e4;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
+
+.product-avatar.is-current {
+  background: #1f2b3d;
+  color: #3b82f6;
+  border: 1px solid #3b82f6;
+}
+
+.product-avatar:hover:not(.is-current) {
+  background: #333333;
 }
 
 .sidebar__head {
@@ -1181,6 +1283,13 @@ button:focus-visible {
   font-weight: 600;
   color: var(--text-muted);
   letter-spacing: 0.06em;
+}
+
+.sidebar__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .sidebar__gap {
@@ -1381,9 +1490,9 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  height: 100%;
-  padding: 16px;
+  flex: 1 1 auto;
   min-height: 0;
+  padding: 16px;
 }
 
 .main-pane__head {
@@ -3571,13 +3680,17 @@ textarea.text-input {
 
 /* —— Agent panel —— */
 .agent-panel {
-  width: var(--agent-width);
   display: flex;
   flex-direction: column;
   background: var(--bg-panel);
-  border-left: 1px solid var(--border);
-  flex-shrink: 0;
+  flex: 0 0 auto;
   min-height: 0;
+  min-width: 0;
+}
+
+.agent-panel.is-collapsed {
+  align-items: center;
+  padding-top: 8px;
 }
 
 .agent-panel__head {
@@ -3627,6 +3740,9 @@ textarea.text-input {
 }
 
 .agent-panel .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
   background: transparent;
   border: none;
@@ -3636,6 +3752,10 @@ textarea.text-input {
   line-height: 1.2;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.agent-panel__actions .icon-btn {
+  flex-shrink: 0;
 }
 
 .agent-panel .btn-ghost:hover {
