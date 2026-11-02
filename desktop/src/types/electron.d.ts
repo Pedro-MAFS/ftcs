@@ -57,6 +57,11 @@ export type AwaitingUserReply = {
   renderable: boolean
 } | null
 
+export type PermissionAskView = {
+  permission: string
+  tool?: string
+} | null
+
 export type AgentEventPayload =
   | {
       type: 'state'
@@ -83,6 +88,10 @@ export type AgentEventPayload =
   | {
       type: 'awaiting-reply'
       pending: AwaitingUserReply
+    }
+  | {
+      type: 'permission-ask'
+      pending: PermissionAskView
     }
 
 export interface ProfileGenerateInput {
@@ -1104,6 +1113,7 @@ declare global {
       replyQuestion: (input: {
         selections: Array<{ optionLabels: string[]; customText: string }>
       }) => Promise<{ ok: boolean; message: string }>
+      replyPermission: (reply: 'once' | 'reject') => Promise<{ ok: boolean; message: string }>
       getProfile: (productId: string) => Promise<ProfileDetail | null>
       listProfiles: () => Promise<ProfileSummary[]>
       saveProfile: (input: ProfileSaveInput) => Promise<ProfileSaveResult>

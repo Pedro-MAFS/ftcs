@@ -88,6 +88,15 @@ import {
   resolveAwaitingReplyTimeoutMs,
 } from './awaiting-reply'
 import {
+  PERMISSION_REPLY_FAILED_MESSAGE,
+  PermissionCoordinator,
+  type PermissionReplyCall,
+  type PermissionReplyOutcome,
+  classifyPermissionHttpResult,
+  readPermissionAsk,
+  type ReplyPermissionResult,
+} from './permission-gate'
+import {
   emptySubagent,
   mergeSubagent,
   readTaskIdentity,
@@ -140,6 +149,10 @@ export type AgentEventPayload =
   | {
       type: 'awaiting-reply'
       pending: AwaitingReplyView | null
+    }
+  | {
+      type: 'permission-ask'
+      pending: { permission: string; tool?: string } | null
     }
 
 export type AgentEventSink = (event: AgentEventPayload) => void
@@ -839,7 +852,9 @@ export class AgentRunController {
   private currentEmit: AgentEventSink | null = null
   private currentFlush: (() => void) | null = null
   private awaitTimelineSeq = 0
+  private permissionFailureHandled = false
   private readonly awaitingReply: AwaitingReplyCoordinator
+  private readonly permissionGate: PermissionCoordinator
 
   constructor(
     private readonly getClient: () => OpencodeClient | null,
@@ -878,6 +893,17 @@ export class AgentRunController {
         disarmAwaitingReplyNotification()
       },
     })
+    this.permissionGate = new PermissionCoordinator({
+      isRunning: () => this.running,
+      hasFailed: () => this.permissionFailureHandled,
+      reply: (call) => this.sendPermissionReply(call),
+      emit: (pending) => {
+        this.currentEmit?.({ type: 'permission-ask', pending })
+      },
+      onReplyFailed: () => {
+        this.failPermissionReply()
+      },
+    })
   }
 
   private async failForPlacesGoogleRejection(googleMessage: string): Promise<void> {
@@ -907,6 +933,8 @@ export class AgentRunController {
 
   /** 新任务开始：卸掉上一段订阅，并打断进行中的自由回复。不把自由回复记成任务失败。 */
   private beginTaskRun(): AbortSignal {
+    this.permissionFailureHandled = false
+    this.running = true
     this.eventBridge?.stop()
     if (this.dialogueActive) {
       this.dialogueToken += 1
@@ -919,12 +947,12 @@ export class AgentRunController {
         void client.session.abort({ sessionID: sid }).catch(() => undefined)
       }
     }
-    this.running = true
     this.abort = new AbortController()
     return this.abort.signal
   }
 
   async abortCurrent(): Promise<void> {
+    this.permissionGate.clear()
     if (!this.running && this.dialogueActive) {
       await this.abortFreeDialogue()
       return
@@ -976,6 +1004,7 @@ export class AgentRunController {
     }
 
     const token = ++this.dialogueToken
+    this.permissionFailureHandled = false
     this.dialogueActive = true
     this.dialogueStopRequested = false
     this.autoAbortReason = null
@@ -1133,6 +1162,47 @@ export class AgentRunController {
 
   replyToPendingQuestion(input: unknown): Promise<ReplyQuestionResult> {
     return this.awaitingReply.reply(input)
+  }
+
+  replyToPendingPermission(input: unknown): Promise<ReplyPermissionResult> {
+    return this.permissionGate.replyFromUser(input)
+  }
+
+  private async sendPermissionReply(call: PermissionReplyCall): Promise<PermissionReplyOutcome> {
+    const client = this.getClient()
+    if (!client) return 'failed'
+    try {
+      const res = await client.permission.reply(call)
+      return classifyPermissionHttpResult({
+        error: res.error,
+        data: res.data,
+        status: res.response?.status,
+      })
+    } catch (error) {
+      return classifyPermissionHttpResult({ error, data: undefined })
+    }
+  }
+
+  /** 回复两次都失败时停掉会话，避免权限请求一直挂起。 */
+  private failPermissionReply(): void {
+    if (this.permissionFailureHandled) return
+    this.permissionFailureHandled = true
+    this.autoAbortReason = PERMISSION_REPLY_FAILED_MESSAGE
+    this.permissionGate.clear()
+    this.timeline?.addSuffix({
+      id: this.running ? 'sys-abort' : 'permission-reply-failed',
+      kind: 'error',
+      time: nowTime(),
+      title: this.running ? '失败' : '系统',
+      body: PERMISSION_REPLY_FAILED_MESSAGE,
+    })
+    this.currentFlush?.()
+    this.abort?.abort()
+    const client = this.getClient()
+    const sid = this.sessionId
+    if (client && sid) {
+      void client.session.abort({ sessionID: sid }).catch(() => undefined)
+    }
   }
 
   private questionClient(): AwaitingQuestionClient | null {
@@ -3472,9 +3542,17 @@ export class AgentRunController {
         case 'permission.v2.asked': {
           const sid = event.properties.sessionID
           if (sid !== sessionId && !knownChildren.has(sid)) return
-          void client.permission
-            .reply({ requestID: event.properties.id, reply: 'always' })
-            .catch(() => undefined)
+          const ask = readPermissionAsk(event)
+          if (!ask) return
+          void this.permissionGate.onAsked(ask)
+          return
+        }
+
+        case 'permission.replied':
+        case 'permission.v2.replied': {
+          const sid = event.properties.sessionID
+          if (sid !== sessionId && !knownChildren.has(sid)) return
+          void this.permissionGate.noteReplied(event.properties.requestID)
           return
         }
 
@@ -3807,6 +3885,7 @@ export class AgentRunController {
           flushTimer = null
         }
         // 换会话时卸掉。不在这里再 flush 旧时间线，避免盖住新任务。
+        this.permissionGate.clear()
         this.awaitingReply.dispose()
       },
     }

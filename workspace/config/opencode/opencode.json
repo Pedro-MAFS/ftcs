@@ -6,9 +6,27 @@
     "paths": ["skills"]
   },
   "permission": {
-    "skill": {
-      "*": "allow"
-    }
+    "*": "ask",
+    "skill": { "*": "allow" },
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "question": "allow",
+    "todowrite": "allow",
+    "doom_loop": "allow",
+    "lead-store_*": "allow",
+    "search-api_*": "allow",
+    "places-api_*": "allow",
+    "hunter-api_*": "allow",
+    "chrome-devtools_*": "allow",
+    "edit": "deny",
+    "bash": "deny",
+    "external_directory": "deny",
+    "lsp": "deny",
+    "webfetch": "ask",
+    "websearch": "ask",
+    "task": "ask",
+    "ftcs-task_*": "ask"
   },
   "mcp": {
     "lead-store": {

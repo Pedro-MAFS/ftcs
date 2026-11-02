@@ -5,6 +5,7 @@ import type {
   AgentEventPayload,
   ReplyQuestionInput,
   ReplyQuestionResult,
+  ReplyPermissionResult,
   AppStatus,
   OpenCodeActionResult,
   ExploreTasksSnapshotDto,
@@ -398,6 +399,8 @@ const api = {
     ipcRenderer.invoke(IPC.AGENT_SEND_MESSAGE, text),
   replyQuestion: (input: ReplyQuestionInput): Promise<ReplyQuestionResult> =>
     ipcRenderer.invoke(IPC.AGENT_REPLY_QUESTION, input),
+  replyPermission: (reply: 'once' | 'reject'): Promise<ReplyPermissionResult> =>
+    ipcRenderer.invoke(IPC.AGENT_REPLY_PERMISSION, reply),
   getProfile: (productId: string): Promise<ProfileDetail | null> =>
     ipcRenderer.invoke(IPC.PROFILE_GET, productId),
   listProfiles: (): Promise<ProfileSummary[]> => ipcRenderer.invoke(IPC.PROFILE_LIST),

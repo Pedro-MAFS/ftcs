@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import Icon from '../shared/Icon.vue'
 import AgentAwaitingReplyCard from './AgentAwaitingReplyCard.vue'
+import AgentPermissionCard from './AgentPermissionCard.vue'
 import {
   FREE_DIALOGUE_PLACEHOLDER,
   composerInputLocked,
@@ -31,6 +32,7 @@ const {
   agentPrompt,
   agentStatus,
   awaitingUserReply,
+  pendingPermission,
   dialogueBusy,
   generating,
   toggleTimelineExpand,
@@ -332,6 +334,8 @@ watch(
       :key="awaitingCardKey"
       :pending="awaitingUserReply"
     />
+
+    <AgentPermissionCard v-if="pendingPermission" :pending="pendingPermission" />
 
     <div class="agent-panel__composer">
       <textarea

@@ -9,6 +9,7 @@ import type {
 import type {
   AgentEventPayload,
   AwaitingUserReply,
+  PermissionAskView,
   EmailDraftsSnapshotDto,
   ExploreTasksSnapshotDto,
   KeywordExpansionDto,
@@ -38,6 +39,7 @@ const agentTimeline = ref<AgentTimelineItem[]>([])
 const agentExpanded = ref<Record<string, boolean>>({})
 const agentPrompt = ref('')
 const awaitingUserReply = ref<AwaitingUserReply>(null)
+const pendingPermission = ref<PermissionAskView>(null)
 /** 自由回复这一轮。不写入 agentStatus，流水线不会把它当成任务在跑。 */
 const dialogueBusy = ref(false)
 const generating = computed(() => agentStatus.value === 'running')
@@ -222,6 +224,7 @@ function handleAgentEvent(payload: AgentEventPayload): void {
     if (payload.productId) {
       activeProductId.value = payload.productId
     }
+    if (payload.status === 'running') pendingPermission.value = null
     updatePipelineFromProfile()
     return
   }
@@ -233,8 +236,13 @@ function handleAgentEvent(payload: AgentEventPayload): void {
     awaitingUserReply.value = payload.pending
     return
   }
+  if (payload.type === 'permission-ask') {
+    pendingPermission.value = payload.pending
+    return
+  }
   if (payload.type === 'done') {
     awaitingUserReply.value = null
+    pendingPermission.value = null
     agentStatus.value = payload.ok ? 'done' : 'error'
     if (payload.profile) {
       applyProfileToState(payload.profile)
@@ -345,6 +353,7 @@ export function useWorkspace() {
   function resetTimelineView(): void {
     agentTimeline.value = []
     agentExpanded.value = {}
+    pendingPermission.value = null
   }
 
   function resetAgentForGenerate(selectedCount: number): void {
@@ -495,6 +504,7 @@ export function useWorkspace() {
     agentTimeline,
     agentPrompt,
     awaitingUserReply,
+    pendingPermission,
     dialogueBusy,
     generating,
     selectProduct,
