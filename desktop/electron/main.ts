@@ -1900,6 +1900,10 @@ function registerIpcHandlers(): void {
     return getAgentRunner().replyToPendingQuestion(input)
   })
 
+  ipcMain.handle(IPC.AGENT_REPLY_PERMISSION, async (_event, input: unknown) => {
+    return getAgentRunner().replyToPendingPermission(input)
+  })
+
   ipcMain.handle(IPC.AGENT_SEND_MESSAGE, async (event, text: unknown) => {
     const message = typeof text === 'string' ? text : ''
     const sender = event.sender

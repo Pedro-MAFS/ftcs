@@ -5138,6 +5138,51 @@ textarea.text-input {
   gap: 8px;
 }
 
+.perm-card {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.perm-card__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.perm-card__line,
+.perm-card__hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.perm-card__hint {
+  color: var(--text-muted);
+}
+
+.perm-card__alert {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.perm-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .website-chip__meta {
   flex: 1;
   min-width: 0;

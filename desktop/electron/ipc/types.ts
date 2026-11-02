@@ -89,6 +89,7 @@ export const IPC = {
   WORKFLOW_DELETE_PLAN: 'workflow:delete-plan',
   AGENT_EVENT: 'agent:event',
   AGENT_REPLY_QUESTION: 'agent:reply-question',
+  AGENT_REPLY_PERMISSION: 'agent:reply-permission',
   AGENT_SEND_MESSAGE: 'agent:send-message',
   APP_OPEN_EXTERNAL: 'app:open-external',
   AUTH_GET_SESSION: 'auth:get-session',
@@ -1079,6 +1080,17 @@ export interface ReplyQuestionResult {
   message: string
 }
 
+/** 续聊授权卡。请求 id 留在主进程，这里只有展示用的权限名和工具键。 */
+export type PermissionAskView = {
+  permission: string
+  tool?: string
+} | null
+
+export interface ReplyPermissionResult {
+  ok: boolean
+  message: string
+}
+
 export type AgentEventPayload =
   | {
       type: 'state'
@@ -1105,6 +1117,10 @@ export type AgentEventPayload =
   | {
       type: 'awaiting-reply'
       pending: AwaitingUserReply
+    }
+  | {
+      type: 'permission-ask'
+      pending: PermissionAskView
     }
 
 export type OpenCodeRuntimeState = 'idle' | 'starting' | 'running' | 'error' | 'stopped'
