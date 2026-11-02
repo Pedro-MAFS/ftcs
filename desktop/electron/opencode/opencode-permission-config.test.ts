@@ -40,6 +40,9 @@ describe('opencode.json permission（US-FD-02 §5）', () => {
     }
     assert.equal(permission['ftcs-task_*'], 'ask')
     assert.notEqual(permission['ftcs-task_*'], 'allow')
+    const task = config.mcp?.['ftcs-task'] as { command?: string[]; enabled?: boolean } | undefined
+    assert.deepEqual(task?.command, ['node', 'mcp-servers/ftcs-task/dist/mcp.js'])
+    assert.equal(task?.enabled, true)
   })
 
   it('硬边界拒绝，网页抓取仍要询问', () => {

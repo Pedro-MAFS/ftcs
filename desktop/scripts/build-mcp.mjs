@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '../..')
-const MCP_NAMES = ['lead-store', 'search-api', 'places-api', 'hunter-api']
+const MCP_NAMES = ['lead-store', 'search-api', 'places-api', 'hunter-api', 'ftcs-task']
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
 function runNpm(cwd, args) {

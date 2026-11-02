@@ -262,6 +262,7 @@ function getAgentRunner(): AgentRunController {
   if (!agentRunner) {
     agentRunner = new AgentRunController(() => runtime?.getClient() ?? null, {
       reloadRuntime: reloadOpenCodeRuntime,
+      preflight: (kind) => gateAgentStart(kind),
     })
   }
   return agentRunner
@@ -1904,7 +1905,15 @@ function registerIpcHandlers(): void {
     return getAgentRunner().replyToPendingPermission(input)
   })
 
-  ipcMain.handle(IPC.AGENT_SEND_MESSAGE, async (event, text: unknown) => {
+  ipcMain.handle(IPC.AGENT_NOTE_PRODUCT, async (_event, productId: unknown) => {
+    getAgentRunner().noteActiveProduct(typeof productId === 'string' ? productId : '')
+    return { ok: true }
+  })
+
+  ipcMain.handle(IPC.AGENT_SEND_MESSAGE, async (event, text: unknown, productId: unknown) => {
+    if (typeof productId === 'string') {
+      getAgentRunner().noteActiveProduct(productId)
+    }
     const message = typeof text === 'string' ? text : ''
     const sender = event.sender
     return getAgentRunner().sendFreeDialogue(message, (payload) => emitAgentEvent(sender, payload))

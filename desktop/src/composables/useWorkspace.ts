@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   AgentMetaItem,
   AgentTimelineItem,
@@ -59,6 +59,7 @@ const SECTION_SKILL: Partial<Record<WorkspaceSection, string>> = {
 
 let agentBound = false
 let productsLoaded = false
+let productNoteBound = false
 let pipelineReady: Promise<void> | null = null
 
 const PRODUCT_PREVIEW_COUNT = 3
@@ -271,6 +272,14 @@ function ensureWorkspaceBindings(): void {
     window.ftcs.onAgentEvent(handleAgentEvent)
     agentBound = true
   }
+  if (!productNoteBound && typeof window !== 'undefined') {
+    productNoteBound = true
+    watch(activeProductId, (id) => {
+      const note = window.ftcs?.noteActiveProduct
+      if (!note) return
+      void note(id)
+    })
+  }
   if (!productsLoaded) {
     productsLoaded = true
     pipelineReady = refreshProducts().then(
@@ -350,6 +359,10 @@ export function useWorkspace() {
     }
   }
 
+  /**
+   * 左侧按钮一启动就清空。
+   * 从聊天同意启动不得调用：时间线要等主进程在 session.create 成功后整表替换。
+   */
   function resetTimelineView(): void {
     agentTimeline.value = []
     agentExpanded.value = {}
