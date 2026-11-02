@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
+import type { SendFreeDialogueResult } from './opencode/free-dialogue'
 import type {
   AgentEventPayload,
   ReplyQuestionInput,
@@ -393,6 +394,8 @@ const api = {
   generateProfile: (input: ProfileGenerateInput): Promise<ProfileGenerateResult> =>
     ipcRenderer.invoke(IPC.PROFILE_GENERATE, input),
   abortProfile: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.PROFILE_ABORT),
+  sendAgentMessage: (text: string): Promise<SendFreeDialogueResult> =>
+    ipcRenderer.invoke(IPC.AGENT_SEND_MESSAGE, text),
   replyQuestion: (input: ReplyQuestionInput): Promise<ReplyQuestionResult> =>
     ipcRenderer.invoke(IPC.AGENT_REPLY_QUESTION, input),
   getProfile: (productId: string): Promise<ProfileDetail | null> =>

@@ -38,6 +38,8 @@ const agentTimeline = ref<AgentTimelineItem[]>([])
 const agentExpanded = ref<Record<string, boolean>>({})
 const agentPrompt = ref('')
 const awaitingUserReply = ref<AwaitingUserReply>(null)
+/** 自由回复这一轮。不写入 agentStatus，流水线不会把它当成任务在跑。 */
+const dialogueBusy = ref(false)
 const generating = computed(() => agentStatus.value === 'running')
 
 const activeProduct = computed(
@@ -493,6 +495,7 @@ export function useWorkspace() {
     agentTimeline,
     agentPrompt,
     awaitingUserReply,
+    dialogueBusy,
     generating,
     selectProduct,
     deleteProduct,

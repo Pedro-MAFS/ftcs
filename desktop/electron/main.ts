@@ -1900,6 +1900,12 @@ function registerIpcHandlers(): void {
     return getAgentRunner().replyToPendingQuestion(input)
   })
 
+  ipcMain.handle(IPC.AGENT_SEND_MESSAGE, async (event, text: unknown) => {
+    const message = typeof text === 'string' ? text : ''
+    const sender = event.sender
+    return getAgentRunner().sendFreeDialogue(message, (payload) => emitAgentEvent(sender, payload))
+  })
+
   ipcMain.handle(IPC.PROFILE_GENERATE, async (event, input: ProfileGenerateInput) => {
     try {
       const preflight = await gateAgentStart('extract-profile', {
