@@ -106,6 +106,7 @@ import {
   type AgentSubagent,
   type AgentSubagentStep,
 } from './subagent-timeline'
+import { retryWatchOnStatus } from './retry-watch'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -536,7 +537,7 @@ function asString(value: unknown): string {
 }
 
 const COLLAPSE_BODY_CHARS = 400
-/** 模型调用持续处于 retry 状态超过该时长则自动中止任务 */
+/** 连续处于 retry 超过该时长才自动中止。离开 retry 即释放。 */
 const RETRY_WATCHDOG_MS = 120_000
 
 /** 完整序列化工具出入参，不做长度截断；折叠由 UI 的 collapsed 处理 */
@@ -3829,7 +3830,8 @@ export class AgentRunController {
           }
           if (event.properties.sessionID !== sessionId) return
           const { status } = event.properties
-          if (status.type === 'retry') {
+          const watch = retryWatchOnStatus(retrySince !== 0, sawSessionError, status.type)
+          if (watch === 'start' || watch === 'continue') {
             if (!retrySince) retrySince = Date.now()
             const waitSec = Math.max(1, Math.round((status.next - Date.now()) / 1000))
             lastRetryBody = [
@@ -3844,25 +3846,23 @@ export class AgentRunController {
               title: `模型调用失败，重试中 · 第 ${status.attempt} 次`,
               body: lastRetryBody,
             })
-            armWatchdog()
+            if (watch === 'start') armWatchdog()
             flushNow()
             return
           }
-          if (status.type === 'idle') {
-            if (retrySince && !sawSessionError) {
-              timeline.addSuffix({
-                id: 'session-retry',
-                kind: 'system',
-                time: nowTime(),
-                title: '模型重试已恢复',
-                body: `${lastRetryBody}\n已恢复，继续执行。`,
-              })
-              flushNow()
-            }
-            retrySince = 0
-            sawSessionError = false
-            disarmWatchdog()
+          if (watch === 'recover') {
+            timeline.addSuffix({
+              id: 'session-retry',
+              kind: 'system',
+              time: nowTime(),
+              title: '模型重试已恢复',
+              body: `${lastRetryBody}\n已恢复，继续执行。`,
+            })
+            flushNow()
           }
+          retrySince = 0
+          sawSessionError = false
+          disarmWatchdog()
           return
         }
 
