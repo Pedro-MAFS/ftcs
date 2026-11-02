@@ -89,6 +89,7 @@ export const IPC = {
   WORKFLOW_DELETE_PLAN: 'workflow:delete-plan',
   AGENT_EVENT: 'agent:event',
   AGENT_REPLY_QUESTION: 'agent:reply-question',
+  AGENT_SEND_MESSAGE: 'agent:send-message',
   APP_OPEN_EXTERNAL: 'app:open-external',
   AUTH_GET_SESSION: 'auth:get-session',
   AUTH_LOGIN: 'auth:login',

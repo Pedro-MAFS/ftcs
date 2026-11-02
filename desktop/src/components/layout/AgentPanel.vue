@@ -2,6 +2,14 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import Icon from '../shared/Icon.vue'
 import AgentAwaitingReplyCard from './AgentAwaitingReplyCard.vue'
+import {
+  FREE_DIALOGUE_PLACEHOLDER,
+  composerInputLocked,
+  emptyTimelineLabel,
+  showDialogueStopButton,
+  showTaskAbortButton,
+} from '../../composables/free-dialogue'
+import { RUNTIME_NOT_READY } from '../../config/user-facing'
 import { showToast } from '../../composables/useToast'
 import { useWorkspace } from '../../composables/useWorkspace'
 import { useWorkspaceLayout } from '../../composables/useWorkspaceLayout'
@@ -23,6 +31,7 @@ const {
   agentPrompt,
   agentStatus,
   awaitingUserReply,
+  dialogueBusy,
   generating,
   toggleTimelineExpand,
   isTimelineExpanded,
@@ -107,11 +116,34 @@ function preview(body: string, max = 160): string {
 }
 
 async function onSend(): Promise<void> {
-  composerHint.value =
-    '当前暂不支持在对话区自由发送指令，请通过左侧按钮启动对应任务。'
+  const draft = agentPrompt.value
+  const text = draft.trim()
+  if (!text || composerInputLocked(generating.value, dialogueBusy.value)) return
+  const send = window.ftcs?.sendAgentMessage
+  if (!send) {
+    composerHint.value = RUNTIME_NOT_READY
+    return
+  }
+  composerHint.value = ''
+  dialogueBusy.value = true
+  agentPrompt.value = ''
+  try {
+    const result = await send(text)
+    if (!result.accepted && !agentPrompt.value) agentPrompt.value = draft
+    composerHint.value = result.ok ? '' : result.message
+  } catch (err) {
+    if (!agentPrompt.value) agentPrompt.value = draft
+    composerHint.value = err instanceof Error && err.message ? err.message : RUNTIME_NOT_READY
+  } finally {
+    dialogueBusy.value = false
+  }
 }
 
 async function onAbort(): Promise<void> {
+  await window.ftcs?.abortProfile?.()
+}
+
+async function onStopDialogue(): Promise<void> {
   await window.ftcs?.abortProfile?.()
 }
 
@@ -291,7 +323,7 @@ watch(
       </div>
 
       <p v-if="!agentTimeline.length" class="agent-panel__empty">
-        {{ generating ? '任务启动中…' : '点击「生成画像」后，此处按时间顺序展示过程' }}
+        {{ emptyTimelineLabel(generating) }}
       </p>
     </div>
 
@@ -306,8 +338,8 @@ watch(
         v-model="agentPrompt"
         class="composer-input"
         rows="2"
-        placeholder="自由对话暂未开放，请用左侧流水线启动任务…"
-        :disabled="generating"
+        :placeholder="FREE_DIALOGUE_PLACEHOLDER"
+        :disabled="composerInputLocked(generating, dialogueBusy)"
         @keydown.enter.exact.prevent="onSend"
       />
       <p v-if="composerHint" class="composer-hint" role="status">{{ composerHint }}</p>
@@ -321,14 +353,27 @@ watch(
         </span>
         <div class="composer-buttons">
           <button
-            v-if="generating"
+            v-if="showDialogueStopButton(generating, dialogueBusy)"
+            type="button"
+            class="btn-secondary btn-sm"
+            @click="onStopDialogue"
+          >
+            停止
+          </button>
+          <button
+            v-if="showTaskAbortButton(generating)"
             type="button"
             class="btn-secondary btn-sm"
             @click="onAbort"
           >
             中止
           </button>
-          <button type="button" class="btn-primary btn-sm" :disabled="generating" @click="onSend">
+          <button
+            type="button"
+            class="btn-primary btn-sm"
+            :disabled="composerInputLocked(generating, dialogueBusy)"
+            @click="onSend"
+          >
             <Icon name="send" :size="12" />
             发送
           </button>

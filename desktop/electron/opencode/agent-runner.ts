@@ -67,6 +67,14 @@ import {
   disarmAwaitingReplyNotification,
 } from '../notify/task-done-notify'
 import {
+  FREE_DIALOGUE_NOT_READY,
+  FREE_DIALOGUE_SESSION_TITLE,
+  FREE_DIALOGUE_STOPPED,
+  freeDialoguePromptArgs,
+  planFreeDialogue,
+  type SendFreeDialogueResult,
+} from './free-dialogue'
+import {
   AwaitingReplyCoordinator,
   type AwaitingQuestionClient,
   type AwaitingReplyView,
@@ -671,6 +679,9 @@ class TimelineBuilder {
   private prefix: AgentTimelineItem[] = []
   private sessionItems: AgentTimelineItem[] = []
   private suffix: AgentTimelineItem[] = []
+  /** 自由对话排在任务收尾之后，避免新回复插到旧 suffix 前面。 */
+  private dialogueItems: AgentTimelineItem[] = []
+  private dialogueRouting = false
   private byId = new Map<string, AgentTimelineItem>()
   private lastFingerprint = ''
 
@@ -678,8 +689,15 @@ class TimelineBuilder {
     this.prefix = []
     this.sessionItems = []
     this.suffix = []
+    this.dialogueItems = []
+    this.dialogueRouting = false
     this.byId.clear()
     this.lastFingerprint = ''
+  }
+
+  /** 之后新增的会话行和系统行都接到时间线末尾。 */
+  beginDialogueAppend(): void {
+    this.dialogueRouting = true
   }
 
   addPrefix(item: AgentTimelineItem): void {
@@ -688,6 +706,17 @@ class TimelineBuilder {
   }
 
   addSuffix(item: AgentTimelineItem): void {
+    const dialogueIdx = this.dialogueItems.findIndex((x) => x.id === item.id)
+    if (dialogueIdx >= 0) {
+      this.dialogueItems[dialogueIdx] = item
+      this.byId.set(item.id, item)
+      return
+    }
+    if (this.dialogueRouting && !this.byId.has(item.id)) {
+      this.dialogueItems.push(item)
+      this.byId.set(item.id, item)
+      return
+    }
     const idx = this.suffix.findIndex((x) => x.id === item.id)
     if (idx >= 0) this.suffix[idx] = item
     else this.suffix.push(item)
@@ -710,7 +739,8 @@ class TimelineBuilder {
       }
       return
     }
-    this.sessionItems.push(item)
+    if (this.dialogueRouting) this.dialogueItems.push(item)
+    else this.sessionItems.push(item)
     this.byId.set(item.id, item)
   }
 
@@ -722,18 +752,22 @@ class TimelineBuilder {
 
   /** 还没写上 sessionId 的子代理卡。只有一张时才能安全绑上刚创建的子会话。 */
   unboundSubagentCard(): AgentTimelineItem | null {
-    const cards = this.sessionItems.filter((item) => item.subagent && !item.subagent.sessionId)
+    const cards = [...this.sessionItems, ...this.dialogueItems].filter(
+      (item) => item.subagent && !item.subagent.sessionId,
+    )
     return cards.length === 1 ? cards[0]! : null
   }
 
   removeSessionItem(id: string): void {
     const idx = this.sessionItems.findIndex((x) => x.id === id)
     if (idx >= 0) this.sessionItems.splice(idx, 1)
+    const dialogueIdx = this.dialogueItems.findIndex((x) => x.id === id)
+    if (dialogueIdx >= 0) this.dialogueItems.splice(dialogueIdx, 1)
     this.byId.delete(id)
   }
 
   snapshot(): AgentTimelineItem[] {
-    return [...this.prefix, ...this.sessionItems, ...this.suffix].map((item) => ({
+    return [...this.prefix, ...this.sessionItems, ...this.suffix, ...this.dialogueItems].map((item) => ({
       ...item,
       subagent: item.subagent
         ? { ...item.subagent, steps: item.subagent.steps.map((step) => ({ ...step })) }
@@ -784,6 +818,14 @@ export class AgentRunController {
   private abort: AbortController | null = null
   private sessionId: string | null = null
   private running = false
+  /** 任务结束后留下，供同一 session 续聊。只有换会话时才停掉。 */
+  private eventBridge: { stop: () => void; sessionId: string; alive: boolean } | null = null
+  /** 当前轮用户原文。回声过滤读它，续聊不必重开订阅。 */
+  private echoPrompt = ''
+  private dialogueActive = false
+  private dialogueStopRequested = false
+  private dialogueToken = 0
+  private dialogueSerial = 0
   /** 本次已经 beginBrowserTask 的任务 id。没有登记时 finally 不收标签。 */
   private browserTaskId: string | null = null
   private timeline: TimelineBuilder | null = null
@@ -863,7 +905,30 @@ export class AgentRunController {
     return this.running
   }
 
+  /** 新任务开始：卸掉上一段订阅，并打断进行中的自由回复。不把自由回复记成任务失败。 */
+  private beginTaskRun(): AbortSignal {
+    this.eventBridge?.stop()
+    if (this.dialogueActive) {
+      this.dialogueToken += 1
+      this.dialogueActive = false
+      this.dialogueStopRequested = false
+      this.abort?.abort()
+      const client = this.getClient()
+      const sid = this.sessionId
+      if (client && sid) {
+        void client.session.abort({ sessionID: sid }).catch(() => undefined)
+      }
+    }
+    this.running = true
+    this.abort = new AbortController()
+    return this.abort.signal
+  }
+
   async abortCurrent(): Promise<void> {
+    if (!this.running && this.dialogueActive) {
+      await this.abortFreeDialogue()
+      return
+    }
     await this.awaitingReply.endForAbort()
     this.abort?.abort()
     const client = this.getClient()
@@ -874,6 +939,196 @@ export class AgentRunController {
         // ignore
       }
     }
+  }
+
+  /** 只停当前这一轮自由回复，不走任务失败收尾。 */
+  private async abortFreeDialogue(): Promise<void> {
+    this.dialogueStopRequested = true
+    this.abort?.abort()
+    const client = this.getClient()
+    const sid = this.sessionId
+    if (client && sid) {
+      try {
+        await client.session.abort({ sessionID: sid })
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  /**
+   * 自由对话。渲染进程只传文本。已有 session 则接着 promptAsync，否则新建标题「自由对话」。
+   * 不把 agentStatus 设成 running，不读任务产物。
+   */
+  async sendFreeDialogue(text: string, emit: AgentEventSink): Promise<SendFreeDialogueResult> {
+    if (!text.trim()) return { ok: true, message: '', accepted: false }
+    const client = this.getClient()
+    const plan = planFreeDialogue({
+      text,
+      running: this.running,
+      clientReady: client != null,
+      hasSession: Boolean(this.sessionId),
+    })
+    if (plan.action === 'ignore') return { ok: true, message: '', accepted: false }
+    if (plan.action === 'block') return { ok: false, message: plan.message, accepted: false }
+    if (!client || this.dialogueActive) {
+      return { ok: false, message: client ? '' : FREE_DIALOGUE_NOT_READY, accepted: false }
+    }
+
+    const token = ++this.dialogueToken
+    this.dialogueActive = true
+    this.dialogueStopRequested = false
+    this.autoAbortReason = null
+    this.abort = new AbortController()
+    const signal = this.abort.signal
+    const timeline = this.timeline ?? new TimelineBuilder()
+    this.timeline = timeline
+    let accepted = false
+
+    const flushTimeline = () => {
+      const items = timeline.emitIfChanged()
+      if (items) emit({ type: 'timeline', items })
+    }
+    const superseded = () => this.dialogueToken !== token || this.running
+
+    try {
+      if (plan.createSession) {
+        const created = await client.session.create({ title: FREE_DIALOGUE_SESSION_TITLE })
+        if (superseded()) return { ok: true, message: '', accepted: false }
+        if (signal.aborted) {
+          this.noteDialogueStopped(timeline, flushTimeline)
+          return { ok: true, message: '', accepted: false }
+        }
+        if (created.error || !created.data?.id) {
+          throw new Error(
+            typeof created.error === 'object' && created.error && 'message' in created.error
+              ? String((created.error as { message?: string }).message)
+              : '创建 OpenCode 会话失败',
+          )
+        }
+        this.sessionId = created.data.id
+        timeline.addPrefix({
+          id: 'sys-session',
+          kind: 'system',
+          time: nowTime(),
+          title: '会话',
+          body: `已创建 OpenCode session\n${this.sessionId}`,
+        })
+        flushTimeline()
+      }
+
+      const sessionId = this.sessionId
+      if (!sessionId) {
+        return { ok: false, message: FREE_DIALOGUE_NOT_READY, accepted: false }
+      }
+
+      timeline.beginDialogueAppend()
+      this.dialogueSerial += 1
+      timeline.upsertSessionItem({
+        id: `dialogue-user-${this.dialogueSerial}`,
+        kind: 'user',
+        time: nowTime(),
+        title: '你',
+        body: plan.text,
+      })
+      accepted = true
+      flushTimeline()
+
+      this.openEventBridge(client, sessionId, timeline, flushTimeline, plan.text, emit)
+
+      if (superseded() || signal.aborted) {
+        if (this.dialogueStopRequested && !superseded()) {
+          this.noteDialogueStopped(timeline, flushTimeline)
+        }
+        return { ok: true, message: '', accepted }
+      }
+
+      void client.session.promptAsync(freeDialoguePromptArgs(sessionId, plan.text)).catch(() => undefined)
+
+      const idleResult = await this.waitForSessionIdle(client, sessionId, signal)
+      if (superseded()) return { ok: true, message: '', accepted }
+
+      if (idleResult === 'abort') {
+        if (this.dialogueStopRequested) {
+          this.noteDialogueStopped(timeline, flushTimeline)
+          return { ok: true, message: '', accepted: true }
+        }
+        if (this.autoAbortReason) {
+          return { ok: false, message: this.autoAbortReason, accepted: true }
+        }
+        return { ok: true, message: '', accepted: true }
+      }
+
+      if (idleResult === 'timeout') {
+        await client.session.abort({ sessionID: sessionId }).catch(() => undefined)
+        timeline.addSuffix({
+          id: `dialogue-timeout-${this.dialogueSerial}`,
+          kind: 'error',
+          time: nowTime(),
+          title: '错误',
+          body: '这一轮回复超时，请再发一次',
+        })
+        flushTimeline()
+        return { ok: false, message: '这一轮回复超时，请再发一次', accepted: true }
+      }
+
+      return { ok: true, message: '', accepted: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (!superseded()) {
+        timeline.beginDialogueAppend()
+        timeline.addSuffix({
+          id: `dialogue-error-${this.dialogueSerial || 'create'}`,
+          kind: 'error',
+          time: nowTime(),
+          title: '错误',
+          body: message,
+        })
+        flushTimeline()
+      }
+      return { ok: false, message, accepted }
+    } finally {
+      if (this.dialogueToken === token) {
+        this.dialogueActive = false
+        this.dialogueStopRequested = false
+        if (!this.running) this.abort = null
+      }
+    }
+  }
+
+  private noteDialogueStopped(timeline: TimelineBuilder, flush: () => void): void {
+    timeline.beginDialogueAppend()
+    timeline.addSuffix({
+      id: `dialogue-stop-${this.dialogueSerial || 'pending'}`,
+      kind: 'system',
+      time: nowTime(),
+      title: '系统',
+      body: FREE_DIALOGUE_STOPPED,
+    })
+    flush()
+  }
+
+  /**
+   * 与任务共用一条订阅。同一 session 续聊时留着；会话号读控制器上的当前 id。
+   */
+  private openEventBridge(
+    client: OpencodeClient,
+    sessionId: string,
+    timeline: TimelineBuilder,
+    flush: () => void,
+    userPrompt: string,
+    emit: AgentEventSink,
+  ): void {
+    this.echoPrompt = userPrompt
+    this.timeline = timeline
+    this.currentEmit = emit
+    this.currentFlush = flush
+    if (this.eventBridge?.alive && this.eventBridge.sessionId === sessionId) {
+      this.awaitingReply.resume()
+      return
+    }
+    this.eventBridge?.stop()
+    this.startEventBridge(client, sessionId, timeline, flush, userPrompt, emit)
   }
 
   replyToPendingQuestion(input: unknown): Promise<ReplyQuestionResult> {
@@ -1006,9 +1261,7 @@ export class AgentRunController {
     const r1Target = keywordLimits.keywordTargetR1
     const perSiteAndR3Target = keywordLimits.keywordTargetPerRound
 
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginTaskRun()
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
 
@@ -1070,8 +1323,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title: `expand-keywords · ${productId}`,
@@ -1093,15 +1344,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -1195,7 +1438,6 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
       this.running = false
       this.abort = null
     }
@@ -1224,9 +1466,7 @@ export class AgentRunController {
       throw new Error('暂无原始线索，请先在探索页完成 R1（discover-leads）')
     }
 
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginTaskRun()
     const startedAt = Date.now()
     const afterIso = new Date().toISOString()
     const timeline = new TimelineBuilder()
@@ -1284,8 +1524,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title: `score-and-dedupe · ${productId}`,
@@ -1307,15 +1545,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -1409,7 +1639,6 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
       this.running = false
       this.abort = null
     }
@@ -1469,9 +1698,7 @@ export class AgentRunController {
       Math.max(20 * 60_000, 10 * 60_000 + estimate.estimatedLetters * 45_000),
     )
 
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginTaskRun()
     const startedAt = Date.now()
     const afterIso = new Date().toISOString()
     const timeline = new TimelineBuilder()
@@ -1539,8 +1766,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title: `draft-outreach-email · ${productId}`,
@@ -1562,15 +1787,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -1662,7 +1879,6 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
       this.running = false
       this.abort = null
     }
@@ -1709,9 +1925,7 @@ export class AgentRunController {
     }
 
     const idleTimeoutMs = 10 * 60_000
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginTaskRun()
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
 
@@ -1775,8 +1989,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title: `draft-outreach-email-slot · ${leadId}`,
@@ -1798,15 +2010,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -1906,7 +2110,6 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
       this.running = false
       this.abort = null
     }
@@ -1944,9 +2147,7 @@ export class AgentRunController {
     }
 
     const idleTimeoutMs = 8 * 60_000
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginTaskRun()
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
 
@@ -2013,8 +2214,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title: `translate-outreach-email · ${leadId}`,
@@ -2036,15 +2235,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -2135,7 +2326,6 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
       this.running = false
       this.abort = null
     }
@@ -2195,9 +2385,7 @@ export class AgentRunController {
       throw new Error(`一次最多补全 50 条，当前 ${leadIds.length} 条，请缩小范围`)
     }
 
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginTaskRun()
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
     const targetLabel =
@@ -2259,8 +2447,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title:
@@ -2285,15 +2471,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -2356,7 +2534,6 @@ export class AgentRunController {
       emit({ type: 'done', ok: false, productId, message })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
       this.running = false
       this.abort = null
     }
@@ -2450,9 +2627,7 @@ export class AgentRunController {
     }
 
     this.beginTrackedBrowserTask(skillName)
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginTaskRun()
     const startedAt = Date.now()
     const afterIso = new Date().toISOString()
     const timeline = new TimelineBuilder()
@@ -2499,7 +2674,6 @@ export class AgentRunController {
       })
     }
 
-    let stopEvents: (() => void) | null = null
     try {
     const exploreIntensity = getExploreIntensity()
     const exploreLimits = getExploreIntensityLimits(exploreIntensity)
@@ -2566,15 +2740,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -2740,7 +2906,6 @@ export class AgentRunController {
       })
       return { ok: false, message, explorationRun: failedRun ?? undefined }
     } finally {
-      stopEvents?.()
       await this.endTrackedBrowserTask()
       this.running = false
       this.abort = null
@@ -2770,9 +2935,7 @@ export class AgentRunController {
     if (bootstrap.websiteUrls.length > 0) {
       this.beginTrackedBrowserTask('extract-product-profile')
     }
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginTaskRun()
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
 
@@ -2811,7 +2974,6 @@ export class AgentRunController {
       })
     }
 
-    let stopEvents: (() => void) | null = null
     try {
     const promptText = buildPrompt(bootstrap)
     this.attachTimeline(timeline)
@@ -2872,15 +3034,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -2972,7 +3126,6 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
       await this.endTrackedBrowserTask()
       this.running = false
       this.abort = null
@@ -3090,9 +3243,10 @@ export class AgentRunController {
     flush: () => void,
     userPrompt: string,
     emit: AgentEventSink,
-  ): { stop: () => void } {
+  ): void {
     this.currentEmit = emit
     this.currentFlush = flush
+    this.echoPrompt = userPrompt
     this.awaitingReply.resume()
     let stopped = false
     const messageRoles = new Map<string, Message['role']>()
@@ -3112,6 +3266,7 @@ export class AgentRunController {
       if (flushTimer != null) return
       flushTimer = setTimeout(() => {
         flushTimer = null
+        if (stopped) return
         flush()
       }, DELTA_FLUSH_THROTTLE_MS)
     }
@@ -3288,6 +3443,9 @@ export class AgentRunController {
     }
 
     const handleEvent = (event: Event): void => {
+      // 续聊与任务共用这条订阅，会话号读控制器上的当前 id。
+      const sessionId = this.sessionId
+      if (!sessionId) return
       switch (event.type) {
         case 'server.instance.disposed':
           failEventBridge(new Error('OpenCode 实例已释放'))
@@ -3466,7 +3624,7 @@ export class AgentRunController {
             }
             // 空正文不建卡不覆盖；用户 prompt 回声过滤只用于非空 text
             if (!part.text) return
-            if (part.text.trim() === userPrompt.trim()) return
+            if (part.text.trim() === this.echoPrompt.trim()) return
             // 如果角色尚不可知，等待 message.updated
             if (role == null) return
             // US-ST-01: 结束时用整份 part.text 覆盖，清缓冲
@@ -3635,6 +3793,25 @@ export class AgentRunController {
       }
     }
 
+    const record: { stop: () => void; sessionId: string; alive: boolean } = {
+      sessionId,
+      alive: true,
+      stop: () => {
+        if (stopped) return
+        stopped = true
+        record.alive = false
+        if (this.eventBridge === record) this.eventBridge = null
+        disarmWatchdog()
+        if (flushTimer != null) {
+          clearTimeout(flushTimer)
+          flushTimer = null
+        }
+        // 换会话时卸掉。不在这里再 flush 旧时间线，避免盖住新任务。
+        this.awaitingReply.dispose()
+      },
+    }
+    this.eventBridge = record
+
     void (async () => {
       try {
         const sub = await client.event.subscribe()
@@ -3643,18 +3820,11 @@ export class AgentRunController {
           handleEvent(event)
         }
       } catch (err) {
-        failEventBridge(err)
+        if (!stopped) failEventBridge(err)
+      } finally {
+        record.alive = false
+        if (this.eventBridge === record) this.eventBridge = null
       }
     })()
-
-    return {
-      stop: () => {
-        stopped = true
-        disarmWatchdog()
-        this.awaitingReply.dispose()
-        // US-ST-02: 停止时 flush 最后一帧
-        flushNow()
-      },
-    }
   }
 }
