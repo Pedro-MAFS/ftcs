@@ -19,6 +19,7 @@ outputs:
 
 ## 何时使用
 
+- 自由对话里要求启动时，改走 start-from-chat；本技能只在桌面 `run*` 已经建好的任务会话里执行
 - `discover-leads` 完成后，需要整理线索优先级
 - 用户说「线索评分」「去重」「整理线索」「哪些客户更值得跟进」
 - 进入 `draft-outreach-email` 之前

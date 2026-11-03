@@ -1,12 +1,20 @@
 /**
- * US-FD-03：从聊天读到 start_task 的结果后，决定要不要进入现有 run*。
- * 工具本身不跑流水线。这里只解析 JSON，并给出时间线上的原句。
+ * US-FD-03：自由对话里用提问卡收齐必填后，决定要不要进入现有 run*。
+ * 题头是技能和桌面的接线契约。不读 ftcs-task 的 JSON，也不靠它启动。
  */
 
-export const CHAT_START_UNAUTHORIZED = "未授权，任务未启动。"
 export const CHAT_START_NO_PRODUCT = "任务没有启动：还没有当前产品。"
 export const CHAT_START_BAD_STEP = "任务没有启动：不能从聊天启动这一步。"
 export const CHAT_START_ALREADY_RUNNING = "任务没有启动：已有任务在运行。"
+export const CHAT_START_CANCELLED = "已取消，任务未启动。"
+export const CHAT_START_USE_SKILL = "请通过技能与提问卡启动。"
+
+/** 拒绝模型调用时附给权限回复的短句。时间线用 CHAT_START_USE_SKILL。 */
+export const FTCS_TASK_REJECT_MESSAGE = "请通过技能与提问卡启动。不要调用 ftcs-task。"
+
+export const CHAT_START_HEADER_PRODUCT = "产品"
+export const CHAT_START_HEADER_STAGE = "阶段"
+export const CHAT_START_HEADER_CHANNEL = "渠道"
 
 export const START_TASK_TOOL_NAME = "start_task"
 
@@ -27,6 +35,11 @@ export type ChatStartRequest =
 
 const STAGES = new Set<ChatStartStage>(["keywords", "explore", "score", "email"])
 const CHANNELS = new Set<ChatStartChannel>(["r1", "r2", "r3"])
+const START_HEADERS = new Set([
+  CHAT_START_HEADER_PRODUCT,
+  CHAT_START_HEADER_STAGE,
+  CHAT_START_HEADER_CHANNEL,
+])
 
 export function isFtcsStartTaskTool(tool: string | undefined): boolean {
   const name = (tool ?? "").trim().toLowerCase()
@@ -43,20 +56,70 @@ export function isFtcsStartTaskPermission(permission: string, tool?: string): bo
 export function chatStartFailureLine(reason: string): string {
   const text = reason.trim()
   if (!text || text === "bad_stage" || text === "missing_channel") return CHAT_START_BAD_STEP
-  if (text.startsWith("未授权，任务未启动")) return CHAT_START_UNAUTHORIZED
   if (text.startsWith("任务没有启动：")) return text
   if (text.includes("已有任务在运行")) return CHAT_START_ALREADY_RUNNING
   return `任务没有启动：${text}`
 }
 
-export function resolveChatProductId(requested: string | null, activeProductId: string): string {
-  return (requested ?? "").trim() || activeProductId.trim()
+/**
+ * 提交值必须出现在 listProductSummaries() 的 id 里。
+ * 空、对不上，都当成没有可启动的产品。
+ */
+export function resolveChatProductId(requested: string | null, knownIds: readonly string[]): string {
+  const id = (requested ?? "").trim()
+  if (!id) return ""
+  return knownIds.includes(id) ? id : ""
 }
 
-export function parseStartTaskOutput(output: unknown): ChatStartRequest | null {
-  const record = findStartRecord(output, 0)
-  if (!record) return null
-  return normalizeStartRecord(record)
+/** 题头恰好是产品 + 阶段，渠道可有可无。多出来的题头不是启任务卡。 */
+export function isChatStartQuestion(headers: readonly string[]): boolean {
+  if (headers.length < 2 || headers.length > 3) return false
+  const normalized = headers.map((header) => header.trim())
+  if (normalized.some((header) => header === "")) return false
+  const unique = new Set(normalized)
+  if (unique.size !== normalized.length) return false
+  if (!unique.has(CHAT_START_HEADER_PRODUCT) || !unique.has(CHAT_START_HEADER_STAGE)) return false
+  for (const header of unique) {
+    if (!START_HEADERS.has(header)) return false
+  }
+  return true
+}
+
+export function isChatStartQuestionRequest(raw: unknown): boolean {
+  if (!Array.isArray(raw) || raw.length === 0) return false
+  const headers: string[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== "object") return false
+    const header = (item as { header?: unknown }).header
+    if (typeof header !== "string") return false
+    headers.push(header)
+  }
+  return isChatStartQuestion(headers)
+}
+
+/**
+ * 从一次提问的题头和提交值拼出启动请求。
+ * 阶段不是探索时丢掉渠道。题头对不上则返回 null，当成普通提问。
+ */
+export function parseChatStartAnswers(
+  questions: ReadonlyArray<{ header: string }>,
+  answers: ReadonlyArray<readonly string[]>,
+): ChatStartRequest | null {
+  if (!isChatStartQuestion(questions.map((question) => question.header))) return null
+  const byHeader = new Map<string, string>()
+  for (let index = 0; index < questions.length; index += 1) {
+    const header = questions[index]?.header.trim() ?? ""
+    const raw = answers[index]?.[0]
+    byHeader.set(header, typeof raw === "string" ? raw.trim() : "")
+  }
+  const stage = byHeader.get(CHAT_START_HEADER_STAGE) ?? ""
+  if (!isStage(stage)) return { ok: false, code: "bad_stage" }
+  const productRaw = byHeader.get(CHAT_START_HEADER_PRODUCT) ?? ""
+  const product_id = productRaw || null
+  if (stage !== "explore") return { ok: true, stage, product_id }
+  const channel = byHeader.get(CHAT_START_HEADER_CHANNEL) ?? ""
+  if (!isChannel(channel)) return { ok: false, code: "missing_channel" }
+  return { ok: true, stage: "explore", product_id, explore_channel: channel }
 }
 
 export type ChatPreflightKind =
@@ -74,53 +137,6 @@ export function preflightKindFor(request: Extract<ChatStartRequest, { ok: true }
   if (request.explore_channel === "r2") return "discover-leads-r2"
   if (request.explore_channel === "r3") return "discover-leads-r3"
   return "discover-leads"
-}
-
-function normalizeStartRecord(record: Record<string, unknown>): ChatStartRequest | null {
-  const stage = typeof record.stage === "string" ? record.stage.trim() : ""
-  if (!isStage(stage)) return { ok: false, code: "bad_stage" }
-  const productRaw = typeof record.product_id === "string" ? record.product_id.trim() : ""
-  const product_id = productRaw || null
-  if (stage !== "explore") return { ok: true, stage, product_id }
-  const channel = typeof record.explore_channel === "string" ? record.explore_channel.trim() : ""
-  if (!isChannel(channel)) return { ok: false, code: "missing_channel" }
-  return { ok: true, stage: "explore", product_id, explore_channel: channel }
-}
-
-function findStartRecord(value: unknown, depth: number): Record<string, unknown> | null {
-  if (depth > 6 || value == null) return null
-  if (typeof value === "string") {
-    const text = value.trim()
-    if (!text.startsWith("{") && !text.startsWith("[")) return null
-    try {
-      return findStartRecord(JSON.parse(text) as unknown, depth + 1)
-    } catch {
-      return null
-    }
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findStartRecord(item, depth + 1)
-      if (found) return found
-    }
-    return null
-  }
-  if (typeof value !== "object") return null
-  const record = value as Record<string, unknown>
-  if (typeof record.stage === "string" || typeof record.code === "string") return record
-  if (Array.isArray(record.content)) {
-    const found = findStartRecord(record.content, depth + 1)
-    if (found) return found
-  }
-  if (typeof record.text === "string") {
-    const found = findStartRecord(record.text, depth + 1)
-    if (found) return found
-  }
-  if ("output" in record) {
-    const found = findStartRecord(record.output, depth + 1)
-    if (found) return found
-  }
-  return null
 }
 
 function isStage(value: string): value is ChatStartStage {

@@ -2,6 +2,7 @@ import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { Event, Message, ToolPart } from '@opencode-ai/sdk/v2/types'
 import type { BootstrapResult } from '../profile/profile-bootstrap'
 import {
+  listProductSummaries,
   loadProfile,
   type ProductProfileDetail,
 } from '../profile/profile-reader'
@@ -86,16 +87,19 @@ import {
   classifyQuestionHttpResult,
   formatQuestionToolCard,
   resolveAwaitingReplyTimeoutMs,
+  type DisplayQuestion,
 } from './awaiting-reply'
 import {
   CHAT_START_ALREADY_RUNNING,
-  CHAT_START_BAD_STEP,
+  CHAT_START_CANCELLED,
   CHAT_START_NO_PRODUCT,
-  CHAT_START_UNAUTHORIZED,
+  CHAT_START_USE_SKILL,
+  FTCS_TASK_REJECT_MESSAGE,
   chatStartFailureLine,
+  isChatStartQuestionRequest,
   isFtcsStartTaskPermission,
   isFtcsStartTaskTool,
-  parseStartTaskOutput,
+  parseChatStartAnswers,
   preflightKindFor,
   resolveChatProductId,
   type ChatPreflightKind,
@@ -107,7 +111,7 @@ import {
   type PermissionReplyCall,
   type PermissionReplyOutcome,
   classifyPermissionHttpResult,
-  normalizePermissionChoice,
+  buildPermissionReply,
   readPermissionAsk,
   type ReplyPermissionResult,
 } from './permission-gate'
@@ -877,7 +881,10 @@ export class AgentRunController {
   private chatOldSessionId: string | null = null
   private chatLaunchToken = 0
   private chatLaunching = false
-  private chatRejectNoted = false
+  /** 权限拒绝已经写过「请通过技能与提问卡启动」，下一次工具结果不要再写。 */
+  private ftcsTaskPermissionNoted = false
+  /** 启任务卡被结束时，不要再追加「已停止这一轮回复」。 */
+  private suppressDialogueStopped = false
   private activeProductId = ''
   private preservedChatTimeline: TimelineBuilder | null = null
   private readonly handledStartParts = new Set<string>()
@@ -920,6 +927,9 @@ export class AgentRunController {
       },
       onSlotCleared: () => {
         disarmAwaitingReplyNotification()
+      },
+      onSubmitted: (info) => {
+        this.onQuestionSubmitted(info)
       },
     })
     this.permissionGate = new PermissionCoordinator({
@@ -1054,8 +1064,8 @@ export class AgentRunController {
     if (!this.running) {
       this.preservedChatTimeline = timeline
       this.timeline = timeline
+      timeline.beginDialogueAppend()
     }
-    timeline.beginDialogueAppend()
     this.chatNoticeSeq += 1
     timeline.addSuffix({
       id: `chat-start-${this.chatNoticeSeq}`,
@@ -1068,40 +1078,24 @@ export class AgentRunController {
     if (items) emit({ type: 'timeline', items })
   }
 
-  private noteChatStartRejected(): void {
-    if (this.chatRejectNoted || this.running) return
-    this.chatRejectNoted = true
-    const emit = this.currentEmit
-    if (!emit) return
-    this.preservedChatTimeline = this.timeline
-    this.appendChatNotice(CHAT_START_UNAUTHORIZED, emit)
-  }
-
+  /**
+   * ftcs-task 的工具结果不是启动入口。
+   * 执行中不追加说明。空闲时若权限拒绝还没写过那一句，补上。
+   */
   private observeStartTaskTool(part: ToolPart): void {
     const state = part.state
     if (state.status !== 'completed' && state.status !== 'error') return
     if (this.handledStartParts.has(part.id)) return
     this.handledStartParts.add(part.id)
     if (this.running) return
-    const emit = this.currentEmit
-    if (!emit) return
-    if (state.status === 'error') {
-      if (this.chatRejectNoted) return
-      const parsed = parseStartTaskOutput(state.error)
-      if (parsed) {
-        void this.launchChatTask(parsed, emit)
-        return
-      }
-      const errorText = typeof state.error === 'string' ? state.error : ''
-      if (/拒绝|denied|permission/i.test(errorText)) {
-        this.noteChatStartRejected()
-        return
-      }
-      this.appendChatNotice(CHAT_START_BAD_STEP, emit)
+    if (this.ftcsTaskPermissionNoted) {
+      this.ftcsTaskPermissionNoted = false
       return
     }
-    const parsed = parseStartTaskOutput(state.output) ?? { ok: false as const, code: 'bad_stage' as const }
-    void this.launchChatTask(parsed, emit)
+    const emit = this.currentEmit
+    if (!emit) return
+    this.preservedChatTimeline = this.preservedChatTimeline ?? this.timeline
+    this.appendChatNotice(CHAT_START_USE_SKILL, emit)
   }
 
   /**
@@ -1151,7 +1145,8 @@ export class AgentRunController {
     }
     const cancelled = () => this.chatLaunchToken !== token || this.chatTaskAbort?.signal.aborted === true
     try {
-      const productId = resolveChatProductId(request.product_id, this.activeProductId)
+      const knownIds = listProductSummaries().map((item) => item.id)
+      const productId = resolveChatProductId(request.product_id, knownIds)
       if (!productId) {
         this.appendChatNotice(CHAT_START_NO_PRODUCT, rawEmit)
         return
@@ -1202,6 +1197,19 @@ export class AgentRunController {
     this.chatLaunchToken += 1
     this.chatTaskAbort?.abort()
     this.permissionGate.clear()
+    if (!this.running && this.awaitingReply.isPendingChatStart()) {
+      await this.awaitingReply.endForAbort()
+      const emit = this.currentEmit
+      if (emit) {
+        this.preservedChatTimeline = this.preservedChatTimeline ?? this.timeline
+        this.appendChatNotice(CHAT_START_CANCELLED, emit)
+      }
+      if (this.dialogueActive) {
+        this.suppressDialogueStopped = true
+        await this.abortFreeDialogue()
+      }
+      return
+    }
     if (!this.running && this.dialogueActive) {
       await this.abortFreeDialogue()
       return
@@ -1254,7 +1262,6 @@ export class AgentRunController {
 
     const token = ++this.dialogueToken
     this.permissionFailureHandled = false
-    this.chatRejectNoted = false
     this.dialogueActive = true
     this.dialogueStopRequested = false
     this.autoAbortReason = null
@@ -1376,6 +1383,10 @@ export class AgentRunController {
   }
 
   private noteDialogueStopped(timeline: TimelineBuilder, flush: () => void): void {
+    if (this.suppressDialogueStopped) {
+      this.suppressDialogueStopped = false
+      return
+    }
     timeline.beginDialogueAppend()
     timeline.addSuffix({
       id: `dialogue-stop-${this.dialogueSerial || 'pending'}`,
@@ -1410,22 +1421,78 @@ export class AgentRunController {
     this.startEventBridge(client, sessionId, timeline, flush, userPrompt, emit)
   }
 
+  /**
+   * 提问卡提交成功后：题头是启任务契约且当前没有任务，才进入 run*。
+   * 其它题头仍是普通提问。
+   */
+  private onQuestionSubmitted(info: {
+    questions: DisplayQuestion[]
+    answers: string[][]
+    fresh: boolean
+  }): void {
+    const parsed = parseChatStartAnswers(info.questions, info.answers)
+    if (!parsed) return
+    const emit = this.currentEmit
+    if (!emit) return
+    if (this.running) {
+      this.appendChatNotice(CHAT_START_ALREADY_RUNNING, emit)
+      return
+    }
+    if (!info.fresh) return
+    void this.launchChatTask(parsed, emit)
+  }
+
+  /** ftcs-task 两段都不画授权卡。空闲时补一句，请改走技能和提问卡。 */
+  private async rejectFtcsTaskWithoutCard(requestID: string): Promise<void> {
+    const duringRun = this.running
+    if (!duringRun) this.ftcsTaskPermissionNoted = true
+    const call = buildPermissionReply({
+      requestID,
+      reply: 'reject',
+      message: FTCS_TASK_REJECT_MESSAGE,
+    })
+    let outcome: PermissionReplyOutcome = 'failed'
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      outcome = await this.sendPermissionReply(call)
+      if (outcome !== 'failed') break
+    }
+    if (outcome === 'failed') {
+      if (!duringRun) this.ftcsTaskPermissionNoted = false
+      this.failPermissionReply()
+      return
+    }
+    if (duringRun || this.running) {
+      this.ftcsTaskPermissionNoted = false
+      return
+    }
+    const emit = this.currentEmit
+    if (!emit) return
+    this.preservedChatTimeline = this.preservedChatTimeline ?? this.timeline
+    this.appendChatNotice(CHAT_START_USE_SKILL, emit)
+  }
+
+  /** 执行中再出现启任务题头：不展示第二张卡，也不启动第二个任务。 */
+  private async rejectChatStartQuestion(
+    sessionId: string,
+    side: 'v1' | 'v2',
+    requestId: string,
+  ): Promise<void> {
+    if (!requestId) return
+    const client = this.questionClient()
+    const run = async () => {
+      if (!client) return 'failed' as const
+      return side === 'v1' ? client.rejectV1(requestId) : client.rejectV2(sessionId, requestId)
+    }
+    let result = await run()
+    if (result === 'failed') result = await run()
+  }
+
   replyToPendingQuestion(input: unknown): Promise<ReplyQuestionResult> {
     return this.awaitingReply.reply(input)
   }
 
   replyToPendingPermission(input: unknown): Promise<ReplyPermissionResult> {
-    const pending = this.permissionGate.pendingAsks()
-    const choice = normalizePermissionChoice(input)
-    return this.permissionGate.replyFromUser(input).then((result) => {
-      const rejectedStart = pending.some((ask) =>
-        isFtcsStartTaskPermission(ask.permission, ask.tool),
-      )
-      if (result.ok && choice && choice !== 'once' && rejectedStart) {
-        this.noteChatStartRejected()
-      }
-      return result
-    })
+    return this.permissionGate.replyFromUser(input)
   }
 
   private async sendPermissionReply(call: PermissionReplyCall): Promise<PermissionReplyOutcome> {
@@ -3803,8 +3870,9 @@ export class AgentRunController {
           if (sid !== sessionId && !knownChildren.has(sid)) return
           const ask = readPermissionAsk(event)
           if (!ask) return
-          if (!this.running && isFtcsStartTaskPermission(ask.permission, ask.tool)) {
-            this.chatRejectNoted = false
+          if (isFtcsStartTaskPermission(ask.permission, ask.tool)) {
+            void this.rejectFtcsTaskWithoutCard(ask.id)
+            return
           }
           void this.permissionGate.onAsked(ask)
           return
@@ -3823,6 +3891,13 @@ export class AgentRunController {
           const sid = event.properties.sessionID
           if (sid !== sessionId && !knownChildren.has(sid)) return
           const side = event.type === 'question.asked' ? 'v1' : 'v2'
+          if (
+            (this.running || this.deferChatStart) &&
+            isChatStartQuestionRequest(event.properties.questions)
+          ) {
+            void this.rejectChatStartQuestion(sid, side, event.properties.id)
+            return
+          }
           void this.awaitingReply.ingest(sid, side, event.properties.id, event.properties.questions)
           if (sid !== sessionId) {
             patchChild(sid, (sub) => ({ ...sub, awaiting: true }))
@@ -4148,8 +4223,9 @@ export class AgentRunController {
           flushTimer = null
         }
         // 换会话时卸掉。不在这里再 flush 旧时间线，避免盖住新任务。
+        // 启任务卡还开着时留着：按钮已经启动后，再提交只追加「已有任务在运行」。
         this.permissionGate.clear()
-        this.awaitingReply.dispose()
+        if (!this.awaitingReply.isPendingChatStart()) this.awaitingReply.dispose()
       },
     }
     this.eventBridge = record

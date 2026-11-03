@@ -28,6 +28,7 @@ R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过�
 
 ## 何时使用
 
+- 自由对话里要求启动时，改走 start-from-chat；本技能只在桌面 `run*` 已经建好的任务会话里执行
 - 画像 `ready`，且 `expansion.json` 含合格 **R3 词**（`round=R3`，无 `site_id`）
 - 用户说「开始 R3」「地图发现」「discover-leads-r3」
 - `GOOGLE_PLACES_API_KEY` 已配置（`places-api` MCP）；探索页「开始 R3」须 Preflight 通过

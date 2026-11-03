@@ -8,9 +8,12 @@ import type { AgentEventPayload, AgentTimelineItem } from './agent-runner.ts'
 import {
   CHAT_START_ALREADY_RUNNING,
   CHAT_START_BAD_STEP,
+  CHAT_START_CANCELLED,
   CHAT_START_NO_PRODUCT,
-  CHAT_START_UNAUTHORIZED,
+  CHAT_START_USE_SKILL,
+  FTCS_TASK_REJECT_MESSAGE,
 } from './chat-start-task.ts'
+import { FREE_DIALOGUE_STOPPED } from './free-dialogue.ts'
 
 const agent = electronMockReady ? await import('./agent-runner.ts') : null
 const AgentRunController = agent?.AgentRunController ?? null
@@ -84,6 +87,62 @@ function toolEvent(sessionId: string, partId: string, output: unknown, status: '
   }
 }
 
+function startQuestions(productId: string, options?: { includeChannel?: boolean }) {
+  const questions: Array<Record<string, unknown>> = [
+    {
+      header: '产品',
+      question: '选一个产品',
+      custom: false,
+      options: [
+        { label: productId, description: 'Acme' },
+        { label: 'prd_other', description: '未命名' },
+      ],
+    },
+    {
+      header: '阶段',
+      question: '选一个阶段',
+      custom: false,
+      options: [
+        { label: 'keywords', description: '扩展关键词' },
+        { label: 'explore', description: '探索' },
+        { label: 'score', description: '评分去重' },
+        { label: 'email', description: '起草待处理线索' },
+        { label: 'profile', description: '画像' },
+      ],
+    },
+  ]
+  if (options?.includeChannel !== false) {
+    questions.push({
+      header: '渠道',
+      question: '选一个渠道',
+      custom: false,
+      options: [
+        { label: 'r1', description: '全网搜索' },
+        { label: 'r2', description: '社媒发现' },
+        { label: 'r3', description: '地图发现' },
+      ],
+    })
+  }
+  return questions
+}
+
+function questionEvent(sessionId: string, questions: unknown, id = 'q_start') {
+  return {
+    type: 'question.asked',
+    properties: {
+      id,
+      sessionID: sessionId,
+      questions,
+    },
+  }
+}
+
+function replySelections(labels: string[]) {
+  return {
+    selections: labels.map((label) => ({ optionLabels: [label], customText: '' })),
+  }
+}
+
 const previousWorkspace = process.env.FTCS_WORKSPACE
 const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-fd03-'))
 process.env.FTCS_WORKSPACE = workspaceRoot
@@ -113,19 +172,22 @@ after(() => {
 const describeRun = electronMockReady && AgentRunController ? describe : describe.skip
 
 describeRun('chat start task', () => {
-  function harness(options?: { failCreate?: boolean }) {
+  function harness(options?: { failCreate?: boolean; holdChat?: boolean }) {
     const chatId = 'ses_chat'
     const taskId = 'ses_task'
     const streams: Array<ReturnType<typeof createEventStream>> = []
     const creates: Array<{ title?: string }> = []
     const aborts: string[] = []
     const replies: unknown[] = []
+    const questionReplies: unknown[] = []
+    const questionRejects: string[] = []
     const order: string[] = []
     let releaseCreate: (() => void) | null = null
     let enteredCreate: (() => void) | null = null
     const createEntered = new Promise<void>((resolve) => {
       enteredCreate = resolve
     })
+    let releaseIdle: (() => void) | null = null
     const closers: Array<() => void> = []
 
     const push = (event: QueueEvent) => {
@@ -168,6 +230,16 @@ describeRun('chat start task', () => {
           return { data: true, response: { status: 200 } }
         },
       },
+      question: {
+        async reply(input: unknown) {
+          questionReplies.push(input)
+          return { data: true, error: undefined, response: { status: 200 } }
+        },
+        async reject(input: { requestID?: string }) {
+          questionRejects.push(input.requestID ?? '')
+          return { data: true, error: undefined, response: { status: 200 } }
+        },
+      },
       event: {
         async subscribe() {
           const api = createEventStream()
@@ -191,9 +263,25 @@ describeRun('chat start task', () => {
                   part: { id: 'part_a', messageID: 'msg_a', type: 'text', text: 'FOB 是装运港船上交货。' },
                 },
               })
-              await new Promise((resolve) => setTimeout(resolve, 20))
+              if (options?.holdChat) {
+                await new Promise<void>((resolve) => {
+                  releaseIdle = resolve
+                })
+              } else {
+                await new Promise((resolve) => setTimeout(resolve, 20))
+              }
             }
             return { response: { status: 204 } }
+          },
+          question: {
+            async reply(input: unknown) {
+              questionReplies.push(input)
+              return { data: undefined, error: undefined, response: { status: 204 } }
+            },
+            async reject(input: { requestID?: string }) {
+              questionRejects.push(input.requestID ?? '')
+              return { data: undefined, error: undefined, response: { status: 204 } }
+            },
           },
         },
       },
@@ -216,10 +304,13 @@ describeRun('chat start task', () => {
       creates,
       aborts,
       replies,
+      questionReplies,
+      questionRejects,
       order,
       push,
       createEntered,
       releaseCreate: () => releaseCreate?.(),
+      releaseIdle: () => releaseIdle?.(),
       close: () => {
         for (const close of closers) close()
       },
@@ -235,12 +326,31 @@ describeRun('chat start task', () => {
     return result
   }
 
+  async function showStartCard(
+    env: ReturnType<typeof harness>,
+    productId: string,
+    options?: { includeChannel?: boolean; id?: string },
+  ) {
+    env.push(questionEvent(env.chatId, startQuestions(productId, options), options?.id ?? 'q_start'))
+    assert.equal(
+      await waitFor(() =>
+        env.emitted.some(
+          (event) => event.type === 'awaiting-reply' && event.pending != null && event.pending.renderable,
+        ),
+      ),
+      true,
+    )
+    assert.equal(env.runner.isRunning(), false)
+    assert.equal(env.emitted.some((event) => event.type === 'state' && event.status === 'running'), false)
+  }
+
   it('keeps the chat when the stage cannot be started', async () => {
     const env = harness()
     try {
       await chat(env)
-      env.runner.noteActiveProduct('prd_missing')
-      env.push(toolEvent(env.chatId, 'tool_bad', { ok: false, code: 'bad_stage', stage: 'profile' }))
+      await showStartCard(env, 'prd_ready')
+      const reply = await env.runner.replyToPendingQuestion(replySelections(['prd_ready', 'profile', 'r1']))
+      assert.equal(reply.ok, true)
       assert.equal(await waitFor(() => timelineItems(env.emitted).some((item) => item.body === CHAT_START_BAD_STEP)), true)
       const items = timelineItems(env.emitted)
       assert.equal(items.some((item) => item.body.includes('什么是 FOB')), true)
@@ -253,16 +363,21 @@ describeRun('chat start task', () => {
     }
   })
 
-  it('keeps the chat when there is no current product', async () => {
+  it('keeps the chat when the product id is not in the sidebar list', async () => {
+    writeProfile('prd_real', 'ready')
     const env = harness()
     try {
       await chat(env)
-      env.push(toolEvent(env.chatId, 'tool_none', { ok: true, stage: 'keywords', product_id: null }))
+      env.runner.noteActiveProduct('prd_real')
+      await showStartCard(env, 'prd_missing')
+      const reply = await env.runner.replyToPendingQuestion(replySelections(['prd_missing', 'keywords', 'r1']))
+      assert.equal(reply.ok, true)
       assert.equal(await waitFor(() => timelineItems(env.emitted).some((item) => item.body === CHAT_START_NO_PRODUCT)), true)
       const items = timelineItems(env.emitted)
       assert.equal(items.some((item) => item.body.includes('什么是 FOB')), true)
       assert.equal(items.some((item) => item.body === CHAT_START_NO_PRODUCT), true)
       assert.equal(env.runner.isRunning(), false)
+      assert.equal(env.creates.some((item) => item.title?.startsWith('expand-keywords')), false)
     } finally {
       env.close()
     }
@@ -273,7 +388,8 @@ describeRun('chat start task', () => {
     const env = harness()
     try {
       await chat(env)
-      env.push(toolEvent(env.chatId, 'tool_draft', { ok: true, stage: 'keywords', product_id: 'prd_draft' }))
+      await showStartCard(env, 'prd_draft')
+      await env.runner.replyToPendingQuestion(replySelections(['prd_draft', 'keywords', 'r2']))
       assert.equal(
         await waitFor(() => timelineItems(env.emitted).some((item) => item.body.includes('画像未就绪'))),
         true,
@@ -282,6 +398,7 @@ describeRun('chat start task', () => {
       const notice = items.find((item) => item.body.startsWith('任务没有启动：'))
       assert.equal(notice?.body.includes('画像未就绪'), true)
       assert.equal(items.some((item) => item.body.includes('什么是 FOB')), true)
+      assert.equal(items.some((item) => item.body === '未授权，任务未启动。'), false)
       assert.equal(env.runner.isRunning(), false)
       assert.equal(env.creates.some((item) => item.title?.startsWith('expand-keywords')), false)
       assert.equal(env.aborts.includes(env.chatId), false)
@@ -290,7 +407,8 @@ describeRun('chat start task', () => {
     }
   })
 
-  it('appends 未授权 when the start permission is rejected and does not run the tool', async () => {
+  it('rejects ftcs-task without a permission card and does not launch', async () => {
+    writeProfile('prd_ready_task', 'ready')
     const env = harness()
     try {
       await chat(env)
@@ -302,22 +420,49 @@ describeRun('chat start task', () => {
           permission: 'ftcs-task_start_task',
         },
       })
+      env.push(
+        toolEvent(env.chatId, 'tool_start', { ok: true, stage: 'keywords', product_id: 'prd_ready_task' }, 'error'),
+      )
       assert.equal(
-        await waitFor(() => env.emitted.some((event) => event.type === 'permission-ask' && event.pending != null)),
+        await waitFor(() => timelineItems(env.emitted).some((item) => item.body === CHAT_START_USE_SKILL)),
         true,
       )
+      const items = timelineItems(env.emitted)
+      assert.equal(items.filter((item) => item.body === CHAT_START_USE_SKILL).length, 1)
+      assert.equal(items.some((item) => item.body.includes('什么是 FOB')), true)
+      assert.equal(items.some((item) => item.body === '未授权，任务未启动。'), false)
       assert.equal(
         env.emitted.some((event) => event.type === 'permission-ask' && event.pending != null),
+        false,
+      )
+      assert.equal(env.replies.length, 1)
+      assert.deepEqual(env.replies[0], {
+        requestID: 'req_start',
+        reply: 'reject',
+        message: FTCS_TASK_REJECT_MESSAGE,
+      })
+      assert.equal(env.creates.some((item) => item.title?.startsWith('expand-keywords')), false)
+      assert.equal(env.runner.isRunning(), false)
+    } finally {
+      env.close()
+    }
+  })
+
+  it('does not launch when ftcs-task completes without a permission event', async () => {
+    writeProfile('prd_ready_direct', 'ready')
+    const env = harness()
+    try {
+      await chat(env)
+      env.push(
+        toolEvent(env.chatId, 'tool_direct', { ok: true, stage: 'keywords', product_id: 'prd_ready_direct' }),
+      )
+      assert.equal(
+        await waitFor(() => timelineItems(env.emitted).some((item) => item.body === CHAT_START_USE_SKILL)),
         true,
       )
+      assert.equal(env.creates.some((item) => item.title?.startsWith('expand-keywords')), false)
       assert.equal(env.runner.isRunning(), false)
-      const reply = await env.runner.replyToPendingPermission('reject')
-      assert.equal(reply.ok, true)
-      const items = timelineItems(env.emitted)
-      assert.equal(items.some((item) => item.body === CHAT_START_UNAUTHORIZED), true)
-      assert.equal(items.some((item) => item.body.includes('什么是 FOB')), true)
-      assert.equal(env.creates.length, 1)
-      assert.equal(env.runner.isRunning(), false)
+      assert.equal(env.emitted.some((event) => event.type === 'permission-ask' && event.pending != null), false)
     } finally {
       env.close()
     }
@@ -328,7 +473,8 @@ describeRun('chat start task', () => {
     const env = harness({ failCreate: true })
     try {
       await chat(env)
-      env.push(toolEvent(env.chatId, 'tool_fail', { ok: true, stage: 'keywords', product_id: 'prd_ready_fail' }))
+      await showStartCard(env, 'prd_ready_fail')
+      await env.runner.replyToPendingQuestion(replySelections(['prd_ready_fail', 'keywords', 'r1']))
       assert.equal(
         await waitFor(() =>
           timelineItems(env.emitted).some(
@@ -339,7 +485,7 @@ describeRun('chat start task', () => {
       )
       const items = timelineItems(env.emitted)
       assert.equal(items.some((item) => item.body.includes('什么是 FOB')), true)
-      assert.equal(items.some((item) => item.body.includes('任务没有启动：') && item.body.includes('创建 OpenCode 会话失败')), true)
+      assert.equal(items.some((item) => item.body.includes('未授权')), false)
       assert.equal(env.runner.isRunning(), false)
       assert.equal(env.aborts.includes(env.chatId), false)
       assert.equal(env.emitted.some((event) => event.type === 'state' && event.status === 'running'), false)
@@ -348,17 +494,19 @@ describeRun('chat start task', () => {
     }
   })
 
-  it('replaces the timeline only after create, then follows the new session', async () => {
+  it('replaces the timeline only after create, then ignores a second start', async () => {
     writeProfile('prd_ready', 'ready')
     const env = harness()
     try {
       await chat(env)
-      env.push(toolEvent(env.chatId, 'tool_ok', { ok: true, stage: 'keywords', product_id: 'prd_ready' }))
+      await showStartCard(env, 'prd_ready')
+      await env.runner.replyToPendingQuestion(replySelections(['prd_ready', 'keywords', 'r2']))
       await env.createEntered
       assert.equal(env.runner.isRunning(), false)
       assert.equal(timelineItems(env.emitted).some((item) => item.body.includes('什么是 FOB')), true)
       assert.equal(env.emitted.some((event) => event.type === 'state' && event.status === 'running'), false)
       assert.equal(env.aborts.includes(env.chatId), false)
+      assert.equal(env.creates.some((item) => item.title?.startsWith('discover-leads')), false)
       env.releaseCreate()
       const replaced = await waitFor(async () => {
         const items = timelineItems(env.emitted)
@@ -368,11 +516,13 @@ describeRun('chat start task', () => {
       const taskItems = timelineItems(env.emitted)
       assert.equal(taskItems.some((item) => item.body.includes('什么是 FOB')), false)
       assert.equal(taskItems.some((item) => item.id === 'sys-session' && item.body.includes('已创建 OpenCode session')), true)
+      assert.equal(env.creates.some((item) => item.title === 'expand-keywords · prd_ready'), true)
       assert.equal(env.runner.isRunning(), true)
       assert.equal(env.emitted.some((event) => event.type === 'state' && event.status === 'running'), true)
       assert.ok(env.order.indexOf('create-end') >= 0)
       assert.ok(env.order.indexOf('create-end') < env.order.indexOf(`abort:${env.chatId}`))
 
+      const before = env.emitted.length
       env.push({
         type: 'permission.asked',
         properties: {
@@ -381,9 +531,10 @@ describeRun('chat start task', () => {
           permission: 'ftcs-task_start_task',
         },
       })
+      env.push(questionEvent(env.taskId, startQuestions('prd_ready'), 'q_again'))
       env.push(toolEvent(env.taskId, 'tool_again', { ok: true, stage: 'keywords', product_id: 'prd_ready' }))
+      assert.equal(await waitFor(() => env.replies.length === 1 && env.questionRejects.includes('q_again')), true)
       await new Promise((resolve) => setTimeout(resolve, 40))
-      assert.equal(env.replies.length, 1)
       assert.equal(env.creates.filter((item) => item.title?.startsWith('expand-keywords')).length, 1)
       assert.equal(
         env.emitted.some(
@@ -391,9 +542,78 @@ describeRun('chat start task', () => {
         ),
         false,
       )
+      const added = env.emitted.slice(before)
+      assert.equal(
+        added.some((event) => event.type === 'awaiting-reply' && event.pending != null),
+        false,
+      )
       assert.equal(timelineItems(env.emitted).some((item) => item.body === CHAT_START_ALREADY_RUNNING), false)
+      assert.equal(timelineItems(env.emitted).some((item) => item.body === CHAT_START_USE_SKILL), false)
     } finally {
       await env.runner.abortCurrent()
+      env.close()
+    }
+  })
+
+  it('cancel on the start card appends the cancel line and does not start', async () => {
+    const env = harness({ holdChat: true })
+    try {
+      const pending = env.runner.sendFreeDialogue('用一句话说明什么是 FOB', env.emit)
+      assert.equal(
+        await waitFor(() => timelineItems(env.emitted).some((item) => item.body.includes('什么是 FOB'))),
+        true,
+      )
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      await showStartCard(env, 'prd_ready')
+      await env.runner.abortCurrent()
+      env.releaseIdle()
+      const result = await pending
+      assert.equal(result.ok, true)
+      const items = timelineItems(env.emitted)
+      assert.equal(items.some((item) => item.body === CHAT_START_CANCELLED), true)
+      assert.equal(items.some((item) => item.body.includes('什么是 FOB')), true)
+      assert.equal(items.some((item) => item.body === FREE_DIALOGUE_STOPPED), false)
+      assert.equal(items.some((item) => item.body === '未授权，任务未启动。'), false)
+      assert.equal(env.questionRejects.includes('q_start'), true)
+      assert.equal(env.creates.some((item) => item.title?.startsWith('expand-keywords')), false)
+      assert.equal(env.runner.isRunning(), false)
+    } finally {
+      env.close()
+    }
+  })
+
+  it('submitting the start card after a button start does not launch a second task', async () => {
+    writeProfile('prd_button_open', 'ready')
+    const env = harness({ holdChat: true })
+    try {
+      const chatPending = env.runner.sendFreeDialogue('用一句话说明什么是 FOB', env.emit)
+      assert.equal(
+        await waitFor(() => timelineItems(env.emitted).some((item) => item.body.includes('什么是 FOB'))),
+        true,
+      )
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      await showStartCard(env, 'prd_button_open')
+      const taskPending = env.runner.runExpandKeywords('prd_button_open', env.emit)
+      await env.createEntered
+      assert.equal(env.runner.isRunning(), true)
+      const awaiting = [...env.emitted].reverse().find((event) => event.type === 'awaiting-reply')
+      assert.equal(awaiting?.type === 'awaiting-reply' && awaiting.pending != null, true)
+      const reply = await env.runner.replyToPendingQuestion(
+        replySelections(['prd_button_open', 'keywords', 'r1']),
+      )
+      assert.equal(reply.ok, true)
+      assert.equal(
+        timelineItems(env.emitted).some((item) => item.body === CHAT_START_ALREADY_RUNNING),
+        true,
+      )
+      assert.equal(env.creates.filter((item) => item.title?.startsWith('expand-keywords')).length, 1)
+      env.releaseCreate()
+      env.releaseIdle()
+      await chatPending
+      await env.runner.abortCurrent()
+      await taskPending
+      assert.equal(env.creates.filter((item) => item.title?.startsWith('expand-keywords')).length, 1)
+    } finally {
       env.close()
     }
   })
@@ -429,19 +649,18 @@ describeRun('chat start task', () => {
     const env = harness()
     try {
       await chat(env)
-      env.push(toolEvent(env.chatId, 'tool_score', { ok: true, stage: 'score', product_id: 'prd_route' }))
+      await showStartCard(env, 'prd_route', { id: 'q_score' })
+      await env.runner.replyToPendingQuestion(replySelections(['prd_route', 'score', 'r1']))
       assert.equal(await waitFor(() => timelineItems(env.emitted).some((item) => item.body.includes('暂无原始线索'))), true)
-      env.push(
-        toolEvent(env.chatId, 'tool_explore', {
-          ok: true,
-          stage: 'explore',
-          explore_channel: 'r1',
-          product_id: 'prd_route',
-        }),
-      )
+
+      await showStartCard(env, 'prd_route', { id: 'q_explore' })
+      await env.runner.replyToPendingQuestion(replySelections(['prd_route', 'explore', 'r1']))
       assert.equal(await waitFor(() => timelineItems(env.emitted).some((item) => item.body.includes('尚未扩展关键词'))), true)
-      env.push(toolEvent(env.chatId, 'tool_email', { ok: true, stage: 'email', product_id: 'prd_route' }))
+
+      await showStartCard(env, 'prd_route', { includeChannel: false, id: 'q_email' })
+      await env.runner.replyToPendingQuestion(replySelections(['prd_route', 'email']))
       assert.equal(await waitFor(() => timelineItems(env.emitted).some((item) => item.body.includes('暂无待起草'))), true)
+
       const bodies = timelineItems(env.emitted).map((item) => item.body)
       assert.equal(bodies.some((body) => body.includes('暂无原始线索')), true)
       assert.equal(bodies.some((body) => body.includes('尚未扩展关键词')), true)
@@ -452,6 +671,43 @@ describeRun('chat start task', () => {
         env.creates.some((item) => /score-and-dedupe|discover-leads|draft-outreach-email/.test(item.title ?? '')),
         false,
       )
+    } finally {
+      env.close()
+    }
+  })
+
+  it('does not launch from an ordinary question', async () => {
+    writeProfile('prd_ready_plain', 'ready')
+    const env = harness()
+    try {
+      await chat(env)
+      env.push(
+        questionEvent(
+          env.chatId,
+          [
+            {
+              header: '范围',
+              question: '继续吗',
+              custom: false,
+              options: [
+                { label: '继续', description: '继续聊' },
+                { label: '停止', description: '停下' },
+              ],
+            },
+          ],
+          'q_plain',
+        ),
+      )
+      assert.equal(
+        await waitFor(() => env.emitted.some((event) => event.type === 'awaiting-reply' && event.pending != null)),
+        true,
+      )
+      const reply = await env.runner.replyToPendingQuestion(replySelections(['继续']))
+      assert.equal(reply.ok, true)
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      assert.equal(env.creates.some((item) => item.title?.startsWith('expand-keywords')), false)
+      assert.equal(env.runner.isRunning(), false)
+      assert.equal(timelineItems(env.emitted).some((item) => item.body.startsWith('任务没有启动：')), false)
     } finally {
       env.close()
     }

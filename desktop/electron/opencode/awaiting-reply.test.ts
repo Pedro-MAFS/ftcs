@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { CHAT_START_CANCELLED } from './chat-start-task.ts'
 import {
   AWAITING_REPLY_SUBMIT_FAILED_MESSAGE,
   AWAITING_REPLY_TIMEOUT_MS,
@@ -103,6 +104,20 @@ describe('decideAwaitingReplyTimeout', () => {
         questions: [{ options: [] }],
       }),
       { action: 'reject', reason: 'no-options' },
+    )
+  })
+
+  it('启任务题不自动选第一项', () => {
+    assert.deepEqual(
+      decideAwaitingReplyTimeout({
+        renderable: true,
+        questions: [
+          { header: '产品', options: [{ label: 'prd_1' }, { label: 'prd_2' }] },
+          { header: '阶段', options: [{ label: 'keywords' }, { label: 'explore' }] },
+          { header: '渠道', options: [{ label: 'r1' }] },
+        ],
+      }),
+      { action: 'reject', reason: 'chat-start' },
     )
   })
 
@@ -478,6 +493,24 @@ describe('AwaitingReplyCoordinator', () => {
     assert.ok(h.calls.includes('rejectV1:id'))
     assert.equal(h.calls.includes('session-abort'), false)
     assert.equal(h.lines.at(-1), AWAITING_REPLY_TIMELINE_TIMEOUT_REJECTED)
+  })
+
+  it('启任务题到期只拒绝，不选第一项', async () => {
+    const h = harness()
+    await h.coord.ingest('s1', 'v1', 'id', [
+      question('产品', ['prd_1', 'prd_2'], { custom: false }),
+      question('阶段', ['keywords', 'explore'], { custom: false }),
+      question('渠道', ['r1', 'r2'], { custom: false }),
+    ])
+    assert.equal(h.coord.isPendingChatStart(), true)
+    h.timers[0]?.cb()
+    await h.coord.whenIdle()
+    assert.ok(h.calls.includes('rejectV1:id'))
+    assert.equal(h.calls.some((call) => call.startsWith('reply')), false)
+    assert.equal(h.lines.at(-1), CHAT_START_CANCELLED)
+    assert.equal(h.calls.includes('session-abort'), false)
+    assert.equal(h.coord.isPendingChatStart(), false)
+    assert.equal(h.emits.at(-1), null)
   })
 
   it('到期对非多选回复首项且不中止会话', async () => {

@@ -24,6 +24,7 @@ outputs:
 
 ## 何时使用
 
+- 自由对话里要求启动时，改走 start-from-chat；本技能只在桌面 `run*` 已经建好的任务会话里执行
 - 产品画像与关键词扩展已完成，且 expansion 里有带 `site_id` 的 R2 词
 - 用户说「开始 R2」「社媒获客」「按 discover-leads-r2 执行」
 - 探索页点「开始 R2」（桌面 IPC `exploration:start-r2`）
