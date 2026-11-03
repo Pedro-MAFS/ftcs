@@ -64,6 +64,14 @@
         "FTCS_WORKSPACE": "."
       }
     },
+    "ftcs-task": {
+      "type": "local",
+      "command": ["node", "mcp-servers/ftcs-task/dist/mcp.js"],
+      "enabled": true,
+      "environment": {
+        "FTCS_WORKSPACE": "."
+      }
+    },
     "chrome-devtools": {
       "type": "local",
       "command": [

@@ -185,6 +185,11 @@ export class PermissionCoordinator {
     this.emitHead(true)
   }
 
+  /** 回复前看一眼队列。请求 id 仍只留在主进程。 */
+  pendingAsks(): PermissionAsk[] {
+    return this.queue.map((item) => ({ ...item }))
+  }
+
   private async rejectNow(requestID: string, running: boolean): Promise<void> {
     const epoch = this.epoch
     const outcome = await this.send({

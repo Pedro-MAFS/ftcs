@@ -3,13 +3,22 @@
 export const FREE_DIALOGUE_PLACEHOLDER = '发消息继续聊，或说明要启动的获客步骤'
 export const FREE_DIALOGUE_EMPTY_TIMELINE = '还没有对话。在下方输入即可。'
 export const TASK_STARTING_TIMELINE = '任务启动中…'
+export const PERMISSION_PENDING_SEND_HINT = '请先同意或拒绝上面的授权'
 
 export function emptyTimelineLabel(generating: boolean): string {
   return generating ? TASK_STARTING_TIMELINE : FREE_DIALOGUE_EMPTY_TIMELINE
 }
 
-/** 任务进行中，或自由回复这一轮，输入和发送都不可用。 */
-export function composerInputLocked(generating: boolean, dialogueBusy: boolean): boolean {
+/**
+ * 任务进行中，或自由回复这一轮，输入和发送都不可用。
+ * 授权卡还在时保持可发送，用来提示先点卡片，不把输入框里的「同意」当成授权。
+ */
+export function composerInputLocked(
+  generating: boolean,
+  dialogueBusy: boolean,
+  permissionPending = false,
+): boolean {
+  if (permissionPending) return false
   return generating || dialogueBusy
 }
 

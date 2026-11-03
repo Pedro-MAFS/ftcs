@@ -1105,11 +1105,12 @@ declare global {
       moveLibraryEntry: (relativePath: string, destDir: string, cwd?: string) => Promise<LibraryMutationResult>
       generateProfile: (input: ProfileGenerateInput) => Promise<ProfileGenerateResult>
       abortProfile: () => Promise<{ ok: boolean }>
-      sendAgentMessage: (text: string) => Promise<{
+      sendAgentMessage: (text: string, productId?: string) => Promise<{
         ok: boolean
         message: string
         accepted: boolean
       }>
+      noteActiveProduct: (productId: string) => Promise<{ ok: boolean }>
       replyQuestion: (input: {
         selections: Array<{ optionLabels: string[]; customText: string }>
       }) => Promise<{ ok: boolean; message: string }>

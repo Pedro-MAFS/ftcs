@@ -5,6 +5,7 @@ import AgentAwaitingReplyCard from './AgentAwaitingReplyCard.vue'
 import AgentPermissionCard from './AgentPermissionCard.vue'
 import {
   FREE_DIALOGUE_PLACEHOLDER,
+  PERMISSION_PENDING_SEND_HINT,
   composerInputLocked,
   emptyTimelineLabel,
   showDialogueStopButton,
@@ -118,6 +119,10 @@ function preview(body: string, max = 160): string {
 }
 
 async function onSend(): Promise<void> {
+  if (pendingPermission.value) {
+    composerHint.value = PERMISSION_PENDING_SEND_HINT
+    return
+  }
   const draft = agentPrompt.value
   const text = draft.trim()
   if (!text || composerInputLocked(generating.value, dialogueBusy.value)) return
@@ -130,7 +135,7 @@ async function onSend(): Promise<void> {
   dialogueBusy.value = true
   agentPrompt.value = ''
   try {
-    const result = await send(text)
+    const result = await send(text, activeProductId.value)
     if (!result.accepted && !agentPrompt.value) agentPrompt.value = draft
     composerHint.value = result.ok ? '' : result.message
   } catch (err) {
@@ -154,6 +159,12 @@ function onTimelineScroll(): void {
   if (!el) return
   pinToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48
 }
+
+watch(pendingPermission, (pending) => {
+  if (!pending && composerHint.value === PERMISSION_PENDING_SEND_HINT) {
+    composerHint.value = ''
+  }
+})
 
 watch(
   agentTimeline,
@@ -343,7 +354,7 @@ watch(
         class="composer-input"
         rows="2"
         :placeholder="FREE_DIALOGUE_PLACEHOLDER"
-        :disabled="composerInputLocked(generating, dialogueBusy)"
+        :disabled="composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
         @keydown.enter.exact.prevent="onSend"
       />
       <p v-if="composerHint" class="composer-hint" role="status">{{ composerHint }}</p>
@@ -375,7 +386,7 @@ watch(
           <button
             type="button"
             class="btn-primary btn-sm"
-            :disabled="composerInputLocked(generating, dialogueBusy)"
+            :disabled="composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
             @click="onSend"
           >
             <Icon name="send" :size="12" />

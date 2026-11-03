@@ -395,8 +395,10 @@ const api = {
   generateProfile: (input: ProfileGenerateInput): Promise<ProfileGenerateResult> =>
     ipcRenderer.invoke(IPC.PROFILE_GENERATE, input),
   abortProfile: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.PROFILE_ABORT),
-  sendAgentMessage: (text: string): Promise<SendFreeDialogueResult> =>
-    ipcRenderer.invoke(IPC.AGENT_SEND_MESSAGE, text),
+  sendAgentMessage: (text: string, productId?: string): Promise<SendFreeDialogueResult> =>
+    ipcRenderer.invoke(IPC.AGENT_SEND_MESSAGE, text, productId),
+  noteActiveProduct: (productId: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.AGENT_NOTE_PRODUCT, productId),
   replyQuestion: (input: ReplyQuestionInput): Promise<ReplyQuestionResult> =>
     ipcRenderer.invoke(IPC.AGENT_REPLY_QUESTION, input),
   replyPermission: (reply: 'once' | 'reject'): Promise<ReplyPermissionResult> =>

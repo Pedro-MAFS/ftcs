@@ -4,6 +4,7 @@ import { describe, it } from 'node:test'
 import {
   FREE_DIALOGUE_EMPTY_TIMELINE,
   FREE_DIALOGUE_PLACEHOLDER,
+  PERMISSION_PENDING_SEND_HINT,
   composerInputLocked,
   emptyTimelineLabel,
   showDialogueStopButton,
@@ -34,6 +35,13 @@ describe('free dialogue composer', () => {
     assert.equal(composerInputLocked(false, false), false)
     assert.equal(showDialogueStopButton(false, false), false)
   })
+
+  it('keeps send available while an auth card is up so typed 同意 is not approval', () => {
+    assert.equal(PERMISSION_PENDING_SEND_HINT, '请先同意或拒绝上面的授权')
+    assert.equal(composerInputLocked(false, true, true), false)
+    assert.equal(composerInputLocked(true, false, true), false)
+    assert.equal(composerInputLocked(false, false, false), false)
+  })
 })
 
 describe('AgentPanel free-dialogue copy', () => {
@@ -47,5 +55,9 @@ describe('AgentPanel free-dialogue copy', () => {
     assert.equal(src.includes('dialogueBusy'), true)
     assert.equal(src.includes('showDialogueStopButton'), true)
     assert.equal(src.includes('abortProfile'), true)
+    assert.equal(src.includes('PERMISSION_PENDING_SEND_HINT'), true)
+    assert.equal(src.includes('pendingPermission.value'), true)
+    assert.equal(src.includes("send(text, activeProductId.value)"), true)
+    assert.equal(src.includes('replyPermission'), false)
   })
 })
