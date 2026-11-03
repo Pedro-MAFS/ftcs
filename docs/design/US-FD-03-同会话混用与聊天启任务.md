@@ -1,19 +1,20 @@
 # US-FD-03 详细设计：同会话混用，并从聊天启动任务
 
 > **用户故事**：[../40-需求-智能体自由对话与权限边界.md](../40-需求-智能体自由对话与权限边界.md) · **US-FD-03** · Related [#118](https://github.com/Pedro-MAFS/ftcs/issues/118) · 对照 [#136](https://github.com/Pedro-MAFS/ftcs/issues/136)  
-> **状态**：**O3 已按 #136 / 2026-11-03 锁定。** 待马丰顺确认后再开发。不关 #118  
+> **状态**：**O3 主路径已按 #136 / #137 锁定**（技能 + 提问卡 + `run*`）。2026-11-04 改口：实现 PR 物理删除 `ftcs-task`。不关 #118  
 > **范围**：任务结束后的闲聊；用技能加现网提问卡收集必填并启动；失败文案；时间线何时清空。复制会话仍按 docs/38  
 > **依赖**：[US-FD-01](US-FD-01-开放自由对话.md) 的发送。[US-FD-02](US-FD-02-任务中自动拒与续聊授权.md) 的任务段 `reject`。提问卡复用 [US-AQ-01](US-AQ-01-识别等待态并展示问题.md) / [US-AQ-02](US-AQ-02-点选提交并继续任务.md)  
-> **不做**：把 `ftcs-task` 写成通过条件；另做启任务授权卡；执行中再启一轮；回滚 #133；关 #118  
+> **不做**：把 `ftcs-task` 写成通过条件；另做启任务授权卡；执行中再启一轮；关 #118  
+> **要删除**：实现 PR 删掉 `workspace/mcp-servers/ftcs-task/`，从 `opencode.json` 摘掉 mcp 登记和 `permission` 里的 `ftcs-task_*`，并清理只服务于该入口的死代码（如 observe / launch 路径）  
 > **索引**：[US-FD-智能体自由对话与权限边界.md](US-FD-智能体自由对话与权限边界.md)
 
-闲聊的通过条件是：上一轮任务已结束，下一轮还没创建会话。启动本身单独测。产品验收不调用 `ftcs-task`。
+闲聊的通过条件是：上一轮任务已结束，下一轮还没创建会话。启动本身单独测。主验收不依赖 `ftcs-task`。
 
 ---
 
 ## 1. O3　技能引导，桌面调用现有 run*
 
-> **已按 #136 / 2026-11-03 锁定。** 不采用「模型调 `ftcs-task`，同意后才启动」。
+> **已按 #136 / #137 锁定。** 不采用「模型调 `ftcs-task`，同意后才启动」。该包由实现 PR 物理删除。主路径仍是技能 + 提问卡 + `run*`。
 
 用户说出要启动哪一步。技能只负责把必填收进一次 `question`。桌面在提问卡提交成功后调用现有入口，不新写一套流水线。
 
@@ -26,7 +27,7 @@
 
 启动前走该按钮已经有的校验和 preflight（画像未就绪、还没有关键词、R3 的 Places 预检等）。失败用那句现成原因。画像、补联系人、单封重写、中文对照不从聊天启动。技能让模型指向左侧按钮，不为它们发这张卡。
 
-推荐技能：`workspace/skills/start-from-chat/SKILL.md`（文件名实现可微调）。触发语覆盖「扩展关键词 / 探索 / 评分去重 / 起草开发信」。正文写明：先 `lead-store.product_list`（已是 allow，无授权卡）；没有产品就直接说明，不要发 `question`；有产品就发一次 `question`，然后停止。不要写文件，不要自己跑步骤技能，不要调用 `ftcs-task`。
+推荐技能：`workspace/skills/start-from-chat/SKILL.md`（文件名实现可微调）。触发语覆盖「扩展关键词 / 探索 / 评分去重 / 起草开发信」。正文写明：先 `lead-store.product_list`（已是 allow，无授权卡）；没有产品就直接说明，不要发 `question`；有产品就发一次 `question`，然后停止。不要写文件，不要自己跑步骤技能。
 
 下列步骤技能今天会在「用户说扩展关键词」这类话上被加载，从而在自由对话里自己执行。各在「何时使用」加一句守卫（句子实现可微调）：自由对话里要求启动时，改走上面的启动技能；本技能只在桌面 `run*` 已经建好的任务会话里执行。
 
@@ -37,7 +38,7 @@
 - `workspace/skills/score-and-dedupe/SKILL.md`
 - `workspace/skills/draft-outreach-email/SKILL.md`
 
-`workspace/AGENTS.md` 的「向用户提问」补一句：从聊天启动上述步骤时用提问卡，不要调 `ftcs-task`。实现 PR 改了 `workspace/skills/` 或 `workspace/AGENTS.md`，要按仓库 `AGENTS.md` 升 `WORKSPACE_TEMPLATE_VERSION`。
+`workspace/AGENTS.md` 的「向用户提问」补一句：从聊天启动上述步骤时用提问卡。实现 PR 改了 `workspace/skills/` 或 `workspace/AGENTS.md`，要按仓库 `AGENTS.md` 升 `WORKSPACE_TEMPLATE_VERSION`。
 
 ---
 
@@ -72,9 +73,9 @@
 
 ---
 
-## 3. 和 US-FD-02 的边界；ftcs-task 留着不用
+## 3. 和 US-FD-02 的边界；删除 ftcs-task
 
-> **已按 #136 / 2026-11-03 锁定：留着不用。** 不物理删除 #133。
+> **2026-11-04 改口：实现 PR 要删除。** 删掉 `workspace/mcp-servers/ftcs-task/`，从 `opencode.json` 摘掉 mcp 登记和 `permission` 里的 `ftcs-task_*`，并删掉只服务于该入口的死代码。O3 主路径仍按 #136 / #137：技能 + 提问卡 + `run*`。
 
 提问卡只发生在 `running === false`。聊天路径要等 `session.create` 成功、`commitChatSession` 把 `running` 设为 true 之后，才算进入执行。此之前不弹授权卡。
 
@@ -84,7 +85,7 @@
 - 其它业务提问仍是任务里的 US-AQ，那不是再启一轮。  
 - 非 allowlist 的权限按 US-FD-02 `reject`，不画授权卡。
 
-`ftcs-task` 包和 `opencode.json` 里的登记先留着。`ftcs-task_*` 保持 `ask`，不进 allowlist。技能和产品路径不再把它当入口。模型若仍调用：不启动流水线；不画 `AgentPermissionCard`；运行时直接 `reject`（续聊也不要 `once`）。`running === false` 时时间线追加「请通过技能与提问卡启动。」执行中不为了这句刷屏。`observeStartTaskTool` 见到工具结果也不要再进 `launchChatTask`。
+删除后会话里不应再出现 `ftcs-task`。主验收不依赖该 MCP。若残留调用：不启动流水线，不画 `AgentPermissionCard`。`observeStartTaskTool` 一类只看该工具结果再进 `launchChatTask` 的路径一并删掉。
 
 按钮若在卡还开着时启动：走按钮自己的路径。随后再提交这张卡，看到 `running === true`，不启动第二轮，追加「任务没有启动：已有任务在运行。」
 
@@ -112,9 +113,9 @@
 | 画像、关键词、线索、待起草等现网校验失败 | 任务没有启动：后面接该 `run*` 或 preflight 的原句。 | 不进入运行 |
 | 提交时已有任务在跑 | 任务没有启动：已有任务在运行。 | 保持原来的那次运行 |
 | `session.create` 失败，或 `run*` 抛错 | 任务没有启动：后面接原因。不要写「未授权」。 | 不进入运行 |
-| `running === false` 时模型调用了 `ftcs-task` | 请通过技能与提问卡启动。 | 不进入运行 |
+| 删除 `ftcs-task` 之后 | 工具列表里不再出现它。若残留调用，不启任务、不画卡 | 主验收不依赖该 MCP |
 | `session.create` 成功 | 整表换成这一轮任务，不再追加上面的句子 | 与按钮启动后相同 |
-| 进入执行后再出现启任务题头或 `ftcs-task` | 不弹启任务卡，也不弹授权卡 | 原任务继续，不启动第二个 |
+| 进入执行后再出现启任务题头 | 不弹启任务卡，也不弹授权卡 | 原任务继续，不启动第二个 |
 
 没有「未授权，任务未启动。」这句。闲聊被取消时，取消前的句子都还在。
 
@@ -139,7 +140,7 @@
 7. 点「复制会话」。正文含当时栏里的闲聊或任务条目，格式仍是 docs/38。  
 8. 从左侧按钮走录入 → 画像 → 探索 → 线索 → 开发信。步骤和结果与现在一致，执行中没有授权卡，也没有启任务提问卡。  
 
-通过不依赖是否调用过 `ftcs-task`。若模型调用了它：没有授权卡，没有因此启动，能看到「请通过技能与提问卡启动。」
+主验收不依赖 `ftcs-task`。删除后不应再出现该工具。若残留调用：没有授权卡，也没有因此启动。
 
 ---
 
@@ -151,13 +152,14 @@
 |------|------|
 | `workspace/skills/start-from-chat/SKILL.md` | 推荐新增，见 §1。文件名实现可微调 |
 | §1 列出的六个步骤技能，以及 `workspace/AGENTS.md` | 守卫句。实现 PR 升 `WORKSPACE_TEMPLATE_VERSION` |
-| `desktop/electron/opencode/agent-runner.ts` | 提问卡答完且题头匹配、`running === false` 时调用现有 `launchChatTask` / `run*`（`fromChat`）。**停用** `observeStartTaskTool` 把 `ftcs-task` 成功当成入口。该权限不画卡，直接 `reject` |
-| `desktop/electron/opencode/chat-start-task.ts` | 解析对象从 `start_task` JSON 改为提问答案。去掉「未授权」文案 |
+| `desktop/electron/opencode/agent-runner.ts` | 提问卡答完且题头匹配、`running === false` 时调用现有 `launchChatTask` / `run*`（`fromChat`）。删掉只把 `ftcs-task` 当入口的 observe / launch 死代码。删除后无需专用 reject 分支 |
+| `desktop/electron/opencode/chat-start-task.ts` | 解析对象从 `start_task` JSON 改为提问答案。去掉「未授权」文案。清掉只服务于 `ftcs-task` 的死代码 |
+| `workspace/mcp-servers/ftcs-task/`、`workspace/config/opencode/opencode.json` | 删除包。摘掉 mcp 登记与 `permission` 里的 `ftcs-task_*`。改了 `workspace/mcp-servers/` 或 `workspace/config/` 时，实现 PR 升 `WORKSPACE_TEMPLATE_VERSION` |
 | `desktop/electron/opencode/awaiting-reply.ts` | 启任务题超时按取消，不自动选第一项 |
 | `desktop/src/components/layout/AgentAwaitingReplyCard.vue` | 不新做卡。「结束任务」在启任务场景下是取消选择，不走任务失败收尾 |
 | `desktop/src/composables/useWorkspace.ts` | 聊天路径不提前 `resetTimelineView` |
 
-按钮的 IPC 和 `resetAgentFor*` 保持原样。不删除 `workspace/mcp-servers/ftcs-task/`，不从 `opencode.json` 摘掉登记。
+按钮的 IPC 和 `resetAgentFor*` 保持原样。删除 `ftcs-task` 包，从 `opencode.json` 摘掉 mcp 登记与 `ftcs-task_*` permission，并清理 `agent-runner` / `chat-start` 等死代码。
 
 ---
 
@@ -169,7 +171,7 @@
 
 `session.create` 之前若整表替换时间线，第 3 步和第 6 步的闲聊会消失。
 
-`observeStartTaskTool` 只要还调用 `launchChatTask`，验收又会依赖 `ftcs-task`。
+只服务于 `ftcs-task` 的 observe / launch 路径若留下，验收又会绕回该 MCP。删包时一并删掉。
 
 ---
 
@@ -179,3 +181,4 @@
 |------|------|
 | 2026-11-01 | 初稿。O3 曾写 `ftcs-task` / `start_task`、授权在执行前、创建成功后才清空。 |
 | 2026-11-03 | 按 #136 改口。启任务改为技能 + 现网提问卡，选完必填即启动。`ftcs-task` 留着不用，不作入口。复制仍按 docs/38。不关 #118。 |
+| 2026-11-04 | 改口：实现 PR 物理删除 `ftcs-task`（包、`opencode.json` 登记与 `ftcs-task_*`、相关死代码）。O3 主路径仍是技能 + 提问卡 + `run*`（#136 / #137）。主验收不依赖该 MCP。不关 #118。 |
