@@ -27,7 +27,6 @@ export type ChatStartRequest =
       code: "bad_stage" | "missing_channel"
     }
 
-const STAGES = new Set<ChatStartStage>(["keywords", "explore", "score", "email"])
 const CHANNELS = new Set<ChatStartChannel>(["r1", "r2", "r3"])
 const START_HEADERS = new Set([
   CHAT_START_HEADER_PRODUCT,
@@ -54,14 +53,51 @@ export function resolveChatProductId(requested: string | null, knownIds: readonl
   return knownIds.includes(id) ? id : ""
 }
 
-/** 题头恰好是产品 + 阶段，渠道可有可无。多出来的题头不是启任务卡。 */
+export const CHAT_START_SKILLS = [
+  "expand-keywords",
+  "discover-leads",
+  "discover-leads-r2",
+  "discover-leads-r3",
+  "score-and-dedupe",
+  "draft-outreach-email",
+] as const
+
+export type ChatStartSkill = (typeof CHAT_START_SKILLS)[number]
+
+const SKILL_STAGE: Record<ChatStartSkill, ChatStartStage> = {
+  "expand-keywords": "keywords",
+  "discover-leads": "explore",
+  "discover-leads-r2": "explore",
+  "discover-leads-r3": "explore",
+  "score-and-dedupe": "score",
+  "draft-outreach-email": "email",
+}
+
+/** 六个步骤技能名。其它技能（画像、补联系人等）对不上。 */
+export function normalizeStepSkill(name: string | null | undefined): ChatStartSkill | null {
+  const text = (name ?? "").trim().toLowerCase()
+  return (CHAT_START_SKILLS as readonly string[]).includes(text) ? (text as ChatStartSkill) : null
+}
+
+/** OpenCode `skill` 工具入参里的技能名。不是 skill 工具则返回 null。 */
+export function readLoadedSkillName(tool: string | undefined, input: unknown): string | null {
+  if ((tool ?? "").trim().toLowerCase() !== "skill") return null
+  if (!input || typeof input !== "object") return null
+  const record = input as Record<string, unknown>
+  const raw = record.name ?? record.skill ?? record.skill_name
+  if (typeof raw !== "string") return null
+  const name = raw.trim()
+  return name || null
+}
+
+/** 题头必须有产品。渠道、阶段可有可无。多出来的题头不是启任务卡。 */
 export function isChatStartQuestion(headers: readonly string[]): boolean {
-  if (headers.length < 2 || headers.length > 3) return false
+  if (headers.length < 1 || headers.length > 3) return false
   const normalized = headers.map((header) => header.trim())
   if (normalized.some((header) => header === "")) return false
   const unique = new Set(normalized)
   if (unique.size !== normalized.length) return false
-  if (!unique.has(CHAT_START_HEADER_PRODUCT) || !unique.has(CHAT_START_HEADER_STAGE)) return false
+  if (!unique.has(CHAT_START_HEADER_PRODUCT)) return false
   for (const header of unique) {
     if (!START_HEADERS.has(header)) return false
   }
@@ -81,12 +117,13 @@ export function isChatStartQuestionRequest(raw: unknown): boolean {
 }
 
 /**
- * 从一次提问的题头和提交值拼出启动请求。
- * 阶段不是探索时丢掉渠道。题头对不上则返回 null，当成普通提问。
+ * 从提问答案和当前步骤技能拼出启动请求。
+ * stage 以技能身份为准。非探索丢掉渠道。题头对不上则返回 null。
  */
 export function parseChatStartAnswers(
   questions: ReadonlyArray<{ header: string }>,
   answers: ReadonlyArray<readonly string[]>,
+  skillName: string | null,
 ): ChatStartRequest | null {
   if (!isChatStartQuestion(questions.map((question) => question.header))) return null
   const byHeader = new Map<string, string>()
@@ -95,8 +132,13 @@ export function parseChatStartAnswers(
     const raw = answers[index]?.[0]
     byHeader.set(header, typeof raw === "string" ? raw.trim() : "")
   }
-  const stage = byHeader.get(CHAT_START_HEADER_STAGE) ?? ""
-  if (!isStage(stage)) return { ok: false, code: "bad_stage" }
+  const skill = normalizeStepSkill(skillName)
+  if (!skill) return { ok: false, code: "bad_stage" }
+  const stage = SKILL_STAGE[skill]
+  if (byHeader.has(CHAT_START_HEADER_STAGE)) {
+    const stated = byHeader.get(CHAT_START_HEADER_STAGE) ?? ""
+    if (stated !== stage) return { ok: false, code: "bad_stage" }
+  }
   const productRaw = byHeader.get(CHAT_START_HEADER_PRODUCT) ?? ""
   const product_id = productRaw || null
   if (stage !== "explore") return { ok: true, stage, product_id }
@@ -120,10 +162,6 @@ export function preflightKindFor(request: Extract<ChatStartRequest, { ok: true }
   if (request.explore_channel === "r2") return "discover-leads-r2"
   if (request.explore_channel === "r3") return "discover-leads-r3"
   return "discover-leads"
-}
-
-function isStage(value: string): value is ChatStartStage {
-  return STAGES.has(value as ChatStartStage)
 }
 
 function isChannel(value: string): value is ChatStartChannel {

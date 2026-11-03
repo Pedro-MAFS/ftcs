@@ -96,6 +96,7 @@ import {
   chatStartFailureLine,
   isChatStartQuestionRequest,
   parseChatStartAnswers,
+  readLoadedSkillName,
   preflightKindFor,
   resolveChatProductId,
   type ChatPreflightKind,
@@ -878,6 +879,8 @@ export class AgentRunController {
   private chatLaunching = false
   /** 启任务卡被结束时，不要再追加「已停止这一轮回复」。 */
   private suppressDialogueStopped = false
+  /** 本轮自由对话里 skill 工具加载到的技能名。按钮任务不写这里。 */
+  private chatStepSkill: string | null = null
   private activeProductId = ''
   private preservedChatTimeline: TimelineBuilder | null = null
   private chatNoticeSeq = 0
@@ -1070,6 +1073,14 @@ export class AgentRunController {
     if (items) emit({ type: 'timeline', items })
   }
 
+  /** 闲聊里记下步骤技能。执行中的 skill 工具不算聊天启任务身份。 */
+  private noteLoadedSkill(part: ToolPart): void {
+    if (this.running || this.deferChatStart) return
+    const name = readLoadedSkillName(part.tool, part.state.input)
+    if (!name) return
+    this.chatStepSkill = name
+  }
+
   /**
    * 提问卡提交成功后才进入 run*。
    * 校验、预检、创建失败都追加在现有时间线末尾。
@@ -1234,6 +1245,7 @@ export class AgentRunController {
 
     const token = ++this.dialogueToken
     this.permissionFailureHandled = false
+    this.chatStepSkill = null
     this.dialogueActive = true
     this.dialogueStopRequested = false
     this.autoAbortReason = null
@@ -1402,7 +1414,7 @@ export class AgentRunController {
     answers: string[][]
     fresh: boolean
   }): void {
-    const parsed = parseChatStartAnswers(info.questions, info.answers)
+    const parsed = parseChatStartAnswers(info.questions, info.answers, this.chatStepSkill)
     if (!parsed) return
     const emit = this.currentEmit
     if (!emit) return
@@ -4017,6 +4029,7 @@ export class AgentRunController {
             return
           }
           if (part.type === 'tool') {
+            this.noteLoadedSkill(part)
             if (part.tool === 'task') {
               const card = taskToolTimelineItem(part)
               applySnapshot(card)

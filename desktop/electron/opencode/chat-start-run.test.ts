@@ -66,7 +66,10 @@ function timelineItems(events: AgentEventPayload[]): AgentTimelineItem[] {
   return last && last.type === 'timeline' ? last.items : []
 }
 
-function startQuestions(productId: string, options?: { includeChannel?: boolean }) {
+function startQuestions(
+  productId: string,
+  options?: { includeChannel?: boolean; includeStage?: boolean },
+) {
   const questions: Array<Record<string, unknown>> = [
     {
       header: '产品',
@@ -77,7 +80,9 @@ function startQuestions(productId: string, options?: { includeChannel?: boolean 
         { label: 'prd_other', description: '未命名' },
       ],
     },
-    {
+  ]
+  if (options?.includeStage) {
+    questions.push({
       header: '阶段',
       question: '选一个阶段',
       custom: false,
@@ -86,11 +91,10 @@ function startQuestions(productId: string, options?: { includeChannel?: boolean 
         { label: 'explore', description: '探索' },
         { label: 'score', description: '评分去重' },
         { label: 'email', description: '起草待处理线索' },
-        { label: 'profile', description: '画像' },
       ],
-    },
-  ]
-  if (options?.includeChannel !== false) {
+    })
+  }
+  if (options?.includeChannel) {
     questions.push({
       header: '渠道',
       question: '选一个渠道',
@@ -103,6 +107,29 @@ function startQuestions(productId: string, options?: { includeChannel?: boolean 
     })
   }
   return questions
+}
+
+function skillEvent(sessionId: string, name: string, id: string) {
+  return {
+    type: 'message.part.updated',
+    properties: {
+      sessionID: sessionId,
+      part: {
+        id,
+        messageID: `msg-${id}`,
+        type: 'tool',
+        tool: 'skill',
+        state: {
+          status: 'completed',
+          input: { name },
+          output: name,
+          title: name,
+          metadata: {},
+          time: { start: 1, end: 2 },
+        },
+      },
+    },
+  }
 }
 
 function questionEvent(sessionId: string, questions: unknown, id = 'q_start') {
@@ -308,9 +335,11 @@ describeRun('chat start task', () => {
   async function showStartCard(
     env: ReturnType<typeof harness>,
     productId: string,
-    options?: { includeChannel?: boolean; id?: string },
+    options?: { includeChannel?: boolean; includeStage?: boolean; id?: string; skill?: string },
   ) {
-    env.push(questionEvent(env.chatId, startQuestions(productId, options), options?.id ?? 'q_start'))
+    const id = options?.id ?? 'q_start'
+    if (options?.skill) env.push(skillEvent(env.chatId, options.skill, `skill-${id}`))
+    env.push(questionEvent(env.chatId, startQuestions(productId, options), id))
     assert.equal(
       await waitFor(() =>
         env.emitted.some(
@@ -327,8 +356,8 @@ describeRun('chat start task', () => {
     const env = harness()
     try {
       await chat(env)
-      await showStartCard(env, 'prd_ready')
-      const reply = await env.runner.replyToPendingQuestion(replySelections(['prd_ready', 'profile', 'r1']))
+      await showStartCard(env, 'prd_ready', { skill: 'expand-keywords', includeStage: true })
+      const reply = await env.runner.replyToPendingQuestion(replySelections(['prd_ready', 'explore']))
       assert.equal(reply.ok, true)
       assert.equal(await waitFor(() => timelineItems(env.emitted).some((item) => item.body === CHAT_START_BAD_STEP)), true)
       const items = timelineItems(env.emitted)
@@ -348,8 +377,8 @@ describeRun('chat start task', () => {
     try {
       await chat(env)
       env.runner.noteActiveProduct('prd_real')
-      await showStartCard(env, 'prd_missing')
-      const reply = await env.runner.replyToPendingQuestion(replySelections(['prd_missing', 'keywords', 'r1']))
+      await showStartCard(env, 'prd_missing', { skill: 'expand-keywords' })
+      const reply = await env.runner.replyToPendingQuestion(replySelections(['prd_missing']))
       assert.equal(reply.ok, true)
       assert.equal(await waitFor(() => timelineItems(env.emitted).some((item) => item.body === CHAT_START_NO_PRODUCT)), true)
       const items = timelineItems(env.emitted)
@@ -367,8 +396,8 @@ describeRun('chat start task', () => {
     const env = harness()
     try {
       await chat(env)
-      await showStartCard(env, 'prd_draft')
-      await env.runner.replyToPendingQuestion(replySelections(['prd_draft', 'keywords', 'r2']))
+      await showStartCard(env, 'prd_draft', { skill: 'expand-keywords', includeChannel: true })
+      await env.runner.replyToPendingQuestion(replySelections(['prd_draft', 'r2']))
       assert.equal(
         await waitFor(() => timelineItems(env.emitted).some((item) => item.body.includes('画像未就绪'))),
         true,
@@ -391,8 +420,8 @@ describeRun('chat start task', () => {
     const env = harness({ failCreate: true })
     try {
       await chat(env)
-      await showStartCard(env, 'prd_ready_fail')
-      await env.runner.replyToPendingQuestion(replySelections(['prd_ready_fail', 'keywords', 'r1']))
+      await showStartCard(env, 'prd_ready_fail', { skill: 'expand-keywords' })
+      await env.runner.replyToPendingQuestion(replySelections(['prd_ready_fail']))
       assert.equal(
         await waitFor(() =>
           timelineItems(env.emitted).some(
@@ -417,8 +446,8 @@ describeRun('chat start task', () => {
     const env = harness()
     try {
       await chat(env)
-      await showStartCard(env, 'prd_ready')
-      await env.runner.replyToPendingQuestion(replySelections(['prd_ready', 'keywords', 'r2']))
+      await showStartCard(env, 'prd_ready', { skill: 'expand-keywords', includeChannel: true })
+      await env.runner.replyToPendingQuestion(replySelections(['prd_ready', 'r2']))
       await env.createEntered
       assert.equal(env.runner.isRunning(), false)
       assert.equal(timelineItems(env.emitted).some((item) => item.body.includes('什么是 FOB')), true)
@@ -501,7 +530,7 @@ describeRun('chat start task', () => {
       const awaiting = [...env.emitted].reverse().find((event) => event.type === 'awaiting-reply')
       assert.equal(awaiting?.type === 'awaiting-reply' && awaiting.pending != null, true)
       const reply = await env.runner.replyToPendingQuestion(
-        replySelections(['prd_button_open', 'keywords', 'r1']),
+        replySelections(['prd_button_open']),
       )
       assert.equal(reply.ok, true)
       assert.equal(
@@ -551,16 +580,29 @@ describeRun('chat start task', () => {
     const env = harness()
     try {
       await chat(env)
-      await showStartCard(env, 'prd_route', { id: 'q_score' })
-      await env.runner.replyToPendingQuestion(replySelections(['prd_route', 'score', 'r1']))
+      await showStartCard(env, 'prd_route', { skill: 'score-and-dedupe', id: 'q_score' })
+      await env.runner.replyToPendingQuestion(replySelections(['prd_route']))
       assert.equal(await waitFor(() => timelineItems(env.emitted).some((item) => item.body.includes('暂无原始线索'))), true)
 
-      await showStartCard(env, 'prd_route', { id: 'q_explore' })
-      await env.runner.replyToPendingQuestion(replySelections(['prd_route', 'explore', 'r1']))
+      await showStartCard(env, 'prd_route', { skill: 'discover-leads', includeChannel: true, id: 'q_explore' })
+      await env.runner.replyToPendingQuestion(replySelections(['prd_route', 'r1']))
       assert.equal(await waitFor(() => timelineItems(env.emitted).some((item) => item.body.includes('尚未扩展关键词'))), true)
 
-      await showStartCard(env, 'prd_route', { includeChannel: false, id: 'q_email' })
-      await env.runner.replyToPendingQuestion(replySelections(['prd_route', 'email']))
+      await showStartCard(env, 'prd_route', {
+        skill: 'discover-leads-r3',
+        includeChannel: true,
+        id: 'q_r3',
+      })
+      await env.runner.replyToPendingQuestion(replySelections(['prd_route', 'r3']))
+      assert.equal(
+        await waitFor(
+          () => timelineItems(env.emitted).filter((item) => item.body.includes('尚未扩展关键词')).length >= 2,
+        ),
+        true,
+      )
+
+      await showStartCard(env, 'prd_route', { skill: 'draft-outreach-email', id: 'q_email' })
+      await env.runner.replyToPendingQuestion(replySelections(['prd_route']))
       assert.equal(await waitFor(() => timelineItems(env.emitted).some((item) => item.body.includes('暂无待起草'))), true)
 
       const bodies = timelineItems(env.emitted).map((item) => item.body)

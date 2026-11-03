@@ -111,10 +111,16 @@ describe('decideAwaitingReplyTimeout', () => {
     assert.deepEqual(
       decideAwaitingReplyTimeout({
         renderable: true,
+        questions: [{ header: '产品', options: [{ label: 'prd_1' }, { label: 'prd_2' }] }],
+      }),
+      { action: 'reject', reason: 'chat-start' },
+    )
+    assert.deepEqual(
+      decideAwaitingReplyTimeout({
+        renderable: true,
         questions: [
-          { header: '产品', options: [{ label: 'prd_1' }, { label: 'prd_2' }] },
-          { header: '阶段', options: [{ label: 'keywords' }, { label: 'explore' }] },
-          { header: '渠道', options: [{ label: 'r1' }] },
+          { header: '产品', options: [{ label: 'prd_1' }] },
+          { header: '渠道', options: [{ label: 'r1' }, { label: 'r3' }] },
         ],
       }),
       { action: 'reject', reason: 'chat-start' },
@@ -499,8 +505,6 @@ describe('AwaitingReplyCoordinator', () => {
     const h = harness()
     await h.coord.ingest('s1', 'v1', 'id', [
       question('产品', ['prd_1', 'prd_2'], { custom: false }),
-      question('阶段', ['keywords', 'explore'], { custom: false }),
-      question('渠道', ['r1', 'r2'], { custom: false }),
     ])
     assert.equal(h.coord.isPendingChatStart(), true)
     h.timers[0]?.cb()

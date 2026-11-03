@@ -28,10 +28,32 @@ R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过�
 
 ## 何时使用
 
-- 自由对话里要求启动时，改走 start-from-chat；本技能只在桌面 `run*` 已经建好的任务会话里执行
+- 任务指令里已经有 `product_id` 时直接执行；没有就用提问卡问清后停止，不要在当前会话里自己跑完
 - 画像 `ready`，且 `expansion.json` 含合格 **R3 词**（`round=R3`，无 `site_id`）
 - 用户说「开始 R3」「地图发现」「discover-leads-r3」
 - `GOOGLE_PLACES_API_KEY` 已配置（`places-api` MCP）；探索页「开始 R3」须 Preflight 通过
+
+## 缺必填
+
+任务指令里没有 `product_id` 时：
+
+1. 调用 `lead-store.product_list`。不要臆造产品 id。
+2. 列表为空：直接说明还没有产品，不要发 `question`。
+3. 用户要的是画像、补联系人、单封重写或中文对照：请他用左侧按钮，不要发这张卡。
+4. 有产品：发**一次** `question`，同时问产品和渠道，然后立刻停止。不要写文件，不要继续执行下面的步骤。
+
+`custom: false`，不设 `multiple`。
+
+| header | 选项 `label` | `description` |
+|--------|--------------|----------------|
+| `产品` | `product_list` 的 `id` | `company_name`，没有就写「未命名」 |
+| `渠道` | `r1` | 全网搜索 |
+| `渠道` | `r2` | 社媒发现 |
+| `渠道` | `r3` | 地图发现 |
+
+可以不设 `阶段`。若带上，`label` 必须是 `explore`。
+
+question 返回后不要继续。桌面会另开会话，那时必填已齐，再按本技能往下做。
 
 ## 前置条件
 
