@@ -25,8 +25,7 @@
     "lsp": "deny",
     "webfetch": "ask",
     "websearch": "ask",
-    "task": "ask",
-    "ftcs-task_*": "ask"
+    "task": "ask"
   },
   "mcp": {
     "lead-store": {
@@ -59,14 +58,6 @@
     "hunter-api": {
       "type": "local",
       "command": ["node", "mcp-servers/hunter-api/dist/mcp.js"],
-      "enabled": true,
-      "environment": {
-        "FTCS_WORKSPACE": "."
-      }
-    },
-    "ftcs-task": {
-      "type": "local",
-      "command": ["node", "mcp-servers/ftcs-task/dist/mcp.js"],
       "enabled": true,
       "environment": {
         "FTCS_WORKSPACE": "."

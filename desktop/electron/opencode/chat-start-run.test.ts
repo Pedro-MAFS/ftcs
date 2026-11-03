@@ -10,8 +10,6 @@ import {
   CHAT_START_BAD_STEP,
   CHAT_START_CANCELLED,
   CHAT_START_NO_PRODUCT,
-  CHAT_START_USE_SKILL,
-  FTCS_TASK_REJECT_MESSAGE,
 } from './chat-start-task.ts'
 import { FREE_DIALOGUE_STOPPED } from './free-dialogue.ts'
 
@@ -66,25 +64,6 @@ function createEventStream() {
 function timelineItems(events: AgentEventPayload[]): AgentTimelineItem[] {
   const last = [...events].reverse().find((event) => event.type === 'timeline')
   return last && last.type === 'timeline' ? last.items : []
-}
-
-function toolEvent(sessionId: string, partId: string, output: unknown, status: 'completed' | 'error' = 'completed') {
-  return {
-    type: 'message.part.updated',
-    properties: {
-      sessionID: sessionId,
-      part: {
-        id: partId,
-        messageID: `msg-${partId}`,
-        type: 'tool',
-        tool: 'ftcs-task_start_task',
-        state:
-          status === 'completed'
-            ? { status, input: {}, output }
-            : { status, error: typeof output === 'string' ? output : JSON.stringify(output) },
-      },
-    },
-  }
 }
 
 function startQuestions(productId: string, options?: { includeChannel?: boolean }) {
@@ -407,67 +386,6 @@ describeRun('chat start task', () => {
     }
   })
 
-  it('rejects ftcs-task without a permission card and does not launch', async () => {
-    writeProfile('prd_ready_task', 'ready')
-    const env = harness()
-    try {
-      await chat(env)
-      env.push({
-        type: 'permission.asked',
-        properties: {
-          id: 'req_start',
-          sessionID: env.chatId,
-          permission: 'ftcs-task_start_task',
-        },
-      })
-      env.push(
-        toolEvent(env.chatId, 'tool_start', { ok: true, stage: 'keywords', product_id: 'prd_ready_task' }, 'error'),
-      )
-      assert.equal(
-        await waitFor(() => timelineItems(env.emitted).some((item) => item.body === CHAT_START_USE_SKILL)),
-        true,
-      )
-      const items = timelineItems(env.emitted)
-      assert.equal(items.filter((item) => item.body === CHAT_START_USE_SKILL).length, 1)
-      assert.equal(items.some((item) => item.body.includes('什么是 FOB')), true)
-      assert.equal(items.some((item) => item.body === '未授权，任务未启动。'), false)
-      assert.equal(
-        env.emitted.some((event) => event.type === 'permission-ask' && event.pending != null),
-        false,
-      )
-      assert.equal(env.replies.length, 1)
-      assert.deepEqual(env.replies[0], {
-        requestID: 'req_start',
-        reply: 'reject',
-        message: FTCS_TASK_REJECT_MESSAGE,
-      })
-      assert.equal(env.creates.some((item) => item.title?.startsWith('expand-keywords')), false)
-      assert.equal(env.runner.isRunning(), false)
-    } finally {
-      env.close()
-    }
-  })
-
-  it('does not launch when ftcs-task completes without a permission event', async () => {
-    writeProfile('prd_ready_direct', 'ready')
-    const env = harness()
-    try {
-      await chat(env)
-      env.push(
-        toolEvent(env.chatId, 'tool_direct', { ok: true, stage: 'keywords', product_id: 'prd_ready_direct' }),
-      )
-      assert.equal(
-        await waitFor(() => timelineItems(env.emitted).some((item) => item.body === CHAT_START_USE_SKILL)),
-        true,
-      )
-      assert.equal(env.creates.some((item) => item.title?.startsWith('expand-keywords')), false)
-      assert.equal(env.runner.isRunning(), false)
-      assert.equal(env.emitted.some((event) => event.type === 'permission-ask' && event.pending != null), false)
-    } finally {
-      env.close()
-    }
-  })
-
   it('does not clear the chat when session.create fails', async () => {
     writeProfile('prd_ready_fail', 'ready')
     const env = harness({ failCreate: true })
@@ -523,32 +441,16 @@ describeRun('chat start task', () => {
       assert.ok(env.order.indexOf('create-end') < env.order.indexOf(`abort:${env.chatId}`))
 
       const before = env.emitted.length
-      env.push({
-        type: 'permission.asked',
-        properties: {
-          id: 'req_second',
-          sessionID: env.taskId,
-          permission: 'ftcs-task_start_task',
-        },
-      })
       env.push(questionEvent(env.taskId, startQuestions('prd_ready'), 'q_again'))
-      env.push(toolEvent(env.taskId, 'tool_again', { ok: true, stage: 'keywords', product_id: 'prd_ready' }))
-      assert.equal(await waitFor(() => env.replies.length === 1 && env.questionRejects.includes('q_again')), true)
+      assert.equal(await waitFor(() => env.questionRejects.includes('q_again')), true)
       await new Promise((resolve) => setTimeout(resolve, 40))
       assert.equal(env.creates.filter((item) => item.title?.startsWith('expand-keywords')).length, 1)
-      assert.equal(
-        env.emitted.some(
-          (event) => event.type === 'permission-ask' && event.pending?.permission === 'ftcs-task_start_task',
-        ),
-        false,
-      )
       const added = env.emitted.slice(before)
       assert.equal(
         added.some((event) => event.type === 'awaiting-reply' && event.pending != null),
         false,
       )
       assert.equal(timelineItems(env.emitted).some((item) => item.body === CHAT_START_ALREADY_RUNNING), false)
-      assert.equal(timelineItems(env.emitted).some((item) => item.body === CHAT_START_USE_SKILL), false)
     } finally {
       await env.runner.abortCurrent()
       env.close()

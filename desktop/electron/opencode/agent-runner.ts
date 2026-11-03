@@ -93,12 +93,8 @@ import {
   CHAT_START_ALREADY_RUNNING,
   CHAT_START_CANCELLED,
   CHAT_START_NO_PRODUCT,
-  CHAT_START_USE_SKILL,
-  FTCS_TASK_REJECT_MESSAGE,
   chatStartFailureLine,
   isChatStartQuestionRequest,
-  isFtcsStartTaskPermission,
-  isFtcsStartTaskTool,
   parseChatStartAnswers,
   preflightKindFor,
   resolveChatProductId,
@@ -111,7 +107,6 @@ import {
   type PermissionReplyCall,
   type PermissionReplyOutcome,
   classifyPermissionHttpResult,
-  buildPermissionReply,
   readPermissionAsk,
   type ReplyPermissionResult,
 } from './permission-gate'
@@ -881,13 +876,10 @@ export class AgentRunController {
   private chatOldSessionId: string | null = null
   private chatLaunchToken = 0
   private chatLaunching = false
-  /** 权限拒绝已经写过「请通过技能与提问卡启动」，下一次工具结果不要再写。 */
-  private ftcsTaskPermissionNoted = false
   /** 启任务卡被结束时，不要再追加「已停止这一轮回复」。 */
   private suppressDialogueStopped = false
   private activeProductId = ''
   private preservedChatTimeline: TimelineBuilder | null = null
-  private readonly handledStartParts = new Set<string>()
   private chatNoticeSeq = 0
   private readonly awaitingReply: AwaitingReplyCoordinator
   private readonly permissionGate: PermissionCoordinator
@@ -1079,28 +1071,8 @@ export class AgentRunController {
   }
 
   /**
-   * ftcs-task 的工具结果不是启动入口。
-   * 执行中不追加说明。空闲时若权限拒绝还没写过那一句，补上。
-   */
-  private observeStartTaskTool(part: ToolPart): void {
-    const state = part.state
-    if (state.status !== 'completed' && state.status !== 'error') return
-    if (this.handledStartParts.has(part.id)) return
-    this.handledStartParts.add(part.id)
-    if (this.running) return
-    if (this.ftcsTaskPermissionNoted) {
-      this.ftcsTaskPermissionNoted = false
-      return
-    }
-    const emit = this.currentEmit
-    if (!emit) return
-    this.preservedChatTimeline = this.preservedChatTimeline ?? this.timeline
-    this.appendChatNotice(CHAT_START_USE_SKILL, emit)
-  }
-
-  /**
-   * 续聊里 start_task 成功之后才进入 run*。
-   * 拒绝、校验、预检、创建失败都追加在现有时间线末尾。
+   * 提问卡提交成功后才进入 run*。
+   * 校验、预检、创建失败都追加在现有时间线末尾。
    */
   private async launchChatTask(request: ChatStartRequest, rawEmit: AgentEventSink): Promise<void> {
     if (this.running) {
@@ -1440,35 +1412,6 @@ export class AgentRunController {
     }
     if (!info.fresh) return
     void this.launchChatTask(parsed, emit)
-  }
-
-  /** ftcs-task 两段都不画授权卡。空闲时补一句，请改走技能和提问卡。 */
-  private async rejectFtcsTaskWithoutCard(requestID: string): Promise<void> {
-    const duringRun = this.running
-    if (!duringRun) this.ftcsTaskPermissionNoted = true
-    const call = buildPermissionReply({
-      requestID,
-      reply: 'reject',
-      message: FTCS_TASK_REJECT_MESSAGE,
-    })
-    let outcome: PermissionReplyOutcome = 'failed'
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      outcome = await this.sendPermissionReply(call)
-      if (outcome !== 'failed') break
-    }
-    if (outcome === 'failed') {
-      if (!duringRun) this.ftcsTaskPermissionNoted = false
-      this.failPermissionReply()
-      return
-    }
-    if (duringRun || this.running) {
-      this.ftcsTaskPermissionNoted = false
-      return
-    }
-    const emit = this.currentEmit
-    if (!emit) return
-    this.preservedChatTimeline = this.preservedChatTimeline ?? this.timeline
-    this.appendChatNotice(CHAT_START_USE_SKILL, emit)
   }
 
   /** 执行中再出现启任务题头：不展示第二张卡，也不启动第二个任务。 */
@@ -3870,10 +3813,6 @@ export class AgentRunController {
           if (sid !== sessionId && !knownChildren.has(sid)) return
           const ask = readPermissionAsk(event)
           if (!ask) return
-          if (isFtcsStartTaskPermission(ask.permission, ask.tool)) {
-            void this.rejectFtcsTaskWithoutCard(ask.id)
-            return
-          }
           void this.permissionGate.onAsked(ask)
           return
         }
@@ -4006,7 +3945,6 @@ export class AgentRunController {
           if (knownChildren.has(event.properties.sessionID)) {
             const { part } = event.properties
             if (part.type === 'tool') {
-              if (isFtcsStartTaskTool(part.tool)) this.observeStartTaskTool(part)
               pushChildStep(event.properties.sessionID, childToolStep(part))
               if (this.watchPlacesGoogleRejection && !this.placesRejectionHandled) {
                 const googleMessage = googleRejectionFromToolPart(part)
@@ -4079,7 +4017,6 @@ export class AgentRunController {
             return
           }
           if (part.type === 'tool') {
-            if (isFtcsStartTaskTool(part.tool)) this.observeStartTaskTool(part)
             if (part.tool === 'task') {
               const card = taskToolTimelineItem(part)
               applySnapshot(card)

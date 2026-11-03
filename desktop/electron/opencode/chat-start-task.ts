@@ -1,22 +1,16 @@
 /**
  * US-FD-03：自由对话里用提问卡收齐必填后，决定要不要进入现有 run*。
- * 题头是技能和桌面的接线契约。不读 ftcs-task 的 JSON，也不靠它启动。
+ * 题头是技能和桌面的接线契约。
  */
 
 export const CHAT_START_NO_PRODUCT = "任务没有启动：还没有当前产品。"
 export const CHAT_START_BAD_STEP = "任务没有启动：不能从聊天启动这一步。"
 export const CHAT_START_ALREADY_RUNNING = "任务没有启动：已有任务在运行。"
 export const CHAT_START_CANCELLED = "已取消，任务未启动。"
-export const CHAT_START_USE_SKILL = "请通过技能与提问卡启动。"
-
-/** 拒绝模型调用时附给权限回复的短句。时间线用 CHAT_START_USE_SKILL。 */
-export const FTCS_TASK_REJECT_MESSAGE = "请通过技能与提问卡启动。不要调用 ftcs-task。"
 
 export const CHAT_START_HEADER_PRODUCT = "产品"
 export const CHAT_START_HEADER_STAGE = "阶段"
 export const CHAT_START_HEADER_CHANNEL = "渠道"
-
-export const START_TASK_TOOL_NAME = "start_task"
 
 export type ChatStartStage = "keywords" | "explore" | "score" | "email"
 export type ChatStartChannel = "r1" | "r2" | "r3"
@@ -40,17 +34,6 @@ const START_HEADERS = new Set([
   CHAT_START_HEADER_STAGE,
   CHAT_START_HEADER_CHANNEL,
 ])
-
-export function isFtcsStartTaskTool(tool: string | undefined): boolean {
-  const name = (tool ?? "").trim().toLowerCase()
-  if (!name || name === "task") return false
-  if (name === START_TASK_TOOL_NAME) return true
-  return name.endsWith(START_TASK_TOOL_NAME) && (name.includes("ftcs-task") || name.includes("ftcs_task"))
-}
-
-export function isFtcsStartTaskPermission(permission: string, tool?: string): boolean {
-  return isFtcsStartTaskTool(permission) || isFtcsStartTaskTool(tool)
-}
 
 /** 时间线追加句。已有前缀的句子保持原样，其余接在「任务没有启动：」后面。 */
 export function chatStartFailureLine(reason: string): string {

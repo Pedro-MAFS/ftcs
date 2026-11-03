@@ -7,26 +7,10 @@ import {
   chatStartFailureLine,
   isChatStartQuestion,
   isChatStartQuestionRequest,
-  isFtcsStartTaskPermission,
-  isFtcsStartTaskTool,
   parseChatStartAnswers,
   preflightKindFor,
   resolveChatProductId,
 } from './chat-start-task.ts'
-
-describe('isFtcsStartTaskTool', () => {
-  it('只认 start_task，不把子代理 task 当成启动', () => {
-    assert.equal(isFtcsStartTaskTool('ftcs-task_start_task'), true)
-    assert.equal(isFtcsStartTaskTool('start_task'), true)
-    assert.equal(isFtcsStartTaskTool('FTCS-TASK_start_task'), true)
-    assert.equal(isFtcsStartTaskTool('task'), false)
-    assert.equal(isFtcsStartTaskTool('lead-store_product_save'), false)
-    assert.equal(isFtcsStartTaskTool('webfetch'), false)
-    assert.equal(isFtcsStartTaskPermission('task', 'ftcs-task_start_task'), true)
-    assert.equal(isFtcsStartTaskPermission('ftcs-task_start_task'), true)
-    assert.equal(isFtcsStartTaskPermission('webfetch', 'webfetch'), false)
-  })
-})
 
 describe('parseChatStartAnswers', () => {
   const questions = [{ header: '渠道' }, { header: '产品' }, { header: '阶段' }]
