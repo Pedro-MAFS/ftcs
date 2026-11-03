@@ -2,9 +2,9 @@
 
 > **用户故事**：[../40-需求-智能体自由对话与权限边界.md](../40-需求-智能体自由对话与权限边界.md) · **US-FD-02** · Related [#118](https://github.com/Pedro-MAFS/ftcs/issues/118)  
 > **状态**：**O1、O2、O6 按推荐写死，待马丰顺确认。** O5 的主流程结论也在这里。不关 #118  
-> **范围**：一份 `permission` 配置，加上按 `running` 切换的回复。任务段不弹窗。续聊对可询问项授权  
-> **依赖**：[US-FD-01](US-FD-01-开放自由对话.md) 的续聊发送。内置 MCP 与 `agent-runner.ts` 里现有的 `permission.reply`。`ftcs-task` 不作聊天启任务入口；本文件只把它留在 `ask`、不进 allowlist。若被调用，按 [US-FD-03](US-FD-03-同会话混用与聊天启任务.md) 非入口处理（不画卡、不启动）  
-> **不做**：从聊天启动的参数和清空时机；把非内置 MCP 放进 allowlist；把 `ftcs-task_*` 的询问写成启任务必经路径；关 #118  
+> **范围**：一份 `permission` 配置，加上按 `running` 切换的回复。任务段不弹窗。续聊对可询问项授权。allowlist 等于现有内置 MCP，无 `ftcs-task` 例外行  
+> **依赖**：[US-FD-01](US-FD-01-开放自由对话.md) 的续聊发送。内置 MCP 与 `agent-runner.ts` 里现有的 `permission.reply`。聊天启任务见 [US-FD-03](US-FD-03-同会话混用与聊天启任务.md)：六个步骤技能缺参自问，桌面按题头调 `run*`。不设 `start-from-chat`。实现后本文件的配置与测试里都没有 `ftcs-task`  
+> **不做**：从聊天启动的参数和清空时机；把非内置 MCP 放进 allowlist；把 `ftcs-task` 留在配置里或写成启任务路径；关 #118  
 > **索引**：[US-FD-智能体自由对话与权限边界.md](US-FD-智能体自由对话与权限边界.md)
 
 两段用同一个会话、同一份配置。差别只在 `AgentRunController.running`。
@@ -33,7 +33,7 @@
 
 | | |
 |--|--|
-| **推荐** | 配置负责「从不执行」和「可以问」。运行时负责「任务中不问」。`running === true`（含该次任务已记下的子会话）：对 `permission.asked` / `permission.v2.asked` 立刻 `reply: 'reject'`，不画授权卡。`running === false`：可询问项画出授权卡，用户选 `once` 或 `reject`。`ftcs-task_*` 两段都不画卡，见 §4 与 US-FD-03。代码路径上不再出现 `reply: 'always'` |
+| **推荐** | 配置负责「从不执行」和「可以问」。运行时负责「任务中不问」。`running === true`（含该次任务已记下的子会话）：对 `permission.asked` / `permission.v2.asked` 立刻 `reply: 'reject'`，不画授权卡。`running === false`：可询问项画出授权卡，用户选 `once` 或 `reject`。代码路径上不再出现 `reply: 'always'`。实现后工具列表与配置里都没有 `ftcs-task`（见 US-FD-03） |
 | **备选** | 任务和续聊各用一个 OpenCode agent，靠换 agent 换权限；或任务段也弹窗 |
 | **理由** | 续聊必须留在同一个 session。1.18 不会因为用户又发了一句就换一套权限。弹窗会把获客任务停住，FD3 已经否决。`reject` 的连带效果可以接受：内置 MCP 在配置里是 `allow`，不会和这次拒绝排在同一个等待队列里 |
 | **样例** | 见 §8。任务段一条，续聊一条，两段都要过 |
@@ -42,7 +42,7 @@
 
 硬边界即使配置被误写成 `ask`，运行时在两段都直接 `reject`，不画卡：`edit`、`bash`、`shell`、`external_directory`。授权不能把它们变成成功。
 
-`question.asked` / `question.v2.asked` 仍走 docs/31 与 US-AQ。自由对话里用来启任务的那张卡也是这套提问卡，不是权限卡；何时出现、选完如何 `run*`，见 US-FD-03。任务里该出现「任务在等你回复」时照旧出现。那不是权限卡，也不用来再启一轮。
+`question.asked` / `question.v2.asked` 仍走 docs/31 与 US-AQ。自由对话里缺必填时，步骤技能发的也是这套提问卡，不是权限卡。哪个技能在问，决定调哪个 `run*`；何时出现、选完如何启动，见 US-FD-03。任务里该出现「任务在等你回复」时照旧出现。那不是权限卡，也不用来再启一轮。按钮路径提示词已齐必填，不会为了启任务发这张卡。
 
 ---
 
@@ -71,8 +71,7 @@
   "lsp": "deny",
   "webfetch": "ask",
   "websearch": "ask",
-  "task": "ask",
-  "ftcs-task_*": "ask"
+  "task": "ask"
 }
 ```
 
@@ -81,14 +80,15 @@
 | `read` / `glob` / `grep` allow | 工作区内读取不询问。画像要 Read `inputs/` 里的文本和图片 |
 | `external_directory` deny | 工作区外的读和写在进 `read` / `edit` 之前就被拒绝，两段都不问 |
 | `edit` / `bash` deny | 工作区写入只走产品 MCP。shell 能写文件，1.18 对命令里的路径是尽力判断，所以 shell 整类拒绝 |
-| 五个 `服务名_*` allow | 今天的内置 MCP。工具键如 `lead-store_product_save`、`chrome-devtools_navigate_page` |
-| `ftcs-task_*` ask | 不进 allowlist。不作聊天启任务入口。执行中与续聊若被调用，都不画授权卡，运行时 `reject`。见 US-FD-03 |
+| 五个 `服务名_*` allow | 今天的内置 MCP。工具键如 `lead-store_product_save`、`chrome-devtools_navigate_page`。删除 `ftcs-task` 后，allowlist 就是这些键，无例外行 |
 | `question` allow | 保住 docs/31 的提问，避免任务段把提问工具拒掉 |
 | `doom_loop` allow | 见 §7。它不是 MCP |
 | `skill.*` allow | 保持现网，任务要能加载技能 |
 | `*` ask | 没点名的工具在续聊里询问，在任务段被 `reject`。堵住 1.18「没写就是 allow」 |
 
 不沿用 OpenCode 对工作区内 `.env` 的默认询问。FD7 规定工作区内读取不限。工作区外的 `.env` 仍被 `external_directory` 拒绝。
+
+实现后这份配置里没有 `ftcs-task_*`。
 
 ---
 
@@ -102,7 +102,7 @@
 | 续聊，用户点拒绝 | `reject` | 用户拒绝了这次操作，不要改用其它方式执行。 |
 | 续聊，用户点同意 | `once` | 不附「以后都允许」 |
 
-`ftcs-task_*` 不走上面的续聊同意。任务中和续聊都直接 `reject`，不画这张卡，也不启动。见 US-FD-03。其余 `ask` 仍是续聊才 `once` 或 `reject`。
+实现后工具列表与配置里都没有 `ftcs-task`。其余 `ask` 仍是续聊才 `once` 或 `reject`。
 
 授权卡放在时间线下方、输入框上方，不复用提问卡片的 IPC。启任务不用这张卡。
 
@@ -127,12 +127,12 @@
 
 | | |
 |--|--|
-| **推荐** | allowlist 就是这份 `opencode.json` 里、效果为 `allow` 的 `服务名_*`。成员等于 `mcp` 下的键，再去掉 `ftcs-task`。增删内置 MCP 时，同一次改动加上或删掉对应的 `"服务名_*": "allow"`。服务名先按 OpenCode 的 `sanitize` 再加 `_*` |
-| **备选** | 进程启动时扫描已连接 MCP，除了 `ftcs-task` 都自动 `allow` |
-| **理由** | 五个名字只是今天的登记，不是永久名单。自动扫描会把未经评审的新 MCP 放进任务段。`ftcs-task` 自己也写在 `mcp` 里，扫描更容易把它放行 |
-| **样例** | 配置里有 `lead-store` 就有 `"lead-store_*": "allow"`。删掉 `hunter-api` 的 `mcp` 块时，同时删掉 `"hunter-api_*"`。留下 `ftcs-task` 时只有 `"ftcs-task_*": "ask"`，没有 allow。这不表示聊天靠它启动。`sanitize` 只把字母、数字、连字符、下划线以外的字符换成 `_` |
+| **推荐** | allowlist 就是这份 `opencode.json` 里、效果为 `allow` 的 `服务名_*`。成员等于 `mcp` 下的键，也就是现有内置 MCP。`ftcs-task` 删除后不再登记，无例外行。增删内置 MCP 时，同一次改动加上或删掉对应的 `"服务名_*": "allow"`。服务名先按 OpenCode 的 `sanitize` 再加 `_*` |
+| **备选** | 进程启动时扫描已连接 MCP，并自动 `allow` |
+| **理由** | 五个名字只是今天的登记，不是永久名单。自动扫描会把未经评审的新 MCP 放进任务段 |
+| **样例** | 配置里有 `lead-store` 就有 `"lead-store_*": "allow"`。删掉 `hunter-api` 的 `mcp` 块时，同时删掉 `"hunter-api_*"`。`sanitize` 只把字母、数字、连字符、下划线以外的字符换成 `_`。实现后配置与测试里都没有 `ftcs-task` |
 
-测试读这份 JSON：每个 `mcp` 键除 `ftcs-task` 外都有一条 allow；`ftcs-task_*` 是 ask；`edit`、`bash`、`external_directory` 是 deny；`webfetch` 是 ask。不在运行时改写这张表。
+测试读这份 JSON：每个 `mcp` 键都有一条 allow；`edit`、`bash`、`external_directory` 是 deny；`webfetch` 是 ask。没有 `ftcs-task`。不在运行时改写这张表。
 
 ---
 
@@ -145,7 +145,6 @@
 | 抓取网页 | `webfetch` | 询问 | `reject`，不执行 | 仅这一次 | 不执行 |
 | 网页搜索 | `websearch` | 询问 | 同上 | 仅这一次 | 不执行 |
 | 子代理 | `task` | 询问 | 同上 | 仅这一次 | 不执行 |
-| 已登记但不作入口 | `ftcs-task_*` | 不询问、不画卡。见 US-FD-03 | `reject`，不启动第二个任务 | 没有「同意后启动」 | 不执行，不启动 |
 | 其它未点名的 `ask` | `*` | 询问 | `reject` | 仅这一次 | 不执行 |
 | 工作区外路径 | `external_directory` | 不询问，直接失败 | 直接失败 | 没有同意按钮 | 读写都不发生 |
 | 直接改文件、shell | `edit`、`bash` | 不询问，直接失败 | 直接失败 | 同意不能写成成功 | 文件不变 |
@@ -154,7 +153,7 @@
 
 主流程技能不调用 `task`。任务中模型若自己拉起子代理，这一次被拒绝，父会话继续。
 
-`ftcs-task_*` 这一行已按 #136 / 2026-11-03 锁定，不再是启任务必经询问。上表其余行仍是 2026-11-01 的推荐。配置测试仍锁 `ftcs-task_*` 为 ask、不为 allow，不锁「同意后启动」。
+上表仍是 2026-11-01 的推荐。实现后配置与测试里都没有 `ftcs-task`。
 
 ---
 
@@ -231,3 +230,5 @@
 |------|------|
 | 2026-11-01 | 初稿。O1、O2、O6 按 1.18.4 写死配置和回复。O5 写明主流程仍走得完，以及画像复制失败时的停笔点。不关 #118。 |
 | 2026-11-03 | `ftcs-task_*` 改为非入口：不画授权卡，调用则 `reject`。聊天启任务改由 US-FD-03 的技能与提问卡。任务中 `reject`、续聊 `once` 或 `reject` 的其余行不动。不关 #118。 |
+| 2026-11-04 | 改口：实现 PR 物理删除 `ftcs-task`。实现后工具列表与配置里都没有它。主验收是包不在、登记不在、没有该入口。任务中 `reject`、续聊 `once` 或 `reject` 的其余行不动。按马丰顺要求去掉残留兼容口径。不关 #118。 |
+| 2026-11-04 | 聊天启任务改为步骤技能缺参自问，见 US-FD-03。砍掉 `start-from-chat`。不区分触发来源。`ftcs-task` 物理删除口径不变。不关 #118。 |
