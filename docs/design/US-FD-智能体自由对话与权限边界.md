@@ -20,7 +20,7 @@ flowchart LR
   FD02 --> FD03
 ```
 
-02 先把非 allowlist 收成任务中 `reject`、续聊 `once` 或 `reject`。实现 PR 删除 `ftcs-task` 后不再登记；allowlist 等于现有内置 MCP，无 `ftcs-task` 例外行。03 在 `running === false` 用提问卡收集必填，选完再调用 `run*`。01 可以先做发送，但没有 02 时不要把权限留在现网的一律 `always`。
+02 先把非 allowlist 收成任务中 `reject`、续聊 `once` 或 `reject`。实现后工具列表与配置里都没有 `ftcs-task`，allowlist 等于现有内置 MCP。03 在 `running === false` 用提问卡收集必填，选完再调用 `run*`。01 可以先做发送，但没有 02 时不要把权限留在现网的一律 `always`。
 
 ## O1～O6 结论
 
@@ -28,12 +28,12 @@ flowchart LR
 
 | 项 | 推荐 |
 |----|------|
-| **O1** | 一份配置：`*` 为 `ask`，硬边界 `deny`，内置 MCP 前缀 `allow`。`AgentRunController.running` 为真时，仍弹出来的 `permission.asked` / `permission.v2.asked` 立刻 `reject`。续聊只让用户选 `once` 或 `reject`。删掉一律 `always`。`ftcs-task` 删除后不再登记，allowlist 无该例外行 |
-| **O2** | allowlist 只来自 `workspace/config/opencode/opencode.json` 的 `mcp` 键，等于现有内置 MCP。`ftcs-task` 删除后不再登记，无例外行。增删内置 MCP 时改同一文件里的 `"服务名_*": "allow"`，用测试锁住。不按已连接服务自动放行 |
-| **O3** | 技能引导启任务（推荐 `workspace/skills/start-from-chat/SKILL.md`，文件名实现可微调）。必填用现网提问卡，选完即调用 `run*`。`session.create` 成功后才清空时间线。实现 PR 物理删除 `ftcs-task`（包、登记与相关死代码）。主路径已按 #136 / #137 锁定 |
+| **O1** | 一份配置：`*` 为 `ask`，硬边界 `deny`，内置 MCP 前缀 `allow`。`AgentRunController.running` 为真时，仍弹出来的 `permission.asked` / `permission.v2.asked` 立刻 `reject`。续聊只让用户选 `once` 或 `reject`。删掉一律 `always`。实现后工具列表与配置里都没有 `ftcs-task` |
+| **O2** | allowlist 只来自 `workspace/config/opencode/opencode.json` 的 `mcp` 键，等于现有内置 MCP。实现后没有 `ftcs-task`。增删内置 MCP 时改同一文件里的 `"服务名_*": "allow"`，用测试锁住。不按已连接服务自动放行 |
+| **O3** | 技能引导启任务（推荐 `workspace/skills/start-from-chat/SKILL.md`，文件名实现可微调）。必填用现网提问卡，选完即调用 `run*`。`session.create` 成功后才清空时间线。实现 PR 物理删除 `ftcs-task`（包、登记、观察/launch 死代码）。主路径已按 #136 / #137 锁定。主验收是包不在、登记不在、没有该入口 |
 | **O4** | 占位改为「发消息继续聊，或说明要启动的获客步骤」。发送进入当前 OpenCode 会话并得到回复。`generating` 时输入仍禁用 |
 | **O5** | 复制仍按 docs/38。主流程要的是工作区内 Read 和内置 MCP；收紧 `edit` / `bash` / `webfetch` 后仍能走完。画像若只因复制文件被拒而整段失败，停下来交产品 |
-| **O6** | 续聊可询问：`webfetch`、`websearch`、`task`，以及其它落在 `*` 上的 `ask`。同意只此一次，拒绝则不执行。`edit`、`bash`、`external_directory` 不进询问。`ftcs-task` 删除后不再登记，不在询问清单里 |
+| **O6** | 续聊可询问：`webfetch`、`websearch`、`task`，以及其它落在 `*` 上的 `ask`。同意只此一次，拒绝则不执行。`edit`、`bash`、`external_directory` 不进询问。实现后没有 `ftcs-task`，询问清单里也没有它 |
 
 各故事里的备选只供确认时对照。开发按推荐，不按备选。
 
@@ -45,4 +45,4 @@ flowchart LR
 |------|------|
 | 2026-11-01 | 按故事拆出索引。O1～O6 写明推荐。Related #118，不关 Issue。 |
 | 2026-11-03 | O3 改为技能 + 提问卡。`ftcs-task` 留着不用，从 O6 的询问清单拿掉。对照 #136。不关 #118。 |
-| 2026-11-04 | 改口：物理删除 `ftcs-task`。O1/O2/O6 的 allowlist 等于现有内置 MCP，删除后不再登记，无例外行。O3 主路径仍是技能 + 提问卡 + `run*`。不关 #118。 |
+| 2026-11-04 | 改口：物理删除 `ftcs-task`。实现后工具列表与配置里都没有它；allowlist 等于现有内置 MCP。O3 主路径仍是技能 + 提问卡 + `run*`。主验收是包不在、登记不在、没有该入口。按马丰顺要求去掉残留兼容口径。不关 #118。 |
