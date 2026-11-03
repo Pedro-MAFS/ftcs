@@ -119,9 +119,9 @@ describe('readPermissionAsk', () => {
     assert.deepEqual(
       readPermissionAsk({
         type: 'permission.v2.asked',
-        properties: { id: 'req-2', action: 'task', metadata: { tool: 'ftcs-task_start_task' } },
+        properties: { id: 'req-2', action: 'task', metadata: { tool: 'lead-store_product_list' } },
       }),
-      { id: 'req-2', permission: 'task', tool: 'ftcs-task_start_task' },
+      { id: 'req-2', permission: 'task', tool: 'lead-store_product_list' },
     )
     assert.equal(readPermissionAsk({ type: 'question.asked', properties: { id: 'q' } }), null)
   })
@@ -133,7 +133,7 @@ describe('isHardBoundaryPermission', () => {
       assert.equal(isHardBoundaryPermission(name), true, name)
     }
     assert.equal(isHardBoundaryPermission('webfetch'), false)
-    assert.equal(isHardBoundaryPermission('ftcs-task_start_task'), false)
+    assert.equal(isHardBoundaryPermission('websearch'), false)
   })
 })
 

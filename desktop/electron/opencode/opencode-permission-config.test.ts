@@ -25,24 +25,16 @@ describe('opencode.json permission（US-FD-02 §5）', () => {
     assert.equal(Object.keys(config.permission as object)[0], '*')
   })
 
-  it('每个内置 MCP 除 ftcs-task 外都是 allow，ftcs-task 只询问', () => {
+  it('每个已登记 MCP 都是 allow，没有 ftcs-task', () => {
     const permission = config.permission as Record<string, PermissionRule>
     const mcpNames = Object.keys(config.mcp ?? {})
     assert.ok(mcpNames.length > 0)
+    assert.equal(mcpNames.includes('ftcs-task'), false)
+    assert.equal(Object.hasOwn(permission, 'ftcs-task_*'), false)
     for (const name of mcpNames) {
       const key = `${sanitizeMcpName(name)}_*`
-      if (name === 'ftcs-task') {
-        assert.equal(permission[key], 'ask')
-        assert.notEqual(permission[key], 'allow')
-        continue
-      }
       assert.equal(permission[key], 'allow', key)
     }
-    assert.equal(permission['ftcs-task_*'], 'ask')
-    assert.notEqual(permission['ftcs-task_*'], 'allow')
-    const task = config.mcp?.['ftcs-task'] as { command?: string[]; enabled?: boolean } | undefined
-    assert.deepEqual(task?.command, ['node', 'mcp-servers/ftcs-task/dist/mcp.js'])
-    assert.equal(task?.enabled, true)
   })
 
   it('硬边界拒绝，网页抓取仍要询问', () => {

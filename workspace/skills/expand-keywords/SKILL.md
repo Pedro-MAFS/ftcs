@@ -19,9 +19,23 @@ outputs:
 
 ## 何时使用
 
+- 任务指令里已经有 `product_id` 时直接执行；没有就用提问卡问清后停止，不要在当前会话里自己跑完
 - 产品画像 `status == "ready"`，需要生成探索关键词
 - 用户说「扩展关键词」「生成搜索词」「为这个产品准备获客搜索」
 - `extract-product-profile` 完成后，作为流水线下一步
+
+## 缺必填
+
+任务指令里没有 `product_id` 时：
+
+1. 调用 `lead-store.product_list`。不要臆造产品 id。
+2. 列表为空：直接说明还没有产品，不要发 `question`。
+3. 用户要的是画像、补联系人、单封重写或中文对照：请他用左侧按钮，不要发这张卡。
+4. 有产品：发**一次** `question`，然后立刻停止。不要写文件，不要继续执行下面的步骤。
+
+`custom: false`，不设 `multiple`。题头 `产品` 的 `label` 用 `product_list` 的 `id`，`description` 用 `company_name`，没有就写「未命名」。不要问渠道。可以不设 `阶段`；若带上，`label` 必须是 `keywords`。
+
+question 返回后不要继续。桌面会另开会话，那时必填已齐，再按本技能往下做。
 
 ## 前置条件
 
