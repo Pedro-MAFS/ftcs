@@ -32,7 +32,7 @@ outputs:
 
 执行前必须有桌面已分配的产品 ID 和已复制到该产品 `inputs/` 的输入清单（网站 URL 或输入文件至少一项）。只有公司名称、旧产品 ID、原始 URL 或资料库路径不算齐全；不要自行调用 `product_generate_id` 或准备快照来补齐。
 
-缺这些参数时，只读取 `data/library/files/` 的目录和网站书签来定位用户所说的资料，发一次 `question` 后停止：
+缺这些参数时，列出 `data/library/files/` 中的原始资料供用户选择，包括普通文本、Office/PDF、图片和网站书签；可按用户提到的公司或产品筛选相关资料。网站书签可读取标题和 URL 辅助识别。使用一次 `question` 收集资料选择，随后停止，等待桌面准备资料并启动正式任务。提问格式如下：
 
 - 题头 `产品`：单选，`custom: false`，唯一选项 label `新建`，description 说明将根据所选资料创建新产品画像，不覆盖已有画像。
 - 题头 `资料`：`multiple: true`，`custom: false`。label 必须是相对 `data/library/files/` 的真实文件路径，description 写资料名称。网站书签和普通文件可以混选；目录须展开成文件。至少选择一项，不能把 URL、产品 ID 或工作区外路径当选项。
