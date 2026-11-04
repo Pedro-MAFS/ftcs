@@ -1,5 +1,5 @@
 /**
- * US-FD-03：自由对话里用提问卡收齐必填后，决定要不要进入现有 run*。
+ * US-FD-03/04/05：自由对话里用提问卡收齐必填后，决定要不要进入现有 run*。
  * 题头是技能和桌面的接线契约。
  */
 
@@ -12,7 +12,7 @@ export const CHAT_START_HEADER_PRODUCT = "产品"
 export const CHAT_START_HEADER_STAGE = "阶段"
 export const CHAT_START_HEADER_CHANNEL = "渠道"
 
-export type ChatStartStage = "keywords" | "explore" | "score" | "email"
+export type ChatStartStage = "keywords" | "explore" | "score" | "email" | "profile" | "translate"
 export type ChatStartChannel = "r1" | "r2" | "r3"
 
 export type ChatStartRequest =
@@ -21,10 +21,13 @@ export type ChatStartRequest =
       stage: ChatStartStage
       product_id: string | null
       explore_channel?: ChatStartChannel
+      sources?: string[]
+      lead_id?: string
+      recipient_key?: string
     }
   | {
       ok: false
-      code: "bad_stage" | "missing_channel"
+      code: "bad_stage" | "missing_channel" | "missing_sources" | "missing_lead"
     }
 
 const CHANNELS = new Set<ChatStartChannel>(["r1", "r2", "r3"])
@@ -32,11 +35,14 @@ const START_HEADERS = new Set([
   CHAT_START_HEADER_PRODUCT,
   CHAT_START_HEADER_STAGE,
   CHAT_START_HEADER_CHANNEL,
+  "资料", "线索", "收件槽",
 ])
 
 /** 时间线追加句。已有前缀的句子保持原样，其余接在「任务没有启动：」后面。 */
 export function chatStartFailureLine(reason: string): string {
   const text = reason.trim()
+  if (text === "missing_sources") return "任务没有启动：请至少选择一项资料。"
+  if (text === "missing_lead") return "任务没有启动：请选择线索。"
   if (!text || text === "bad_stage" || text === "missing_channel") return CHAT_START_BAD_STEP
   if (text.startsWith("任务没有启动：")) return text
   if (text.includes("已有任务在运行")) return CHAT_START_ALREADY_RUNNING
@@ -54,6 +60,8 @@ export function resolveChatProductId(requested: string | null, knownIds: readonl
 }
 
 export const CHAT_START_SKILLS = [
+  "extract-product-profile",
+  "translate-outreach-email",
   "expand-keywords",
   "discover-leads",
   "discover-leads-r2",
@@ -65,6 +73,8 @@ export const CHAT_START_SKILLS = [
 export type ChatStartSkill = (typeof CHAT_START_SKILLS)[number]
 
 const SKILL_STAGE: Record<ChatStartSkill, ChatStartStage> = {
+  "extract-product-profile": "profile",
+  "translate-outreach-email": "translate",
   "expand-keywords": "keywords",
   "discover-leads": "explore",
   "discover-leads-r2": "explore",
@@ -73,7 +83,7 @@ const SKILL_STAGE: Record<ChatStartSkill, ChatStartStage> = {
   "draft-outreach-email": "email",
 }
 
-/** 六个步骤技能名。其它技能（画像、补联系人等）对不上。 */
+/** 支持正式聊天启动的步骤技能；补联系人、单封重写不在此列。 */
 export function normalizeStepSkill(name: string | null | undefined): ChatStartSkill | null {
   const text = (name ?? "").trim().toLowerCase()
   return (CHAT_START_SKILLS as readonly string[]).includes(text) ? (text as ChatStartSkill) : null
@@ -90,9 +100,9 @@ export function readLoadedSkillName(tool: string | undefined, input: unknown): s
   return name || null
 }
 
-/** 题头必须有产品。渠道、阶段可有可无。多出来的题头不是启任务卡。 */
+/** 题头须有产品；各步骤允许的其它题头由解析器进一步校验。 */
 export function isChatStartQuestion(headers: readonly string[]): boolean {
-  if (headers.length < 1 || headers.length > 3) return false
+  if (headers.length < 1 || headers.length > 4) return false
   const normalized = headers.map((header) => header.trim())
   if (normalized.some((header) => header === "")) return false
   const unique = new Set(normalized)
@@ -135,12 +145,31 @@ export function parseChatStartAnswers(
   const skill = normalizeStepSkill(skillName)
   if (!skill) return { ok: false, code: "bad_stage" }
   const stage = SKILL_STAGE[skill]
+  const allowed = stage === "profile" ? ["产品", "阶段", "资料"]
+    : stage === "translate" ? ["产品", "阶段", "线索", "收件槽"]
+    : ["产品", "阶段", "渠道"]
+  if (questions.some(q => !allowed.includes(q.header.trim()))) return { ok: false, code: "bad_stage" }
+  if (questions.some((q, i) => q.header.trim() !== "资料" && answers[i]?.length !== 1)) {
+    return { ok: false, code: "bad_stage" }
+  }
   if (byHeader.has(CHAT_START_HEADER_STAGE)) {
     const stated = byHeader.get(CHAT_START_HEADER_STAGE) ?? ""
     if (stated !== stage) return { ok: false, code: "bad_stage" }
   }
   const productRaw = byHeader.get(CHAT_START_HEADER_PRODUCT) ?? ""
   const product_id = productRaw || null
+  if (stage === "profile") {
+    const index = questions.findIndex(q => q.header.trim() === "资料")
+    const sources = [...new Set((answers[index] ?? []).map(s => s.trim()).filter(Boolean))]
+    if (!sources.length) return { ok: false, code: "missing_sources" }
+    if (product_id !== "新建") return { ok: false, code: "bad_stage" }
+    return { ok: true, stage, product_id, sources }
+  }
+  if (stage === "translate") {
+    const lead_id = byHeader.get("线索") ?? ""
+    if (!lead_id) return { ok: false, code: "missing_lead" }
+    return { ok: true, stage, product_id, lead_id, recipient_key: byHeader.get("收件槽") || "company" }
+  }
   if (stage !== "explore") return { ok: true, stage, product_id }
   const channel = byHeader.get(CHAT_START_HEADER_CHANNEL) ?? ""
   if (!isChannel(channel)) return { ok: false, code: "missing_channel" }
@@ -148,6 +177,7 @@ export function parseChatStartAnswers(
 }
 
 export type ChatPreflightKind =
+  | "extract-profile"
   | "expand-keywords"
   | "discover-leads"
   | "discover-leads-r2"
@@ -156,6 +186,8 @@ export type ChatPreflightKind =
   | "draft-email"
 
 export function preflightKindFor(request: Extract<ChatStartRequest, { ok: true }>): ChatPreflightKind {
+  if (request.stage === "profile") return "extract-profile"
+  if (request.stage === "translate") return "draft-email"
   if (request.stage === "keywords") return "expand-keywords"
   if (request.stage === "score") return "score-and-dedupe"
   if (request.stage === "email") return "draft-email"

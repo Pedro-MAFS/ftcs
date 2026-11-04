@@ -30,7 +30,7 @@ outputs:
 
 1. 调用 `lead-store.product_list`。不要臆造产品 id。
 2. 列表为空：直接说明还没有产品，不要发 `question`。
-3. 用户要的是画像、补联系人、单封重写或中文对照：请他用左侧按钮，不要发这张卡。
+3. 用户要的是画像或中文对照：加载对应的 `extract-product-profile` 或 `translate-outreach-email` 技能，按其必填提问，不要发这张卡。补联系人、单封重写仍请他用左侧按钮。
 4. 有产品：发**一次** `question`，然后立刻停止。不要写文件，不要继续执行下面的步骤。
 
 `custom: false`，不设 `multiple`。题头 `产品` 的 `label` 用 `product_list` 的 `id`，`description` 用 `company_name`，没有就写「未命名」。不要问渠道。可以不设 `阶段`；若带上，`label` 必须是 `score`。
