@@ -39,8 +39,7 @@ R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过�
 
 1. 调用 `lead-store.product_list`。不要臆造产品 id。
 2. 列表为空：直接说明还没有产品，不要发 `question`。
-3. 用户要的是画像、补联系人、单封重写或中文对照：请他用左侧按钮，不要发这张卡。
-4. 有产品：发**一次** `question`，同时问产品和渠道，然后立刻停止。不要写文件，不要继续执行下面的步骤。
+3. 有产品：发**一次** `question`，同时问产品和渠道，然后立刻停止。不要写文件，不要继续执行下面的步骤。
 
 `custom: false`，不设 `multiple`。
 

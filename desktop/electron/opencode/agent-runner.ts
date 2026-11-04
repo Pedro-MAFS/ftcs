@@ -1,6 +1,7 @@
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { Event, Message, ToolPart } from '@opencode-ai/sdk/v2/types'
-import type { BootstrapResult } from '../profile/profile-bootstrap'
+import { bootstrapProductFromLibrary, type BootstrapResult } from '../profile/profile-bootstrap'
+import { resolveChatProfileSources, validateChatTranslation } from './chat-start-inputs'
 import {
   listProductSummaries,
   loadProfile,
@@ -842,7 +843,7 @@ export function capDraftOutreachLeadIds(
 export interface AgentRunHooks {
   reloadRuntime?: () => Promise<void>
   /** 与按钮入口相同的 preflight。聊天启动在 session.create 之前调用。 */
-  preflight?: (kind: ChatPreflightKind) => Promise<{ ok: boolean; message: string }>
+  preflight?: (kind: ChatPreflightKind, options?: { requireBuiltinBrowser?: boolean }) => Promise<{ ok: boolean; message: string }>
 }
 
 export class AgentRunController {
@@ -1128,16 +1129,18 @@ export class AgentRunController {
     }
     const cancelled = () => this.chatLaunchToken !== token || this.chatTaskAbort?.signal.aborted === true
     try {
+      const profileInput = request.stage === 'profile'
+        ? resolveChatProfileSources(request.sources ?? [], getWorkspaceRoot()) : null
       const knownIds = listProductSummaries().map((item) => item.id)
       const productId = resolveChatProductId(request.product_id, knownIds)
-      if (!productId) {
+      if (!profileInput && !productId) {
         this.appendChatNotice(CHAT_START_NO_PRODUCT, rawEmit)
         return
       }
       if (cancelled()) return
       const preflight = this.hooks.preflight
       if (preflight) {
-        const checked = await preflight(preflightKindFor(request))
+        const checked = await preflight(preflightKindFor(request), profileInput ? { requireBuiltinBrowser: profileInput.websitePaths.length > 0 } : undefined)
         if (cancelled() || this.chatLaunchToken !== token) return
         if (!checked.ok) {
           this.appendChatNotice(chatStartFailureLine(checked.message), rawEmit)
@@ -1149,7 +1152,14 @@ export class AgentRunController {
         return
       }
       const fromChat = { fromChat: true as const }
-      if (request.stage === 'keywords') {
+      if (request.stage === 'profile' && profileInput) {
+        const bootstrap = await bootstrapProductFromLibrary(profileInput)
+        if (cancelled()) return
+        await this.runExtractProfile(bootstrap, emit, fromChat)
+      } else if (request.stage === 'translate') {
+        validateChatTranslation(productId, request.lead_id ?? '', request.recipient_key ?? 'company', getWorkspaceRoot())
+        await this.runTranslateOutreachEmail({ productId, leadId: request.lead_id!, recipientKey: request.recipient_key }, emit, fromChat)
+      } else if (request.stage === 'keywords') {
         await this.runExpandKeywords(productId, emit, fromChat)
       } else if (request.stage === 'explore') {
         await this.runDiscoverLeads(productId, emit, {
@@ -2473,6 +2483,7 @@ export class AgentRunController {
       recipientKey?: string
     },
     emit: AgentEventSink,
+    launchOptions?: { fromChat?: boolean },
   ): Promise<{ ok: boolean; message: string; recipientKey?: string }> {
     if (this.running) {
       throw new Error('已有任务在运行，请稍候或先中止')
@@ -2498,7 +2509,7 @@ export class AgentRunController {
     }
 
     const idleTimeoutMs = 8 * 60_000
-    const signal = this.beginTaskRun()
+    const signal = this.beginPipelineRun(launchOptions?.fromChat)
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
 
@@ -2576,7 +2587,7 @@ export class AgentRunController {
             : '创建 OpenCode 会话失败',
         )
       }
-      this.sessionId = created.data.id
+      this.sessionId = this.noteCreatedSession(created.data.id)
       timeline.addPrefix({
         id: 'sys-session',
         kind: 'system',
@@ -2677,8 +2688,7 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      this.running = false
-      this.abort = null
+      this.finishTaskRun()
     }
   }
 
@@ -3272,6 +3282,7 @@ export class AgentRunController {
   async runExtractProfile(
     bootstrap: BootstrapResult,
     emit: AgentEventSink,
+    launchOptions?: { fromChat?: boolean },
   ): Promise<{ ok: boolean; message: string; profile?: ProductProfileDetail }> {
     if (this.running) {
       throw new Error('已有任务在运行，请稍候或先中止')
@@ -3286,7 +3297,7 @@ export class AgentRunController {
     if (bootstrap.websiteUrls.length > 0) {
       this.beginTrackedBrowserTask('extract-product-profile')
     }
-    const signal = this.beginTaskRun()
+    const signal = this.beginPipelineRun(launchOptions?.fromChat)
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
 
@@ -3375,7 +3386,7 @@ export class AgentRunController {
             : '创建 OpenCode 会话失败',
         )
       }
-      this.sessionId = created.data.id
+      this.sessionId = this.noteCreatedSession(created.data.id)
       timeline.addPrefix({
         id: 'sys-session',
         kind: 'system',
@@ -3478,8 +3489,7 @@ export class AgentRunController {
       return { ok: false, message }
     } finally {
       await this.endTrackedBrowserTask()
-      this.running = false
-      this.abort = null
+      this.finishTaskRun()
     }
   }
 

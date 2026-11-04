@@ -67,7 +67,7 @@ describe('parseChatStartAnswers', () => {
       { ok: false, code: 'bad_stage' },
     )
     assert.deepEqual(
-      parseChatStartAnswers([{ header: '产品' }], [['prd_2']], 'extract-product-profile'),
+      parseChatStartAnswers([{ header: '产品' }], [['prd_2']], 'enrich-lead-contacts'),
       { ok: false, code: 'bad_stage' },
     )
     assert.deepEqual(
@@ -94,7 +94,7 @@ describe('parseChatStartAnswers', () => {
     assert.equal(isChatStartQuestionRequest([{ header: '产品' }]), true)
     assert.equal(isChatStartQuestionRequest([{ header: '范围' }]), false)
     assert.equal(normalizeStepSkill(' Discover-Leads-R2 '), 'discover-leads-r2')
-    assert.equal(normalizeStepSkill('extract-product-profile'), null)
+    assert.equal(normalizeStepSkill('enrich-lead-contacts'), null)
     assert.equal(readLoadedSkillName('skill', { name: 'expand-keywords' }), 'expand-keywords')
     assert.equal(readLoadedSkillName('skill', { skill: 'score-and-dedupe' }), 'score-and-dedupe')
     assert.equal(readLoadedSkillName('question', { name: 'expand-keywords' }), null)

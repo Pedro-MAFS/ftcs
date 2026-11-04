@@ -262,7 +262,7 @@ function getAgentRunner(): AgentRunController {
   if (!agentRunner) {
     agentRunner = new AgentRunController(() => runtime?.getClient() ?? null, {
       reloadRuntime: reloadOpenCodeRuntime,
-      preflight: (kind) => gateAgentStart(kind),
+      preflight: (kind, options) => gateAgentStart(kind, options),
     })
   }
   return agentRunner

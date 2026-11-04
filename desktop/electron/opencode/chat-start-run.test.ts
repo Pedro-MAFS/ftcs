@@ -352,6 +352,97 @@ describeRun('chat start task', () => {
     assert.equal(env.emitted.some((event) => event.type === 'state' && event.status === 'running'), false)
   }
 
+  for (const stage of ['profile', 'translate'] as const) {
+    for (const failCreate of [false, true]) {
+      it(`US-FD-04/05 ${stage}: ${failCreate ? '创建失败保留聊天' : '正式会话成功后切换'}`, async () => {
+        const pid = 'prd_extension'
+        writeProfile(pid, 'ready')
+        const files = path.join(workspaceRoot, 'data/library/files')
+        fs.mkdirSync(files, { recursive: true })
+        fs.writeFileSync(path.join(files, '产品.txt'), 'Widget product', 'utf8')
+        const draftDir = path.join(workspaceRoot, 'data/emails/lead_extension/jane_at_example.com')
+        fs.mkdirSync(draftDir, { recursive: true })
+        fs.writeFileSync(path.join(draftDir, 'draft.json'), JSON.stringify({
+          product_id: pid, lead_id: 'lead_extension', subject: 'Hello', body: 'Our product',
+          recipient: { audience: 'person', email: 'jane@example.com' },
+        }), 'utf8')
+        const skill = stage === 'profile' ? 'extract-product-profile' : 'translate-outreach-email'
+        const headers = stage === 'profile' ? ['产品', '资料'] : ['产品', '线索', '收件槽']
+        const labels = stage === 'profile' ? ['新建', '产品.txt'] : [pid, 'lead_extension', 'jane_at_example.com']
+        const env = harness({ failCreate })
+        try {
+          await chat(env)
+          env.push(skillEvent(env.chatId, skill, `skill-${stage}`))
+          env.push(questionEvent(env.chatId, headers.map((header, i) => ({
+            header, question: header, custom: false, multiple: header === '资料',
+            options: [{ label: labels[i], description: labels[i] }],
+          })), `q-${stage}`))
+          assert.equal(await waitFor(() => env.emitted.some(e => e.type === 'awaiting-reply' && e.pending?.renderable)), true)
+          assert.equal((await env.runner.replyToPendingQuestion(replySelections(labels))).ok, true)
+          assert.equal(await waitFor(() => env.creates.some(c => c.title?.startsWith(skill))), true)
+          assert.equal(env.aborts.includes(env.chatId), false)
+          if (failCreate) {
+            assert.equal(await waitFor(() => timelineItems(env.emitted).some(i => i.body.includes('任务没有启动：'))), true)
+            assert.equal(timelineItems(env.emitted).some(i => i.body.includes('什么是 FOB')), true)
+          } else {
+            env.releaseCreate()
+            assert.equal(await waitFor(() => env.emitted.some(e => e.type === 'state' && e.skill === skill && e.status === 'running')), true)
+            assert.equal(env.aborts.includes(env.chatId), true)
+            assert.equal(timelineItems(env.emitted).some(i => i.id === 'sys-session' && i.body.includes(env.taskId)), true)
+          }
+        } finally { await env.runner.abortCurrent(); env.close() }
+      })
+    }
+  }
+
+  for (const stage of ['profile', 'translate'] as const) {
+    it(`US-FD-04/05 ${stage}: 取消卡片不启动`, async () => {
+      const env = harness()
+      try {
+        await chat(env)
+        const skill = stage === 'profile' ? 'extract-product-profile' : 'translate-outreach-email'
+        env.push(skillEvent(env.chatId, skill, 'skill-cancel'))
+        env.push(questionEvent(env.chatId, [
+          { header: '产品', question: '产品', options: [{ label: '新建', description: '新建' }] },
+          { header: stage === 'profile' ? '资料' : '线索', question: '选择', options: [{ label: 'x', description: 'x' }] },
+        ], 'q-cancel-extension'))
+        assert.equal(await waitFor(() => env.emitted.some(e => e.type === 'awaiting-reply' && e.pending?.renderable)), true)
+        await env.runner.abortCurrent()
+        assert.equal(env.creates.length, 1)
+        assert.equal(env.runner.isRunning(), false)
+        assert.equal(timelineItems(env.emitted).some(i => i.body === CHAT_START_CANCELLED), true)
+      } finally { env.close() }
+    })
+  }
+
+  for (const problem of ['missing', 'foreign', 'empty'] as const) {
+    it(`US-FD-05: ${problem} 草稿不启动`, async () => {
+      writeProfile('prd_validation', 'ready')
+      const lead = `lead_validation_${problem}`
+      if (problem !== 'missing') {
+        const dir = path.join(workspaceRoot, 'data/emails', lead)
+        fs.mkdirSync(dir, { recursive: true })
+        fs.writeFileSync(path.join(dir, 'draft.json'), JSON.stringify({
+          product_id: problem === 'foreign' ? 'prd_other' : 'prd_validation',
+          subject: 'Hello', body: problem === 'empty' ? '' : 'Body',
+        }), 'utf8')
+      }
+      const env = harness()
+      try {
+        await chat(env)
+        env.push(skillEvent(env.chatId, 'translate-outreach-email', 'skill-invalid'))
+        env.push(questionEvent(env.chatId, ['产品', '线索'].map((header, i) => ({
+          header, question: header, options: [{ label: i ? lead : 'prd_validation', description: header }],
+        })), 'q-invalid'))
+        assert.equal(await waitFor(() => env.emitted.some(e => e.type === 'awaiting-reply' && e.pending?.renderable)), true)
+        await env.runner.replyToPendingQuestion(replySelections(['prd_validation', lead]))
+        assert.equal(await waitFor(() => timelineItems(env.emitted).some(i => i.body.includes('任务没有启动：'))), true)
+        assert.equal(env.creates.length, 1)
+        assert.equal(env.runner.isRunning(), false)
+      } finally { env.close() }
+    })
+  }
+
   it('keeps the chat when the stage cannot be started', async () => {
     const env = harness()
     try {
