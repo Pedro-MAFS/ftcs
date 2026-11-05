@@ -7,7 +7,7 @@ export type PageKey = 'home' | 'input' | 'profile' | 'explore' | 'leads' | 'emai
 
 export const PAGE_TITLE: Record<PageKey, string> = {
   home: '首页',
-  input: '产品录入',
+  input: '资料',
   profile: '产品画像',
   explore: '获客探索',
   leads: '线索库',

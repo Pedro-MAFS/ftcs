@@ -321,7 +321,7 @@ async function createExploreTask(): Promise<void> {
   expandError.value = ''
 
   if (dirty.value) {
-    expandError.value = '请先保存画像修改，再新建探索任务'
+    expandError.value = '请先保存画像修改，再扩展关键词'
     return
   }
   if (currentProfile.value?.status !== 'ready') {
@@ -392,7 +392,7 @@ async function createExploreTask(): Promise<void> {
           @click="createExploreTask"
         >
           <Icon name="radar" :size="12" />
-          新建探索任务
+          扩展关键词
         </button>
       </div>
     </header>
@@ -421,7 +421,7 @@ async function createExploreTask(): Promise<void> {
         生成失败，请查看右侧 Agent 日志后重试。
       </p>
       <p v-else-if="!currentProfile" class="library-feedback muted">
-        尚未生成画像。请到「录入」勾选网站/文件后点击「生成画像」。
+        尚未生成画像。请到「资料」勾选网站/文件后点击「生成画像」。
       </p>
 
       <template v-if="draft">

@@ -10,7 +10,7 @@ const cards: Array<{
   detail: string
   open: () => void
 }> = [
-  { title: '录入', detail: '公司与产品资料', open: () => void tabs.openPageTab('input') },
+  { title: '资料', detail: '公司与产品资料', open: () => void tabs.openPageTab('input') },
   { title: '画像', detail: '确认后再去探索', open: () => void tabs.openPageTab('profile') },
   { title: '探索', detail: '扩展关键词并找客户', open: () => void tabs.openPageTab('explore') },
   { title: '线索', detail: '原始与已评分线索', open: () => void tabs.openPageTab('leads') },

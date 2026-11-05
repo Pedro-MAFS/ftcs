@@ -5,7 +5,7 @@ import { createMainViewTabs } from './useMainViewTabs.ts'
 import { landingSectionFromSteps } from './landing-section'
 import type { PipelineStep } from '../types/workspace'
 
-const defaultTitles = ['首页', '产品录入', '产品画像', '获客探索', '线索库', '邮件审核']
+const defaultTitles = ['首页', '资料', '产品画像', '获客探索', '线索库', '邮件审核']
 
 function harness() {
   const pushes: Array<{ name?: string | symbol; query?: LocationQueryRaw }> = []
@@ -71,7 +71,7 @@ describe('useMainViewTabs', () => {
     assert.equal(tabs.activeId.value, 'page:email')
     assert.deepEqual(
       tabs.tabs.value.map((tab) => tab.title),
-      ['首页', '产品录入', '产品画像', '获客探索', '邮件审核'],
+      ['首页', '资料', '产品画像', '获客探索', '邮件审核'],
     )
     assert.equal(pushes.at(-1)?.name, 'email')
 

@@ -624,7 +624,7 @@ onUnmounted(() => {
         class="explore-empty"
       >
         <h2>暂无探索任务</h2>
-        <p>请先在「画像」页确认产品就绪，再点击「新建探索任务」扩展关键词。</p>
+        <p>请先在「画像」页确认产品就绪，再点击「扩展关键词」。</p>
         <button type="button" class="btn-secondary" :disabled="loading" @click="reload">
           {{ loading ? '刷新中…' : '刷新列表' }}
         </button>

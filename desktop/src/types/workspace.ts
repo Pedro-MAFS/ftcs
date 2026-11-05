@@ -88,14 +88,14 @@ export const SECTION_META: Record<
   { label: string; title: string; subtitle: string }
 > = {
   input: {
-    label: '录入',
-    title: '产品录入',
+    label: '资料',
+    title: '资料',
     subtitle: '维护公司网站与产品资料，再从资料库生成画像',
   },
   profile: {
     label: '画像',
     title: '产品画像',
-    subtitle: '确认画像后可新建探索任务，自动扩展关键词',
+    subtitle: '确认画像后可扩展关键词',
   },
   explore: {
     label: '探索',
