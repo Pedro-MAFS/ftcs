@@ -10,7 +10,7 @@ const items: Array<{
   icon: 'package' | 'file-text' | 'radar' | 'users' | 'mail'
   label: string
 }> = [
-  { page: 'input', icon: 'package', label: '录入' },
+  { page: 'input', icon: 'package', label: '资料' },
   { page: 'profile', icon: 'file-text', label: '画像' },
   { page: 'explore', icon: 'radar', label: '探索' },
   { page: 'leads', icon: 'users', label: '线索' },

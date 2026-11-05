@@ -173,10 +173,10 @@ export const TOUR_STEPS = [
   {
     id: 'input',
     route: 'input',
-    title: '产品录入',
+    title: '资料',
     desc: '粘贴官网 / 上传资料',
     detail:
-      '在「录入」页粘贴产品官网 URL，或上传说明书等资料。保存产品后即可启动画像生成。可用示例产品 _example 先跑通整条链路。',
+      '在「资料」页粘贴产品官网 URL，或上传说明书等资料。保存产品后即可启动画像生成。可用示例产品 _example 先跑通整条链路。',
   },
   {
     id: 'profile',

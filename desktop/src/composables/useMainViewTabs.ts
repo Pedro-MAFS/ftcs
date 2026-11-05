@@ -7,7 +7,7 @@ export type PageKey = 'home' | 'input' | 'profile' | 'explore' | 'leads' | 'emai
 
 export const PAGE_TITLE: Record<PageKey, string> = {
   home: '首页',
-  input: '产品录入',
+  input: '资料',
   profile: '产品画像',
   explore: '获客探索',
   leads: '线索库',
@@ -62,17 +62,18 @@ function isBlankUserTab(tab: MainTab): boolean {
   return tab.kind === 'browser' && tab.origin === 'user' && (tab.url === '' || tab.url === 'about:blank')
 }
 
-function homeTab(): PageTab {
-  return { id: 'page:home', kind: 'page', page: 'home', title: PAGE_TITLE.home }
+function pageTab(page: PageKey): PageTab {
+  return { id: pageId(page), kind: 'page', page, title: PAGE_TITLE[page] }
 }
 
 function placeHomeFirst(list: MainTab[]): MainTab[] {
-  const home = list.find((tab) => tab.id === 'page:home') ?? homeTab()
+  const home = list.find((tab) => tab.id === 'page:home') ?? pageTab('home')
   return [home, ...list.filter((tab) => tab.id !== 'page:home')]
 }
 
 export function createMainViewTabs(router: Pick<Router, 'push'>) {
-  const tabs = ref<MainTab[]>([homeTab()])
+  // 启动时展示全部业务入口，激活页仍由 useDefaultLanding 按流水线进度选择。
+  const tabs = ref<MainTab[]>([pageTab('home'), ...Array.from(BUSINESS_PAGES, pageTab)])
   const activeId = ref<string | null>(null)
   const settingsCover = ref(false)
   let browserSeq = 0
@@ -98,7 +99,7 @@ export function createMainViewTabs(router: Pick<Router, 'push'>) {
     const id = pageId(page)
     let tab = tabs.value.find((item) => item.id === id)
     if (!tab) {
-      tab = { id, kind: 'page', page, title: PAGE_TITLE[page] }
+      tab = pageTab(page)
       tabs.value.push(tab)
       tabs.value = placeHomeFirst(tabs.value)
     }

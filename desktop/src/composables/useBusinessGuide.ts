@@ -23,7 +23,7 @@ export const GUIDE_STEPS: GuideStepSpec[] = [
     route: 'profile',
     guide: 'og-profile-new-explore',
     title: '确认画像',
-    body: '在这一页查看并保存画像。点「新建探索任务」时会先按画像扩展关键词，再去找客户。',
+    body: '在这一页查看并保存画像。点「扩展关键词」后，再去找客户。',
   },
   {
     route: 'explore',
