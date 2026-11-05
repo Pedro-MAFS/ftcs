@@ -30,22 +30,15 @@ outputs:
 
 ## 何时使用
 
-- 任务指令里已经有 `product_id` 时直接执行；没有就用提问卡问清后停止，不要在当前会话里自己跑完
 - `score-and-dedupe` 完成后需要撰写开发信
 - 用户说「生成邮件」「写开发信」「为客户准备触达邮件」
 - Phase 1 最后一环，完成后进入人工审核
 
-## 缺必填
+## 任务调用
 
-任务指令里没有 `product_id` 时：
+确定 `scope.product_id` 和 `parameters.mode`。批量用 batch，可传已选的 lead_ids，未指定时由桌面选取待起草线索。单封或重写用 slot，并在 scope 指明实际 lead_id 和 recipient_key。公司稿用 company，个人稿选实际槽位。
 
-1. 调用 `lead-store.product_list`。不要臆造产品 id。
-2. 列表为空：直接说明还没有产品，不要发 `question`。
-3. 有产品：发**一次** `question`，然后立刻停止。不要写文件，不要继续执行下面的步骤。不传指定线索，与按钮「起草待处理线索」相同。
-
-`custom: false`，不设 `multiple`。题头 `产品` 的 `label` 用 `product_list` 的 `id`，`description` 用 `company_name`，没有就写「未命名」。不要问渠道。可以不设 `阶段`；若带上，`label` 必须是 `email`。
-
-question 返回后不要继续。桌面会另开会话，那时必填已齐，再按本技能往下做。
+必填不明确时用 `question` 补齐，用户取消就结束。参数齐全后在当前会话调用 `lead-store.task_begin`，task_type 为 `draft-outreach-email`。收到 running 后按 `prepared.instructions` 和下面的步骤执行；收尾调用 `lead-store.task_done`，传回本次 task_id 和实际结果。调用格式见工作区 AGENTS.md。
 
 ## 前置条件
 

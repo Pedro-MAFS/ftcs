@@ -31,7 +31,7 @@ describe('derivePipelineSteps', () => {
     assert.equal(steps.find((s) => s.id === 'email')?.status, 'done')
   })
 
-  it('keeps score done from disk after navigate away from leads page', () => {
+  it('keeps completed scoring while a new exploration is running', () => {
     const steps = derivePipelineSteps({
       profileReady: true,
       hasKeywords: true,
@@ -46,7 +46,7 @@ describe('derivePipelineSteps', () => {
       drafting: false,
     })
     assert.equal(steps.find((s) => s.id === 'score')?.status, 'done')
-    assert.equal(steps.find((s) => s.id === 'explore')?.status, 'done')
+    assert.equal(steps.find((s) => s.id === 'explore')?.status, 'running')
   })
 
   it('shows explore running from agent while no completed run on disk', () => {

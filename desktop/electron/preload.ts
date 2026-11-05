@@ -489,6 +489,8 @@ const api = {
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_REJECT, input),
   approveEmailDraft: (input: ApproveEmailDraftInput): Promise<ApproveEmailDraftResult> =>
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_APPROVE, input),
+  taskSnapshot: () => ipcRenderer.invoke(IPC.TASK_SNAPSHOT),
+  launchWorkflowStep: (node: string, productId: string, origin: string) => ipcRenderer.invoke(IPC.WORKFLOW_LAUNCH_STEP, node, productId, origin),
   onAgentEvent: (handler: (payload: AgentEventPayload) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: AgentEventPayload) => {
       handler(payload)

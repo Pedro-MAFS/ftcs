@@ -20,9 +20,11 @@ export type OfficeExtractResult =
 export async function extractOfficeTextToString(
   absSourcePath: string,
   cliExe: string,
+  signal?: AbortSignal,
 ): Promise<OfficeExtractResult> {
   try {
     const { stdout } = await execFileAsync(cliExe, ['view', absSourcePath, 'text'], {
+      signal,
       windowsHide: true,
       timeout: OFFICE_EXTRACT_TIMEOUT_MS,
       maxBuffer: OFFICE_EXTRACT_MAX_BUFFER,

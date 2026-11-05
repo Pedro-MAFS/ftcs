@@ -40,6 +40,7 @@ export type InputFileKind = 'supported' | 'office' | 'image' | 'pdf' | 'special'
 export type OfficeExtractFn = (
   absSourcePath: string,
   cliExe: string,
+  signal?: AbortSignal,
 ) => Promise<OfficeExtractResult>
 
 export type PdfExtractFn = (absSourcePath: string) => Promise<PdfExtractResult>
@@ -66,6 +67,7 @@ export interface CopiedLibrarySources {
 }
 
 export interface CopyLibrarySourcesOptions {
+  signal?: AbortSignal
   /** 单测注入；默认走真 OfficeCLI extract */
   extractOffice?: OfficeExtractFn
   /** 单测注入；默认走内置 PDF 文本抽取 */
@@ -121,6 +123,7 @@ export async function copyLibrarySourcesToInputs(
   const resolveCli = options?.resolveCli ?? (() => null)
 
   for (const rel of websitePaths) {
+    options?.signal?.throwIfAborted()
     try {
       const safe = assertSafeRel(rel)
       const src = path.join(filesRoot, ...safe.split('/'))
@@ -154,6 +157,7 @@ export async function copyLibrarySourcesToInputs(
   }
 
   for (const rel of filePaths) {
+    options?.signal?.throwIfAborted()
     try {
       const safe = assertSafeRel(rel)
       const src = path.join(filesRoot, ...safe.split('/'))
@@ -222,7 +226,7 @@ export async function copyLibrarySourcesToInputs(
         continue
       }
 
-      const extracted = await extractOffice(src, exe)
+      const extracted = await extractOffice(src, exe, options?.signal)
       if (!extracted.ok) {
         const label =
           extracted.reason === '抽出文本为空'

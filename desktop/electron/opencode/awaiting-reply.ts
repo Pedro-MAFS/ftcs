@@ -419,6 +419,7 @@ export type AwaitingQuestionClient = {
 type TimerHandle = { clear: () => void }
 
 export type AwaitingReplyHooks = {
+  needsExplicitAnswer?: () => boolean
   timeoutMs: () => number
   schedule: (ms: number, cb: () => void) => TimerHandle
   emit: (pending: AwaitingReplyView | null) => void
@@ -687,7 +688,7 @@ export class AwaitingReplyCoordinator {
     const slot = this.slot
     if (!slot || slot.closed || slot.inFlight) return
     const epoch = this.generation
-    const decision = decideAwaitingReplyTimeout({
+    const decision = this.hooks.needsExplicitAnswer?.() ? { action: 'reject', reason: 'explicit-answer' } as const : decideAwaitingReplyTimeout({
       renderable: slot.renderable,
       questions: slot.questions,
     })

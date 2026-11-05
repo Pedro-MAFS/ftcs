@@ -8,7 +8,7 @@ import { getRepoRoot } from './paths'
  * 模板版本：改动标准 workspace 中 skills/mcp/config 结构时递增，
  * 启动时若目标区标记版本落后，会重新同步托管目录。
  */
-export const WORKSPACE_TEMPLATE_VERSION = '2026.11.04-profile-source-selection-copy'
+export const WORKSPACE_TEMPLATE_VERSION = '2026.11.05-task-lifecycle-v1'
 
 /** 始终从模板覆盖同步（用户业务数据不在此列） */
 export const MANAGED_WORKSPACE_DIRS = ['skills', 'mcp-servers', 'config'] as const
@@ -277,6 +277,7 @@ function needsManagedSync(workspaceRoot: string, force: boolean): boolean {
   if (!fs.existsSync(path.join(workspaceRoot, 'config', 'opencode', 'opencode.json'))) {
     return true
   }
+  if (!fs.existsSync(path.join(workspaceRoot, 'config', 'opencode', 'task-context.mjs'))) return true
   for (const name of MANAGED_WORKSPACE_FILES) {
     if (!fs.existsSync(path.join(workspaceRoot, name))) return true
   }
