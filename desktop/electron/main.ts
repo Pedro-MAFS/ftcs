@@ -213,6 +213,9 @@ import {
   type UiThemeMode,
 } from './theme/ui-theme'
 import { applyExploreIntensity } from './explore/explore-intensity'
+import { installConsoleLogging } from './logging/console-log'
+
+const desktopLog = installConsoleLogging(path.join(app.getPath('userData'), 'logs'))
 
 // 尽早加载 desktop/.env（electron-vite 不会把 FTCS_* 写入 process.env）
 loadDesktopEnvFile()
@@ -360,6 +363,10 @@ function getWindowOptions(): BrowserWindowConstructorOptions {
 async function createWindow(): Promise<void> {
   mainWindow = allowCreatedWebContentsDuring(() => new BrowserWindow(getWindowOptions()))
   const win = mainWindow
+  win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    const levels = ['debug', 'info', 'warn', 'error']
+    desktopLog.write('renderer', levels[level] ?? 'log', `${message} (${sourceId}:${line})`)
+  })
 
   /**
    * Windows + titleBarOverlay：
