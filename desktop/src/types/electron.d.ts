@@ -279,7 +279,7 @@ export type ScheduleTriggerPayload = {
   scheduleId: string
   productId: string
   planId: string
-  reason: 'due' | 'catch-up'
+  reason: 'due'
 }
 
 export interface WorkflowListPlansResult {

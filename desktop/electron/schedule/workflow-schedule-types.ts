@@ -90,23 +90,6 @@ export function isDueNow(
   return true
 }
 
-/** 启动补跑：上一应跑时刻晚于 lastRunAt，且距今 ≤ 24h，且已过 due 超过 1 分钟 */
-export function needsCatchUp(
-  schedule: WorkflowSchedule,
-  now: Date = new Date(),
-  maxAgeMs = 24 * 60 * 60 * 1000,
-): boolean {
-  const due = computeLastDueAt(schedule, now)
-  if (!due) return false
-  const age = now.getTime() - due.getTime()
-  if (age < 60_000 || age > maxAgeMs) return false
-  if (schedule.lastRunAt) {
-    const last = Date.parse(schedule.lastRunAt)
-    if (Number.isFinite(last) && last >= due.getTime()) return false
-  }
-  return true
-}
-
 export function slotKey(scheduleId: string, due: Date): string {
   const y = due.getFullYear()
   const m = String(due.getMonth() + 1).padStart(2, '0')

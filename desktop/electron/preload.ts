@@ -320,7 +320,7 @@ const api = {
       scheduleId: string
       productId: string
       planId: string
-      reason: 'due' | 'catch-up'
+      reason: 'due'
     }) => void,
   ): (() => void) => {
     const listener = (
@@ -329,7 +329,7 @@ const api = {
         scheduleId: string
         productId: string
         planId: string
-        reason: 'due' | 'catch-up'
+        reason: 'due'
       },
     ) => {
       handler(payload)
