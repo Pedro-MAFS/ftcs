@@ -14,7 +14,7 @@ import {
   getConfigPath,
   getInputsDir,
   getKeywordsPath,
-  getProductDir,
+  getProductsDir,
   getProfilePath,
 } from "./paths.js";
 import {
@@ -45,6 +45,16 @@ export function loadProfile(root: string, productId: string): ProductProfile | n
   }
   const raw = JSON.parse(readFileSync(profilePath, "utf8"));
   return ProductProfileSchema.parse(raw);
+}
+
+function loadProfileForList(root: string, productId: string): ProductProfile | null {
+  try {
+    const profile = loadProfile(root, productId);
+    if (!profile || profile.status === "deleted") return null;
+    return profile;
+  } catch {
+    return null;
+  }
 }
 
 export function saveProfile(
@@ -101,19 +111,18 @@ export function saveProfile(
 }
 
 export function listProfiles(root: string): ProductProfile[] {
-  const productsDir = getProductDir(root, "");
-  const parent = dirname(productsDir);
+  const productsDir = getProductsDir(root);
 
   let entries: string[] = [];
   try {
-    entries = readDirNames(parent);
+    entries = readDirNames(productsDir);
   } catch {
     return [];
   }
 
   return entries
     .filter((name) => name !== "_example")
-    .map((name) => loadProfile(root, name))
+    .map((name) => loadProfileForList(root, name))
     .filter((profile): profile is ProductProfile => profile !== null)
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
 }

@@ -118,7 +118,7 @@ server.tool(
 
 server.tool(
   "product_list",
-  "List all saved product profiles (excluding _example).",
+  "List saved product profiles (excluding _example and soft-deleted). One unreadable profile is skipped.",
   {},
   async () => {
     const root = getProjectRoot();
