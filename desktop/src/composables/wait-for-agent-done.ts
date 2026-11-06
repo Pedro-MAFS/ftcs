@@ -1,7 +1,7 @@
 import type { AgentEventPayload } from '../types/electron'
 
 export function waitForAgentDone(
-  productId: string,
+  taskId: string,
   options?: { signal?: AbortSignal; timeoutMs?: number },
 ): Promise<{ ok: boolean; message: string }> {
   return new Promise((resolve, reject) => {
@@ -36,13 +36,17 @@ export function waitForAgentDone(
     signal?.addEventListener('abort', onAbort)
 
     const listener = (payload: AgentEventPayload): void => {
-      if (payload.type !== 'done') return
-      if (payload.productId !== productId) return
+      if (payload.type !== 'task.changed' || payload.task.task_id !== taskId || !payload.task.finished_at) return
       cleanup()
-      resolve({ ok: payload.ok, message: payload.message })
+      resolve({ ok: payload.task.state === 'succeeded', message: payload.task.message })
     }
 
     unsubscribe = window.ftcs.onAgentEvent(listener)
+
+    void window.ftcs.taskSnapshot?.().then(records => {
+      const task = records.find(record => record.task_id === taskId)
+      if (task) listener({ type: 'task.changed', task })
+    }).catch(error => { cleanup(); reject(error) })
 
     if (options?.timeoutMs != null && options.timeoutMs > 0) {
       timeoutId = setTimeout(() => {

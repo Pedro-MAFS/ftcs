@@ -17,7 +17,7 @@ import type { SettingsCategory } from '../../types/settings'
 defineProps<{
   settings: boolean
 }>()
-const { products, activeProductId, pipelineSteps, selectProduct, deleteProduct, createDraftProduct } =
+const { products, activeProductId, latestTask, generating, pipelineSteps, selectProduct, deleteProduct, createDraftProduct } =
   useWorkspace()
 const { widths, pipelineColumnCollapsed, collapsePipelineColumn, expandPipelineColumn } =
   useWorkspaceLayout()
@@ -221,6 +221,9 @@ async function onCreateDraft(): Promise<void> {
         </div>
       </div>
 
+      <p v-if="generating && latestTask?.task_type === 'extract-product-profile'" role="status">
+        {{ latestTask.state === 'preparing' ? '正在准备新产品资料…' : '正在生成新产品画像…' }}
+      </p>
       <p v-if="deleteError" class="sidebar__error">{{ deleteError }}</p>
 
       <div
@@ -239,7 +242,7 @@ async function onCreateDraft(): Promise<void> {
           <button
             type="button"
             class="product-item__delete"
-            :disabled="deletingId === product.id"
+            :disabled="deletingId === product.id || (generating && latestTask?.scope.product_id === product.id)"
             :title="deletingId === product.id ? '删除中…' : '删除产品'"
             aria-label="删除产品"
             @click="requestDelete($event, product.id, product.companyName)"
@@ -254,7 +257,7 @@ async function onCreateDraft(): Promise<void> {
             :class="productToneClass(product.statusTone)"
           >{{ product.statusLabel }}</span>
           <span class="product-item__sep">·</span>
-          <span class="product-item__date">{{ product.updatedLabel }}</span>
+          <span class="product-item__date">{{ generating && latestTask?.scope.product_id === product.id ? '任务进行中' : product.updatedLabel }}</span>
         </span>
       </div>
 

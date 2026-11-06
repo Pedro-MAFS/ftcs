@@ -63,7 +63,7 @@ export function useScheduleRunner(): {
         return
       }
 
-      const result = await executePlan(payload.planId)
+      const result = await executePlan(payload.planId, 'schedule')
       await window.ftcs.markWorkflowScheduleRun({
         scheduleId: payload.scheduleId,
         skipped: false,

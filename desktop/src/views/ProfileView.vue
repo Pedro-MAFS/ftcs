@@ -3,7 +3,6 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import { useMainViewTabs } from '../composables/useMainViewTabs'
-import { ensureAgentReady } from '../composables/useAgentPreflight'
 import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
 import type { ProfileDetail, ProfileSaveInput } from '../types/electron'
@@ -13,13 +12,15 @@ const { openPageTab } = useMainViewTabs()
 const meta = SECTION_META.profile
 const {
   currentProfile,
+  latestTask,
   activeProductId,
   generating,
+  runningForProduct,
   agentStatus,
   loadActiveProfile,
   refreshProducts,
   applyProfileToState,
-  resetAgentForExpandKeywords,
+
 } = useWorkspace()
 
 interface ProductDraft {
@@ -193,7 +194,7 @@ const dirty = computed(() => {
 })
 
 const readinessLabel = computed(() => {
-  if (generating.value) return '生成中…'
+  if (runningForProduct.value && latestTask.value?.task_type === 'extract-product-profile') return '生成中…'
   const p = currentProfile.value
   if (!p) return '—'
   return p.readinessScore != null ? `${p.readinessScore}%` : '—'
@@ -329,25 +330,18 @@ async function createExploreTask(): Promise<void> {
     return
   }
 
-  const preflightError = await ensureAgentReady('expand-keywords')
-  if (preflightError) {
-    expandError.value = preflightError
-    return
-  }
-
-  resetAgentForExpandKeywords()
   try {
     const res = await window.ftcs.expandKeywords(activeProductId.value)
     if (!res.ok) {
       expandError.value = res.message
       // 启动失败时恢复 Agent 面板状态（成功启动则由 agent:event 接管）
-      agentStatus.value = 'error'
+
       return
     }
     await openPageTab('explore')
   } catch (err) {
     expandError.value = err instanceof Error ? err.message : String(err)
-    agentStatus.value = 'error'
+
   }
 }
 </script>

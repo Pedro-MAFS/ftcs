@@ -46,11 +46,11 @@ export function derivePipelineSteps(input: PipelineDerivationInput): PipelineSte
     {
       id: 'keywords',
       label: '2 关键词扩展',
-      status: input.hasKeywords ? 'done' : input.expandingKeywords ? 'running' : 'pending',
-      statusLabel: input.hasKeywords
-        ? '完成'
-        : input.expandingKeywords
-          ? '执行中'
+      status: input.expandingKeywords ? 'running' : input.hasKeywords ? 'done' : 'pending',
+      statusLabel: input.expandingKeywords
+        ? '执行中'
+        : input.hasKeywords
+          ? '完成'
           : canExpandKeywords
             ? '可执行'
             : '待就绪',
@@ -58,15 +58,15 @@ export function derivePipelineSteps(input: PipelineDerivationInput): PipelineSte
     {
       id: 'explore',
       label: '3 获客探索',
-      status: input.hasExploreCompleted
-        ? 'done'
-        : input.hasExploreRunning || input.exploring
-          ? 'running'
+      status: input.hasExploreRunning || input.exploring
+        ? 'running'
+        : input.hasExploreCompleted
+          ? 'done'
           : 'pending',
-      statusLabel: input.hasExploreCompleted
-        ? '完成'
-        : input.hasExploreRunning || input.exploring
-          ? '执行中'
+      statusLabel: input.hasExploreRunning || input.exploring
+        ? '执行中'
+        : input.hasExploreCompleted
+          ? '完成'
           : canExplore
             ? '可执行'
             : '待关键词',
@@ -74,11 +74,11 @@ export function derivePipelineSteps(input: PipelineDerivationInput): PipelineSte
     {
       id: 'score',
       label: '4 线索评分',
-      status: hasScored ? 'done' : input.scoring ? 'running' : 'pending',
-      statusLabel: hasScored
-        ? '完成'
-        : input.scoring
-          ? '执行中'
+      status: input.scoring ? 'running' : hasScored ? 'done' : 'pending',
+      statusLabel: input.scoring
+        ? '执行中'
+        : hasScored
+          ? '完成'
           : canScore
             ? '可执行'
             : '待探索',
@@ -86,16 +86,17 @@ export function derivePipelineSteps(input: PipelineDerivationInput): PipelineSte
     {
       id: 'email',
       label: '5 邮件草稿',
-      status: hasDrafted ? 'done' : input.drafting ? 'running' : 'pending',
-      statusLabel: hasDrafted
-        ? '完成'
-        : input.drafting
-          ? '执行中'
+      status: input.drafting ? 'running' : hasDrafted ? 'done' : 'pending',
+      statusLabel: input.drafting
+        ? '执行中'
+        : hasDrafted
+          ? '完成'
           : canDraft
             ? '可执行'
             : '待评分',
     },
   ]
+
 }
 
 export function pendingPipelineSteps(): PipelineStep[] {

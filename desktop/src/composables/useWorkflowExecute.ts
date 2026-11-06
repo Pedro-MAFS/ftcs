@@ -4,10 +4,8 @@ import {
   WORKFLOW_NODE_PREFLIGHT,
   workflowNodeLabel,
 } from '../constants/workflow-node-labels'
-import type { LeadRowDto, WorkflowNodeId, WorkflowPlan } from '../types/electron'
-import { parseCompanyDomain } from '../utils/parse-company-domain'
+import type { WorkflowNodeId, WorkflowPlan } from '../types/electron'
 import { ensureAgentReady } from './useAgentPreflight'
-import { useExploreStart } from './useExploreStart'
 import { useWorkspace } from './useWorkspace'
 import { formatWorkflowPlanNotifyBody } from '../utils/format-workflow-plan-notify-body'
 import { waitForAgentDone } from './wait-for-agent-done'
@@ -39,16 +37,6 @@ export async function runWorkflowPreflight(plan: WorkflowPlan): Promise<string |
     if (err) return err
   }
   return null
-}
-
-function countPendingEnrich(rows: LeadRowDto[] | undefined): number {
-  if (!rows?.length) return 0
-  return rows.filter(
-    (row) =>
-      row.phase === 'scored' &&
-      Boolean(parseCompanyDomain(row.company?.website || row.domain)) &&
-      (!row.people || row.people.length === 0),
-  ).length
 }
 
 function isAbortError(err: unknown): boolean {
@@ -118,7 +106,7 @@ export function useWorkflowExecute(options?: {
   currentStepLabel: Ref<string>
   currentPlanName: Ref<string>
   runWorkflowPreflight: (plan: WorkflowPlan) => Promise<string | null>
-  executePlan: (planId: string) => Promise<WorkflowExecuteResult>
+  executePlan: (planId: string, origin?: 'workflow' | 'schedule') => Promise<WorkflowExecuteResult>
   cancel: () => Promise<void>
 } {
   const running = workflowRunning
@@ -126,163 +114,9 @@ export function useWorkflowExecute(options?: {
   const currentStepLabel = workflowCurrentStepLabel
   const currentPlanName = workflowCurrentPlanName
 
-  const {
-    activeProductId,
-    currentProfile,
-    leadsSnapshot,
-    emailDraftsSnapshot,
-    generating,
-    agentStatus,
-    resetAgentForExpandKeywords,
-    resetAgentForScoreAndDedupe,
-    resetAgentForDraftEmail,
-    resetAgentForEnrichContacts,
-    refreshPipelineArtifacts,
-  } = useWorkspace()
+  const { activeProductId } = useWorkspace()
 
-  const explore = useExploreStart()
-
-  function assertStepReady(nodeId: WorkflowNodeId): string | null {
-    if (!activeProductId.value) return '请先在侧栏选择产品'
-    if (generating.value) return '已有任务在运行'
-    return null
-  }
-
-  async function launchStep(
-    nodeId: WorkflowNodeId,
-    productId: string,
-    signal: AbortSignal,
-  ): Promise<{ ipcOk: boolean; message: string }> {
-    switch (nodeId) {
-      case 'expand-keywords': {
-        if (!window.ftcs?.expandKeywords) {
-          return { ipcOk: false, message: '操作失败，请重试' }
-        }
-        resetAgentForExpandKeywords()
-        const donePromise = waitForAgentDone(productId, { signal })
-        try {
-          const res = await window.ftcs.expandKeywords(productId)
-          if (!res.ok) {
-            agentStatus.value = 'error'
-            return { ipcOk: false, message: res.message }
-          }
-          const done = await donePromise
-          return { ipcOk: done.ok, message: done.message }
-        } catch (err) {
-          if (isAbortError(err)) throw err
-          agentStatus.value = 'error'
-          return {
-            ipcOk: false,
-            message: err instanceof Error ? err.message : String(err),
-          }
-        }
-      }
-      case 'discover-r1': {
-        const res = await explore.startR1()
-        if (!res.ok) return { ipcOk: false, message: res.message }
-        const done = await waitForAgentDone(productId, { signal })
-        return { ipcOk: done.ok, message: done.message }
-      }
-      case 'discover-r2': {
-        const res = await explore.startR2()
-        if (!res.ok) return { ipcOk: false, message: res.message }
-        const done = await waitForAgentDone(productId, { signal })
-        return { ipcOk: done.ok, message: done.message }
-      }
-      case 'discover-r3': {
-        const res = await explore.startR3()
-        if (!res.ok) return { ipcOk: false, message: res.message }
-        const done = await waitForAgentDone(productId, { signal })
-        return { ipcOk: done.ok, message: done.message }
-      }
-      case 'score-and-dedupe': {
-        if (!window.ftcs?.scoreAndDedupeLeads) {
-          return { ipcOk: false, message: '操作失败，请重试' }
-        }
-        const raw = leadsSnapshot.value?.stats.raw ?? 0
-        resetAgentForScoreAndDedupe(raw)
-        const donePromise = waitForAgentDone(productId, { signal })
-        try {
-          const res = await window.ftcs.scoreAndDedupeLeads(productId)
-          if (!res.ok) {
-            agentStatus.value = 'error'
-            return { ipcOk: false, message: res.message }
-          }
-          const done = await donePromise
-          return { ipcOk: done.ok, message: done.message }
-        } catch (err) {
-          if (isAbortError(err)) throw err
-          agentStatus.value = 'error'
-          return {
-            ipcOk: false,
-            message: err instanceof Error ? err.message : String(err),
-          }
-        }
-      }
-      case 'draft-outreach-email': {
-        if (!window.ftcs?.draftEmails) {
-          return { ipcOk: false, message: '操作失败，请重试' }
-        }
-        const pending = emailDraftsSnapshot.value?.pendingHighLeadIds.length ?? 0
-        const donePromise = waitForAgentDone(productId, { signal })
-        try {
-          const res = await window.ftcs.draftEmails({ productId })
-          if (!res.ok) {
-            return { ipcOk: false, message: res.message }
-          }
-          resetAgentForDraftEmail(res.acceptedCount ?? pending)
-          const done = await donePromise
-          return { ipcOk: done.ok, message: done.message }
-        } catch (err) {
-          if (isAbortError(err)) throw err
-          agentStatus.value = 'error'
-          return {
-            ipcOk: false,
-            message: err instanceof Error ? err.message : String(err),
-          }
-        }
-      }
-      case 'enrich-lead-contacts': {
-        if (!window.ftcs?.enrichLeadContacts) {
-          return { ipcOk: false, message: '操作失败，请重试' }
-        }
-        const pendingIds = (leadsSnapshot.value?.rows ?? [])
-          .filter(
-            (row) =>
-              row.phase === 'scored' &&
-              Boolean(parseCompanyDomain(row.company?.website || row.domain)) &&
-              (!row.people || row.people.length === 0),
-          )
-          .map((row) => row.id)
-        const settings = window.ftcs.getSettings
-          ? await window.ftcs.getSettings()
-          : null
-        const verifyEmails = settings?.hunterVerifyEmails !== false
-        resetAgentForEnrichContacts(pendingIds, verifyEmails)
-        const donePromise = waitForAgentDone(productId, { signal })
-        try {
-          const res = await window.ftcs.enrichLeadContacts({ productId })
-          if (!res.ok) {
-            agentStatus.value = 'error'
-            return { ipcOk: false, message: res.message }
-          }
-          const done = await donePromise
-          return { ipcOk: done.ok, message: done.message }
-        } catch (err) {
-          if (isAbortError(err)) throw err
-          agentStatus.value = 'error'
-          return {
-            ipcOk: false,
-            message: err instanceof Error ? err.message : String(err),
-          }
-        }
-      }
-      default:
-        return { ipcOk: false, message: `未知步骤：${nodeId}` }
-    }
-  }
-
-  async function executePlan(planId: string): Promise<WorkflowExecuteResult> {
+  async function executePlan(planId: string, origin: 'workflow' | 'schedule' = 'workflow'): Promise<WorkflowExecuteResult> {
     if (running.value) {
       return { ok: false, message: '已有方案在执行中', completedSteps: 0 }
     }
@@ -324,25 +158,13 @@ export function useWorkflowExecute(options?: {
         currentStepIndex.value = i
         currentStepLabel.value = workflowNodeLabel(step.nodeId)
 
-        const gate = assertStepReady(step.nodeId)
-        if (gate) {
-          failedStep = step.nodeId
-          throw new Error(gate)
-        }
-
-        const launch = await launchStep(
-          step.nodeId,
-          productId,
-          workflowAbortController.signal,
-        )
-        await refreshPipelineArtifacts()
-        await options?.refreshLeads?.()
-
-        if (!launch.ipcOk) {
-          failedStep = step.nodeId
-          throw new Error(launch.message || '步骤启动失败')
-        }
-
+        failedStep = step.nodeId
+        workflowAbortController.signal.throwIfAborted()
+        if (!window.ftcs?.launchWorkflowStep) throw new Error('桌面任务通道未连接')
+        const taskId = await window.ftcs.launchWorkflowStep(step.nodeId, productId, origin)
+        const result = await waitForAgentDone(taskId, { signal: workflowAbortController.signal })
+        if (!result.ok) throw new Error(result.message)
+        failedStep = undefined
         completed += 1
       }
 

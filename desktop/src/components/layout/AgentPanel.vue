@@ -29,6 +29,7 @@ const {
   activeProductId,
   agentSkill,
   agentMeta,
+  latestTask,
   agentTimeline,
   agentPrompt,
   agentStatus,
@@ -362,9 +363,7 @@ watch(
         <span class="composer-skill">
           {{ skillLabel }}
           <template v-if="awaitingUserReply"> · 任务在等你回复</template>
-          <template v-else-if="agentStatus === 'running'"> · 运行中</template>
-          <template v-else-if="agentStatus === 'done'"> · 完成</template>
-          <template v-else-if="agentStatus === 'error'"> · 异常</template>
+          <template v-else-if="latestTask"> · {{ agentMeta[0]?.value }}</template>
         </span>
         <div class="composer-buttons">
           <button

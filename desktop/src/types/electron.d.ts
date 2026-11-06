@@ -63,6 +63,7 @@ export type PermissionAskView = {
 } | null
 
 export type AgentEventPayload =
+  | { type: 'task.changed'; task: import('../../electron/tasks/lifecycle').TaskRecord }
   | {
       type: 'state'
       skill: string
@@ -157,6 +158,7 @@ export interface ProfileSaveResult {
 }
 
 export interface ProfileGenerateResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -164,6 +166,7 @@ export interface ProfileGenerateResult {
 }
 
 export interface KeywordsExpandResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -306,6 +309,7 @@ export interface DiscoverLeadsInput {
 }
 
 export interface DiscoverLeadsResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -492,6 +496,7 @@ export interface ScoredLeadsSummaryDto {
 }
 
 export interface ScoreAndDedupeResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -572,6 +577,7 @@ export interface DraftEmailsInput {
 }
 
 export interface DraftEmailsResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -710,6 +716,7 @@ export interface DraftEmailSlotInput {
 }
 
 export interface DraftEmailSlotResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -724,6 +731,7 @@ export interface GenerateEmailDraftZhInput {
 }
 
 export interface GenerateEmailDraftZhResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -1176,6 +1184,8 @@ declare global {
       }>
       rejectEmailDraft: (input: RejectEmailDraftInput) => Promise<RejectEmailDraftResult>
       approveEmailDraft: (input: ApproveEmailDraftInput) => Promise<ApproveEmailDraftResult>
+      taskSnapshot: () => Promise<import('../../electron/tasks/lifecycle').TaskRecord[]>
+      launchWorkflowStep: (node: WorkflowNodeId, productId: string, origin: 'workflow' | 'schedule') => Promise<string>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
       getSidecarLogs: () => Promise<string[]>

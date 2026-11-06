@@ -37,6 +37,12 @@ website → domain → domain_search → 映射+排序 → leads_patch_scored
 - 用户说「补全联系人」「找决策人邮箱」「enrich-lead-contacts」等，且已给出（或上下文中明确）`product_id` + `lead_id` / `lead_ids`
 - `score-and-dedupe` 之后，已评分线索需要人员邮箱，而现有 `contacts` 多为 `info@` / `sales@` 等通用地址
 
+## 任务调用
+
+确认 `scope.product_id` 和目标已评分线索，将单条或多条 ID 放入 `parameters.lead_ids`；按用户选择或桌面配置填写 `verify_emails`。
+
+必填不明确时用 `question` 补齐，用户取消就结束。参数齐全后在当前会话调用 `lead-store.task_begin`，task_type 为 `enrich-lead-contacts`。收到 running 后按 `prepared.instructions` 和下面的步骤执行；收尾调用 `lead-store.task_done`，传回本次 task_id 和实际结果。调用格式见工作区 AGENTS.md。
+
 ## 前置条件
 
 - MCP：`lead-store`、`hunter-api`

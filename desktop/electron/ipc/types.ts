@@ -87,6 +87,8 @@ export const IPC = {
   WORKFLOW_LIST_PLANS: 'workflow:list-plans',
   WORKFLOW_SAVE_PLAN: 'workflow:save-plan',
   WORKFLOW_DELETE_PLAN: 'workflow:delete-plan',
+  WORKFLOW_LAUNCH_STEP: 'task:workflow-step',
+  TASK_SNAPSHOT: 'task:snapshot',
   AGENT_EVENT: 'agent:event',
   AGENT_REPLY_QUESTION: 'agent:reply-question',
   AGENT_REPLY_PERMISSION: 'agent:reply-permission',
@@ -436,6 +438,7 @@ export interface ProfileSaveResult {
 }
 
 export interface ProfileGenerateResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -443,6 +446,7 @@ export interface ProfileGenerateResult {
 }
 
 export interface KeywordsExpandResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -508,6 +512,7 @@ export interface DiscoverLeadsInput {
 }
 
 export interface DiscoverLeadsResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -694,6 +699,7 @@ export interface ScoredLeadsSummaryDto {
 }
 
 export interface ScoreAndDedupeResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -787,6 +793,7 @@ export interface DraftEmailsInput {
 }
 
 export interface DraftEmailsResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -925,6 +932,7 @@ export interface DraftEmailSlotInput {
 }
 
 export interface DraftEmailSlotResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -939,6 +947,7 @@ export interface GenerateEmailDraftZhInput {
 }
 
 export interface GenerateEmailDraftZhResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -1093,6 +1102,7 @@ export interface ReplyPermissionResult {
 }
 
 export type AgentEventPayload =
+  | { type: 'task.changed'; task: import('../tasks/lifecycle').TaskRecord }
   | {
       type: 'state'
       skill: string
