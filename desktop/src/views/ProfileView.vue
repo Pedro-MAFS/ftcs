@@ -49,6 +49,7 @@ const expandedIndex = ref(0)
 const draft = ref<ProfileDraft | null>(null)
 const baseline = ref('')
 const saving = ref(false)
+const refreshing = ref(false)
 const saveMessage = ref('')
 const saveError = ref(false)
 
@@ -284,6 +285,19 @@ async function reload(): Promise<void> {
   syncDraftFromProfile(currentProfile.value)
 }
 
+async function refreshProfile(): Promise<void> {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    await refreshProducts()
+    if (dirty.value) showToast('画像已刷新，未保存的修改已保留')
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '刷新画像失败', { tone: 'error' })
+  } finally {
+    refreshing.value = false
+  }
+}
+
 async function save(): Promise<void> {
   if (!draft.value || !activeProductId.value || !window.ftcs?.saveProfile) return
   saving.value = true
@@ -354,13 +368,18 @@ async function createExploreTask(): Promise<void> {
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
+        <button type="button" class="btn-secondary" :disabled="refreshing || saving" @click="refreshProfile">
+          <Icon name="refresh-cw" :size="12" />
+          {{ refreshing ? '刷新中…' : '刷新' }}
+        </button>
         <button
+          v-if="dirty"
           type="button"
           class="btn-secondary"
           :disabled="generating || saving"
           @click="reload"
         >
-          {{ dirty ? '放弃修改' : '刷新' }}
+          放弃修改
         </button>
         <button
           type="button"

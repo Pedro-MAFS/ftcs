@@ -36,6 +36,7 @@ let profileStartSelection: number | undefined
 let artifactsVersion = 0
 let profileVersion = 0
 let productsVersion = 0
+let sessionVersion = 0
 const agentSkill = ref('extract-product-profile')
 const agentStatus = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const agentMeta = ref<AgentMetaItem[]>([
@@ -265,6 +266,20 @@ function applyTask(task: Task, fromSnapshot = false): void {
 }
 
 function handleAgentEvent(payload: AgentEventPayload): void {
+  if (payload.type === 'session.created') {
+    sessionVersion++
+    latestTask.value = null
+    agentSkill.value = 'idle'
+    agentStatus.value = 'idle'
+    agentMeta.value = []
+    agentTimeline.value = []
+    agentExpanded.value = {}
+    agentPrompt.value = ''
+    awaitingUserReply.value = null
+    pendingPermission.value = null
+    updatePipelineFromProfile()
+    return
+  }
   if (payload.type === 'task.changed') {
     applyTask(payload.task)
     return
@@ -297,8 +312,14 @@ function ensureWorkspaceBindings(): void {
   if (!agentBound && window.ftcs?.onAgentEvent) {
     window.ftcs.onAgentEvent(handleAgentEvent)
     agentBound = true
-    void window.ftcs.taskSnapshot?.().then(history => {
-      const last = history[history.length - 1]
+    const version = sessionVersion
+    void Promise.all([
+      window.ftcs.taskSnapshot?.() ?? Promise.resolve([]),
+      window.ftcs.currentAgentSession?.() ?? Promise.resolve(null),
+    ]).then(([history, sessionId]) => {
+      if (version !== sessionVersion) return
+      const matching = sessionId ? history.filter(task => task.session_id === sessionId) : history
+      const last = matching[matching.length - 1]
       if (last) applyTask(last, true)
     }).catch(() => undefined)
   }

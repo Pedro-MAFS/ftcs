@@ -323,7 +323,7 @@ const canExport = computed(() => {
   )
 })
 
-function reconcileLeadSelection(rows: LeadRowDto[]) {
+function reconcileLeadSelection(rows: LeadRowDto[], preserveDrawer = false) {
   if (
     selectedId.value &&
     !rows.some((r) => r.id === selectedId.value)
@@ -334,7 +334,7 @@ function reconcileLeadSelection(rows: LeadRowDto[]) {
     detailLead.value &&
     !rows.some((r) => r.id === detailLead.value?.id)
   ) {
-    closeDrawer()
+    if (!preserveDrawer) closeDrawer()
   } else if (detailLead.value) {
     const latest = rows.find((r) => r.id === detailLead.value?.id)
     if (latest) detailLead.value = latest
@@ -342,7 +342,7 @@ function reconcileLeadSelection(rows: LeadRowDto[]) {
   applyLeadQueryFromRoute()
 }
 
-async function refreshLeads(): Promise<void> {
+async function refreshLeads(preserveDrawer = false): Promise<void> {
   if (!window.ftcs?.listLeads || !activeProductId.value) {
     snapshot.value = null
     pendingHighIds.value = []
@@ -359,7 +359,7 @@ async function refreshLeads(): Promise<void> {
       if (pid !== activeProductId.value) return
       pendingHighIds.value = emails.pendingHighLeadIds ?? []
     }
-    reconcileLeadSelection(snapshot.value.rows)
+    reconcileLeadSelection(snapshot.value.rows, preserveDrawer)
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
     snapshot.value = null
@@ -807,6 +807,10 @@ onMounted(() => {
         <p>{{ subtitle }}</p>
       </div>
       <div class="main-pane__actions">
+        <button type="button" class="btn-secondary" :disabled="loading" @click="refreshLeads(true)">
+          <Icon name="refresh-cw" :size="12" />
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
         <button
           type="button"
           class="btn-secondary"

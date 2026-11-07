@@ -1778,6 +1778,10 @@ function registerIpcHandlers(): void {
       node === 'enrich-lead-contacts' ? { verify_emails: getSettingsSnapshot().hunterVerifyEmails } : {}
     return runner.launchButton(skills[node], { product_id: productId }, parameters, payload => emitAgentEvent(event.sender, payload), origin)
   })
+  ipcMain.handle(IPC.AGENT_CREATE_SESSION, (event) =>
+    getAgentRunner().createChatSession(payload => emitAgentEvent(event.sender, payload)),
+  )
+  ipcMain.handle(IPC.AGENT_CURRENT_SESSION, () => getAgentRunner().currentChatSessionId())
   ipcMain.handle(IPC.AGENT_SEND_MESSAGE, async (event, text: unknown, productId: unknown) => {
     if (typeof productId === 'string') {
       getAgentRunner().noteActiveProduct(productId)

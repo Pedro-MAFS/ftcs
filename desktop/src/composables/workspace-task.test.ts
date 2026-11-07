@@ -61,4 +61,10 @@ test('同一任务更新状态卡与所属产品流水线，切换产品后的�
   assert.equal(ui.latestTask.value?.state, 'partial')
   assert.equal(ui.pipelineSteps.value.find((s) => s.id === 'keywords')?.status, 'pending')
   assert.equal(reads.length, count)
+  ui.agentPrompt.value = '未发送的内容'
+  emit({ type: 'session.created' })
+  assert.equal(ui.agentStatus.value, 'idle')
+  assert.equal(ui.agentPrompt.value, '')
+  assert.equal(ui.agentTimeline.value.length, 0)
+  assert.equal(ui.activeProductId.value, 'B')
 })

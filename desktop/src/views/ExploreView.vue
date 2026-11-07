@@ -194,6 +194,8 @@ async function reload(): Promise<void> {
   actionMessage.value = ''
   try {
     await refreshExploreTasks()
+  } catch (error) {
+    actionMessage.value = error instanceof Error ? error.message : '刷新探索任务失败'
   } finally {
     loading.value = false
   }
@@ -334,6 +336,10 @@ onMounted(() => {
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
+        <button type="button" class="btn-secondary" :disabled="loading" @click="reload">
+          <Icon name="refresh-cw" :size="12" />
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
         <button
           type="button"
           class="btn-secondary"

@@ -63,6 +63,7 @@ export type PermissionAskView = {
 } | null
 
 export type AgentEventPayload =
+  | { type: 'session.created' }
   | { type: 'task.changed'; task: import('../../electron/tasks/lifecycle').TaskRecord }
   | {
       type: 'state'
@@ -1113,6 +1114,8 @@ declare global {
       moveLibraryEntry: (relativePath: string, destDir: string, cwd?: string) => Promise<LibraryMutationResult>
       generateProfile: (input: ProfileGenerateInput) => Promise<ProfileGenerateResult>
       abortProfile: () => Promise<{ ok: boolean }>
+      createAgentSession: () => Promise<{ ok: boolean; message: string }>
+      currentAgentSession: () => Promise<string | null>
       sendAgentMessage: (text: string, productId?: string) => Promise<{
         ok: boolean
         message: string

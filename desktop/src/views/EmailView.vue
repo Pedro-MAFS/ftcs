@@ -29,6 +29,7 @@ const {
 } = useWorkspace()
 
 const loading = ref(false)
+const refreshing = ref(false)
 const slotLoading = ref(false)
 const drafting = ref(false)
 const saving = ref(false)
@@ -450,6 +451,18 @@ async function refreshDrafts(options?: {
   }
 }
 
+async function refreshEmail(): Promise<void> {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    const hasEdits = isDirty.value
+    if (hasEdits) actionMessage.value = '未保存的修改会保留'
+    await refreshDrafts({ soft: true, forceHydrate: !hasEdits })
+  } finally {
+    refreshing.value = false
+  }
+}
+
 async function onBatchDraft(): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.draftEmails) return
   if (generating.value) {
@@ -842,6 +855,10 @@ onMounted(() => {
         <p>{{ subtitle }}</p>
       </div>
       <div class="main-pane__actions">
+        <button type="button" class="btn-secondary" :disabled="refreshing || saving" @click="refreshEmail">
+          <Icon name="refresh-cw" :size="12" />
+          {{ refreshing ? '刷新中…' : '刷新' }}
+        </button>
         <button
           type="button"
           class="btn-secondary"

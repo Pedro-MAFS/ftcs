@@ -78,6 +78,7 @@ const awaitingCardKey = computed(() => {
 
 const timelineEl = ref<HTMLElement | null>(null)
 const composerHint = ref('')
+const creatingSession = ref(false)
 const pinToBottom = ref(true)
 
 function cloneJson<T>(value: T): T {
@@ -96,6 +97,24 @@ function onCopySession(): void {
     copiedAt: new Date(),
   }
   void copySession.copy(source)
+}
+
+async function onCreateSession(): Promise<void> {
+  if (creatingSession.value || generating.value || dialogueBusy.value || awaitingUserReply.value || pendingPermission.value) return
+  const create = window.ftcs?.createAgentSession
+  if (!create) {
+    composerHint.value = RUNTIME_NOT_READY
+    return
+  }
+  creatingSession.value = true
+  try {
+    const result = await create()
+    composerHint.value = result.ok ? '' : result.message
+  } catch (error) {
+    composerHint.value = error instanceof Error ? error.message : '创建会话失败，请重试'
+  } finally {
+    creatingSession.value = false
+  }
 }
 
 function stepKey(itemId: string, stepId: string): string {
@@ -126,7 +145,7 @@ async function onSend(): Promise<void> {
   }
   const draft = agentPrompt.value
   const text = draft.trim()
-  if (!text || composerInputLocked(generating.value, dialogueBusy.value)) return
+  if (!text || creatingSession.value || composerInputLocked(generating.value, dialogueBusy.value)) return
   const send = window.ftcs?.sendAgentMessage
   if (!send) {
     composerHint.value = RUNTIME_NOT_READY
@@ -210,6 +229,16 @@ watch(
       </div>
       <div class="agent-panel__actions">
         <span class="agent-panel__skill">{{ skillLabel }}</span>
+        <button
+          type="button"
+          class="btn-ghost"
+          :disabled="creatingSession || generating || dialogueBusy || !!awaitingUserReply || !!pendingPermission"
+          :title="generating || dialogueBusy || awaitingUserReply || pendingPermission ? '请先结束当前任务或回复' : '新建会话'"
+          @click="onCreateSession"
+        >
+          <Icon name="plus" :size="14" />
+          新建会话
+        </button>
         <button
           type="button"
           class="btn-ghost"
@@ -355,7 +384,7 @@ watch(
         class="composer-input"
         rows="2"
         :placeholder="FREE_DIALOGUE_PLACEHOLDER"
-        :disabled="composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
+        :disabled="creatingSession || composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
         @keydown.enter.exact.prevent="onSend"
       />
       <p v-if="composerHint" class="composer-hint" role="status">{{ composerHint }}</p>
@@ -385,7 +414,7 @@ watch(
           <button
             type="button"
             class="btn-primary btn-sm"
-            :disabled="composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
+            :disabled="creatingSession || composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
             @click="onSend"
           >
             <Icon name="send" :size="12" />
