@@ -95,6 +95,46 @@ after(() => {
 const describeSend = electronMockReady ? describe : describe.skip
 
 describeSend('sendFreeDialogue', () => {
+  it('creates a clean session and sends the next message to it', async () => {
+    const prompts: Array<{ sessionID: string }> = []
+    const emitted: AgentEventPayload[] = []
+    let created = 0
+    const events = createEventStream()
+    closers.push(() => events.close())
+    const client = {
+      session: {
+        async create() { return { data: { id: `ses_${++created}` } } },
+        async promptAsync(input: { sessionID: string }) { prompts.push(input); return {} },
+      },
+      event: { async subscribe() { return { stream: events.stream } } },
+      v2: { session: { async wait() { return { response: { status: 204 } } } } },
+    }
+    const runner = new AgentRunController(() => client as never)
+    await runner.sendFreeDialogue('旧会话', event => emitted.push(event))
+    const result = await runner.createChatSession(event => emitted.push(event))
+    assert.equal(result.ok, true)
+    assert.equal(emitted.filter(event => event.type === 'session.created').length, 1)
+    await runner.sendFreeDialogue('新会话', event => emitted.push(event))
+    assert.deepEqual(prompts.map(prompt => prompt.sessionID), ['ses_1', 'ses_2'])
+    assert.equal(created, 2)
+    assert.equal(timelineItems(emitted).some(item => item.body.includes('旧会话')), false)
+    runner.disconnect()
+  })
+
+  it('keeps the current conversation when creation fails or another request is running', async () => {
+    let resolveCreate!: (value: { error: { message: string } }) => void
+    const client = { session: { create: () => new Promise<{ error: { message: string } }>(resolve => { resolveCreate = resolve }) } }
+    const runner = new AgentRunController(() => client as never)
+    const events: AgentEventPayload[] = []
+    const pending = runner.createChatSession(event => events.push(event))
+    assert.equal((await runner.createChatSession(event => events.push(event))).ok, false)
+    assert.equal((await runner.sendFreeDialogue('你好', event => events.push(event))).accepted, false)
+    resolveCreate({ error: { message: 'unavailable' } })
+    assert.equal((await pending).ok, false)
+    assert.equal(events.some(event => event.type === 'session.created'), false)
+    assert.equal(runner.isRunning(), false)
+  })
+
   it('refuses while a task is running and when the service is down', async () => {
     const prompts: unknown[] = []
     const offline = new AgentRunController(() => null)

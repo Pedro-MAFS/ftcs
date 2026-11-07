@@ -149,6 +149,7 @@ export type AgentTimelineItem = {
 }
 
 export type AgentEventPayload =
+  | { type: 'session.created' }
   | { type: 'task.changed'; task: TaskRecord }
   | {
       type: 'state'
@@ -870,6 +871,7 @@ export class AgentRunController {
   /** 当前轮用户原文。回声过滤读它，续聊不必重开订阅。 */
   private echoPrompt = ''
   private dialogueActive = false
+  private creatingSession = false
   private dialogueStopRequested = false
   private dialogueToken = 0
   private dialogueSerial = 0
@@ -971,12 +973,48 @@ export class AgentRunController {
   }
 
   disconnect() {
+    this.dialogueToken++
     this.launchAbort?.abort()
     if (this.sessionId) this.lifecycle.interrupt(this.sessionId, 'interrupted', '任务服务已断开')
     this.abort?.abort()
     this.eventBridge?.stop()
     this.awaitingReply.dispose()
     this.sessionId = null
+  }
+
+  currentChatSessionId(): string | null {
+    return this.sessionId
+  }
+
+  async createChatSession(emit: AgentEventSink): Promise<{ ok: boolean; message: string }> {
+    if (this.isRunning() || this.dialogueActive) {
+      return { ok: false, message: '请先结束当前任务或回复' }
+    }
+    const client = this.getClient()
+    if (!client) return { ok: false, message: FREE_DIALOGUE_NOT_READY }
+    this.creatingSession = true
+    const token = this.dialogueToken
+    try {
+      const created = await client.session.create({ title: FREE_DIALOGUE_SESSION_TITLE })
+      if (token !== this.dialogueToken) return { ok: false, message: '服务已断开，请重试' }
+      if (created.error || !created.data?.id) return { ok: false, message: '创建会话失败，请重试' }
+      this.eventBridge?.stop()
+      this.permissionGate.clear()
+      this.awaitingReply.dispose()
+      this.sessionId = created.data.id
+      this.timeline = null
+      this.currentEmit = emit
+      this.currentFlush = null
+      this.dialogueSerial = 0
+      this.chatStepSkill = null
+      this.preservedChatTimeline = null
+      emit({ type: 'session.created' })
+      return { ok: true, message: '' }
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : '创建会话失败，请重试' }
+    } finally {
+      this.creatingSession = false
+    }
   }
 
   async waitForFinishedButton() {
@@ -1522,7 +1560,7 @@ export class AgentRunController {
   }
 
   isRunning(): boolean {
-    return this.running || !!this.lifecycle.current || !!this.buttonRequest
+    return this.running || !!this.lifecycle.current || !!this.buttonRequest || this.creatingSession
   }
 
   /** 新任务开始：卸掉上一段订阅，并打断进行中的自由回复。不把自由回复记成任务失败。 */
@@ -1809,7 +1847,7 @@ export class AgentRunController {
     const client = this.getClient()
     const plan = planFreeDialogue({
       text,
-      running: this.running || (!!this.buttonRequest && !fromButton),
+      running: this.running || this.creatingSession || (!!this.buttonRequest && !fromButton),
       clientReady: client != null,
       hasSession: Boolean(this.sessionId),
     })

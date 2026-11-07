@@ -93,6 +93,8 @@ export const IPC = {
   AGENT_REPLY_QUESTION: 'agent:reply-question',
   AGENT_REPLY_PERMISSION: 'agent:reply-permission',
   AGENT_SEND_MESSAGE: 'agent:send-message',
+  AGENT_CREATE_SESSION: 'agent:create-session',
+  AGENT_CURRENT_SESSION: 'agent:current-session',
   AGENT_NOTE_PRODUCT: 'agent:note-product',
   APP_OPEN_EXTERNAL: 'app:open-external',
   AUTH_GET_SESSION: 'auth:get-session',
@@ -1102,6 +1104,7 @@ export interface ReplyPermissionResult {
 }
 
 export type AgentEventPayload =
+  | { type: 'session.created' }
   | { type: 'task.changed'; task: import('../tasks/lifecycle').TaskRecord }
   | {
       type: 'state'
