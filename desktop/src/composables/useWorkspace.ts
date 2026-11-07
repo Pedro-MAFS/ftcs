@@ -242,7 +242,7 @@ function applyTask(task: Task, fromSnapshot = false): void {
   if (prev?.task_id === task.task_id && prev.revision >= task.revision) return
   if (fromSnapshot && prev && prev.task_id !== task.task_id) return
   if (!fromSnapshot && task.task_type === 'extract-product-profile' && task.state === 'preparing' && prev?.task_id !== task.task_id) {
-    profileStartSelection = selectionVersion
+    profileStartSelection = task.scope.product_id ? undefined : selectionVersion
   }
   latestTask.value = task
   agentSkill.value = task.task_type

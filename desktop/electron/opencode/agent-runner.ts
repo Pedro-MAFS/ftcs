@@ -1244,9 +1244,12 @@ export class AgentRunController {
   private async checkTaskEnvironment(request: Begin, hasWebsites?: boolean) {
     if (!this.hooks.preflight) return
     const skill = request.task_type
-    if (skill === 'extract-product-profile' && hasWebsites == null) {
+    if (skill === 'extract-product-profile' && !request.scope.product_id && hasWebsites == null) {
       hasWebsites = !!resolveChatProfileSources(request.parameters.library_sources ?? [], getWorkspaceRoot())
         .websitePaths.length
+    }
+    if (skill === 'extract-product-profile' && request.scope.product_id && hasWebsites == null) {
+      hasWebsites = false
     }
     const kind =
       skill === 'extract-product-profile'
@@ -1279,13 +1282,14 @@ export class AgentRunController {
     if (skill === 'enrich-lead-contacts' && !this.buttonRequest && !p.lead_ids?.length)
       throw new Error('请先选中要补全的线索')
     if (skill === 'draft-outreach-email' && !p.mode) throw new Error('缺少起草模式')
-    if (skill === 'extract-product-profile' && pid) throw new Error('新产品 ID 由桌面分配')
+    if (skill === 'extract-product-profile' && pid && p.library_sources?.length)
+      throw new Error('修改已有画像时请使用当前产品资料，不支持同时导入新资料')
     if (slotTask) {
       assertChatIdentifier(scope.lead_id ?? '')
       assertChatIdentifier(scope.recipient_key ?? '')
     } else if (scope.lead_id || scope.recipient_key) throw new Error('此任务不接受收件槽')
     const source =
-      skill === 'extract-product-profile'
+      skill === 'extract-product-profile' && !pid
         ? resolveChatProfileSources(p.library_sources ?? [], getWorkspaceRoot())
         : null
     if (!this.buttonRequest)
@@ -1305,6 +1309,13 @@ export class AgentRunController {
     assertChatIdentifier(pid)
     const profile = loadProfile(pid)
     if (!profile) throw new Error('未找到所选产品')
+    if (skill === 'extract-product-profile') {
+      if (profile.status === 'deleted' || profile.status === 'archived') throw new Error('无法修改已删除或归档的产品')
+      return {
+        product_id: pid,
+        instructions: `修改已有产品画像 ${pid}。先调用 lead-store.product_get 读取当前画像，再根据用户要求更新，使用相同 product_id 调用 lead-store.product_save。保留用户未要求修改的内容，特别是 products、buyer_personas、competitors 和 source_inputs 等完整数组。保存成功后调用 task_done。`,
+      }
+    }
     const intensity = getExploreIntensity(),
       limits = getExploreIntensityLimits(intensity)
     let instructions: string
