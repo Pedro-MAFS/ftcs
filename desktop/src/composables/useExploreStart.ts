@@ -1,6 +1,5 @@
 import { computed, onMounted, ref, watch, type MaybeRefOrGetter, toValue } from 'vue'
 import { useWorkspace } from './useWorkspace'
-import { ensureAgentReady } from './useAgentPreflight'
 import type { ExploreStartRound } from '../components/explore/ExploreStartControl.vue'
 
 export const EXPLORE_ROUND_STORAGE_KEY = 'ftcs.explore.startRound'
@@ -25,9 +24,9 @@ export function useExploreStart(options?: {
     currentExpansion,
     exploreTasks,
     generating,
+  runningForProduct,
     agentSkill,
-    agentStatus,
-    resetAgentForDiscoverLeads,
+
   } = useWorkspace()
 
   const exploreRound = ref<ExploreStartRound>(readSavedRound())
@@ -142,7 +141,7 @@ export function useExploreStart(options?: {
 
   const isDiscovering = computed(
     () =>
-      generating.value &&
+      runningForProduct.value &&
       (agentSkill.value === 'discover-leads' ||
         agentSkill.value === 'discover-leads-r2' ||
         agentSkill.value === 'discover-leads-r3'),
@@ -195,12 +194,9 @@ export function useExploreStart(options?: {
       return { ok: false, message: startR1DisabledReason.value }
     }
 
-    const preflightError = await ensureAgentReady('discover-leads')
-    if (preflightError) return { ok: false, message: preflightError }
-
     startingR1.value = true
     const maxQueries = resolveMaxQueries(r1QueryCount.value)
-    resetAgentForDiscoverLeads(maxQueries, 'discover-leads')
+
     options?.onLaunch?.()
 
     try {
@@ -210,12 +206,11 @@ export function useExploreStart(options?: {
         maxQueries,
       })
       if (!res.ok) {
-        agentStatus.value = 'error'
         options?.onFail?.()
       }
       return { ok: res.ok, message: res.message }
     } catch (err) {
-      agentStatus.value = 'error'
+
       options?.onFail?.()
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
     } finally {
@@ -231,12 +226,9 @@ export function useExploreStart(options?: {
       return { ok: false, message: startR2DisabledReason.value }
     }
 
-    const preflightError = await ensureAgentReady('discover-leads-r2')
-    if (preflightError) return { ok: false, message: preflightError }
-
     startingR2.value = true
     const maxQueries = resolveMaxQueries(r2QueryCount.value)
-    resetAgentForDiscoverLeads(maxQueries, 'discover-leads-r2')
+
     options?.onLaunch?.()
 
     try {
@@ -245,12 +237,11 @@ export function useExploreStart(options?: {
         maxQueries,
       })
       if (!res.ok) {
-        agentStatus.value = 'error'
         options?.onFail?.()
       }
       return { ok: res.ok, message: res.message }
     } catch (err) {
-      agentStatus.value = 'error'
+
       options?.onFail?.()
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
     } finally {
@@ -266,12 +257,9 @@ export function useExploreStart(options?: {
       return { ok: false, message: startR3DisabledReason.value }
     }
 
-    const preflightError = await ensureAgentReady('discover-leads-r3')
-    if (preflightError) return { ok: false, message: preflightError }
-
     startingR3.value = true
     const maxQueries = resolveMaxQueries(r3QueryCount.value)
-    resetAgentForDiscoverLeads(maxQueries, 'discover-leads-r3')
+
     options?.onLaunch?.()
 
     try {
@@ -280,12 +268,11 @@ export function useExploreStart(options?: {
         maxQueries,
       })
       if (!res.ok) {
-        agentStatus.value = 'error'
         options?.onFail?.()
       }
       return { ok: res.ok, message: res.message }
     } catch (err) {
-      agentStatus.value = 'error'
+
       options?.onFail?.()
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
     } finally {

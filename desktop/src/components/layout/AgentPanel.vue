@@ -2,35 +2,63 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import Icon from '../shared/Icon.vue'
 import AgentAwaitingReplyCard from './AgentAwaitingReplyCard.vue'
+import AgentPermissionCard from './AgentPermissionCard.vue'
+import {
+  FREE_DIALOGUE_PLACEHOLDER,
+  PERMISSION_PENDING_SEND_HINT,
+  composerInputLocked,
+  emptyTimelineLabel,
+  showDialogueStopButton,
+  showTaskAbortButton,
+} from '../../composables/free-dialogue'
+import { RUNTIME_NOT_READY } from '../../config/user-facing'
+import { showToast } from '../../composables/useToast'
 import { useWorkspace } from '../../composables/useWorkspace'
-import type { AgentTimelineItem } from '../../types/workspace'
+import { useWorkspaceLayout } from '../../composables/useWorkspaceLayout'
+import {
+  createCopySessionController,
+  kindLabel,
+  skillDisplayName,
+  subagentCurrent,
+  subagentStatus,
+  writeClipboardText,
+  type CopySessionSource,
+} from './copy-agent-session'
 
 const {
+  activeProductId,
   agentSkill,
   agentMeta,
+  latestTask,
   agentTimeline,
   agentPrompt,
   agentStatus,
   awaitingUserReply,
+  pendingPermission,
+  dialogueBusy,
   generating,
   toggleTimelineExpand,
   isTimelineExpanded,
 } = useWorkspace()
+const { fill, widths, agentCollapsed, toggleAgentCollapsed, enterFill, exitFill } = useWorkspaceLayout()
+const collapsedStrip = computed(() => fill.value === 'none' && agentCollapsed.value)
+const agentFilled = computed(() => fill.value === 'agent')
 
-const SKILL_LABELS: Record<string, string> = {
-  'extract-product-profile': '画像生成',
-  'expand-keywords': '关键词扩展',
-  'discover-leads': '全网搜索',
-  'discover-leads-r2': '社媒发现',
-  'discover-leads-r3': '地图发现',
-  'score-and-dedupe': '评分去重',
-  'enrich-lead-contacts': '补全联系人',
-  'draft-outreach-email': '起草开发信',
-  'translate-outreach-email': '翻译对照',
-  idle: '空闲',
-}
-
-const skillLabel = computed(() => SKILL_LABELS[agentSkill.value] || '任务')
+const skillLabel = computed(() => skillDisplayName(agentSkill.value))
+const copySession = createCopySessionController({
+  async readAppVersion() {
+    const read = window.ftcs?.getAppVersion
+    if (!read) return ''
+    return read()
+  },
+  writeClipboard: writeClipboardText,
+  showToast,
+  saveTextToDownloads(input) {
+    const save = window.ftcs?.saveTextToDownloads
+    if (!save) return Promise.resolve({ ok: false as const, error: '保存通道不可用' })
+    return save(input)
+  },
+})
 const awaitingCardKey = computed(() => {
   const pending = awaitingUserReply.value
   if (!pending) return 'none'
@@ -50,43 +78,43 @@ const awaitingCardKey = computed(() => {
 
 const timelineEl = ref<HTMLElement | null>(null)
 const composerHint = ref('')
+const creatingSession = ref(false)
 const pinToBottom = ref(true)
 
-function formatDuration(ms: number): string {
-  const sec = Math.max(1, Math.round(ms / 1000))
-  if (sec < 60) return `${sec} 秒`
-  const min = Math.floor(sec / 60)
-  const rem = sec % 60
-  return rem ? `${min} 分 ${rem} 秒` : `${min} 分`
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
 }
 
-function agentLabel(agent: string): string {
-  const name = agent.trim()
-  if (!name) return 'General'
-  return name.charAt(0).toUpperCase() + name.slice(1)
-}
-
-function subagentStatus(item: AgentTimelineItem): string {
-  const sub = item.subagent
-  if (!sub) return ''
-  const agent = agentLabel(sub.agent)
-  if (item.status === 'error') return `${agent} · 失败`
-  if (sub.awaiting) return `${agent} · 在等你回复`
-  if (item.status === 'done') {
-    const end = sub.finishedAt ?? Date.now()
-    const dur = sub.startedAt ? formatDuration(end - sub.startedAt) : ''
-    const count = `${sub.toolCount} 次工具`
-    return dur ? `${agent} · 完成 · ${count} · ${dur}` : `${agent} · 完成 · ${count}`
+function onCopySession(): void {
+  if (copySession.isCopying()) return
+  const source: CopySessionSource = {
+    items: cloneJson(agentTimeline.value),
+    meta: cloneJson(agentMeta.value),
+    skill: agentSkill.value,
+    status: agentStatus.value,
+    awaiting: cloneJson(awaitingUserReply.value),
+    productId: activeProductId.value,
+    copiedAt: new Date(),
   }
-  return `${agent} · 进行中`
+  void copySession.copy(source)
 }
 
-function subagentCurrent(item: AgentTimelineItem): string {
-  const sub = item.subagent
-  if (!sub) return ''
-  if (sub.current) return `↳ ${sub.current}`
-  if (item.status === 'running') return '↳ 启动中'
-  return `↳ ${sub.toolCount} 次工具`
+async function onCreateSession(): Promise<void> {
+  if (creatingSession.value || generating.value || dialogueBusy.value || awaitingUserReply.value || pendingPermission.value) return
+  const create = window.ftcs?.createAgentSession
+  if (!create) {
+    composerHint.value = RUNTIME_NOT_READY
+    return
+  }
+  creatingSession.value = true
+  try {
+    const result = await create()
+    composerHint.value = result.ok ? '' : result.message
+  } catch (error) {
+    composerHint.value = error instanceof Error ? error.message : '创建会话失败，请重试'
+  } finally {
+    creatingSession.value = false
+  }
 }
 
 function stepKey(itemId: string, stepId: string): string {
@@ -104,25 +132,6 @@ function isStepExpanded(itemId: string, stepId: string): boolean {
   })
 }
 
-function kindLabel(kind: AgentTimelineItem['kind']): string {
-  switch (kind) {
-    case 'user':
-      return '你'
-    case 'system':
-      return '系统'
-    case 'assistant':
-      return '回复'
-    case 'reasoning':
-      return '思考'
-    case 'tool':
-      return '工具'
-    case 'error':
-      return '错误'
-    default:
-      return kind
-  }
-}
-
 function preview(body: string, max = 160): string {
   const text = body.trim()
   if (text.length <= max) return text
@@ -130,11 +139,38 @@ function preview(body: string, max = 160): string {
 }
 
 async function onSend(): Promise<void> {
-  composerHint.value =
-    '当前暂不支持在对话区自由发送指令，请通过左侧按钮启动对应任务。'
+  if (pendingPermission.value) {
+    composerHint.value = PERMISSION_PENDING_SEND_HINT
+    return
+  }
+  const draft = agentPrompt.value
+  const text = draft.trim()
+  if (!text || creatingSession.value || composerInputLocked(generating.value, dialogueBusy.value)) return
+  const send = window.ftcs?.sendAgentMessage
+  if (!send) {
+    composerHint.value = RUNTIME_NOT_READY
+    return
+  }
+  composerHint.value = ''
+  dialogueBusy.value = true
+  agentPrompt.value = ''
+  try {
+    const result = await send(text, activeProductId.value)
+    if (!result.accepted && !agentPrompt.value) agentPrompt.value = draft
+    composerHint.value = result.ok ? '' : result.message
+  } catch (err) {
+    if (!agentPrompt.value) agentPrompt.value = draft
+    composerHint.value = err instanceof Error && err.message ? err.message : RUNTIME_NOT_READY
+  } finally {
+    dialogueBusy.value = false
+  }
 }
 
 async function onAbort(): Promise<void> {
+  await window.ftcs?.abortProfile?.()
+}
+
+async function onStopDialogue(): Promise<void> {
   await window.ftcs?.abortProfile?.()
 }
 
@@ -143,6 +179,12 @@ function onTimelineScroll(): void {
   if (!el) return
   pinToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 48
 }
+
+watch(pendingPermission, (pending) => {
+  if (!pending && composerHint.value === PERMISSION_PENDING_SEND_HINT) {
+    composerHint.value = ''
+  }
+})
 
 watch(
   agentTimeline,
@@ -157,7 +199,23 @@ watch(
 </script>
 
 <template>
-  <aside class="agent-panel" aria-label="智能体">
+  <aside
+    class="agent-panel"
+    :class="{ 'is-collapsed': collapsedStrip }"
+    :style="{ width: `${widths.agent}px` }"
+    aria-label="智能体"
+  >
+    <button
+      v-if="collapsedStrip"
+      type="button"
+      class="icon-btn"
+      title="展开"
+      aria-label="展开智能体"
+      @click="toggleAgentCollapsed"
+    >
+      <Icon name="panel-right-open" :size="14" />
+    </button>
+    <template v-else>
     <div class="agent-panel__head">
       <div class="agent-panel__title">
         <i
@@ -169,7 +227,57 @@ watch(
         />
         <span>智能体</span>
       </div>
-      <span class="agent-panel__skill">{{ skillLabel }}</span>
+      <div class="agent-panel__actions">
+        <span class="agent-panel__skill">{{ skillLabel }}</span>
+        <button
+          type="button"
+          class="btn-ghost"
+          :disabled="creatingSession || generating || dialogueBusy || !!awaitingUserReply || !!pendingPermission"
+          :title="generating || dialogueBusy || awaitingUserReply || pendingPermission ? '请先结束当前任务或回复' : '新建会话'"
+          @click="onCreateSession"
+        >
+          <Icon name="plus" :size="14" />
+          新建会话
+        </button>
+        <button
+          type="button"
+          class="btn-ghost"
+          aria-label="复制当前会话"
+          @click="onCopySession"
+        >
+          复制会话
+        </button>
+        <button
+          v-if="agentFilled"
+          type="button"
+          class="btn-ghost"
+          aria-label="退出占满"
+          @click="exitFill"
+        >
+          <Icon name="minimize-2" :size="14" />
+          退出占满
+        </button>
+        <template v-else>
+          <button
+            type="button"
+            class="icon-btn"
+            title="收起"
+            aria-label="收起智能体"
+            @click="toggleAgentCollapsed"
+          >
+            <Icon name="panel-right-close" :size="14" />
+          </button>
+          <button
+            type="button"
+            class="icon-btn"
+            title="占满"
+            aria-label="智能体占满"
+            @click="enterFill('agent')"
+          >
+            <Icon name="maximize-2" :size="14" />
+          </button>
+        </template>
+      </div>
     </div>
 
     <div class="agent-panel__meta">
@@ -258,7 +366,7 @@ watch(
       </div>
 
       <p v-if="!agentTimeline.length" class="agent-panel__empty">
-        {{ generating ? '任务启动中…' : '点击「生成画像」后，此处按时间顺序展示过程' }}
+        {{ emptyTimelineLabel(generating) }}
       </p>
     </div>
 
@@ -268,13 +376,15 @@ watch(
       :pending="awaitingUserReply"
     />
 
+    <AgentPermissionCard v-if="pendingPermission" :pending="pendingPermission" />
+
     <div class="agent-panel__composer">
       <textarea
         v-model="agentPrompt"
         class="composer-input"
         rows="2"
-        placeholder="自由对话暂未开放，请用左侧流水线启动任务…"
-        :disabled="generating"
+        :placeholder="FREE_DIALOGUE_PLACEHOLDER"
+        :disabled="creatingSession || composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
         @keydown.enter.exact.prevent="onSend"
       />
       <p v-if="composerHint" class="composer-hint" role="status">{{ composerHint }}</p>
@@ -282,23 +392,37 @@ watch(
         <span class="composer-skill">
           {{ skillLabel }}
           <template v-if="awaitingUserReply"> · 任务在等你回复</template>
-          <template v-else-if="agentStatus === 'running'"> · 运行中</template>
-          <template v-else-if="agentStatus === 'done'"> · 完成</template>
-          <template v-else-if="agentStatus === 'error'"> · 异常</template>
+          <template v-else-if="latestTask"> · {{ agentMeta[0]?.value }}</template>
         </span>
-        <button
-          v-if="generating"
-          type="button"
-          class="btn-secondary btn-sm"
-          @click="onAbort"
-        >
-          中止
-        </button>
-        <button type="button" class="btn-primary btn-sm" :disabled="generating" @click="onSend">
-          <Icon name="send" :size="12" />
-          发送
-        </button>
+        <div class="composer-buttons">
+          <button
+            v-if="showDialogueStopButton(generating, dialogueBusy)"
+            type="button"
+            class="btn-secondary btn-sm"
+            @click="onStopDialogue"
+          >
+            停止
+          </button>
+          <button
+            v-if="showTaskAbortButton(generating)"
+            type="button"
+            class="btn-secondary btn-sm"
+            @click="onAbort"
+          >
+            中止
+          </button>
+          <button
+            type="button"
+            class="btn-primary btn-sm"
+            :disabled="creatingSession || composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
+            @click="onSend"
+          >
+            <Icon name="send" :size="12" />
+            发送
+          </button>
+        </div>
       </div>
     </div>
+    </template>
   </aside>
 </template>

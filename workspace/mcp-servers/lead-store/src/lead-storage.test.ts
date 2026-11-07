@@ -1052,8 +1052,8 @@ test("US-DD-01 corrupt scored file throws before any write", () => {
 
 test("US-DD-01 tool callbacks skip before write and do not mark skip as isError", () => {
   const source = readFileSync(fileURLToPath(new URL("../src/index.ts", import.meta.url)), "utf8");
-  const appendAt = source.indexOf('server.tool(\n  "lead_append_raw"');
-  const setAt = source.indexOf('server.tool(\n  "lead_set_company_intelligence"');
+  const appendAt = source.indexOf('businessTool(server,\n  "lead_append_raw"');
+  const setAt = source.indexOf('businessTool(server,\n  "lead_set_company_intelligence"');
   const listAt = source.indexOf('server.tool(\n  "lead_list_raw"');
   assert.ok(appendAt >= 0 && setAt > appendAt && listAt > setAt);
   const append = source.slice(appendAt, setAt);

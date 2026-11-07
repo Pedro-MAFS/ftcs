@@ -1,7 +1,10 @@
 /**
  * 等待用户回复：纯决策与主进程槽。
  * 不依赖 Electron。协议与文案以 US-AQ-00～03 为准。
+ * 启任务题（产品 / 阶段 / 渠道）超时按取消，不自动选第一项。
  */
+
+import { CHAT_START_CANCELLED, isChatStartQuestion } from './chat-start-task'
 
 export const AWAITING_REPLY_TIMEOUT_MS = 600_000
 
@@ -40,7 +43,7 @@ export type QuestionSideResult = 'ok' | 'not-found' | 'failed'
 
 export type AwaitTimeoutDecision =
   | { action: 'reply'; answers: string[][] }
-  | { action: 'reject'; reason: 'multiple' | 'no-options' | 'unrenderable' }
+  | { action: 'reject'; reason: 'multiple' | 'no-options' | 'unrenderable' | 'chat-start' }
 
 type MatchKey = {
   header: string
@@ -65,9 +68,13 @@ export function resolveAwaitingReplyTimeoutMs(
 
 export function decideAwaitingReplyTimeout(input: {
   renderable: boolean
-  questions: Array<{ multiple?: boolean; options?: Array<{ label?: string }> }>
+  questions: Array<{ header?: string; multiple?: boolean; options?: Array<{ label?: string }> }>
 }): AwaitTimeoutDecision {
   const questions = input.questions ?? []
+  const headers = questions.map((question) => (typeof question.header === 'string' ? question.header : ''))
+  if (isChatStartQuestion(headers)) {
+    return { action: 'reject', reason: 'chat-start' }
+  }
   if (input.renderable !== true || questions.length === 0) {
     return { action: 'reject', reason: 'unrenderable' }
   }
@@ -412,6 +419,7 @@ export type AwaitingQuestionClient = {
 type TimerHandle = { clear: () => void }
 
 export type AwaitingReplyHooks = {
+  needsExplicitAnswer?: () => boolean
   timeoutMs: () => number
   schedule: (ms: number, cb: () => void) => TimerHandle
   emit: (pending: AwaitingReplyView | null) => void
@@ -422,6 +430,11 @@ export type AwaitingReplyHooks = {
   performSessionAbort: () => Promise<void>
   onSlotCreated: () => void
   onSlotCleared: () => void
+  /**
+   * 提交成功且槽已清掉之后。题头和答案在清槽前抄出。
+   * fresh 为 false 表示请求已经不在（404），不要据此启动。
+   */
+  onSubmitted?: (info: { questions: DisplayQuestion[]; answers: string[][]; fresh: boolean }) => void
 }
 
 type Slot = {
@@ -522,6 +535,13 @@ export class AwaitingReplyCoordinator {
 
   whenIdle(): Promise<void> {
     return this.queue
+  }
+
+  /** 当前槽是启任务题（产品 + 阶段，渠道可选）。清槽后为 false。 */
+  isPendingChatStart(): boolean {
+    const slot = this.slot
+    if (!slot || slot.closed || !slot.renderable) return false
+    return isChatStartQuestion(slot.questions.map((question) => question.header))
   }
 
   private enqueue<T>(task: () => Promise<T>): Promise<T> {
@@ -635,12 +655,18 @@ export class AwaitingReplyCoordinator {
       return { ok: false, message: '' }
     }
     if (summary.allDone) {
+      const submitted = {
+        questions: slot.questions,
+        answers: built.answers,
+        fresh: !summary.anyNotFound,
+      }
       this.hooks.timeline(
         summary.anyNotFound
           ? AWAITING_REPLY_TIMELINE_ALREADY_DONE
           : AWAITING_REPLY_TIMELINE_SUBMITTED,
       )
       this.clearSlot()
+      this.hooks.onSubmitted?.(submitted)
       return { ok: true, message: '' }
     }
     this.hooks.logReject({
@@ -662,7 +688,7 @@ export class AwaitingReplyCoordinator {
     const slot = this.slot
     if (!slot || slot.closed || slot.inFlight) return
     const epoch = this.generation
-    const decision = decideAwaitingReplyTimeout({
+    const decision = this.hooks.needsExplicitAnswer?.() ? { action: 'reject', reason: 'explicit-answer' } as const : decideAwaitingReplyTimeout({
       renderable: slot.renderable,
       questions: slot.questions,
     })
@@ -700,7 +726,11 @@ export class AwaitingReplyCoordinator {
     if (this.generation !== epoch || slot.closed || this.slot !== slot) return
     slot.inFlight = null
     if (summary.allDone) {
-      this.hooks.timeline(AWAITING_REPLY_TIMELINE_TIMEOUT_REJECTED)
+      this.hooks.timeline(
+        decision.reason === 'chat-start'
+          ? CHAT_START_CANCELLED
+          : AWAITING_REPLY_TIMELINE_TIMEOUT_REJECTED,
+      )
       this.clearSlot()
       return
     }

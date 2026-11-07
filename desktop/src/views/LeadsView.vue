@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { useMainViewTabs } from '../composables/useMainViewTabs'
 import { useWorkflowExecute } from '../composables/useWorkflowExecute'
-import { ensureAgentReady } from '../composables/useAgentPreflight'
 import { showToast } from '../composables/useToast'
 import {
   canViewBuiltinWorkflowPlan,
@@ -21,19 +21,23 @@ import type { LeadRowDto, LeadsSnapshotDto, WorkflowPlan } from '../types/electr
 import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonScreen } from '../utils/leads-export'
 import { parseCompanyDomain } from '../utils/parse-company-domain'
 
+defineOptions({ name: 'LeadsView' })
 const meta = SECTION_META.leads
 const route = useRoute()
 const router = useRouter()
+const { openPageTab } = useMainViewTabs()
 const {
   activeProductId,
   exploreTasks,
   generating,
+  runningForProduct,
   agentSkill,
-  agentStatus,
-  refreshExploreTasks,
-  resetAgentForScoreAndDedupe,
-  resetAgentForDraftEmail,
-  resetAgentForEnrichContacts,
+  taskFinished,
+  leadsSnapshot,
+  emailDraftsSnapshot,
+
+
+
 } = useWorkspace()
 
 type FilterId = 'all' | 'raw' | 'scored' | 'discarded' | 'a' | 'b' | 'c' | 'mail'
@@ -46,6 +50,7 @@ const loading = ref(false)
 const exporting = ref(false)
 const scoring = ref(false)
 const drafting = ref(false)
+let launchedDraftTask: string | undefined
 const enriching = ref(false)
 const hunterVerifyEmails = ref(true)
 const hunterKeySet = ref(false)
@@ -79,19 +84,19 @@ const rows = computed(() => snapshot.value?.rows ?? [])
 const isScoring = computed(
   () =>
     scoring.value ||
-    (generating.value && agentSkill.value === 'score-and-dedupe'),
+    (runningForProduct.value && agentSkill.value === 'score-and-dedupe'),
 )
 
 const isDrafting = computed(
   () =>
     drafting.value ||
-    (generating.value && agentSkill.value === 'draft-outreach-email'),
+    (runningForProduct.value && agentSkill.value === 'draft-outreach-email'),
 )
 
 const isEnriching = computed(
   () =>
     enriching.value ||
-    (generating.value && agentSkill.value === 'enrich-lead-contacts'),
+    (runningForProduct.value && agentSkill.value === 'enrich-lead-contacts'),
 )
 
 const runOptions = computed(() => {
@@ -318,7 +323,26 @@ const canExport = computed(() => {
   )
 })
 
-async function refreshLeads(): Promise<void> {
+function reconcileLeadSelection(rows: LeadRowDto[], preserveDrawer = false) {
+  if (
+    selectedId.value &&
+    !rows.some((r) => r.id === selectedId.value)
+  ) {
+    selectedId.value = ''
+  }
+  if (
+    detailLead.value &&
+    !rows.some((r) => r.id === detailLead.value?.id)
+  ) {
+    if (!preserveDrawer) closeDrawer()
+  } else if (detailLead.value) {
+    const latest = rows.find((r) => r.id === detailLead.value?.id)
+    if (latest) detailLead.value = latest
+  }
+  applyLeadQueryFromRoute()
+}
+
+async function refreshLeads(preserveDrawer = false): Promise<void> {
   if (!window.ftcs?.listLeads || !activeProductId.value) {
     snapshot.value = null
     pendingHighIds.value = []
@@ -326,28 +350,16 @@ async function refreshLeads(): Promise<void> {
   }
   loading.value = true
   try {
-    void refreshExploreTasks()
-    snapshot.value = await window.ftcs.listLeads(activeProductId.value)
+    const pid = activeProductId.value
+    const leads = await window.ftcs.listLeads(pid)
+    if (pid !== activeProductId.value) return
+    snapshot.value = leads
     if (window.ftcs.listEmailDrafts) {
       const emails = await window.ftcs.listEmailDrafts(activeProductId.value)
+      if (pid !== activeProductId.value) return
       pendingHighIds.value = emails.pendingHighLeadIds ?? []
     }
-    if (
-      selectedId.value &&
-      !snapshot.value.rows.some((r) => r.id === selectedId.value)
-    ) {
-      selectedId.value = ''
-    }
-    if (
-      detailLead.value &&
-      !snapshot.value.rows.some((r) => r.id === detailLead.value?.id)
-    ) {
-      closeDrawer()
-    } else if (detailLead.value) {
-      const latest = snapshot.value.rows.find((r) => r.id === detailLead.value?.id)
-      if (latest) detailLead.value = latest
-    }
-    applyLeadQueryFromRoute()
+    reconcileLeadSelection(snapshot.value.rows, preserveDrawer)
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
     snapshot.value = null
@@ -529,27 +541,19 @@ async function onScoreClick(): Promise<void> {
     return
   }
 
-  const preflightError = await ensureAgentReady('score-and-dedupe')
-  if (preflightError) {
-    actionMessage.value = preflightError
-    return
-  }
-
   scoring.value = true
   actionMessage.value = ''
-  resetAgentForScoreAndDedupe(stats.value.raw)
 
   try {
     const res = await window.ftcs.scoreAndDedupeLeads(activeProductId.value)
     if (!res.ok) {
       actionMessage.value = res.message
-      agentStatus.value = 'error'
+
       return
     }
     actionMessage.value = res.message
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
-    agentStatus.value = 'error'
   } finally {
     scoring.value = false
   }
@@ -568,12 +572,6 @@ async function startDraftEmails(leadIds?: string[]): Promise<void> {
     return
   }
 
-  const preflightError = await ensureAgentReady('draft-email')
-  if (preflightError) {
-    actionMessage.value = preflightError
-    return
-  }
-
   try {
     const res = await window.ftcs.draftEmails({
       productId: activeProductId.value,
@@ -583,12 +581,12 @@ async function startDraftEmails(leadIds?: string[]): Promise<void> {
       showToast(res.message, { tone: 'error' })
       return
     }
+    launchedDraftTask = res.taskId
     drafting.value = true
-    resetAgentForDraftEmail(res.acceptedCount ?? targetCount)
+
     actionMessage.value = res.message
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
-    agentStatus.value = 'error'
   } finally {
     drafting.value = false
   }
@@ -650,15 +648,8 @@ async function startEnrichContacts(leadIds: string[]): Promise<void> {
     return
   }
 
-  const preflightError = await ensureAgentReady('enrich-lead-contacts')
-  if (preflightError) {
-    actionMessage.value = preflightError
-    return
-  }
-
   enriching.value = true
   actionMessage.value = ''
-  resetAgentForEnrichContacts(targets, hunterVerifyEmails.value)
 
   try {
     const res = await window.ftcs.enrichLeadContacts({
@@ -668,13 +659,12 @@ async function startEnrichContacts(leadIds: string[]): Promise<void> {
     })
     if (!res.ok) {
       actionMessage.value = res.message
-      agentStatus.value = 'error'
+
       return
     }
     actionMessage.value = res.message
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
-    agentStatus.value = 'error'
   } finally {
     enriching.value = false
   }
@@ -693,13 +683,11 @@ function onEnrichLead(lead: LeadRowDto): void {
 }
 
 function goEmail(): void {
-  router.push({ name: 'email' }).catch(() => undefined)
+  void openPageTab('email')
 }
 
 function goEmailLead(lead: LeadRowDto): void {
-  router
-    .push({ name: 'email', query: { leadId: lead.id } })
-    .catch(() => undefined)
+  void openPageTab('email', { leadId: lead.id })
 }
 
 async function onExportCsv(): Promise<void> {
@@ -791,42 +779,14 @@ watch(
   },
 )
 
-watch(agentStatus, (status) => {
-  if (
-    (status === 'done' || status === 'error') &&
-    (agentSkill.value === 'discover-leads' ||
-      agentSkill.value === 'discover-leads-r2' ||
-      agentSkill.value === 'discover-leads-r3')
-  ) {
-    void refreshLeads()
-  }
-  if (
-    (status === 'done' || status === 'error') &&
-    agentSkill.value === 'score-and-dedupe'
-  ) {
-    void refreshLeads().then(() => {
-      if (status === 'done' && stats.value.scored > 0) {
-        activeFilter.value = 'scored'
-      }
-    })
-  }
-  if (
-    (status === 'done' || status === 'error') &&
-    agentSkill.value === 'draft-outreach-email'
-  ) {
-    void refreshLeads().then(() => {
-      if (status === 'done') goEmail()
-    })
-  }
-  if (
-    (status === 'done' || status === 'error') &&
-    agentSkill.value === 'enrich-lead-contacts'
-  ) {
-    void refreshLeads()
-  }
+watch(taskFinished, task => {
+  if (!task || task.scope.product_id !== activeProductId.value || !leadsSnapshot.value) return
+  snapshot.value = leadsSnapshot.value
+  pendingHighIds.value = emailDraftsSnapshot.value?.pendingHighLeadIds ?? []
+  reconcileLeadSelection(snapshot.value.rows)
+  if (task.task_id === launchedDraftTask && task.state === 'succeeded') goEmail()
+  if (task.task_type === 'score-and-dedupe' && task.state === 'succeeded' && stats.value.scored) activeFilter.value = 'scored'
 })
-
-let pollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   applyRunQueryFromRoute()
@@ -835,14 +795,8 @@ onMounted(() => {
     hunterKeySet.value = Boolean(s.hunterApiKeySet)
     hunterVerifyEmails.value = s.hunterVerifyEmails !== false
   })
-  pollTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') void refreshLeads()
-  }, 8000)
 })
 
-onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer)
-})
 </script>
 
 <template>
@@ -853,6 +807,10 @@ onUnmounted(() => {
         <p>{{ subtitle }}</p>
       </div>
       <div class="main-pane__actions">
+        <button type="button" class="btn-secondary" :disabled="loading" @click="refreshLeads(true)">
+          <Icon name="refresh-cw" :size="12" />
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
         <button
           type="button"
           class="btn-secondary"

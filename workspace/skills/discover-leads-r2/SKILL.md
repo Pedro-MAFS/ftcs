@@ -28,6 +28,12 @@ outputs:
 - 用户说「开始 R2」「社媒获客」「按 discover-leads-r2 执行」
 - 探索页点「开始 R2」（桌面 IPC `exploration:start-r2`）
 
+## 任务调用
+
+通过产品列表确认 `scope.product_id`。可在 parameters 指定 max_queries，使用桌面返回的本轮渠道和数量限制。
+
+必填不明确时用 `question` 补齐，用户取消就结束。参数齐全后在当前会话调用 `lead-store.task_begin`，task_type 为 `discover-leads-r2`。收到 running 后按 `prepared.instructions` 和下面的步骤执行；收尾调用 `lead-store.task_done`，传回本次 task_id 和实际结果。调用格式见工作区 AGENTS.md。
+
 ## 前置条件
 
 - MCP `lead-store`、`search-api`、`chrome-devtools`（user-chrome-devtools）已配置

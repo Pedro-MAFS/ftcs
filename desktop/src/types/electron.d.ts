@@ -57,7 +57,14 @@ export type AwaitingUserReply = {
   renderable: boolean
 } | null
 
+export type PermissionAskView = {
+  permission: string
+  tool?: string
+} | null
+
 export type AgentEventPayload =
+  | { type: 'session.created' }
+  | { type: 'task.changed'; task: import('../../electron/tasks/lifecycle').TaskRecord }
   | {
       type: 'state'
       skill: string
@@ -83,6 +90,10 @@ export type AgentEventPayload =
   | {
       type: 'awaiting-reply'
       pending: AwaitingUserReply
+    }
+  | {
+      type: 'permission-ask'
+      pending: PermissionAskView
     }
 
 export interface ProfileGenerateInput {
@@ -148,6 +159,7 @@ export interface ProfileSaveResult {
 }
 
 export interface ProfileGenerateResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -155,6 +167,7 @@ export interface ProfileGenerateResult {
 }
 
 export interface KeywordsExpandResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -270,7 +283,7 @@ export type ScheduleTriggerPayload = {
   scheduleId: string
   productId: string
   planId: string
-  reason: 'due' | 'catch-up'
+  reason: 'due'
 }
 
 export interface WorkflowListPlansResult {
@@ -297,6 +310,7 @@ export interface DiscoverLeadsInput {
 }
 
 export interface DiscoverLeadsResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -483,6 +497,7 @@ export interface ScoredLeadsSummaryDto {
 }
 
 export interface ScoreAndDedupeResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -563,6 +578,7 @@ export interface DraftEmailsInput {
 }
 
 export interface DraftEmailsResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -701,6 +717,7 @@ export interface DraftEmailSlotInput {
 }
 
 export interface DraftEmailSlotResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -715,6 +732,7 @@ export interface GenerateEmailDraftZhInput {
 }
 
 export interface GenerateEmailDraftZhResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -757,6 +775,42 @@ export interface BuiltinBrowserUiState {
   mode: BuiltinBrowserMode
   title: string
   url: string
+}
+
+export interface BuiltinBrowserSlot {
+  x: number
+  y: number
+  width: number
+  height: number
+  visible: boolean
+  browserKey: string
+}
+
+export interface BuiltinBrowserTabSnapshot {
+  browserKey: string
+  title: string
+  url: string
+  origin: 'user' | 'task'
+  taskId: string | null
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
+export interface BuiltinBrowserTabsPayload {
+  tabs: BuiltinBrowserTabSnapshot[]
+  focusKey: string | null
+}
+
+export interface MainViewLayoutPrefs {
+  ratios: { pipeline: number; main: number; agent: number }
+  pipelineCollapsed: boolean
+  agentCollapsed: boolean
+  fill: 'none' | 'main' | 'agent'
+  beforeFill: {
+    ratios: { pipeline: number; main: number; agent: number }
+    pipelineCollapsed: boolean
+    agentCollapsed: boolean
+  } | null
 }
 
 export interface RawLeadContactEditDto {
@@ -854,6 +908,15 @@ export interface ExportLeadsCsvResult {
   message: string
 }
 
+export interface SaveTextToDownloadsInput {
+  suggestedName: string
+  content: string
+}
+
+export type SaveTextToDownloadsResult =
+  | { ok: true; path: string }
+  | { ok: false; error: string }
+
 declare global {
   interface Window {
     ftcs?: {
@@ -867,6 +930,15 @@ declare global {
       getBuiltinBrowserState: () => Promise<BuiltinBrowserUiState>
       showBuiltinBrowser: () => Promise<BuiltinBrowserUiState>
       onBuiltinBrowserState: (callback: (state: BuiltinBrowserUiState) => void) => () => void
+      getBuiltinBrowserTabs: () => Promise<BuiltinBrowserTabsPayload>
+      onBuiltinBrowserTabs: (callback: (payload: BuiltinBrowserTabsPayload) => void) => () => void
+      openBuiltinBrowserTab: () => Promise<{ key: string }>
+      closeBuiltinBrowserTab: (key: string) => Promise<boolean>
+      navigateBuiltinBrowser: (key: string, url: string) => Promise<boolean>
+      controlBuiltinBrowser: (key: string, action: 'back' | 'forward' | 'reload') => Promise<void>
+      setBuiltinBrowserSlot: (slot: BuiltinBrowserSlot) => Promise<void>
+      getMainViewLayout: () => Promise<MainViewLayoutPrefs | null>
+      setMainViewLayout: (layout: MainViewLayoutPrefs) => Promise<MainViewLayoutPrefs | null>
       startOpenCode: () => Promise<OpenCodeActionResult>
       stopOpenCode: () => Promise<OpenCodeActionResult>
       restartOpenCode: () => Promise<AppStatus>
@@ -940,6 +1012,9 @@ declare global {
       getOfficeCliReady: () => Promise<OfficeCliReadyResult>
       quitApp: () => Promise<{ ok: boolean }>
       getAppVersion: () => Promise<string>
+      saveTextToDownloads: (
+        input: SaveTextToDownloadsInput,
+      ) => Promise<SaveTextToDownloadsResult>
       checkForUpdate: (opts?: { forceNotify?: boolean }) => Promise<UpdateCheckResult>
       snoozeUpdate: () => Promise<{ ok: boolean }>
       dismissUpdate: (version: string) => Promise<{ ok: boolean }>
@@ -1039,9 +1114,18 @@ declare global {
       moveLibraryEntry: (relativePath: string, destDir: string, cwd?: string) => Promise<LibraryMutationResult>
       generateProfile: (input: ProfileGenerateInput) => Promise<ProfileGenerateResult>
       abortProfile: () => Promise<{ ok: boolean }>
+      createAgentSession: () => Promise<{ ok: boolean; message: string }>
+      currentAgentSession: () => Promise<string | null>
+      sendAgentMessage: (text: string, productId?: string) => Promise<{
+        ok: boolean
+        message: string
+        accepted: boolean
+      }>
+      noteActiveProduct: (productId: string) => Promise<{ ok: boolean }>
       replyQuestion: (input: {
         selections: Array<{ optionLabels: string[]; customText: string }>
       }) => Promise<{ ok: boolean; message: string }>
+      replyPermission: (reply: 'once' | 'reject') => Promise<{ ok: boolean; message: string }>
       getProfile: (productId: string) => Promise<ProfileDetail | null>
       listProfiles: () => Promise<ProfileSummary[]>
       saveProfile: (input: ProfileSaveInput) => Promise<ProfileSaveResult>
@@ -1103,6 +1187,8 @@ declare global {
       }>
       rejectEmailDraft: (input: RejectEmailDraftInput) => Promise<RejectEmailDraftResult>
       approveEmailDraft: (input: ApproveEmailDraftInput) => Promise<ApproveEmailDraftResult>
+      taskSnapshot: () => Promise<import('../../electron/tasks/lifecycle').TaskRecord[]>
+      launchWorkflowStep: (node: WorkflowNodeId, productId: string, origin: 'workflow' | 'schedule') => Promise<string>
       onAgentEvent: (handler: (payload: AgentEventPayload) => void) => () => void
       restartSidecar: () => Promise<AppStatus>
       getSidecarLogs: () => Promise<string[]>

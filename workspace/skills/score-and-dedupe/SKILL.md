@@ -23,6 +23,12 @@ outputs:
 - 用户说「线索评分」「去重」「整理线索」「哪些客户更值得跟进」
 - 进入 `draft-outreach-email` 之前
 
+## 任务调用
+
+通过产品列表确认 `scope.product_id`。parameters 使用空对象。
+
+必填不明确时用 `question` 补齐，用户取消就结束。参数齐全后在当前会话调用 `lead-store.task_begin`，task_type 为 `score-and-dedupe`。收到 running 后按 `prepared.instructions` 和下面的步骤执行；收尾调用 `lead-store.task_done`，传回本次 task_id 和实际结果。调用格式见工作区 AGENTS.md。
+
 ## 前置条件
 
 - MCP `lead-store` 已配置

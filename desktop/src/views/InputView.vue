@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import type { LibrarySnapshot, LibraryTreeNode } from '../types/library'
 import { useWorkspace } from '../composables/useWorkspace'
-import { ensureAgentReady } from '../composables/useAgentPreflight'
+import { useMainViewTabs } from '../composables/useMainViewTabs'
 import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
 import LibraryTree from '../components/library/LibraryTree.vue'
@@ -33,8 +32,9 @@ import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import OfficeCliGenerateGateDialog from '../components/library/OfficeCliGenerateGateDialog.vue'
 
 const meta = SECTION_META.input
-const router = useRouter()
-const { resetAgentForGenerate, clearAgentStartFailed, generating } = useWorkspace()
+defineOptions({ name: 'InputView' })
+const { openPageTab } = useMainViewTabs()
+const { generating } = useWorkspace()
 
 const websiteUrl = ref('')
 const savingWebsite = ref(false)
@@ -953,20 +953,11 @@ async function openOfficeGateManual() {
 async function runGenerate(websitePaths: string[], fileList: string[]) {
   if (!window.ftcs?.generateProfile) return
 
-  const preflightError = await ensureAgentReady('extract-profile', {
-    requireBuiltinBrowser: websitePaths.length > 0,
-  })
-  if (preflightError) {
-    error.value = preflightError
-    return
-  }
-
   busy.value = true
   error.value = ''
   message.value = ''
   const plainWebsites = Array.from(websitePaths, (p) => String(p))
   const plainFiles = Array.from(fileList, (p) => String(p))
-  resetAgentForGenerate(plainWebsites.length + plainFiles.length)
 
   try {
     const res = await window.ftcs.generateProfile({
@@ -975,17 +966,16 @@ async function runGenerate(websitePaths: string[], fileList: string[]) {
     })
     if (!res.ok) {
       error.value = res.message
-      clearAgentStartFailed()
+
       return
     }
     message.value = res.message
     if (res.skipped?.length) {
       message.value += `（跳过：${res.skipped.join('；')}）`
     }
-    await router.push({ name: 'profile' })
+    await openPageTab('profile')
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
-    clearAgentStartFailed()
   } finally {
     busy.value = false
   }

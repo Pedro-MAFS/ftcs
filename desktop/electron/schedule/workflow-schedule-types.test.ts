@@ -3,7 +3,6 @@ import { describe, it } from 'node:test'
 import {
   computeLastDueAt,
   isDueNow,
-  needsCatchUp,
   isValidTimeLocal,
   slotKey,
 } from './workflow-schedule-types.ts'
@@ -47,8 +46,7 @@ describe('workflow-schedule-types', () => {
     )
   })
 
-  it('needsCatchUp within 24h', () => {
-    const now = new Date(2026, 8, 20, 12, 0, 0)
+  it('does not run a missed schedule outside its scheduled minute', () => {
     const base = {
       id: 'sch_1',
       productId: 'p',
@@ -56,19 +54,14 @@ describe('workflow-schedule-types', () => {
       enabled: true,
       recurrence: 'daily' as const,
       weekday: null,
-      timeLocal: '09:00',
+      timeLocal: '23:05',
       createdAt: '',
       updatedAt: '',
       lastRunAt: null,
     }
-    assert.equal(needsCatchUp(base, now), true)
-    assert.equal(
-      needsCatchUp(
-        { ...base, lastRunAt: new Date(2026, 8, 20, 9, 0, 0).toISOString() },
-        now,
-      ),
-      false,
-    )
+    assert.equal(isDueNow(base, new Date(2026, 8, 20, 9, 0, 0)), false)
+    assert.equal(isDueNow(base, new Date(2026, 8, 20, 23, 5, 30)), true)
+    assert.equal(isDueNow(base, new Date(2026, 8, 20, 23, 6, 0)), false)
   })
 
   it('slotKey stable', () => {

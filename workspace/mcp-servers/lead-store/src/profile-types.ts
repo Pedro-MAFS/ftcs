@@ -60,7 +60,7 @@ export const ProductProfileSchema = z.object({
   version: z.number().default(1),
   created_at: z.string(),
   updated_at: z.string(),
-  status: z.enum(["draft", "ready", "archived"]),
+  status: z.enum(["draft", "ready", "archived", "deleted"]),
   readiness: ReadinessSchema,
   company: CompanySchema.default({}),
   products: z.array(ProductItemSchema).default([]),

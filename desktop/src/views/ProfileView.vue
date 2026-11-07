@@ -1,24 +1,26 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
-import { ensureAgentReady } from '../composables/useAgentPreflight'
+import { useMainViewTabs } from '../composables/useMainViewTabs'
 import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
 import type { ProfileDetail, ProfileSaveInput } from '../types/electron'
 
-const router = useRouter()
+defineOptions({ name: 'ProfileView' })
+const { openPageTab } = useMainViewTabs()
 const meta = SECTION_META.profile
 const {
   currentProfile,
+  latestTask,
   activeProductId,
   generating,
+  runningForProduct,
   agentStatus,
   loadActiveProfile,
   refreshProducts,
   applyProfileToState,
-  resetAgentForExpandKeywords,
+
 } = useWorkspace()
 
 interface ProductDraft {
@@ -47,6 +49,7 @@ const expandedIndex = ref(0)
 const draft = ref<ProfileDraft | null>(null)
 const baseline = ref('')
 const saving = ref(false)
+const refreshing = ref(false)
 const saveMessage = ref('')
 const saveError = ref(false)
 
@@ -192,7 +195,7 @@ const dirty = computed(() => {
 })
 
 const readinessLabel = computed(() => {
-  if (generating.value) return '生成中…'
+  if (runningForProduct.value && latestTask.value?.task_type === 'extract-product-profile') return '生成中…'
   const p = currentProfile.value
   if (!p) return '—'
   return p.readinessScore != null ? `${p.readinessScore}%` : '—'
@@ -282,6 +285,19 @@ async function reload(): Promise<void> {
   syncDraftFromProfile(currentProfile.value)
 }
 
+async function refreshProfile(): Promise<void> {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    await refreshProducts()
+    if (dirty.value) showToast('画像已刷新，未保存的修改已保留')
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : '刷新画像失败', { tone: 'error' })
+  } finally {
+    refreshing.value = false
+  }
+}
+
 async function save(): Promise<void> {
   if (!draft.value || !activeProductId.value || !window.ftcs?.saveProfile) return
   saving.value = true
@@ -320,7 +336,7 @@ async function createExploreTask(): Promise<void> {
   expandError.value = ''
 
   if (dirty.value) {
-    expandError.value = '请先保存画像修改，再新建探索任务'
+    expandError.value = '请先保存画像修改，再扩展关键词'
     return
   }
   if (currentProfile.value?.status !== 'ready') {
@@ -328,25 +344,18 @@ async function createExploreTask(): Promise<void> {
     return
   }
 
-  const preflightError = await ensureAgentReady('expand-keywords')
-  if (preflightError) {
-    expandError.value = preflightError
-    return
-  }
-
-  resetAgentForExpandKeywords()
   try {
     const res = await window.ftcs.expandKeywords(activeProductId.value)
     if (!res.ok) {
       expandError.value = res.message
       // 启动失败时恢复 Agent 面板状态（成功启动则由 agent:event 接管）
-      agentStatus.value = 'error'
+
       return
     }
-    await router.push({ name: 'explore' })
+    await openPageTab('explore')
   } catch (err) {
     expandError.value = err instanceof Error ? err.message : String(err)
-    agentStatus.value = 'error'
+
   }
 }
 </script>
@@ -359,13 +368,18 @@ async function createExploreTask(): Promise<void> {
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
+        <button type="button" class="btn-secondary" :disabled="refreshing || saving" @click="refreshProfile">
+          <Icon name="refresh-cw" :size="12" />
+          {{ refreshing ? '刷新中…' : '刷新' }}
+        </button>
         <button
+          v-if="dirty"
           type="button"
           class="btn-secondary"
           :disabled="generating || saving"
           @click="reload"
         >
-          {{ dirty ? '放弃修改' : '刷新' }}
+          放弃修改
         </button>
         <button
           type="button"
@@ -391,7 +405,7 @@ async function createExploreTask(): Promise<void> {
           @click="createExploreTask"
         >
           <Icon name="radar" :size="12" />
-          新建探索任务
+          扩展关键词
         </button>
       </div>
     </header>
@@ -420,7 +434,7 @@ async function createExploreTask(): Promise<void> {
         生成失败，请查看右侧 Agent 日志后重试。
       </p>
       <p v-else-if="!currentProfile" class="library-feedback muted">
-        尚未生成画像。请到「录入」勾选网站/文件后点击「生成画像」。
+        尚未生成画像。请到「资料」勾选网站/文件后点击「生成画像」。
       </p>
 
       <template v-if="draft">

@@ -11,20 +11,26 @@ import {
 } from './cdp-gateway'
 import {
   destroyBuiltinBrowserWindow,
+  closeBrowserTab,
+  controlBuiltinBrowser,
   ensureBuiltinBrowserWindow,
   getBuiltinBrowserMode,
+  getBuiltinBrowserTabs,
   getBuiltinBrowserUiState,
   isBuiltinBrowserQuitting,
   isBuiltinWindowAlive,
+  navigateBuiltinBrowser,
   noteBuiltinBrowserQuitting,
   onBuiltinBrowserUi,
+  openUserBuiltinBrowserTab,
   setBuiltinBrowserMode,
+  setBuiltinBrowserSlot,
   notePrimaryBrowserTarget,
   reinforceBuiltinBrowserViewport,
   showBuiltinBrowserFromTitleBar,
   showBuiltinBrowserInactive,
 } from './builtin-browser-window'
-import type { BuiltinBrowserStatus, BuiltinBrowserUiState } from './types'
+import type { BuiltinBrowserSlot, BuiltinBrowserStatus, BuiltinBrowserTabsPayload, BuiltinBrowserUiState } from './types'
 import { isBuiltinBrowserMode, modeAfterEnsure } from './window-policy'
 
 export {
@@ -156,6 +162,28 @@ export function registerBuiltinBrowserIpc(): void {
   ipcMain.handle(IPC.BUILTIN_BROWSER_SET_MODE, async (_event, next: BuiltinBrowserMode) => {
     if (isBuiltinBrowserMode(next)) await setBuiltinBrowserMode(next)
     return getBuiltinBrowserUiState()
+  })
+  ipcMain.handle(IPC.BUILTIN_BROWSER_GET_TABS, (): BuiltinBrowserTabsPayload => getBuiltinBrowserTabs())
+  ipcMain.handle(IPC.BUILTIN_BROWSER_OPEN, () => openUserBuiltinBrowserTab())
+  ipcMain.handle(IPC.BUILTIN_BROWSER_CLOSE, (_event, key: string) => closeBrowserTab(String(key ?? '')))
+  ipcMain.handle(IPC.BUILTIN_BROWSER_NAVIGATE, (_event, key: string, url: string) =>
+    navigateBuiltinBrowser(String(key ?? ''), String(url ?? '')),
+  )
+  ipcMain.handle(IPC.BUILTIN_BROWSER_CONTROL, (_event, key: string, action: string) => {
+    if (action === 'back' || action === 'forward' || action === 'reload') {
+      controlBuiltinBrowser(String(key ?? ''), action)
+    }
+  })
+  ipcMain.handle(IPC.BUILTIN_BROWSER_SET_SLOT, (_event, slot: BuiltinBrowserSlot) => {
+    if (!slot || typeof slot !== 'object') return
+    setBuiltinBrowserSlot({
+      x: Number(slot.x) || 0,
+      y: Number(slot.y) || 0,
+      width: Number(slot.width) || 0,
+      height: Number(slot.height) || 0,
+      visible: Boolean(slot.visible),
+      browserKey: typeof slot.browserKey === 'string' ? slot.browserKey : '',
+    })
   })
 }
 

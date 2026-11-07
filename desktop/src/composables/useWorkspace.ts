@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type {
   AgentMetaItem,
   AgentTimelineItem,
@@ -9,6 +9,7 @@ import type {
 import type {
   AgentEventPayload,
   AwaitingUserReply,
+  PermissionAskView,
   EmailDraftsSnapshotDto,
   ExploreTasksSnapshotDto,
   KeywordExpansionDto,
@@ -27,6 +28,15 @@ const emailDraftsSnapshot = ref<EmailDraftsSnapshotDto | null>(null)
 
 export const pipelineSteps = ref<PipelineStep[]>(pendingPipelineSteps())
 
+type Task = Extract<AgentEventPayload, { type: 'task.changed' }>['task']
+const latestTask = ref<Task | null>(null)
+const taskFinished = ref<Task | null>(null)
+let selectionVersion = 0
+let profileStartSelection: number | undefined
+let artifactsVersion = 0
+let profileVersion = 0
+let productsVersion = 0
+let sessionVersion = 0
 const agentSkill = ref('extract-product-profile')
 const agentStatus = ref<'idle' | 'running' | 'done' | 'error'>('idle')
 const agentMeta = ref<AgentMetaItem[]>([
@@ -38,7 +48,12 @@ const agentTimeline = ref<AgentTimelineItem[]>([])
 const agentExpanded = ref<Record<string, boolean>>({})
 const agentPrompt = ref('')
 const awaitingUserReply = ref<AwaitingUserReply>(null)
+const pendingPermission = ref<PermissionAskView>(null)
+/** 自由回复这一轮。不写入 agentStatus，流水线不会把它当成任务在跑。 */
+const dialogueBusy = ref(false)
 const generating = computed(() => agentStatus.value === 'running')
+
+const runningForProduct = computed(() => generating.value && latestTask.value?.scope.product_id === activeProductId.value)
 
 const activeProduct = computed(
   () => products.value.find((p) => p.id === activeProductId.value) ?? products.value[0],
@@ -55,6 +70,7 @@ const SECTION_SKILL: Partial<Record<WorkspaceSection, string>> = {
 
 let agentBound = false
 let productsLoaded = false
+let productNoteBound = false
 let pipelineReady: Promise<void> | null = null
 
 const PRODUCT_PREVIEW_COUNT = 3
@@ -124,6 +140,7 @@ function toProductSummary(profile: {
 }
 
 async function refreshPipelineArtifacts(): Promise<void> {
+  const version = ++artifactsVersion
   const pid = activeProductId.value
   if (!pid || !window.ftcs) {
     exploreTasks.value = null
@@ -138,6 +155,7 @@ async function refreshPipelineArtifacts(): Promise<void> {
     window.ftcs.listLeads?.(pid) ?? Promise.resolve(null),
     window.ftcs.listEmailDrafts?.(pid) ?? Promise.resolve(null),
   ])
+  if (pid !== activeProductId.value || version !== artifactsVersion) return
   exploreTasks.value = explore
   currentExpansion.value = explore?.expansion ?? null
   leadsSnapshot.value = leads
@@ -149,14 +167,16 @@ async function refreshExploreTasks(): Promise<void> {
   await refreshPipelineArtifacts()
 }
 
-async function refreshProducts(): Promise<void> {
+async function refreshProducts(loadSelected = true): Promise<void> {
   if (!window.ftcs?.listProfiles) return
+  const version = ++productsVersion
   const list = await window.ftcs.listProfiles()
+  if (version !== productsVersion) return
   products.value = list.map(toProductSummary)
   if (!activeProductId.value && products.value[0]) {
     activeProductId.value = products.value[0].id
   }
-  if (activeProductId.value) {
+  if (loadSelected && activeProductId.value) {
     await loadActiveProfile()
     await refreshPipelineArtifacts()
   }
@@ -168,7 +188,11 @@ async function loadActiveProfile(): Promise<void> {
     currentProfile.value = null
     return
   }
-  currentProfile.value = await window.ftcs.getProfile(activeProductId.value)
+  const pid = activeProductId.value
+  const version = ++profileVersion
+  const profile = await window.ftcs.getProfile(pid)
+  if (pid !== activeProductId.value || version !== profileVersion) return
+  currentProfile.value = profile
   updatePipelineFromProfile()
 }
 
@@ -179,25 +203,26 @@ function updatePipelineFromProfile(): void {
     return
   }
 
+  const runningHere = runningForProduct.value
   const generatingProfile =
-    agentStatus.value === 'running' && agentSkill.value === 'extract-product-profile'
+    runningHere && agentSkill.value === 'extract-product-profile'
   const expandingKeywords =
-    agentStatus.value === 'running' && agentSkill.value === 'expand-keywords'
+    runningHere && agentSkill.value === 'expand-keywords'
   const exploring =
-    agentStatus.value === 'running' &&
+    runningHere &&
     (agentSkill.value === 'discover-leads' ||
       agentSkill.value === 'discover-leads-r2' ||
       agentSkill.value === 'discover-leads-r3')
   const scoring =
-    agentStatus.value === 'running' && agentSkill.value === 'score-and-dedupe'
+    runningHere && ['score-and-dedupe', 'enrich-lead-contacts'].includes(agentSkill.value)
   const drafting =
-    agentStatus.value === 'running' && agentSkill.value === 'draft-outreach-email'
+    runningHere && ['draft-outreach-email', 'translate-outreach-email'].includes(agentSkill.value)
 
   pipelineSteps.value = derivePipelineSteps({
     profileReady: profile.status === 'ready',
     hasKeywords: !!currentExpansion.value,
     hasExploreCompleted: (exploreTasks.value?.summary.completed ?? 0) > 0,
-    hasExploreRunning: (exploreTasks.value?.summary.running ?? 0) > 0,
+    hasExploreRunning: exploring,
     scoredCount: leadsSnapshot.value?.stats.scored ?? 0,
     emailDraftCount: emailDraftsSnapshot.value?.stats.total ?? 0,
     generatingProfile,
@@ -208,19 +233,55 @@ function updatePipelineFromProfile(): void {
   })
 }
 
+const taskLabels = {
+  preparing: '准备中', running: '执行中', succeeded: '已完成', partial: '部分完成',
+  failed: '失败', cancelled: '已取消', interrupted: '已中断',
+}
+
+function applyTask(task: Task, fromSnapshot = false): void {
+  const prev = latestTask.value
+  if (prev?.task_id === task.task_id && prev.revision >= task.revision) return
+  if (fromSnapshot && prev && prev.task_id !== task.task_id) return
+  if (!fromSnapshot && task.task_type === 'extract-product-profile' && task.state === 'preparing' && prev?.task_id !== task.task_id) {
+    profileStartSelection = task.scope.product_id ? undefined : selectionVersion
+  }
+  latestTask.value = task
+  agentSkill.value = task.task_type
+  agentStatus.value = !task.finished_at ? 'running' : task.state === 'succeeded' ? 'done' : 'error'
+  agentMeta.value = [
+    { label: '状态', value: taskLabels[task.state], tone: !task.finished_at ? 'accent' : task.state === 'succeeded' ? 'success' : 'warning' },
+    { label: '说明', value: task.message },
+  ]
+  if (task.result?.completed_count != null) agentMeta.value.push({ label: '完成数', value: String(task.result.completed_count) })
+  updatePipelineFromProfile()
+  if (!task.finished_at || fromSnapshot) return
+  const pid = task.scope.product_id
+  if (task.task_type === 'extract-product-profile') {
+    if (pid && task.state === 'succeeded' && profileStartSelection === selectionVersion) activeProductId.value = pid
+    profileStartSelection = undefined
+    void refreshProducts(pid === activeProductId.value).then(() => { taskFinished.value = task })
+  } else if (pid === activeProductId.value) {
+    void refreshPipelineArtifacts().then(() => { taskFinished.value = task })
+  }
+}
+
 function handleAgentEvent(payload: AgentEventPayload): void {
-  if (payload.type === 'state') {
-    agentSkill.value = payload.skill
-    agentStatus.value = payload.status
-    agentMeta.value = payload.meta.map((m) => ({
-      label: m.label,
-      value: m.value,
-      tone: (m.tone as AgentMetaItem['tone']) || undefined,
-    }))
-    if (payload.productId) {
-      activeProductId.value = payload.productId
-    }
+  if (payload.type === 'session.created') {
+    sessionVersion++
+    latestTask.value = null
+    agentSkill.value = 'idle'
+    agentStatus.value = 'idle'
+    agentMeta.value = []
+    agentTimeline.value = []
+    agentExpanded.value = {}
+    agentPrompt.value = ''
+    awaitingUserReply.value = null
+    pendingPermission.value = null
     updatePipelineFromProfile()
+    return
+  }
+  if (payload.type === 'task.changed') {
+    applyTask(payload.task)
     return
   }
   if (payload.type === 'timeline') {
@@ -231,20 +292,11 @@ function handleAgentEvent(payload: AgentEventPayload): void {
     awaitingUserReply.value = payload.pending
     return
   }
-  if (payload.type === 'done') {
-    awaitingUserReply.value = null
-    agentStatus.value = payload.ok ? 'done' : 'error'
-    if (payload.profile) {
-      applyProfileToState(payload.profile)
-      activeProductId.value = payload.profile.id
-    }
-    if (payload.expansion) {
-      currentExpansion.value = payload.expansion
-    }
-    void refreshProducts()
-    void refreshPipelineArtifacts()
-    updatePipelineFromProfile()
+  if (payload.type === 'permission-ask') {
+    pendingPermission.value = payload.pending
+    return
   }
+
 }
 
 function applyProfileToState(profile: ProfileDetail): void {
@@ -260,6 +312,25 @@ function ensureWorkspaceBindings(): void {
   if (!agentBound && window.ftcs?.onAgentEvent) {
     window.ftcs.onAgentEvent(handleAgentEvent)
     agentBound = true
+    const version = sessionVersion
+    void Promise.all([
+      window.ftcs.taskSnapshot?.() ?? Promise.resolve([]),
+      window.ftcs.currentAgentSession?.() ?? Promise.resolve(null),
+    ]).then(([history, sessionId]) => {
+      if (version !== sessionVersion) return
+      const matching = sessionId ? history.filter(task => task.session_id === sessionId) : history
+      const last = matching[matching.length - 1]
+      if (last) applyTask(last, true)
+    }).catch(() => undefined)
+  }
+  if (!productNoteBound && typeof window !== 'undefined') {
+    productNoteBound = true
+    watch(activeProductId, (id) => {
+      selectionVersion++
+      const note = window.ftcs?.noteActiveProduct
+      if (!note) return
+      void note(id)
+    }, { flush: 'sync' })
   }
   if (!productsLoaded) {
     productsLoaded = true
@@ -335,132 +406,9 @@ export function useWorkspace() {
   }
 
   function setAgentContext(section: WorkspaceSection): void {
-    if (agentStatus.value !== 'running') {
+    if (!latestTask.value) {
       agentSkill.value = SECTION_SKILL[section] ?? 'idle'
     }
-  }
-
-  function resetTimelineView(): void {
-    agentTimeline.value = []
-    agentExpanded.value = {}
-  }
-
-  function resetAgentForGenerate(selectedCount: number): void {
-    agentSkill.value = 'extract-product-profile'
-    agentStatus.value = 'running'
-    resetTimelineView()
-    agentMeta.value = [
-      { label: '就绪度', value: '生成中', tone: 'accent' },
-      { label: '选中', value: `${selectedCount} 项` },
-      { label: '来源', value: '资料库' },
-    ]
-    updatePipelineFromProfile()
-  }
-
-  /** 生成未真正启动（如无可导入资料）时解除右侧面板占用 */
-  function clearAgentStartFailed(): void {
-    agentStatus.value = 'idle'
-    resetTimelineView()
-    agentMeta.value = []
-  }
-
-  function productStatusLabel(): string {
-    const name =
-      activeProduct.value?.name?.trim() || activeProduct.value?.companyName?.trim() || ''
-    if (!name || name === activeProductId.value) return '当前产品'
-    return name
-  }
-
-  function leadStatusLabel(leadId: string): string {
-    const row = leadsSnapshot.value?.rows.find((item) => item.id === leadId)
-    const name = row?.companyName?.trim()
-    return name || '—'
-  }
-
-  function recipientStatusLabel(key: string): string {
-    if (key.trim() === 'company') return '公司'
-    return '—'
-  }
-
-  function resetAgentForExpandKeywords(): void {
-    agentSkill.value = 'expand-keywords'
-    agentStatus.value = 'running'
-    resetTimelineView()
-    agentMeta.value = [
-      { label: '状态', value: '扩展中', tone: 'accent' },
-      { label: '产品', value: productStatusLabel() },
-      { label: '来源', value: '画像' },
-    ]
-    updatePipelineFromProfile()
-  }
-
-  function resetAgentForDiscoverLeads(maxQueries = 0, skill = 'discover-leads'): void {
-    agentSkill.value = skill
-    agentStatus.value = 'running'
-    resetTimelineView()
-    const total = maxQueries > 0 ? String(maxQueries) : '—'
-    agentMeta.value = [
-      { label: '状态', value: '探索中', tone: 'accent' },
-      { label: '进度', value: `0/${total}` },
-      { label: '线索', value: '0' },
-      { label: '来源', value: '关键词' },
-    ]
-    updatePipelineFromProfile()
-  }
-
-  function resetAgentForScoreAndDedupe(rawCount?: number): void {
-    agentSkill.value = 'score-and-dedupe'
-    agentStatus.value = 'running'
-    resetTimelineView()
-    agentMeta.value = [
-      { label: '状态', value: '评分中', tone: 'accent' },
-      { label: '原始', value: rawCount != null ? String(rawCount) : '—' },
-      { label: '产品', value: productStatusLabel() },
-    ]
-    updatePipelineFromProfile()
-  }
-
-  function resetAgentForDraftEmail(targetCount?: number): void {
-    agentSkill.value = 'draft-outreach-email'
-    agentStatus.value = 'running'
-    resetTimelineView()
-    agentMeta.value = [
-      { label: '状态', value: '起草中', tone: 'accent' },
-      { label: '目标', value: targetCount != null ? String(targetCount) : '—' },
-      { label: '产品', value: productStatusLabel() },
-    ]
-    updatePipelineFromProfile()
-  }
-
-  function resetAgentForTranslateEmail(leadId: string, recipientKey: string): void {
-    agentSkill.value = 'translate-outreach-email'
-    agentStatus.value = 'running'
-    resetTimelineView()
-    agentMeta.value = [
-      { label: '状态', value: '翻译对照中', tone: 'accent' },
-      { label: '线索', value: leadStatusLabel(leadId) },
-      { label: '收件人', value: recipientStatusLabel(recipientKey) },
-      { label: '产品', value: productStatusLabel() },
-    ]
-    updatePipelineFromProfile()
-  }
-
-  function resetAgentForEnrichContacts(
-    leadIds: string | string[],
-    verifyEmails: boolean,
-  ): void {
-    const ids = Array.isArray(leadIds) ? leadIds : [leadIds]
-    const label = ids.length === 1 ? leadStatusLabel(ids[0] || '') : `${ids.length} 条`
-    agentSkill.value = 'enrich-lead-contacts'
-    agentStatus.value = 'running'
-    resetTimelineView()
-    agentMeta.value = [
-      { label: '状态', value: '补全中', tone: 'accent' },
-      { label: '线索', value: label },
-      { label: '验邮', value: verifyEmails ? '是' : '否' },
-      { label: '产品', value: productStatusLabel() },
-    ]
-    updatePipelineFromProfile()
   }
 
   function toggleTimelineExpand(id: string): void {
@@ -487,25 +435,22 @@ export function useWorkspace() {
     leadsSnapshot,
     emailDraftsSnapshot,
     pipelineSteps,
+    runningForProduct,
+    latestTask,
+    taskFinished,
     agentSkill,
     agentStatus,
     agentMeta,
     agentTimeline,
     agentPrompt,
     awaitingUserReply,
+    pendingPermission,
+    dialogueBusy,
     generating,
     selectProduct,
     deleteProduct,
     createDraftProduct,
     setAgentContext,
-    resetAgentForGenerate,
-    clearAgentStartFailed,
-    resetAgentForExpandKeywords,
-    resetAgentForDiscoverLeads,
-    resetAgentForScoreAndDedupe,
-    resetAgentForDraftEmail,
-    resetAgentForTranslateEmail,
-    resetAgentForEnrichContacts,
     toggleTimelineExpand,
     isTimelineExpanded,
     refreshProducts,

@@ -31,6 +31,12 @@ Phase 1 默认执行 **R1 广撒网**。
 - 用户说「开始探索」「执行 R1」「发现潜在客户」
 - `expand-keywords` 完成后的下一步
 
+## 任务调用
+
+通过产品列表确认 `scope.product_id`。可在 parameters 指定 max_queries，使用桌面返回的本轮渠道和数量限制。
+
+必填不明确时用 `question` 补齐，用户取消就结束。参数齐全后在当前会话调用 `lead-store.task_begin`，task_type 为 `discover-leads`。收到 running 后按 `prepared.instructions` 和下面的步骤执行；收尾调用 `lead-store.task_done`，传回本次 task_id 和实际结果。调用格式见工作区 AGENTS.md。
+
 ## 前置条件
 
 - MCP `lead-store`、`search-api`（Tavily）已配置

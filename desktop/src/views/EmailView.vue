@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
-import { ensureAgentReady } from '../composables/useAgentPreflight'
+import { useMainViewTabs } from '../composables/useMainViewTabs'
 import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
 import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
@@ -14,19 +14,22 @@ import type {
   EmailRecipientPoolItemDto,
 } from '../types/electron'
 
+defineOptions({ name: 'EmailView' })
 const meta = SECTION_META.email
 const route = useRoute()
-const router = useRouter()
+const { openPageTab } = useMainViewTabs()
 const {
   activeProductId,
   generating,
+  runningForProduct,
   agentSkill,
-  agentStatus,
-  resetAgentForDraftEmail,
-  resetAgentForTranslateEmail,
+  taskFinished,
+  emailDraftsSnapshot,
+
 } = useWorkspace()
 
 const loading = ref(false)
+const refreshing = ref(false)
 const slotLoading = ref(false)
 const drafting = ref(false)
 const saving = ref(false)
@@ -88,14 +91,14 @@ const isDirty = computed(
 const isDrafting = computed(
   () =>
     drafting.value ||
-    (generating.value &&
+    (runningForProduct.value &&
       (agentSkill.value === 'draft-outreach-email' ||
         agentSkill.value === 'translate-outreach-email')),
 )
 
 const isTranslatingZh = computed(
   () =>
-    generating.value && agentSkill.value === 'translate-outreach-email',
+    runningForProduct.value && agentSkill.value === 'translate-outreach-email',
 )
 
 const isBusy = computed(
@@ -270,10 +273,12 @@ async function loadRecipientPool(leadId: string): Promise<string> {
     recipientPool.value = []
     return 'company'
   }
+  const pid = activeProductId.value
   const res = await window.ftcs.getEmailRecipientPool({
-    productId: activeProductId.value,
+    productId: pid,
     leadId,
   })
+  if (pid !== activeProductId.value || selectedId.value !== leadId) return 'company'
   if (!res.ok) {
     recipientPool.value = []
     actionMessage.value = res.message || '加载收件人失败'
@@ -304,17 +309,19 @@ async function loadCurrentSlot(options?: {
   const showLoading = options?.showLoading !== false
   if (showLoading) slotLoading.value = true
   try {
+    const pid = activeProductId.value, lead = selectedId.value, key = selectedRecipientKey.value
     const detail = await window.ftcs.getEmailDraftSlot({
       productId: activeProductId.value,
       leadId: selectedId.value,
       recipientKey: selectedRecipientKey.value || 'company',
     })
+    if (pid !== activeProductId.value || lead !== selectedId.value || key !== selectedRecipientKey.value) return
     if (!detail.ok) {
       actionMessage.value = detail.message || '读取草稿失败'
       clearEdits()
       return
     }
-    hydrateFromSlot(detail, options?.force === true)
+    hydrateFromSlot(detail, options?.force === true && !isDirty.value)
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -369,6 +376,7 @@ function cancelDiscardSwitch(): void {
 async function refreshDrafts(options?: {
   forceHydrate?: boolean
   soft?: boolean
+  list?: EmailDraftsSnapshotDto
 }): Promise<void> {
   if (!window.ftcs?.listEmailDrafts || !activeProductId.value) {
     snapshot.value = null
@@ -387,11 +395,15 @@ async function refreshDrafts(options?: {
     const includeLeadId = soft
       ? selectedId.value || undefined
       : fromRoute || selectedId.value || undefined
-    snapshot.value = await window.ftcs.listEmailDrafts(
-      activeProductId.value,
+    const pid = activeProductId.value
+    const drafts = options?.list ?? await window.ftcs.listEmailDrafts(
+      pid,
       includeLeadId,
     )
 
+    if (pid !== activeProductId.value) return
+    snapshot.value = drafts
+    if (isDirty.value && soft) return
     const inList = (id: string): boolean =>
       Boolean(id && snapshot.value?.drafts.some((d) => d.leadId === id))
 
@@ -439,6 +451,18 @@ async function refreshDrafts(options?: {
   }
 }
 
+async function refreshEmail(): Promise<void> {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    const hasEdits = isDirty.value
+    if (hasEdits) actionMessage.value = '未保存的修改会保留'
+    await refreshDrafts({ soft: true, forceHydrate: !hasEdits })
+  } finally {
+    refreshing.value = false
+  }
+}
+
 async function onBatchDraft(): Promise<void> {
   if (!activeProductId.value || !window.ftcs?.draftEmails) return
   if (generating.value) {
@@ -447,12 +471,6 @@ async function onBatchDraft(): Promise<void> {
   }
   if (pendingHigh.value.length <= 0) {
     actionMessage.value = '暂无待起草的已评分线索'
-    return
-  }
-
-  const preflightError = await ensureAgentReady('draft-email')
-  if (preflightError) {
-    actionMessage.value = preflightError
     return
   }
 
@@ -465,11 +483,10 @@ async function onBatchDraft(): Promise<void> {
       return
     }
     drafting.value = true
-    resetAgentForDraftEmail(res.acceptedCount ?? pendingHigh.value.length)
+
     actionMessage.value = res.message
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
-    agentStatus.value = 'error'
   } finally {
     drafting.value = false
   }
@@ -486,17 +503,11 @@ async function runSlotDraft(): Promise<void> {
     return
   }
 
-  const preflightError = await ensureAgentReady('draft-email')
-  if (preflightError) {
-    actionMessage.value = preflightError
-    return
-  }
-
   const item = activePoolItem.value
   const audience = item?.kind === 'person' ? 'person' : 'company'
   drafting.value = true
   actionMessage.value = ''
-  resetAgentForDraftEmail(1)
+
   rewriteConfirmOpen.value = false
 
   try {
@@ -509,13 +520,12 @@ async function runSlotDraft(): Promise<void> {
     })
     if (!res.ok) {
       actionMessage.value = res.message
-      agentStatus.value = 'error'
+
       return
     }
     actionMessage.value = res.message
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
-    agentStatus.value = 'error'
   } finally {
     drafting.value = false
   }
@@ -687,9 +697,7 @@ function openRejectAllConfirm(): void {
 
 function goToLead(): void {
   if (!selected.value?.leadId) return
-  router
-    .push({ name: 'leads', query: { leadId: selected.value.leadId } })
-    .catch(() => undefined)
+  void openPageTab('leads', { leadId: selected.value.leadId })
 }
 
 async function runReject(scope: 'slot' | 'lead'): Promise<void> {
@@ -782,14 +790,9 @@ async function onGenerateZh(): Promise<void> {
     actionMessage.value = '已有任务在运行，请稍候'
     return
   }
-  const preflightError = await ensureAgentReady('draft-email')
-  if (preflightError) {
-    actionMessage.value = preflightError
-    return
-  }
   const leadId = selected.value.leadId
   const recipientKey = selectedRecipientKey.value || 'company'
-  resetAgentForTranslateEmail(leadId, recipientKey)
+
   actionMessage.value = ''
   try {
     const res = await window.ftcs.generateEmailDraftZh({
@@ -825,34 +828,23 @@ watch(
   },
 )
 
-watch(agentStatus, (status) => {
-  if (
-    (status === 'done' || status === 'error') &&
-    (agentSkill.value === 'draft-outreach-email' ||
-      agentSkill.value === 'translate-outreach-email')
-  ) {
-    void refreshDrafts({ forceHydrate: true }).then(() => {
-      if (status === 'done' && agentSkill.value === 'translate-outreach-email') {
-        zhContrastOpen.value = true
-      }
-    })
-  }
+watch(taskFinished, (task) => {
+  if (!task || task.scope.product_id !== activeProductId.value) return
+  if (!['draft-outreach-email', 'translate-outreach-email', 'score-and-dedupe', 'enrich-lead-contacts'].includes(task.task_type)) return
+  const slotMatches = (!task.scope.lead_id || task.scope.lead_id === selectedId.value) &&
+    (!task.scope.recipient_key || task.scope.recipient_key === selectedRecipientKey.value)
+  if (slotMatches && isDirty.value) actionMessage.value = '草稿数据已更新，当前编辑内容已保留'
+  void refreshDrafts({ soft: true, forceHydrate: slotMatches && !isDirty.value, list: emailDraftsSnapshot.value ?? undefined }).then(() => {
+    if (task.state === 'succeeded' && task.task_type === 'translate-outreach-email' &&
+        task.scope.product_id === activeProductId.value && task.scope.lead_id === selectedId.value &&
+        task.scope.recipient_key === selectedRecipientKey.value) zhContrastOpen.value = true
+  })
 })
-
-let pollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   void refreshDrafts({ forceHydrate: true })
-  pollTimer = setInterval(() => {
-    if (document.visibilityState !== 'visible') return
-    if (isDirty.value || isBusy.value) return
-    void refreshDrafts({ soft: true })
-  }, 8000)
 })
 
-onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer)
-})
 </script>
 
 <template>
@@ -863,6 +855,10 @@ onUnmounted(() => {
         <p>{{ subtitle }}</p>
       </div>
       <div class="main-pane__actions">
+        <button type="button" class="btn-secondary" :disabled="refreshing || saving" @click="refreshEmail">
+          <Icon name="refresh-cw" :size="12" />
+          {{ refreshing ? '刷新中…' : '刷新' }}
+        </button>
         <button
           type="button"
           class="btn-secondary"

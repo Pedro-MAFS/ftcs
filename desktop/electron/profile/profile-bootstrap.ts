@@ -27,6 +27,8 @@ export interface BootstrapResult {
 export async function bootstrapProductFromLibrary(
   input: BootstrapInput,
   workspaceRoot = getWorkspaceRoot(),
+  signal?: AbortSignal,
+  onReserved?: (productId: string) => void,
 ): Promise<BootstrapResult> {
   migrateWebsitesIntoFiles(workspaceRoot)
   const websitePaths = [...new Set(input.websitePaths ?? [])]
@@ -35,46 +37,62 @@ export async function bootstrapProductFromLibrary(
     throw new Error('请先勾选至少一个公司网站或资料文件')
   }
 
-  const productId = generateProductId(workspaceRoot)
-  const productDir = path.join(workspaceRoot, 'data', 'products', productId)
-  const inputsDir = path.join(productDir, 'inputs')
-  fs.mkdirSync(inputsDir, { recursive: true })
+  signal?.throwIfAborted()
+  let productId: string, productDir: string
+  for (;;) {
+    productId = generateProductId(workspaceRoot)
+    productDir = path.join(workspaceRoot, 'data', 'products', productId)
+    try {
+      fs.mkdirSync(productDir)
+      break
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    }
+  }
+  try {
+    onReserved?.(productId)
+    const inputsDir = path.join(productDir, 'inputs')
+    fs.mkdirSync(inputsDir, { recursive: true })
 
-  const filesRoot = path.join(workspaceRoot, 'data', 'library', 'files')
-  const copied = await copyLibrarySourcesToInputs(
-    productId,
-    inputsDir,
-    filesRoot,
-    websitePaths,
-    filePaths,
-    { resolveCli: resolveConfiguredOfficeCli },
-  )
+    const filesRoot = path.join(workspaceRoot, 'data', 'library', 'files')
+    const copied = await copyLibrarySourcesToInputs(
+      productId,
+      inputsDir,
+      filesRoot,
+      websitePaths,
+      filePaths,
+      { resolveCli: resolveConfiguredOfficeCli, signal },
+    )
 
-  if (!copied.websiteUrls.length && !copied.inputFiles.length) {
+    signal?.throwIfAborted()
+    if (!copied.websiteUrls.length && !copied.inputFiles.length) {
+      throw new Error(`没有可导入的资料：${copied.skipped.join('；') || '未知原因'}`)
+    }
+
+    const manifest = {
+      product_id: productId,
+      created_at: new Date().toISOString(),
+      websites: copied.websiteUrls,
+      files: copied.inputFiles,
+      skipped: copied.skipped,
+      source_inputs: copied.sourceInputs,
+    }
+    fs.writeFileSync(
+      path.join(inputsDir, '_sources.json'),
+      JSON.stringify(manifest, null, 2),
+      'utf8',
+    )
+
+    return {
+      productId,
+      productDir,
+      inputsDir,
+      websiteUrls: copied.websiteUrls,
+      inputFiles: copied.inputFiles,
+      skipped: copied.skipped,
+    }
+  } catch (error) {
     fs.rmSync(productDir, { recursive: true, force: true })
-    throw new Error(`没有可导入的资料：${copied.skipped.join('；') || '未知原因'}`)
-  }
-
-  const manifest = {
-    product_id: productId,
-    created_at: new Date().toISOString(),
-    websites: copied.websiteUrls,
-    files: copied.inputFiles,
-    skipped: copied.skipped,
-    source_inputs: copied.sourceInputs,
-  }
-  fs.writeFileSync(
-    path.join(inputsDir, '_sources.json'),
-    JSON.stringify(manifest, null, 2),
-    'utf8',
-  )
-
-  return {
-    productId,
-    productDir,
-    inputsDir,
-    websiteUrls: copied.websiteUrls,
-    inputFiles: copied.inputFiles,
-    skipped: copied.skipped,
+    throw error
   }
 }

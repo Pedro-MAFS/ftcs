@@ -2,11 +2,15 @@ import { nextTick, ref } from 'vue'
 import type { Router } from 'vue-router'
 import { useRouter } from 'vue-router'
 import { landingSectionFromSteps } from './landing-section'
+import { useMainViewTabs } from './useMainViewTabs'
 import { pipelineSteps, whenPipelineReady } from './useWorkspace'
 
 export const landingSettled = ref(false)
 
 const TAKEOVER_ROUTES = new Set([
+  'home',
+  'browse',
+  'empty',
   'input',
   'profile',
   'explore',
@@ -101,7 +105,7 @@ async function runSettle(router: Router): Promise<void> {
     const name = landingSectionFromSteps(pipelineSteps.value)
     replaceFromLanding = true
     try {
-      await router.replace({ name })
+      await useMainViewTabs().openPageTab(name)
       await nextTick()
     } finally {
       replaceFromLanding = false

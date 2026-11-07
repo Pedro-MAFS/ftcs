@@ -4,7 +4,6 @@ import { showTaskDoneNotification } from '../notify/task-done-notify'
 import {
   computeLastDueAt,
   isDueNow,
-  needsCatchUp,
   slotKey,
   type WorkflowSchedule,
 } from './workflow-schedule-types'
@@ -14,7 +13,7 @@ export type ScheduleTriggerPayload = {
   scheduleId: string
   productId: string
   planId: string
-  reason: 'due' | 'catch-up'
+  reason: 'due'
 }
 
 type SchedulerDeps = {
@@ -30,12 +29,12 @@ const skipNotifiedSlots = new Set<string>()
 export function startWorkflowScheduler(nextDeps: SchedulerDeps): void {
   deps = nextDeps
   stopWorkflowScheduler()
-  // 启动后稍等渲染就绪，再做漏跑补偿
+  // 启动后稍等渲染就绪，再检查当前是否到点。
   setTimeout(() => {
-    tickWorkflowScheduler({ includeCatchUp: true })
+    tickWorkflowScheduler()
   }, 8_000)
   timer = setInterval(() => {
-    tickWorkflowScheduler({ includeCatchUp: false })
+    tickWorkflowScheduler()
   }, 30_000)
 }
 
@@ -51,12 +50,12 @@ export function resetWorkflowSchedulerStateForTests(): void {
   skipNotifiedSlots.clear()
 }
 
-function pickCandidates(now: Date, includeCatchUp: boolean): Array<{
+function pickCandidates(now: Date): Array<{
   schedule: WorkflowSchedule
-  reason: 'due' | 'catch-up'
+  reason: 'due'
   due: Date
 }> {
-  const out: Array<{ schedule: WorkflowSchedule; reason: 'due' | 'catch-up'; due: Date }> = []
+  const out: Array<{ schedule: WorkflowSchedule; reason: 'due'; due: Date }> = []
   for (const schedule of listWorkflowSchedules()) {
     if (!schedule.enabled) continue
     const due = computeLastDueAt(schedule, now)
@@ -68,17 +67,14 @@ function pickCandidates(now: Date, includeCatchUp: boolean): Array<{
       out.push({ schedule, reason: 'due', due })
       continue
     }
-    if (includeCatchUp && needsCatchUp(schedule, now)) {
-      out.push({ schedule, reason: 'catch-up', due })
-    }
   }
   return out
 }
 
-export function tickWorkflowScheduler(opts?: { includeCatchUp?: boolean; now?: Date }): void {
+export function tickWorkflowScheduler(opts?: { now?: Date }): void {
   if (!deps) return
   const now = opts?.now ?? new Date()
-  const candidates = pickCandidates(now, Boolean(opts?.includeCatchUp))
+  const candidates = pickCandidates(now)
   if (!candidates.length) return
 
   const win = deps.getMainWindow()

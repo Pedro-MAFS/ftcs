@@ -1,3 +1,5 @@
+export type { MainViewLayout } from '../config/main-view-layout'
+
 export const IPC = {
   APP_GET_STATUS: 'app:get-status',
   APP_AGENT_PREFLIGHT: 'app:agent-preflight',
@@ -6,12 +8,21 @@ export const IPC = {
   BUILTIN_BROWSER_SET_MODE: 'builtin-browser:set-mode',
   BUILTIN_BROWSER_STATE: 'builtin-browser:state',
   BUILTIN_BROWSER_CAPTION: 'builtin-browser:caption',
+  BUILTIN_BROWSER_TABS: 'builtin-browser:tabs',
+  BUILTIN_BROWSER_GET_TABS: 'builtin-browser:get-tabs',
+  BUILTIN_BROWSER_OPEN: 'builtin-browser:open',
+  BUILTIN_BROWSER_CLOSE: 'builtin-browser:close',
+  BUILTIN_BROWSER_NAVIGATE: 'builtin-browser:navigate',
+  BUILTIN_BROWSER_CONTROL: 'builtin-browser:control',
+  BUILTIN_BROWSER_SET_SLOT: 'builtin-browser:set-slot',
   OPENCODE_START: 'opencode:start',
   OPENCODE_STOP: 'opencode:stop',
   OPENCODE_RESTART: 'opencode:restart',
   OPENCODE_GET_LOGS: 'opencode:get-logs',
   OPENCODE_MCP_RECONNECT: 'opencode:mcp-reconnect',
   SETTINGS_GET: 'settings:get',
+  LAYOUT_GET: 'layout:get',
+  LAYOUT_SET: 'layout:set',
   SETTINGS_SAVE: 'settings:save',
   SETTINGS_PICK_WORKSPACE: 'settings:pick-workspace',
   SETTINGS_SET_OPEN_AT_LOGIN: 'settings:set-open-at-login',
@@ -76,8 +87,15 @@ export const IPC = {
   WORKFLOW_LIST_PLANS: 'workflow:list-plans',
   WORKFLOW_SAVE_PLAN: 'workflow:save-plan',
   WORKFLOW_DELETE_PLAN: 'workflow:delete-plan',
+  WORKFLOW_LAUNCH_STEP: 'task:workflow-step',
+  TASK_SNAPSHOT: 'task:snapshot',
   AGENT_EVENT: 'agent:event',
   AGENT_REPLY_QUESTION: 'agent:reply-question',
+  AGENT_REPLY_PERMISSION: 'agent:reply-permission',
+  AGENT_SEND_MESSAGE: 'agent:send-message',
+  AGENT_CREATE_SESSION: 'agent:create-session',
+  AGENT_CURRENT_SESSION: 'agent:current-session',
+  AGENT_NOTE_PRODUCT: 'agent:note-product',
   APP_OPEN_EXTERNAL: 'app:open-external',
   AUTH_GET_SESSION: 'auth:get-session',
   AUTH_LOGIN: 'auth:login',
@@ -121,6 +139,7 @@ export const IPC = {
   SCHEDULE_MARK_RUN: 'schedule:mark-run',
   SCHEDULE_TRIGGER: 'schedule:trigger',
   APP_GET_VERSION: 'app:get-version',
+  APP_SAVE_TEXT_TO_DOWNLOADS: 'app:save-text-to-downloads',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_RESTART */
   SIDECAR_RESTART: 'opencode:restart',
   /** @deprecated 兼容旧预加载命名，等同 OPENCODE_GET_LOGS */
@@ -131,6 +150,15 @@ export type {
   UpdateDownloadPhase,
   UpdateDownloadState,
 } from '../update/update-download-types'
+
+export interface SaveTextToDownloadsInput {
+  suggestedName: string
+  content: string
+}
+
+export type SaveTextToDownloadsResult =
+  | { ok: true; path: string }
+  | { ok: false; error: string }
 
 export interface UpdateCheckResult {
   ok: boolean
@@ -412,6 +440,7 @@ export interface ProfileSaveResult {
 }
 
 export interface ProfileGenerateResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -419,6 +448,7 @@ export interface ProfileGenerateResult {
 }
 
 export interface KeywordsExpandResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -484,6 +514,7 @@ export interface DiscoverLeadsInput {
 }
 
 export interface DiscoverLeadsResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -670,6 +701,7 @@ export interface ScoredLeadsSummaryDto {
 }
 
 export interface ScoreAndDedupeResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -763,6 +795,7 @@ export interface DraftEmailsInput {
 }
 
 export interface DraftEmailsResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -901,6 +934,7 @@ export interface DraftEmailSlotInput {
 }
 
 export interface DraftEmailSlotResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -915,6 +949,7 @@ export interface GenerateEmailDraftZhInput {
 }
 
 export interface GenerateEmailDraftZhResult {
+  taskId?: string
   ok: boolean
   message: string
   productId?: string
@@ -1057,7 +1092,20 @@ export interface ReplyQuestionResult {
   message: string
 }
 
+/** 续聊授权卡。请求 id 留在主进程，这里只有展示用的权限名和工具键。 */
+export type PermissionAskView = {
+  permission: string
+  tool?: string
+} | null
+
+export interface ReplyPermissionResult {
+  ok: boolean
+  message: string
+}
+
 export type AgentEventPayload =
+  | { type: 'session.created' }
+  | { type: 'task.changed'; task: import('../tasks/lifecycle').TaskRecord }
   | {
       type: 'state'
       skill: string
@@ -1083,6 +1131,10 @@ export type AgentEventPayload =
   | {
       type: 'awaiting-reply'
       pending: AwaitingUserReply
+    }
+  | {
+      type: 'permission-ask'
+      pending: PermissionAskView
     }
 
 export type OpenCodeRuntimeState = 'idle' | 'starting' | 'running' | 'error' | 'stopped'
@@ -1164,6 +1216,30 @@ export interface BuiltinBrowserUiState {
   mode: BuiltinBrowserMode
   title: string
   url: string
+}
+
+export interface BuiltinBrowserSlot {
+  x: number
+  y: number
+  width: number
+  height: number
+  visible: boolean
+  browserKey: string
+}
+
+export interface BuiltinBrowserTabSnapshot {
+  browserKey: string
+  title: string
+  url: string
+  origin: 'user' | 'task'
+  taskId: string | null
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
+export interface BuiltinBrowserTabsPayload {
+  tabs: BuiltinBrowserTabSnapshot[]
+  focusKey: string | null
 }
 
 export type ChannelMode = 'official' | 'custom'

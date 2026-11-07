@@ -23,6 +23,12 @@ outputs:
 - 用户说「扩展关键词」「生成搜索词」「为这个产品准备获客搜索」
 - `extract-product-profile` 完成后，作为流水线下一步
 
+## 任务调用
+
+通过产品列表确认 `scope.product_id`。parameters 使用空对象。
+
+必填不明确时用 `question` 补齐，用户取消就结束。参数齐全后在当前会话调用 `lead-store.task_begin`，task_type 为 `expand-keywords`。收到 running 后按 `prepared.instructions` 和下面的步骤执行；收尾调用 `lead-store.task_done`，传回本次 task_id 和实际结果。调用格式见工作区 AGENTS.md。
+
 ## 前置条件
 
 - `lead-store` MCP 已配置

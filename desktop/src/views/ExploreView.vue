@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
+import { useMainViewTabs } from '../composables/useMainViewTabs'
 import { useExploreStart } from '../composables/useExploreStart'
-import { ensureAgentReady } from '../composables/useAgentPreflight'
 import { showToast } from '../composables/useToast'
 import Icon from '../components/shared/Icon.vue'
 import ExploreStartControl from '../components/explore/ExploreStartControl.vue'
@@ -18,18 +17,20 @@ import {
   roundLabel,
 } from '../explore/round-labels'
 
+defineOptions({ name: 'ExploreView' })
+const { openPageTab } = useMainViewTabs()
 const meta = SECTION_META.explore
-const router = useRouter()
 const {
   activeProductId,
   activeProduct,
   exploreTasks,
   currentExpansion,
   generating,
+  runningForProduct,
   agentSkill,
-  agentStatus,
+  taskFinished,
   refreshExploreTasks,
-  resetAgentForScoreAndDedupe,
+
 } = useWorkspace()
 
 const expandedId = ref('')
@@ -46,8 +47,6 @@ const editorOpen = ref(false)
 const scoringLeads = ref(false)
 const previewRound = ref('R1')
 const previewDimension = ref('all')
-
-let progressTimer: ReturnType<typeof setInterval> | null = null
 
 const DIMENSION_OPTIONS = [
   { value: 'all', label: '全部维度' },
@@ -131,7 +130,7 @@ async function loadR2Sites(): Promise<void> {
 
 const expandingPlaceholder = computed(() => {
   return (
-    generating.value &&
+    runningForProduct.value &&
     agentSkill.value === 'expand-keywords' &&
     !tasks.value.some((t) => t.status === 'keywords_ready')
   )
@@ -139,7 +138,7 @@ const expandingPlaceholder = computed(() => {
 
 const discoveringPlaceholder = computed(() => {
   return (
-    generating.value &&
+    runningForProduct.value &&
     agentSkill.value === 'discover-leads' &&
     !tasks.value.some((t) => t.status === 'running')
   )
@@ -147,7 +146,7 @@ const discoveringPlaceholder = computed(() => {
 
 const discoveringR2Placeholder = computed(() => {
   return (
-    generating.value &&
+    runningForProduct.value &&
     agentSkill.value === 'discover-leads-r2' &&
     !tasks.value.some((t) => t.status === 'running')
   )
@@ -155,7 +154,7 @@ const discoveringR2Placeholder = computed(() => {
 
 const discoveringR3Placeholder = computed(() => {
   return (
-    generating.value &&
+    runningForProduct.value &&
     agentSkill.value === 'discover-leads-r3' &&
     !tasks.value.some((t) => t.status === 'running')
   )
@@ -164,25 +163,8 @@ const discoveringR3Placeholder = computed(() => {
 const isScoring = computed(
   () =>
     scoringLeads.value ||
-    (generating.value && agentSkill.value === 'score-and-dedupe'),
+    (runningForProduct.value && agentSkill.value === 'score-and-dedupe'),
 )
-
-function stopProgressPolling(): void {
-  if (progressTimer) {
-    clearInterval(progressTimer)
-    progressTimer = null
-  }
-}
-
-function startProgressPolling(): void {
-  stopProgressPolling()
-  progressTimer = setInterval(() => {
-    void refreshExploreTasks().then(() => {
-      const running = tasks.value.find((t) => t.status === 'running')
-      if (running) expandedId.value = running.id
-    })
-  }, 2500)
-}
 
 const statusLabel = (status: ExploreTaskDto['status']): string => {
   if (status === 'keywords_ready') return '关键词就绪'
@@ -212,6 +194,8 @@ async function reload(): Promise<void> {
   actionMessage.value = ''
   try {
     await refreshExploreTasks()
+  } catch (error) {
+    actionMessage.value = error instanceof Error ? error.message : '刷新探索任务失败'
   } finally {
     loading.value = false
   }
@@ -221,7 +205,7 @@ async function stopAgent(): Promise<void> {
   if (!window.ftcs?.abortProfile) return
   await window.ftcs.abortProfile()
   actionMessage.value = '已请求停止当前任务'
-  stopProgressPolling()
+
 }
 
 const {
@@ -233,8 +217,7 @@ const {
   startExplore: runExploreStart,
 } = useExploreStart({
   extraBusy: () => scoringLeads.value,
-  onLaunch: startProgressPolling,
-  onFail: stopProgressPolling,
+
 })
 
 async function startExplore(): Promise<void> {
@@ -243,12 +226,10 @@ async function startExplore(): Promise<void> {
 
 function goLeads(task?: ExploreTaskDto): void {
   if (task && task.status !== 'keywords_ready') {
-    router
-      .push({ name: 'leads', query: { runId: task.id } })
-      .catch(() => undefined)
+    void openPageTab('leads', { runId: task.id })
     return
   }
-  router.push({ name: 'leads' }).catch(() => undefined)
+  void openPageTab('leads')
 }
 
 async function startScoreAndDedupe(task: ExploreTaskDto): Promise<void> {
@@ -262,27 +243,19 @@ async function startScoreAndDedupe(task: ExploreTaskDto): Promise<void> {
     return
   }
 
-  const preflightError = await ensureAgentReady('score-and-dedupe')
-  if (preflightError) {
-    actionMessage.value = preflightError
-    return
-  }
-
   scoringLeads.value = true
   actionMessage.value = ''
-  resetAgentForScoreAndDedupe(task.leadsFound)
 
   try {
     const res = await window.ftcs.scoreAndDedupeLeads(activeProductId.value)
     if (!res.ok) {
       actionMessage.value = res.message
-      agentStatus.value = 'error'
+
       return
     }
     actionMessage.value = res.message
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
-    agentStatus.value = 'error'
   } finally {
     scoringLeads.value = false
   }
@@ -331,20 +304,15 @@ watch(activeProductId, () => {
   void refreshExploreTasks()
 })
 
-watch(agentStatus, (status) => {
-  if (status === 'done' && agentSkill.value === 'score-and-dedupe') {
+watch(taskFinished, (task) => {
+  if (!task || task.scope.product_id !== activeProductId.value) return
+  const status = task.state === 'succeeded' ? 'done' : 'error'
+  if (status === 'done' && task.task_type === 'score-and-dedupe') {
     actionMessage.value = '评分去重已完成，可前往线索库查看'
   }
-  if (status === 'done' || status === 'error') {
-    stopProgressPolling()
-    void refreshExploreTasks().then(() => {
-      const done = tasks.value.find(
-        (t) => t.status === 'completed' || t.status === 'failed',
-      )
-      const running = tasks.value.find((t) => t.status === 'running')
-      if (running) expandedId.value = running.id
-      else if (done) expandedId.value = done.id
-    })
+  if (task.task_type.startsWith('discover-leads')) {
+    const latest = tasks.value.find(t => t.status === 'completed' || t.status === 'failed')
+    if (latest) expandedId.value = latest.id
   }
 })
 
@@ -358,9 +326,6 @@ onMounted(() => {
   void loadR2Sites()
 })
 
-onUnmounted(() => {
-  stopProgressPolling()
-})
 </script>
 
 <template>
@@ -371,6 +336,10 @@ onUnmounted(() => {
         <p>{{ meta.subtitle }}</p>
       </div>
       <div class="main-pane__actions">
+        <button type="button" class="btn-secondary" :disabled="loading" @click="reload">
+          <Icon name="refresh-cw" :size="12" />
+          {{ loading ? '刷新中…' : '刷新' }}
+        </button>
         <button
           type="button"
           class="btn-secondary"
@@ -625,7 +594,7 @@ onUnmounted(() => {
         class="explore-empty"
       >
         <h2>暂无探索任务</h2>
-        <p>请先在「画像」页确认产品就绪，再点击「新建探索任务」扩展关键词。</p>
+        <p>请先在「画像」页确认产品就绪，再点击「扩展关键词」。</p>
         <button type="button" class="btn-secondary" :disabled="loading" @click="reload">
           {{ loading ? '刷新中…' : '刷新列表' }}
         </button>

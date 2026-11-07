@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { saveProfile, loadProfile, saveKeywords, loadKeywords } from "./storage.js";
+import { saveProfile, loadProfile, listProfiles, saveKeywords, loadKeywords } from "./storage.js";
 
 function createTempProject(): string {
   const dir = mkdtempSync(join(tmpdir(), "ftcs-test-"));
@@ -52,6 +52,60 @@ test("saveProfile creates and updates product profile", () => {
     assert.equal(second.created, false);
     assert.equal(second.profile.competitors.length, 1);
     assert.equal(second.profile.readiness.score, 100);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("listProfiles reads data/products and skips _example", () => {
+  const root = createTempProject();
+
+  try {
+    mkdirSync(join(root, "data", "leads"), { recursive: true });
+    mkdirSync(join(root, "data", "keywords"), { recursive: true });
+    const profile = {
+      company: { name: "ACME Valves", website: "https://acme.test" },
+      products: [{ name: "Ball Valve", use_cases: ["water treatment"] }],
+      buyer_personas: [{ role: "procurement_manager", company_types: ["distributor"] }],
+      target_markets: { regions: ["EU"] },
+      source_inputs: [{ type: "file" as const, path: "inputs/intro.txt" }],
+    };
+    saveProfile(root, profile, "prod_list_001");
+    saveProfile(root, { ...profile, company: { name: "Example" } }, "_example");
+
+    assert.deepEqual(
+      listProfiles(root).map((item) => item.id),
+      ["prod_list_001"],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("listProfiles skips soft-deleted and unreadable profiles", () => {
+  const root = createTempProject();
+  const profile = {
+    company: { name: "ACME Valves", website: "https://acme.test" },
+    products: [{ name: "Ball Valve", use_cases: ["water treatment"] }],
+    buyer_personas: [{ role: "procurement_manager", company_types: ["distributor"] }],
+    target_markets: { regions: ["EU"] },
+    source_inputs: [{ type: "file" as const, path: "inputs/intro.txt" }],
+  };
+
+  try {
+    saveProfile(root, profile, "prod_live_001");
+    saveProfile(root, profile, "prod_gone_001");
+    const gonePath = join(root, "data", "products", "prod_gone_001", "profile.json");
+    const gone = JSON.parse(readFileSync(gonePath, "utf8")) as { status: string };
+    gone.status = "deleted";
+    writeFileSync(gonePath, `${JSON.stringify(gone, null, 2)}\n`, "utf8");
+    mkdirSync(join(root, "data", "products", "prod_bad_001"), { recursive: true });
+    writeFileSync(join(root, "data", "products", "prod_bad_001", "profile.json"), "{", "utf8");
+
+    assert.deepEqual(
+      listProfiles(root).map((item) => item.id),
+      ["prod_live_001"],
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

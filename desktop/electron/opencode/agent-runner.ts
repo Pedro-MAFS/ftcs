@@ -1,7 +1,17 @@
+import { getSettingsSnapshot } from '../settings/settings-service'
+import { randomUUID } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
+import { TaskLifecycle, type Begin, type Done, type TaskRecord, type TaskSkill, isActive } from '../tasks/lifecycle'
+import type { ToolIdentity } from '../tasks/bridge'
+import { listLeadsSnapshot } from '../leads/leads-reader'
+import { loadExplorationRun } from '../exploration/exploration-reader'
+import { markExplorationRunFailed } from '../exploration/exploration-writer'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 import type { Event, Message, ToolPart } from '@opencode-ai/sdk/v2/types'
-import type { BootstrapResult } from '../profile/profile-bootstrap'
+import { bootstrapProductFromLibrary, type BootstrapResult } from '../profile/profile-bootstrap'
+import { resolveChatProfileSources, validateChatTranslation, assertChatIdentifier } from './chat-start-inputs'
 import {
+  listProductSummaries,
   loadProfile,
   type ProductProfileDetail,
 } from '../profile/profile-reader'
@@ -34,6 +44,7 @@ import {
 } from '../leads/leads-reader'
 import {
   estimateOutreachDraftCounts,
+  getEmailRecipientPool,
   getEmailDraftSlot,
   listLeadsNeedingDraft,
   loadEmailDraftsArtifact,
@@ -67,6 +78,14 @@ import {
   disarmAwaitingReplyNotification,
 } from '../notify/task-done-notify'
 import {
+  FREE_DIALOGUE_NOT_READY,
+  FREE_DIALOGUE_SESSION_TITLE,
+  FREE_DIALOGUE_STOPPED,
+  freeDialoguePromptArgs,
+  planFreeDialogue,
+  type SendFreeDialogueResult,
+} from './free-dialogue'
+import {
   AwaitingReplyCoordinator,
   type AwaitingQuestionClient,
   type AwaitingReplyView,
@@ -78,7 +97,30 @@ import {
   classifyQuestionHttpResult,
   formatQuestionToolCard,
   resolveAwaitingReplyTimeoutMs,
+  type DisplayQuestion,
 } from './awaiting-reply'
+import {
+  CHAT_START_ALREADY_RUNNING,
+  CHAT_START_CANCELLED,
+  CHAT_START_NO_PRODUCT,
+  chatStartFailureLine,
+  isChatStartQuestionRequest,
+  parseChatStartAnswers,
+  readLoadedSkillName,
+  preflightKindFor,
+  resolveChatProductId,
+  type ChatPreflightKind,
+  type ChatStartRequest,
+} from './chat-start-task'
+import {
+  PERMISSION_REPLY_FAILED_MESSAGE,
+  PermissionCoordinator,
+  type PermissionReplyCall,
+  type PermissionReplyOutcome,
+  classifyPermissionHttpResult,
+  readPermissionAsk,
+  type ReplyPermissionResult,
+} from './permission-gate'
 import {
   emptySubagent,
   mergeSubagent,
@@ -89,6 +131,7 @@ import {
   type AgentSubagent,
   type AgentSubagentStep,
 } from './subagent-timeline'
+import { retryWatchOnStatus } from './retry-watch'
 
 /** 单一时间线条目：保证界面按发生顺序阅读 */
 export type AgentTimelineItem = {
@@ -106,6 +149,8 @@ export type AgentTimelineItem = {
 }
 
 export type AgentEventPayload =
+  | { type: 'session.created' }
+  | { type: 'task.changed'; task: TaskRecord }
   | {
       type: 'state'
       skill: string
@@ -132,6 +177,10 @@ export type AgentEventPayload =
   | {
       type: 'awaiting-reply'
       pending: AwaitingReplyView | null
+    }
+  | {
+      type: 'permission-ask'
+      pending: { permission: string; tool?: string } | null
     }
 
 export type AgentEventSink = (event: AgentEventPayload) => void
@@ -515,7 +564,7 @@ function asString(value: unknown): string {
 }
 
 const COLLAPSE_BODY_CHARS = 400
-/** 模型调用持续处于 retry 状态超过该时长则自动中止任务 */
+/** 连续处于 retry 超过该时长才自动中止。离开 retry 即释放。 */
 const RETRY_WATCHDOG_MS = 120_000
 
 /** 完整序列化工具出入参，不做长度截断；折叠由 UI 的 collapsed 处理 */
@@ -588,7 +637,8 @@ function toolPartToTimelineItem(part: ToolPart): AgentTimelineItem {
   if (state.status === 'running' || state.status === 'completed') {
     if (state.title) detailParts.push(state.title)
   }
-  const input = formatJsonFull(state.input)
+  const { _ticket, ...displayInput } = state.input ?? {}
+  const input = formatJsonFull(displayInput)
   if (input) detailParts.push(`输入:\n${input}`)
   if (state.status === 'completed') {
     const out = formatJsonFull(state.output)
@@ -671,6 +721,9 @@ class TimelineBuilder {
   private prefix: AgentTimelineItem[] = []
   private sessionItems: AgentTimelineItem[] = []
   private suffix: AgentTimelineItem[] = []
+  /** 自由对话排在任务收尾之后，避免新回复插到旧 suffix 前面。 */
+  private dialogueItems: AgentTimelineItem[] = []
+  private dialogueRouting = false
   private byId = new Map<string, AgentTimelineItem>()
   private lastFingerprint = ''
 
@@ -678,8 +731,15 @@ class TimelineBuilder {
     this.prefix = []
     this.sessionItems = []
     this.suffix = []
+    this.dialogueItems = []
+    this.dialogueRouting = false
     this.byId.clear()
     this.lastFingerprint = ''
+  }
+
+  /** 之后新增的会话行和系统行都接到时间线末尾。 */
+  beginDialogueAppend(): void {
+    this.dialogueRouting = true
   }
 
   addPrefix(item: AgentTimelineItem): void {
@@ -688,6 +748,17 @@ class TimelineBuilder {
   }
 
   addSuffix(item: AgentTimelineItem): void {
+    const dialogueIdx = this.dialogueItems.findIndex((x) => x.id === item.id)
+    if (dialogueIdx >= 0) {
+      this.dialogueItems[dialogueIdx] = item
+      this.byId.set(item.id, item)
+      return
+    }
+    if (this.dialogueRouting && !this.byId.has(item.id)) {
+      this.dialogueItems.push(item)
+      this.byId.set(item.id, item)
+      return
+    }
     const idx = this.suffix.findIndex((x) => x.id === item.id)
     if (idx >= 0) this.suffix[idx] = item
     else this.suffix.push(item)
@@ -710,7 +781,8 @@ class TimelineBuilder {
       }
       return
     }
-    this.sessionItems.push(item)
+    if (this.dialogueRouting) this.dialogueItems.push(item)
+    else this.sessionItems.push(item)
     this.byId.set(item.id, item)
   }
 
@@ -722,18 +794,22 @@ class TimelineBuilder {
 
   /** 还没写上 sessionId 的子代理卡。只有一张时才能安全绑上刚创建的子会话。 */
   unboundSubagentCard(): AgentTimelineItem | null {
-    const cards = this.sessionItems.filter((item) => item.subagent && !item.subagent.sessionId)
+    const cards = [...this.sessionItems, ...this.dialogueItems].filter(
+      (item) => item.subagent && !item.subagent.sessionId,
+    )
     return cards.length === 1 ? cards[0]! : null
   }
 
   removeSessionItem(id: string): void {
     const idx = this.sessionItems.findIndex((x) => x.id === id)
     if (idx >= 0) this.sessionItems.splice(idx, 1)
+    const dialogueIdx = this.dialogueItems.findIndex((x) => x.id === id)
+    if (dialogueIdx >= 0) this.dialogueItems.splice(dialogueIdx, 1)
     this.byId.delete(id)
   }
 
   snapshot(): AgentTimelineItem[] {
-    return [...this.prefix, ...this.sessionItems, ...this.suffix].map((item) => ({
+    return [...this.prefix, ...this.sessionItems, ...this.suffix, ...this.dialogueItems].map((item) => ({
       ...item,
       subagent: item.subagent
         ? { ...item.subagent, steps: item.subagent.steps.map((step) => ({ ...step })) }
@@ -777,13 +853,28 @@ export function capDraftOutreachLeadIds(
 }
 
 export interface AgentRunHooks {
+  lifecycle?: boolean
+  refreshPlaces?: () => Promise<void>
   reloadRuntime?: () => Promise<void>
+  /** 与按钮入口相同的 preflight。聊天启动在 session.create 之前调用。 */
+  preflight?: (kind: ChatPreflightKind | 'enrich-lead-contacts', options?: { requireBuiltinBrowser?: boolean }) => Promise<{ ok: boolean; message: string }>
 }
+
+const discoveryWrites = ['exploration_start','exploration_update','exploration_finish','lead_append_raw','lead_set_company_intelligence']
 
 export class AgentRunController {
   private abort: AbortController | null = null
   private sessionId: string | null = null
   private running = false
+  /** 任务结束后留下，供同一 session 续聊。只有换会话时才停掉。 */
+  private eventBridge: { stop: () => void; sessionId: string; alive: boolean } | null = null
+  /** 当前轮用户原文。回声过滤读它，续聊不必重开订阅。 */
+  private echoPrompt = ''
+  private dialogueActive = false
+  private creatingSession = false
+  private dialogueStopRequested = false
+  private dialogueToken = 0
+  private dialogueSerial = 0
   /** 本次已经 beginBrowserTask 的任务 id。没有登记时 finally 不收标签。 */
   private browserTaskId: string | null = null
   private timeline: TimelineBuilder | null = null
@@ -797,15 +888,610 @@ export class AgentRunController {
   private currentEmit: AgentEventSink | null = null
   private currentFlush: (() => void) | null = null
   private awaitTimelineSeq = 0
+  private permissionFailureHandled = false
+  /** 聊天里同意启动后，创建会话成功前不把 running 交给界面。 */
+  private deferChatStart = false
+  private chatTaskAbort: AbortController | null = null
+  private chatOldSessionId: string | null = null
+  private chatLaunchToken = 0
+  private chatLaunching = false
+  /** 启任务卡被结束时，不要再追加「已停止这一轮回复」。 */
+  private suppressDialogueStopped = false
+  /** 本轮自由对话里 skill 工具加载到的技能名。按钮任务不写这里。 */
+  private chatStepSkill: string | null = null
+  private activeProductId = ''
+  private preservedChatTimeline: TimelineBuilder | null = null
+  private chatNoticeSeq = 0
   private readonly awaitingReply: AwaitingReplyCoordinator
+  private readonly permissionGate: PermissionCoordinator
 
+  private launchAbort?: AbortController
+  private buttonRequest?: Begin
+  private buttonTaskId?: ReturnType<typeof randomUUID>
+  private buttonOrigin: TaskRecord['origin'] = 'button'
+  private buttonFinished?: Promise<void>
+  private acceptedButton = false
+  private targets = new Set<string>()
+  private completedWrites = new Set<string>()
+  private estimatedLetters = 0
+  private expectedSlots = new Set<string>()
+  private explorationId = ''
+  private placesLease = false
+  private translationSource?: { subject: string; body: string }
+  private deadline?: ReturnType<typeof setTimeout>
+  private cleanup = Promise.resolve()
+  private readonly lifecycle = new TaskLifecycle((record) => {
+    if (isActive(record.state)) {
+      this.currentEmit?.({ type: 'task.changed', task: record })
+      if (record.state === 'running' && !this.deadline) {
+        this.deadline = setTimeout(() => {
+          this.lifecycle.interrupt(record.session_id, 'interrupted', '任务执行超时')
+          this.abort?.abort()
+          void this.getClient()
+            ?.session.abort({ sessionID: record.session_id })
+            .catch(() => undefined)
+        }, this.taskTimeout(record))
+      }
+      return
+    }
+    clearTimeout(this.deadline)
+    this.deadline = undefined
+    if (record.run_id && record.state !== 'succeeded' && record.scope.product_id) {
+      try {
+        markExplorationRunFailed(record.scope.product_id, record.run_id, record.message)
+      } catch (error) {
+        console.warn('[ftcs:task] 探索记录收尾失败', error)
+      }
+    }
+    const release = this.placesLease && releasePlacesDiscoverRun().reload
+    this.placesLease = false
+    this.watchPlacesGoogleRejection = false
+    this.cleanup = Promise.all([
+      this.endTrackedBrowserTask(),
+      release ? this.hooks.refreshPlaces?.() : undefined,
+    ])
+      .then(() => undefined)
+      .catch((error) => console.warn('[ftcs:task] 清理失败', error))
+    this.currentEmit?.({ type: 'task.changed', task: record })
+  })
+
+  private taskTimeout(task: TaskRecord): number {
+    const minute = 60_000
+    switch (task.task_type) {
+      case 'translate-outreach-email':
+        return 8 * minute
+      case 'score-and-dedupe':
+        return 20 * minute
+      case 'enrich-lead-contacts':
+        return 15 * minute * Math.min(Math.max(1, this.targets.size), 10)
+      case 'draft-outreach-email':
+        if (task.scope.lead_id) return 10 * minute
+        return Math.min(60 * minute, Math.max(20 * minute, 10 * minute + this.estimatedLetters * 45_000))
+      default:
+        return 45 * minute
+    }
+  }
+
+  disconnect() {
+    this.dialogueToken++
+    this.launchAbort?.abort()
+    if (this.sessionId) this.lifecycle.interrupt(this.sessionId, 'interrupted', '任务服务已断开')
+    this.abort?.abort()
+    this.eventBridge?.stop()
+    this.awaitingReply.dispose()
+    this.sessionId = null
+  }
+
+  currentChatSessionId(): string | null {
+    return this.sessionId
+  }
+
+  async createChatSession(emit: AgentEventSink): Promise<{ ok: boolean; message: string }> {
+    if (this.isRunning() || this.dialogueActive) {
+      return { ok: false, message: '请先结束当前任务或回复' }
+    }
+    const client = this.getClient()
+    if (!client) return { ok: false, message: FREE_DIALOGUE_NOT_READY }
+    this.creatingSession = true
+    const token = this.dialogueToken
+    try {
+      const created = await client.session.create({ title: FREE_DIALOGUE_SESSION_TITLE })
+      if (token !== this.dialogueToken) return { ok: false, message: '服务已断开，请重试' }
+      if (created.error || !created.data?.id) return { ok: false, message: '创建会话失败，请重试' }
+      this.eventBridge?.stop()
+      this.permissionGate.clear()
+      this.awaitingReply.dispose()
+      this.sessionId = created.data.id
+      this.timeline = null
+      this.currentEmit = emit
+      this.currentFlush = null
+      this.dialogueSerial = 0
+      this.chatStepSkill = null
+      this.preservedChatTimeline = null
+      emit({ type: 'session.created' })
+      return { ok: true, message: '' }
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : '创建会话失败，请重试' }
+    } finally {
+      this.creatingSession = false
+    }
+  }
+
+  async waitForFinishedButton() {
+    const before = this.chatLaunchToken
+    if (this.acceptedButton && !this.lifecycle.current) await this.buttonFinished
+    if (before !== this.chatLaunchToken) throw new Error('任务已中止')
+  }
+
+  launchButton(
+    task_type: TaskSkill,
+    scope: Begin['scope'],
+    parameters: Begin['parameters'],
+    emit: AgentEventSink,
+    origin: TaskRecord['origin'] = 'button',
+  ) {
+    if (this.isRunning() || this.dialogueActive) throw new Error('请先结束当前任务或回复')
+    const id = randomUUID()
+    const started = new Date().toISOString()
+    const launch: TaskRecord = {
+      task_id: id,
+      session_id: '',
+      origin,
+      task_type,
+      scope,
+      state: 'preparing',
+      revision: 0,
+      started_at: started,
+      message: '正在启动会话',
+    }
+    emit({ type: 'task.changed', task: launch })
+    this.buttonOrigin = origin
+    this.buttonTaskId = id
+    this.buttonRequest = { protocol_version: 1, request_id: randomUUID(), task_type, scope, parameters }
+    this.acceptedButton = false
+    const launchAbort = new AbortController()
+    this.launchAbort = launchAbort
+    const request = this.buttonRequest
+    this.buttonFinished = (async () => {
+      try {
+        await this.checkTaskEnvironment(request)
+        launchAbort.signal.throwIfAborted()
+        this.eventBridge?.stop()
+        this.timeline = null
+        this.sessionId = null
+        const message = `执行技能 ${task_type}。用以下参数调用 lead-store.task_begin：${JSON.stringify(request)}。使用返回的 prepared 执行，最后调用 task_done。`
+        const reply = await this.sendFreeDialogue(message, emit, true)
+        if (!this.acceptedButton) throw new Error(reply.message || '会话结束前未开始任务')
+      } catch (error) {
+        if (!this.acceptedButton)
+          emit({
+            type: 'task.changed',
+            task: {
+              ...launch,
+              session_id: this.sessionId ?? '',
+              state: launchAbort.signal.aborted ? 'cancelled' : 'failed',
+              revision: 1,
+              finished_at: new Date().toISOString(),
+              message: launchAbort.signal.aborted
+                ? '任务已中止'
+                : error instanceof Error
+                  ? error.message
+                  : '启动失败',
+            },
+          })
+      } finally {
+        this.buttonRequest = undefined
+        this.buttonTaskId = undefined
+        this.launchAbort = undefined
+      }
+    })()
+    return id
+  }
+
+  async begin(session: string, request: Begin) {
+    if (session !== this.sessionId || !this.dialogueActive || this.abort?.signal.aborted)
+      throw new Error('会话已结束')
+    const trusted = this.buttonRequest
+    if (trusted && !isDeepStrictEqual(JSON.parse(JSON.stringify(trusted)), request)) throw new Error('启动参数与已确认的桌面请求不匹配')
+    if (trusted) this.acceptedButton = true
+    return this.lifecycle.begin(
+      session,
+      trusted ? this.buttonOrigin : 'chat',
+      trusted ?? request,
+      async (signal) => {
+        await this.cleanup
+        signal.throwIfAborted()
+        this.targets.clear()
+        this.expectedSlots.clear()
+        this.completedWrites.clear()
+        this.explorationId = ''
+        this.translationSource = undefined
+        return this.prepareTask(trusted ?? request, signal)
+      },
+      this.buttonTaskId,
+    )
+  }
+
+  authorize(context: ToolIdentity, args: Record<string, unknown>) {
+    if (context.sessionID !== this.sessionId || !this.dialogueActive || this.abort?.signal.aborted)
+      throw new Error('工具调用不属于当前任务会话')
+    const name = context.tool.slice('lead-store_'.length)
+    if (name === 'task_begin' || name === 'task_done') return
+    const task = this.lifecycle.current
+    if (!task || task.state !== 'running') throw new Error('请先调用 task_begin，等待桌面确认再执行业务工具')
+    if (!context.tool.startsWith('lead-store_')) {
+      const permitted =
+        context.tool === 'search-api_search_web'
+          ? task.task_type.startsWith('discover-leads')
+          : context.tool.startsWith('places-api_')
+            ? task.task_type === 'discover-leads-r3'
+            : context.tool.startsWith('hunter-api_') && task.task_type === 'enrich-lead-contacts'
+      if (!permitted) throw new Error('该外部工具不属于当前任务')
+      return task.task_id
+    }
+    const allowed: Record<TaskSkill, string[]> = {
+      'extract-product-profile': ['inputs_ensure_dir', 'product_save'],
+      'expand-keywords': ['keywords_save'],
+      'discover-leads': discoveryWrites,
+      'discover-leads-r2': discoveryWrites,
+      'discover-leads-r3': discoveryWrites,
+      'score-and-dedupe': ['leads_score_and_dedupe'],
+      'enrich-lead-contacts': ['leads_patch_scored'],
+      'draft-outreach-email': ['email_draft_plan', 'email_draft_plan_slot', 'email_draft_save'],
+      'translate-outreach-email': ['email_draft_save_zh'],
+    }
+    if (!allowed[task.task_type].includes(name)) throw new Error('该工具不属于当前任务')
+    if (
+      (!name.startsWith('email_draft_') || args.product_id != null) &&
+      args.product_id !== task.scope.product_id
+    )
+      throw new Error('目标产品与任务不一致')
+    if (task.task_type.startsWith('discover-leads')) {
+      const round = task.task_type === 'discover-leads' ? 'R1' : task.task_type.endsWith('r2') ? 'R2' : 'R3'
+      if (name === 'exploration_start' && JSON.stringify(args.rounds ?? ['R1']) !== JSON.stringify([round]))
+        throw new Error('探索渠道与任务不一致')
+      if (
+        name === 'lead_append_raw' &&
+        (args.round !== round || !this.explorationId || args.run_id !== this.explorationId)
+      )
+        throw new Error('原始线索的渠道或探索记录不匹配')
+    }
+    if (name === 'email_draft_plan') {
+      if (task.scope.lead_id || args.product_id !== task.scope.product_id)
+        throw new Error('需要使用指定的起草模式')
+      return task.task_id
+    }
+    if (name === 'email_draft_plan_slot' && !task.scope.lead_id) throw new Error('请使用批量槽位计划')
+    if (
+      name === 'email_draft_save' &&
+      !this.expectedSlots.has(JSON.stringify([args.lead_id, args.recipient_key || 'company']))
+    )
+      throw new Error('请先为所选目标生成槽位计划')
+    if (name.startsWith('email_draft_') || name === 'leads_patch_scored') {
+      if (!this.targets.has(String(args.lead_id))) throw new Error('目标线索与任务不一致')
+      if (task.scope.recipient_key && (args.recipient_key || 'company') !== task.scope.recipient_key)
+        throw new Error('收件槽与任务不一致')
+      if (name === 'email_draft_save_zh') {
+        const slot = getEmailDraftSlot(
+          task.scope.product_id!,
+          String(args.lead_id),
+          task.scope.recipient_key || 'company',
+        )
+        if (slot.subject !== this.translationSource?.subject || slot.body !== this.translationSource?.body)
+          throw new Error('外文稿已变更，请重新翻译')
+      }
+    }
+    if (name === 'exploration_start' && this.explorationId) throw new Error('本任务已有探索记录')
+    if (['exploration_update', 'exploration_finish'].includes(name) && args.run_id !== this.explorationId)
+      throw new Error('探索记录与任务不一致')
+    return task.task_id
+  }
+
+  recordWrite(
+    context: ToolIdentity,
+    result: { run_id?: string; lead_id?: string; recipient_key?: string; slots?: [string, string][] },
+  ) {
+    if (
+      context.sessionID !== this.sessionId ||
+      this.lifecycle.current?.state !== 'running' ||
+      context.taskID !== this.lifecycle.current.task_id
+    )
+      return
+    const name = context.tool.slice('lead-store_'.length)
+    this.completedWrites.add(name)
+    if (name === 'exploration_start' && result.run_id && /^[\w-]+$/.test(result.run_id)) {
+      this.explorationId = result.run_id
+      this.lifecycle.bindExploration(result.run_id)
+    }
+    if (name === 'email_draft_plan' || name === 'email_draft_plan_slot') {
+      for (const [lead, key] of result.slots ?? []) {
+        if (this.targets.has(lead)) this.expectedSlots.add(JSON.stringify([lead, key]))
+      }
+    }
+    if (name === 'email_draft_save')
+      this.completedWrites.add(JSON.stringify([result.lead_id, result.recipient_key || 'company']))
+    if (name === 'leads_patch_scored') this.completedWrites.add('contact:' + result.lead_id)
+  }
+
+  async done(session: string, request: Done) {
+    const record = this.lifecycle.done(session, request, (task) => {
+      const pid = task.scope.product_id!
+      const wrote = (name: string) => this.completedWrites.has(name)
+      if (request.outcome === 'partial') {
+        if (
+          ![...this.completedWrites].some((name) =>
+            [
+              'product_save',
+              'keywords_save',
+              'lead_append_raw',
+              'lead_set_company_intelligence',
+              'leads_score_and_dedupe',
+              'leads_patch_scored',
+              'email_draft_save',
+              'email_draft_save_zh',
+            ].includes(name),
+          )
+        )
+          throw new Error('没有确认已保存的部分结果')
+        return
+      }
+      let verified = false
+      switch (task.task_type) {
+        case 'extract-product-profile':
+          verified = wrote('product_save') && !!patchProfileSourceInputs(pid)
+          break
+        case 'expand-keywords':
+          verified = wrote('keywords_save') && !!loadExpansion(pid)?.search_queries.length
+          break
+        case 'score-and-dedupe':
+          verified = wrote('leads_score_and_dedupe') && !!loadScoredArtifact(pid)
+          break
+        case 'enrich-lead-contacts':
+          verified =
+            [...this.targets].filter((id) => wrote('contact:' + id)).length +
+              (request.result?.skipped_count ?? 0) ===
+            this.targets.size
+          break
+        case 'draft-outreach-email': {
+          verified =
+            [...this.targets].every((id) =>
+              this.expectedSlots.has(JSON.stringify([id, task.scope.recipient_key || 'company'])),
+            ) && [...this.expectedSlots].every((key) => wrote(key))
+          if (verified && task.scope.lead_id)
+            clearEmailDraftZh(task.scope.lead_id, task.scope.recipient_key!, getWorkspaceRoot())
+          break
+        }
+        case 'translate-outreach-email': {
+          const slot = getEmailDraftSlot(pid, task.scope.lead_id!, task.scope.recipient_key || 'company')
+          verified = wrote('email_draft_save_zh') && !!slot.bodyZh && !!slot.subjectZh && !slot.zhStale
+          break
+        }
+        default:
+          verified =
+            !!this.explorationId &&
+            (!request.result?.run_id || request.result.run_id === this.explorationId) &&
+            wrote('exploration_finish') &&
+            loadExplorationRun(pid, this.explorationId)?.status === 'completed'
+      }
+      if (!verified) throw new Error('本次任务的保存结果未通过校验')
+    })
+    await this.cleanup
+    return record
+  }
+
+  private async checkTaskEnvironment(request: Begin, hasWebsites?: boolean) {
+    if (!this.hooks.preflight) return
+    const skill = request.task_type
+    if (skill === 'extract-product-profile' && !request.scope.product_id && hasWebsites == null) {
+      hasWebsites = !!resolveChatProfileSources(request.parameters.library_sources ?? [], getWorkspaceRoot())
+        .websitePaths.length
+    }
+    if (skill === 'extract-product-profile' && request.scope.product_id && hasWebsites == null) {
+      hasWebsites = false
+    }
+    const kind =
+      skill === 'extract-product-profile'
+        ? 'extract-profile'
+        : skill === 'draft-outreach-email' || skill === 'translate-outreach-email'
+          ? 'draft-email'
+          : skill
+    const check = await this.hooks.preflight(kind, { requireBuiltinBrowser: hasWebsites })
+    if (!check.ok) throw new Error(check.message)
+  }
+
+  private async prepareTask(request: Begin, signal: AbortSignal) {
+    const { scope, parameters: p, task_type: skill } = request
+    const pid = scope.product_id ?? ''
+    const slotTask =
+      skill === 'translate-outreach-email' || (skill === 'draft-outreach-email' && p.mode === 'slot')
+    const permitted =
+      skill === 'extract-product-profile'
+        ? ['library_sources']
+        : skill.startsWith('discover-leads')
+          ? ['max_queries']
+          : skill === 'enrich-lead-contacts'
+            ? ['lead_ids', 'verify_emails']
+            : skill === 'draft-outreach-email'
+              ? slotTask
+                ? ['mode', 'email']
+                : ['mode', 'lead_ids']
+              : []
+    if (Object.keys(p).some((key) => !permitted.includes(key))) throw new Error('任务参数不适用于该技能')
+    if (skill === 'enrich-lead-contacts' && !this.buttonRequest && !p.lead_ids?.length)
+      throw new Error('请先选中要补全的线索')
+    if (skill === 'draft-outreach-email' && !p.mode) throw new Error('缺少起草模式')
+    if (skill === 'extract-product-profile' && pid && p.library_sources?.length)
+      throw new Error('修改已有画像时请使用当前产品资料，不支持同时导入新资料')
+    if (slotTask) {
+      assertChatIdentifier(scope.lead_id ?? '')
+      assertChatIdentifier(scope.recipient_key ?? '')
+    } else if (scope.lead_id || scope.recipient_key) throw new Error('此任务不接受收件槽')
+    const source =
+      skill === 'extract-product-profile' && !pid
+        ? resolveChatProfileSources(p.library_sources ?? [], getWorkspaceRoot())
+        : null
+    if (!this.buttonRequest)
+      await this.checkTaskEnvironment(request, source ? !!source.websitePaths.length : undefined)
+    signal.throwIfAborted()
+    if (source) {
+      const data = await bootstrapProductFromLibrary(source, getWorkspaceRoot(), signal, id => this.lifecycle.bindProduct(id))
+      if (data.websiteUrls.length) this.beginTrackedBrowserTask(skill)
+      return {
+        product_id: data.productId,
+        input_files: data.inputFiles,
+        website_urls: data.websiteUrls,
+        skipped: data.skipped,
+        instructions: buildPrompt(data),
+      }
+    }
+    assertChatIdentifier(pid)
+    const profile = loadProfile(pid)
+    if (!profile) throw new Error('未找到所选产品')
+    if (skill === 'extract-product-profile') {
+      if (profile.status === 'deleted' || profile.status === 'archived') throw new Error('无法修改已删除或归档的产品')
+      return {
+        product_id: pid,
+        instructions: `修改已有产品画像 ${pid}。先调用 lead-store.product_get 读取当前画像，再根据用户要求更新，使用相同 product_id 调用 lead-store.product_save。保留用户未要求修改的内容，特别是 products、buyer_personas、competitors 和 source_inputs 等完整数组。保存成功后调用 task_done。`,
+      }
+    }
+    const intensity = getExploreIntensity(),
+      limits = getExploreIntensityLimits(intensity)
+    let instructions: string
+    if (skill === 'expand-keywords' || skill.startsWith('discover-leads')) {
+      if (profile.status !== 'ready' || !profile.productNames.length) throw new Error('请先补全产品画像')
+    }
+    if (skill === 'expand-keywords')
+      instructions = buildExpandKeywordsPrompt(
+        pid,
+        intensity,
+        limits.keywordTargetR1,
+        limits.keywordTargetPerRound,
+      )
+    else if (skill === 'score-and-dedupe') {
+      if (!countRawLeads(pid)) throw new Error('暂无原始线索')
+      instructions = buildScoreAndDedupePrompt(pid)
+    } else if (skill.startsWith('discover-leads')) {
+      const round = skill === 'discover-leads' ? 'R1' : skill.endsWith('r2') ? 'R2' : 'R3'
+      const enabledSites =
+        round === 'R2'
+          ? listExploreR2Sites(getWorkspaceRoot())
+              .filter((site) => site.enabled)
+              .map((site) => site.id)
+          : []
+      const queries =
+        loadExpansion(pid)?.search_queries.filter((q) =>
+          round === 'R2'
+            ? isEligibleR2Query(q) && enabledSites.includes(q.site_id ?? '')
+            : q.round?.toUpperCase() === round && (round !== 'R3' || !q.site_id),
+        ) ?? []
+      if (!queries.length) throw new Error(`没有可用的 ${round} 探索词`)
+      const count = Math.min(p.max_queries ?? queries.length, queries.length)
+      if (round === 'R3') {
+        const lease = await beginPlacesDiscoverRun(this.lifecycle.current!.task_id)
+        if (!lease.ok) throw new Error(lease.message)
+        if (signal.aborted) {
+          if (lease.releaseAfter && releasePlacesDiscoverRun().reload) await this.hooks.refreshPlaces?.()
+          signal.throwIfAborted()
+        }
+        this.placesLease = lease.releaseAfter
+        if (lease.reloadBefore) await this.hooks.refreshPlaces?.()
+        this.watchPlacesGoogleRejection = lease.watchGoogleRejection
+        this.placesRejectionHandled = false
+        signal.throwIfAborted()
+      }
+      this.beginTrackedBrowserTask(skill)
+      instructions =
+        round === 'R1'
+          ? buildDiscoverLeadsPrompt(pid, {
+              rounds: [round],
+              maxQueries: count,
+              intensity,
+              searchNumResults: limits.searchNumResults,
+            })
+          : round === 'R2'
+            ? buildDiscoverLeadsR2Prompt(pid, count, intensity, limits.searchNumResults)
+            : buildDiscoverLeadsR3Prompt(
+                pid,
+                count,
+                intensity,
+                limits.searchNumResults,
+                limits.placesResultLimit,
+              )
+    } else {
+      const slot = skill === 'translate-outreach-email' || p.mode === 'slot'
+      const ids = slot
+        ? [scope.lead_id ?? '']
+        : (p.lead_ids ??
+          (skill === 'enrich-lead-contacts' ? listScoredLeadsNeedingEnrich(pid) : listLeadsNeedingDraft(pid)))
+      const targets =
+        skill === 'draft-outreach-email' && !slot
+          ? capDraftOutreachLeadIds(ids, { rankedByScore: !p.lead_ids }).leadIds
+          : ids
+      const scored = new Set(
+        listLeadsSnapshot(pid)
+          .rows.filter((r) => r.phase === 'scored')
+          .map((r) => r.id),
+      )
+      for (const id of targets) {
+        assertChatIdentifier(id)
+        if (skill !== 'translate-outreach-email' && !scored.has(id))
+          throw new Error('线索不属于该产品的已评分线索')
+        this.targets.add(id)
+      }
+      if (!targets.length)
+        return {
+          product_id: pid,
+          noop: true,
+          instructions: '没有待处理目标，直接以 succeeded 调用 task_done。',
+        }
+      const leadId = targets[0],
+        recipientKey = scope.recipient_key ?? 'company'
+      if (skill === 'translate-outreach-email') {
+        validateChatTranslation(pid, leadId, recipientKey, getWorkspaceRoot())
+        const detail = getEmailDraftSlot(pid, leadId, recipientKey)
+        this.translationSource = { subject: detail.subject, body: detail.body }
+        instructions = buildTranslateOutreachPrompt({ ...detail, productId: pid, leadId, recipientKey })
+      } else if (skill === 'enrich-lead-contacts')
+        instructions = buildEnrichLeadContactsPrompt(
+          pid,
+          targets,
+          p.verify_emails ?? getSettingsSnapshot().hunterVerifyEmails,
+        )
+      else if (slot) {
+        const recipient = getEmailRecipientPool(pid, leadId).pool.find(
+          (item) => item.recipientKey === recipientKey,
+        )
+        if (
+          !recipient ||
+          (p.email && recipientKey !== 'company' && recipientKeyFromEmail(p.email) !== recipientKey)
+        )
+          throw new Error('所选收件人不属于该线索')
+        instructions = buildDraftOutreachSlotPrompt({
+          productId: pid,
+          leadId,
+          recipientKey,
+          email: recipient.email || p.email,
+          audience: recipientKey === 'company' ? 'company' : 'person',
+        })
+      } else {
+        this.estimatedLetters = estimateOutreachDraftCounts(pid, targets).estimatedLetters
+        instructions = buildDraftOutreachPrompt(pid, targets, this.estimatedLetters)
+      }
+    }
+    return {
+      product_id: pid,
+      instructions,
+      ...(this.targets.size ? { lead_ids: [...this.targets] } : {}),
+      ...(this.translationSource ?? {}),
+    }
+  }
   constructor(
     private readonly getClient: () => OpencodeClient | null,
     private readonly hooks: AgentRunHooks = {},
   ) {
     this.awaitingReply = new AwaitingReplyCoordinator({
-      timeoutMs: () =>
-        resolveAwaitingReplyTimeoutMs(process.env.FTCS_AWAITING_REPLY_TIMEOUT_MS),
+      needsExplicitAnswer: () => !!this.hooks.lifecycle && !this.lifecycle.current,
+      timeoutMs: () => resolveAwaitingReplyTimeoutMs(process.env.FTCS_AWAITING_REPLY_TIMEOUT_MS),
       schedule: (ms, cb) => {
         const timer = setTimeout(cb, ms)
         return { clear: () => clearTimeout(timer) }
@@ -835,6 +1521,20 @@ export class AgentRunController {
       onSlotCleared: () => {
         disarmAwaitingReplyNotification()
       },
+      onSubmitted: (info) => {
+        if (!this.hooks.lifecycle) this.onQuestionSubmitted(info)
+      },
+    })
+    this.permissionGate = new PermissionCoordinator({
+      isRunning: () => this.running || !!this.lifecycle.current,
+      hasFailed: () => this.permissionFailureHandled,
+      reply: (call) => this.sendPermissionReply(call),
+      emit: (pending) => {
+        this.currentEmit?.({ type: 'permission-ask', pending })
+      },
+      onReplyFailed: () => {
+        this.failPermissionReply()
+      },
     })
   }
 
@@ -860,10 +1560,252 @@ export class AgentRunController {
   }
 
   isRunning(): boolean {
-    return this.running
+    return this.running || !!this.lifecycle.current || !!this.buttonRequest || this.creatingSession
+  }
+
+  /** 新任务开始：卸掉上一段订阅，并打断进行中的自由回复。不把自由回复记成任务失败。 */
+  private beginTaskRun(): AbortSignal {
+    this.permissionFailureHandled = false
+    this.deferChatStart = false
+    this.chatTaskAbort = null
+    this.running = true
+    this.eventBridge?.stop()
+    if (this.dialogueActive) {
+      this.dialogueToken += 1
+      this.dialogueActive = false
+      this.dialogueStopRequested = false
+      this.abort?.abort()
+      const client = this.getClient()
+      const sid = this.sessionId
+      if (client && sid) {
+        void client.session.abort({ sessionID: sid }).catch(() => undefined)
+      }
+    }
+    this.abort = new AbortController()
+    return this.abort.signal
+  }
+
+  /**
+   * 聊天启动：创建成功前不进入 running，不清时间线，也不中止续聊会话。
+   * 按钮入口不走这里。
+   */
+  private beginChatTaskRun(): AbortSignal {
+    this.permissionFailureHandled = false
+    this.deferChatStart = true
+    this.chatOldSessionId = this.sessionId
+    this.chatTaskAbort = new AbortController()
+    return this.chatTaskAbort.signal
+  }
+
+  private beginPipelineRun(fromChat: boolean | undefined): AbortSignal {
+    return fromChat ? this.beginChatTaskRun() : this.beginTaskRun()
+  }
+
+  /** 按钮立刻记下新会话。聊天要等创建成功后才切订阅并中止旧续聊。 */
+  private noteCreatedSession(sessionId: string): string {
+    if (!this.deferChatStart) {
+      this.sessionId = sessionId
+      return sessionId
+    }
+    if (this.chatTaskAbort?.signal.aborted) {
+      throw new Error('已取消')
+    }
+    this.commitChatSession(sessionId)
+    return sessionId
+  }
+
+  private commitChatSession(sessionId: string): void {
+    const oldSessionId = this.chatOldSessionId
+    const dialogueAbort = this.abort
+    this.deferChatStart = false
+    this.chatOldSessionId = null
+    this.running = true
+    this.dialogueToken += 1
+    this.dialogueActive = false
+    this.dialogueStopRequested = false
+    this.eventBridge?.stop()
+    this.abort = this.chatTaskAbort ?? new AbortController()
+    this.chatTaskAbort = null
+    this.sessionId = sessionId
+    dialogueAbort?.abort()
+    const client = this.getClient()
+    if (client && oldSessionId && oldSessionId !== sessionId) {
+      void client.session.abort({ sessionID: oldSessionId }).catch(() => undefined)
+    }
+  }
+
+  /** 聊天启动没创建成功时，别拆掉续聊仍在用的 abort。 */
+  private finishTaskRun(): void {
+    this.running = false
+    if (this.deferChatStart) {
+      this.deferChatStart = false
+      this.chatTaskAbort = null
+      this.chatOldSessionId = null
+      return
+    }
+    this.abort = null
+  }
+
+  noteActiveProduct(productId: string): void {
+    this.activeProductId = productId.trim()
+  }
+
+  private appendChatNotice(body: string, emit: AgentEventSink): void {
+    const timeline = this.running
+      ? (this.timeline ?? new TimelineBuilder())
+      : (this.preservedChatTimeline ?? this.timeline ?? new TimelineBuilder())
+    if (!this.running) {
+      this.preservedChatTimeline = timeline
+      this.timeline = timeline
+      timeline.beginDialogueAppend()
+    }
+    this.chatNoticeSeq += 1
+    timeline.addSuffix({
+      id: `chat-start-${this.chatNoticeSeq}`,
+      kind: 'system',
+      time: nowTime(),
+      title: '系统',
+      body,
+    })
+    const items = timeline.emitIfChanged()
+    if (items) emit({ type: 'timeline', items })
+  }
+
+  /** 闲聊里记下步骤技能。执行中的 skill 工具不算聊天启任务身份。 */
+  private noteLoadedSkill(part: ToolPart): void {
+    if (this.running || this.deferChatStart) return
+    const name = readLoadedSkillName(part.tool, part.state.input)
+    if (!name) return
+    this.chatStepSkill = name
+  }
+
+  /**
+   * 提问卡提交成功后才进入 run*。
+   * 校验、预检、创建失败都追加在现有时间线末尾。
+   */
+  private async launchChatTask(request: ChatStartRequest, rawEmit: AgentEventSink): Promise<void> {
+    if (this.running) {
+      this.appendChatNotice(CHAT_START_ALREADY_RUNNING, rawEmit)
+      return
+    }
+    if (!request.ok) {
+      this.preservedChatTimeline = this.preservedChatTimeline ?? this.timeline
+      this.appendChatNotice(chatStartFailureLine(request.code), rawEmit)
+      return
+    }
+    if (this.chatLaunching) return
+    const token = ++this.chatLaunchToken
+    this.chatLaunching = true
+    this.preservedChatTimeline = this.timeline
+    let released = false
+    let notedFailure = false
+    let pendingState: Extract<AgentEventPayload, { type: 'state' }> | null = null
+    const emit: AgentEventSink = (payload) => {
+      if (released) {
+        rawEmit(payload)
+        return
+      }
+      if (payload.type === 'timeline') {
+        if (!payload.items.some((item) => item.id === 'sys-session')) return
+        released = true
+        rawEmit(payload)
+        if (pendingState) rawEmit(pendingState)
+        pendingState = null
+        return
+      }
+      if (payload.type === 'state') {
+        if (payload.status === 'running') pendingState = payload
+        return
+      }
+      if (payload.type === 'done') {
+        notedFailure = true
+        this.appendChatNotice(chatStartFailureLine(payload.message), rawEmit)
+        return
+      }
+      rawEmit(payload)
+    }
+    const cancelled = () => this.chatLaunchToken !== token || this.chatTaskAbort?.signal.aborted === true
+    try {
+      const profileInput = request.stage === 'profile'
+        ? resolveChatProfileSources(request.sources ?? [], getWorkspaceRoot()) : null
+      const knownIds = listProductSummaries().map((item) => item.id)
+      const productId = resolveChatProductId(request.product_id, knownIds)
+      if (!profileInput && !productId) {
+        this.appendChatNotice(CHAT_START_NO_PRODUCT, rawEmit)
+        return
+      }
+      if (cancelled()) return
+      const preflight = this.hooks.preflight
+      if (preflight) {
+        const checked = await preflight(preflightKindFor(request), profileInput ? { requireBuiltinBrowser: profileInput.websitePaths.length > 0 } : undefined)
+        if (cancelled() || this.chatLaunchToken !== token) return
+        if (!checked.ok) {
+          this.appendChatNotice(chatStartFailureLine(checked.message), rawEmit)
+          return
+        }
+      }
+      if (this.running) {
+        this.appendChatNotice(CHAT_START_ALREADY_RUNNING, rawEmit)
+        return
+      }
+      const fromChat = { fromChat: true as const }
+      if (request.stage === 'profile' && profileInput) {
+        const bootstrap = await bootstrapProductFromLibrary(profileInput)
+        if (cancelled()) return
+        await this.runExtractProfile(bootstrap, emit, fromChat)
+      } else if (request.stage === 'translate') {
+        validateChatTranslation(productId, request.lead_id ?? '', request.recipient_key ?? 'company', getWorkspaceRoot())
+        await this.runTranslateOutreachEmail({ productId, leadId: request.lead_id!, recipientKey: request.recipient_key }, emit, fromChat)
+      } else if (request.stage === 'keywords') {
+        await this.runExpandKeywords(productId, emit, fromChat)
+      } else if (request.stage === 'explore') {
+        await this.runDiscoverLeads(productId, emit, {
+          ...fromChat,
+          channel: request.explore_channel,
+        })
+      } else if (request.stage === 'score') {
+        await this.runScoreAndDedupe(productId, emit, fromChat)
+      } else {
+        await this.runDraftOutreachEmail(productId, emit, fromChat)
+      }
+    } catch (err) {
+      if (!released && !notedFailure && !cancelled()) {
+        const message = err instanceof Error ? err.message : String(err)
+        this.appendChatNotice(chatStartFailureLine(message), rawEmit)
+      }
+    } finally {
+      if (!released && this.preservedChatTimeline) {
+        this.timeline = this.preservedChatTimeline
+      } else if (released) {
+        this.preservedChatTimeline = null
+      }
+      this.chatLaunching = false
+    }
   }
 
   async abortCurrent(): Promise<void> {
+    this.launchAbort?.abort()
+    if (this.sessionId) this.lifecycle.interrupt(this.sessionId, 'cancelled', '用户已中止')
+    this.chatLaunchToken += 1
+    this.chatTaskAbort?.abort()
+    this.permissionGate.clear()
+    if (!this.hooks.lifecycle && !this.running && this.awaitingReply.isPendingChatStart()) {
+      await this.awaitingReply.endForAbort()
+      const emit = this.currentEmit
+      if (emit) {
+        this.preservedChatTimeline = this.preservedChatTimeline ?? this.timeline
+        this.appendChatNotice(CHAT_START_CANCELLED, emit)
+      }
+      if (this.dialogueActive) {
+        this.suppressDialogueStopped = true
+        await this.abortFreeDialogue()
+      }
+      return
+    }
+    if (!this.running && this.dialogueActive) {
+      await this.abortFreeDialogue()
+      return
+    }
     await this.awaitingReply.endForAbort()
     this.abort?.abort()
     const client = this.getClient()
@@ -876,8 +1818,303 @@ export class AgentRunController {
     }
   }
 
+  /** 只停当前这一轮自由回复，不走任务失败收尾。 */
+  private async abortFreeDialogue(): Promise<void> {
+    this.dialogueStopRequested = true
+    if (this.hooks.lifecycle) await this.awaitingReply.endForAbort()
+    this.abort?.abort()
+    const client = this.getClient()
+    const sid = this.sessionId
+    if (client && sid) {
+      try {
+        await client.session.abort({ sessionID: sid })
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  /**
+   * 自由对话。渲染进程只传文本。已有 session 则接着 promptAsync，否则新建标题「自由对话」。
+   * 不把 agentStatus 设成 running，不读任务产物。
+   */
+  async sendFreeDialogue(
+    text: string,
+    emit: AgentEventSink,
+    fromButton = false,
+  ): Promise<SendFreeDialogueResult> {
+    if (!text.trim()) return { ok: true, message: '', accepted: false }
+    const client = this.getClient()
+    const plan = planFreeDialogue({
+      text,
+      running: this.running || this.creatingSession || (!!this.buttonRequest && !fromButton),
+      clientReady: client != null,
+      hasSession: Boolean(this.sessionId),
+    })
+    if (plan.action === 'ignore') return { ok: true, message: '', accepted: false }
+    if (plan.action === 'block') return { ok: false, message: plan.message, accepted: false }
+    if (!client || this.dialogueActive) {
+      return { ok: false, message: client ? '' : FREE_DIALOGUE_NOT_READY, accepted: false }
+    }
+
+    const token = ++this.dialogueToken
+    this.permissionFailureHandled = false
+    this.chatStepSkill = null
+    this.dialogueActive = true
+    this.dialogueStopRequested = false
+    this.autoAbortReason = null
+    this.abort = new AbortController()
+    const signal = this.abort.signal
+    const timeline = this.timeline ?? new TimelineBuilder()
+    this.timeline = timeline
+    let accepted = false
+
+    const flushTimeline = () => {
+      const items = timeline.emitIfChanged()
+      if (items) emit({ type: 'timeline', items })
+    }
+    const superseded = () => this.dialogueToken !== token || this.running
+
+    try {
+      if (plan.createSession) {
+        const created = await client.session.create({
+          title: this.buttonRequest?.task_type ?? FREE_DIALOGUE_SESSION_TITLE,
+        })
+        if (superseded()) return { ok: true, message: '', accepted: false }
+        if (signal.aborted) {
+          this.noteDialogueStopped(timeline, flushTimeline)
+          return { ok: true, message: '', accepted: false }
+        }
+        if (created.error || !created.data?.id) {
+          throw new Error(
+            typeof created.error === 'object' && created.error && 'message' in created.error
+              ? String((created.error as { message?: string }).message)
+              : '创建 OpenCode 会话失败',
+          )
+        }
+        this.sessionId = created.data.id
+        timeline.addPrefix({
+          id: 'sys-session',
+          kind: 'system',
+          time: nowTime(),
+          title: '会话',
+          body: `已创建 OpenCode session\n${this.sessionId}`,
+        })
+        flushTimeline()
+      }
+
+      const sessionId = this.sessionId
+      if (!sessionId) {
+        return { ok: false, message: FREE_DIALOGUE_NOT_READY, accepted: false }
+      }
+
+      timeline.beginDialogueAppend()
+      this.dialogueSerial += 1
+      timeline.upsertSessionItem({
+        id: `dialogue-user-${this.dialogueSerial}`,
+        kind: 'user',
+        time: nowTime(),
+        title: '你',
+        body: plan.text,
+      })
+      accepted = true
+      flushTimeline()
+
+      this.openEventBridge(client, sessionId, timeline, flushTimeline, plan.text, emit)
+
+      if (superseded() || signal.aborted) {
+        if (this.dialogueStopRequested && !superseded()) {
+          this.noteDialogueStopped(timeline, flushTimeline)
+        }
+        return { ok: true, message: '', accepted }
+      }
+
+      const sent = await client.session.promptAsync(freeDialoguePromptArgs(sessionId, plan.text))
+      if (sent?.error) throw new Error('发送任务指令失败')
+
+      const idleResult = await this.waitForSessionIdle(
+        client,
+        sessionId,
+        signal,
+        this.hooks.lifecycle ? 165 * 60_000 : undefined,
+      )
+      if (this.hooks.lifecycle)
+        this.lifecycle.interrupt(
+          sessionId,
+          this.dialogueStopRequested ? 'cancelled' : 'interrupted',
+          this.autoAbortReason || '会话结束前未收到任务结束信号',
+        )
+      if (superseded()) return { ok: true, message: '', accepted }
+
+      if (idleResult === 'abort') {
+        if (this.dialogueStopRequested) {
+          this.noteDialogueStopped(timeline, flushTimeline)
+          return { ok: true, message: '', accepted: true }
+        }
+        if (this.autoAbortReason) {
+          return { ok: false, message: this.autoAbortReason, accepted: true }
+        }
+        return { ok: true, message: '', accepted: true }
+      }
+
+      if (idleResult === 'timeout') {
+        await client.session.abort({ sessionID: sessionId }).catch(() => undefined)
+        timeline.addSuffix({
+          id: `dialogue-timeout-${this.dialogueSerial}`,
+          kind: 'error',
+          time: nowTime(),
+          title: '错误',
+          body: '这一轮回复超时，请再发一次',
+        })
+        flushTimeline()
+        return { ok: false, message: '这一轮回复超时，请再发一次', accepted: true }
+      }
+
+      return { ok: true, message: '', accepted: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (!superseded()) {
+        timeline.beginDialogueAppend()
+        timeline.addSuffix({
+          id: `dialogue-error-${this.dialogueSerial || 'create'}`,
+          kind: 'error',
+          time: nowTime(),
+          title: '错误',
+          body: message,
+        })
+        flushTimeline()
+      }
+      return { ok: false, message, accepted }
+    } finally {
+      if (this.dialogueToken === token) {
+        if (this.sessionId && this.hooks.lifecycle)
+          this.lifecycle.interrupt(this.sessionId, 'interrupted', '会话已结束')
+        this.dialogueActive = false
+        this.dialogueStopRequested = false
+        if (!this.running) this.abort = null
+      }
+    }
+  }
+
+  private noteDialogueStopped(timeline: TimelineBuilder, flush: () => void): void {
+    if (this.suppressDialogueStopped) {
+      this.suppressDialogueStopped = false
+      return
+    }
+    timeline.beginDialogueAppend()
+    timeline.addSuffix({
+      id: `dialogue-stop-${this.dialogueSerial || 'pending'}`,
+      kind: 'system',
+      time: nowTime(),
+      title: '系统',
+      body: FREE_DIALOGUE_STOPPED,
+    })
+    flush()
+  }
+
+  /**
+   * 与任务共用一条订阅。同一 session 续聊时留着；会话号读控制器上的当前 id。
+   */
+  private openEventBridge(
+    client: OpencodeClient,
+    sessionId: string,
+    timeline: TimelineBuilder,
+    flush: () => void,
+    userPrompt: string,
+    emit: AgentEventSink,
+  ): void {
+    this.echoPrompt = userPrompt
+    this.timeline = timeline
+    this.currentEmit = emit
+    this.currentFlush = flush
+    if (this.eventBridge?.alive && this.eventBridge.sessionId === sessionId) {
+      this.awaitingReply.resume()
+      return
+    }
+    this.eventBridge?.stop()
+    this.startEventBridge(client, sessionId, timeline, flush, userPrompt, emit)
+  }
+
+  /**
+   * 提问卡提交成功后：题头是启任务契约且当前没有任务，才进入 run*。
+   * 其它题头仍是普通提问。
+   */
+  private onQuestionSubmitted(info: {
+    questions: DisplayQuestion[]
+    answers: string[][]
+    fresh: boolean
+  }): void {
+    const parsed = parseChatStartAnswers(info.questions, info.answers, this.chatStepSkill)
+    if (!parsed) return
+    const emit = this.currentEmit
+    if (!emit) return
+    if (this.running) {
+      this.appendChatNotice(CHAT_START_ALREADY_RUNNING, emit)
+      return
+    }
+    if (!info.fresh) return
+    void this.launchChatTask(parsed, emit)
+  }
+
+  /** 执行中再出现启任务题头：不展示第二张卡，也不启动第二个任务。 */
+  private async rejectChatStartQuestion(
+    sessionId: string,
+    side: 'v1' | 'v2',
+    requestId: string,
+  ): Promise<void> {
+    if (!requestId) return
+    const client = this.questionClient()
+    const run = async () => {
+      if (!client) return 'failed' as const
+      return side === 'v1' ? client.rejectV1(requestId) : client.rejectV2(sessionId, requestId)
+    }
+    let result = await run()
+    if (result === 'failed') result = await run()
+  }
+
   replyToPendingQuestion(input: unknown): Promise<ReplyQuestionResult> {
     return this.awaitingReply.reply(input)
+  }
+
+  replyToPendingPermission(input: unknown): Promise<ReplyPermissionResult> {
+    return this.permissionGate.replyFromUser(input)
+  }
+
+  private async sendPermissionReply(call: PermissionReplyCall): Promise<PermissionReplyOutcome> {
+    const client = this.getClient()
+    if (!client) return 'failed'
+    try {
+      const res = await client.permission.reply(call)
+      return classifyPermissionHttpResult({
+        error: res.error,
+        data: res.data,
+        status: res.response?.status,
+      })
+    } catch (error) {
+      return classifyPermissionHttpResult({ error, data: undefined })
+    }
+  }
+
+  /** 回复两次都失败时停掉会话，避免权限请求一直挂起。 */
+  private failPermissionReply(): void {
+    if (this.permissionFailureHandled) return
+    this.permissionFailureHandled = true
+    this.autoAbortReason = PERMISSION_REPLY_FAILED_MESSAGE
+    this.permissionGate.clear()
+    this.timeline?.addSuffix({
+      id: this.running ? 'sys-abort' : 'permission-reply-failed',
+      kind: 'error',
+      time: nowTime(),
+      title: this.running ? '失败' : '系统',
+      body: PERMISSION_REPLY_FAILED_MESSAGE,
+    })
+    this.currentFlush?.()
+    this.abort?.abort()
+    const client = this.getClient()
+    const sid = this.sessionId
+    if (client && sid) {
+      void client.session.abort({ sessionID: sid }).catch(() => undefined)
+    }
   }
 
   private questionClient(): AwaitingQuestionClient | null {
@@ -979,6 +2216,7 @@ export class AgentRunController {
   async runExpandKeywords(
     productId: string,
     emit: AgentEventSink,
+    options?: { fromChat?: boolean },
   ): Promise<{ ok: boolean; message: string; expansion?: KeywordExpansion }> {
     if (this.running) {
       throw new Error('已有任务在运行，请稍候或先中止')
@@ -1006,9 +2244,7 @@ export class AgentRunController {
     const r1Target = keywordLimits.keywordTargetR1
     const perSiteAndR3Target = keywordLimits.keywordTargetPerRound
 
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginPipelineRun(options?.fromChat)
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
 
@@ -1070,8 +2306,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title: `expand-keywords · ${productId}`,
@@ -1083,35 +2317,27 @@ export class AgentRunController {
             : '创建 OpenCode 会话失败',
         )
       }
-      this.sessionId = created.data.id
+      const sessionId = this.noteCreatedSession(created.data.id)
       timeline.addPrefix({
         id: 'sys-session',
         kind: 'system',
         time: nowTime(),
         title: '会话',
-        body: `已创建 OpenCode session\n${this.sessionId}`,
+        body: `已创建 OpenCode session\n${sessionId}`,
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
-        sessionID: this.sessionId,
+        sessionID: sessionId,
         parts: [{ type: 'text', text: promptText }],
       })
       void promptPromise
 
       const idleResult = await this.waitForSessionIdle(
         client,
-        this.sessionId,
+        sessionId,
         signal,
         45 * 60_000,
       )
@@ -1195,15 +2421,14 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
-      this.running = false
-      this.abort = null
+      this.finishTaskRun()
     }
   }
 
   async runScoreAndDedupe(
     productId: string,
     emit: AgentEventSink,
+    options?: { fromChat?: boolean },
   ): Promise<{ ok: boolean; message: string; scored?: ScoredLeadsArtifact }> {
     if (this.running) {
       throw new Error('已有任务在运行，请稍候或先中止')
@@ -1224,9 +2449,7 @@ export class AgentRunController {
       throw new Error('暂无原始线索，请先在探索页完成 R1（discover-leads）')
     }
 
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginPipelineRun(options?.fromChat)
     const startedAt = Date.now()
     const afterIso = new Date().toISOString()
     const timeline = new TimelineBuilder()
@@ -1284,8 +2507,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title: `score-and-dedupe · ${productId}`,
@@ -1297,35 +2518,27 @@ export class AgentRunController {
             : '创建 OpenCode 会话失败',
         )
       }
-      this.sessionId = created.data.id
+      const sessionId = this.noteCreatedSession(created.data.id)
       timeline.addPrefix({
         id: 'sys-session',
         kind: 'system',
         time: nowTime(),
         title: '会话',
-        body: `已创建 OpenCode session\n${this.sessionId}`,
+        body: `已创建 OpenCode session\n${sessionId}`,
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
-        sessionID: this.sessionId,
+        sessionID: sessionId,
         parts: [{ type: 'text', text: promptText }],
       })
       void promptPromise
 
       const idleResult = await this.waitForSessionIdle(
         client,
-        this.sessionId,
+        sessionId,
         signal,
         20 * 60_000,
       )
@@ -1409,16 +2622,14 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
-      this.running = false
-      this.abort = null
+      this.finishTaskRun()
     }
   }
 
   async runDraftOutreachEmail(
     productId: string,
     emit: AgentEventSink,
-    options?: { leadIds?: string[] },
+    options?: { leadIds?: string[]; fromChat?: boolean },
   ): Promise<{ ok: boolean; message: string; emailDrafts?: EmailDraftsArtifact }> {
     if (this.running) {
       throw new Error('已有任务在运行，请稍候或先中止')
@@ -1469,9 +2680,7 @@ export class AgentRunController {
       Math.max(20 * 60_000, 10 * 60_000 + estimate.estimatedLetters * 45_000),
     )
 
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginPipelineRun(options?.fromChat)
     const startedAt = Date.now()
     const afterIso = new Date().toISOString()
     const timeline = new TimelineBuilder()
@@ -1539,8 +2748,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title: `draft-outreach-email · ${productId}`,
@@ -1552,35 +2759,27 @@ export class AgentRunController {
             : '创建 OpenCode 会话失败',
         )
       }
-      this.sessionId = created.data.id
+      const sessionId = this.noteCreatedSession(created.data.id)
       timeline.addPrefix({
         id: 'sys-session',
         kind: 'system',
         time: nowTime(),
         title: '会话',
-        body: `已创建 OpenCode session\n${this.sessionId}`,
+        body: `已创建 OpenCode session\n${sessionId}`,
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
-        sessionID: this.sessionId,
+        sessionID: sessionId,
         parts: [{ type: 'text', text: promptText }],
       })
       void promptPromise
 
       const idleResult = await this.waitForSessionIdle(
         client,
-        this.sessionId,
+        sessionId,
         signal,
         idleTimeoutMs,
       )
@@ -1662,9 +2861,7 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
-      this.running = false
-      this.abort = null
+      this.finishTaskRun()
     }
   }
 
@@ -1709,9 +2906,7 @@ export class AgentRunController {
     }
 
     const idleTimeoutMs = 10 * 60_000
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginTaskRun()
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
 
@@ -1775,8 +2970,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title: `draft-outreach-email-slot · ${leadId}`,
@@ -1798,15 +2991,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -1906,7 +3091,6 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
       this.running = false
       this.abort = null
     }
@@ -1919,6 +3103,7 @@ export class AgentRunController {
       recipientKey?: string
     },
     emit: AgentEventSink,
+    launchOptions?: { fromChat?: boolean },
   ): Promise<{ ok: boolean; message: string; recipientKey?: string }> {
     if (this.running) {
       throw new Error('已有任务在运行，请稍候或先中止')
@@ -1944,9 +3129,7 @@ export class AgentRunController {
     }
 
     const idleTimeoutMs = 8 * 60_000
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginPipelineRun(launchOptions?.fromChat)
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
 
@@ -2013,8 +3196,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title: `translate-outreach-email · ${leadId}`,
@@ -2026,7 +3207,7 @@ export class AgentRunController {
             : '创建 OpenCode 会话失败',
         )
       }
-      this.sessionId = created.data.id
+      this.sessionId = this.noteCreatedSession(created.data.id)
       timeline.addPrefix({
         id: 'sys-session',
         kind: 'system',
@@ -2036,15 +3217,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -2135,9 +3308,7 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
-      this.running = false
-      this.abort = null
+      this.finishTaskRun()
     }
   }
 
@@ -2195,9 +3366,7 @@ export class AgentRunController {
       throw new Error(`一次最多补全 50 条，当前 ${leadIds.length} 条，请缩小范围`)
     }
 
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginTaskRun()
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
     const targetLabel =
@@ -2259,8 +3428,6 @@ export class AgentRunController {
     pushState('running')
     flushTimeline()
 
-    let stopEvents: (() => void) | null = null
-
     try {
       const created = await client.session.create({
         title:
@@ -2285,15 +3452,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -2356,7 +3515,6 @@ export class AgentRunController {
       emit({ type: 'done', ok: false, productId, message })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
       this.running = false
       this.abort = null
     }
@@ -2369,6 +3527,7 @@ export class AgentRunController {
       rounds?: string[]
       maxQueries?: number
       channel?: 'r1' | 'r2' | 'r3'
+      fromChat?: boolean
     },
   ): Promise<{ ok: boolean; message: string; explorationRun?: ExplorationRun }> {
     if (this.running) {
@@ -2450,9 +3609,7 @@ export class AgentRunController {
     }
 
     this.beginTrackedBrowserTask(skillName)
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginPipelineRun(options?.fromChat)
     const startedAt = Date.now()
     const afterIso = new Date().toISOString()
     const timeline = new TimelineBuilder()
@@ -2499,7 +3656,6 @@ export class AgentRunController {
       })
     }
 
-    let stopEvents: (() => void) | null = null
     try {
     const exploreIntensity = getExploreIntensity()
     const exploreLimits = getExploreIntensityLimits(exploreIntensity)
@@ -2556,28 +3712,20 @@ export class AgentRunController {
             : '创建 OpenCode 会话失败',
         )
       }
-      this.sessionId = created.data.id
+      const sessionId = this.noteCreatedSession(created.data.id)
       timeline.addPrefix({
         id: 'sys-session',
         kind: 'system',
         time: nowTime(),
         title: '会话',
-        body: `已创建 OpenCode session\n${this.sessionId}`,
+        body: `已创建 OpenCode session\n${sessionId}`,
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
-        sessionID: this.sessionId,
+        sessionID: sessionId,
         parts: [{ type: 'text', text: promptText }],
       })
       void promptPromise
@@ -2592,7 +3740,7 @@ export class AgentRunController {
       try {
         idleResult = await this.waitForSessionIdle(
           client,
-          this.sessionId,
+          sessionId,
           signal,
           45 * 60_000,
         )
@@ -2740,10 +3888,8 @@ export class AgentRunController {
       })
       return { ok: false, message, explorationRun: failedRun ?? undefined }
     } finally {
-      stopEvents?.()
       await this.endTrackedBrowserTask()
-      this.running = false
-      this.abort = null
+      this.finishTaskRun()
       if (placesReleaseAfter) {
         const release = releasePlacesDiscoverRun()
         this.watchPlacesGoogleRejection = false
@@ -2756,6 +3902,7 @@ export class AgentRunController {
   async runExtractProfile(
     bootstrap: BootstrapResult,
     emit: AgentEventSink,
+    launchOptions?: { fromChat?: boolean },
   ): Promise<{ ok: boolean; message: string; profile?: ProductProfileDetail }> {
     if (this.running) {
       throw new Error('已有任务在运行，请稍候或先中止')
@@ -2770,9 +3917,7 @@ export class AgentRunController {
     if (bootstrap.websiteUrls.length > 0) {
       this.beginTrackedBrowserTask('extract-product-profile')
     }
-    this.running = true
-    this.abort = new AbortController()
-    const signal = this.abort.signal
+    const signal = this.beginPipelineRun(launchOptions?.fromChat)
     const startedAt = Date.now()
     const timeline = new TimelineBuilder()
 
@@ -2811,7 +3956,6 @@ export class AgentRunController {
       })
     }
 
-    let stopEvents: (() => void) | null = null
     try {
     const promptText = buildPrompt(bootstrap)
     this.attachTimeline(timeline)
@@ -2862,7 +4006,7 @@ export class AgentRunController {
             : '创建 OpenCode 会话失败',
         )
       }
-      this.sessionId = created.data.id
+      this.sessionId = this.noteCreatedSession(created.data.id)
       timeline.addPrefix({
         id: 'sys-session',
         kind: 'system',
@@ -2872,15 +4016,7 @@ export class AgentRunController {
       })
       flushTimeline()
 
-      const bridge = this.startEventBridge(
-        client,
-        this.sessionId,
-        timeline,
-        flushTimeline,
-        promptText,
-        emit,
-      )
-      stopEvents = bridge.stop
+      this.openEventBridge(client, this.sessionId, timeline, flushTimeline, promptText, emit)
 
       const promptPromise = client.session.promptAsync({
         sessionID: this.sessionId,
@@ -2972,10 +4108,8 @@ export class AgentRunController {
       })
       return { ok: false, message }
     } finally {
-      stopEvents?.()
       await this.endTrackedBrowserTask()
-      this.running = false
-      this.abort = null
+      this.finishTaskRun()
     }
   }
 
@@ -3090,17 +4224,19 @@ export class AgentRunController {
     flush: () => void,
     userPrompt: string,
     emit: AgentEventSink,
-  ): { stop: () => void } {
+  ): void {
     this.currentEmit = emit
     this.currentFlush = flush
+    this.echoPrompt = userPrompt
     this.awaitingReply.resume()
+    const subscription = new AbortController()
     let stopped = false
     const messageRoles = new Map<string, Message['role']>()
     let retrySince = 0
     let lastRetryBody = ''
     let sawSessionError = false
     let watchdogTimer: ReturnType<typeof setTimeout> | null = null
-    
+
     // US-ST-01: pending delta 缓冲与 partID 类型映射
     const pendingDeltas = new Map<string, string[]>()
     const partKinds = new Map<string, 'text' | 'reasoning'>()
@@ -3112,6 +4248,7 @@ export class AgentRunController {
       if (flushTimer != null) return
       flushTimer = setTimeout(() => {
         flushTimer = null
+        if (stopped) return
         flush()
       }, DELTA_FLUSH_THROTTLE_MS)
     }
@@ -3253,8 +4390,7 @@ export class AgentRunController {
       if (stopped) return
       stopped = true
       disarmWatchdog()
-      const detail =
-        err instanceof Error ? err.message : err != null ? String(err) : '未知错误'
+      const detail = err instanceof Error ? err.message : err != null ? String(err) : '未知错误'
       this.autoAbortReason = `OpenCode 事件流不可用：${detail}`
       timeline.addSuffix({
         id: 'sse-fatal',
@@ -3288,6 +4424,9 @@ export class AgentRunController {
     }
 
     const handleEvent = (event: Event): void => {
+      // 续聊与任务共用这条订阅，会话号读控制器上的当前 id。
+      const sessionId = this.sessionId
+      if (!sessionId) return
       switch (event.type) {
         case 'server.instance.disposed':
           failEventBridge(new Error('OpenCode 实例已释放'))
@@ -3314,9 +4453,17 @@ export class AgentRunController {
         case 'permission.v2.asked': {
           const sid = event.properties.sessionID
           if (sid !== sessionId && !knownChildren.has(sid)) return
-          void client.permission
-            .reply({ requestID: event.properties.id, reply: 'always' })
-            .catch(() => undefined)
+          const ask = readPermissionAsk(event)
+          if (!ask) return
+          void this.permissionGate.onAsked(ask)
+          return
+        }
+
+        case 'permission.replied':
+        case 'permission.v2.replied': {
+          const sid = event.properties.sessionID
+          if (sid !== sessionId && !knownChildren.has(sid)) return
+          void this.permissionGate.noteReplied(event.properties.requestID)
           return
         }
 
@@ -3325,6 +4472,13 @@ export class AgentRunController {
           const sid = event.properties.sessionID
           if (sid !== sessionId && !knownChildren.has(sid)) return
           const side = event.type === 'question.asked' ? 'v1' : 'v2'
+          if (
+            (this.running || this.deferChatStart) &&
+            isChatStartQuestionRequest(event.properties.questions)
+          ) {
+            void this.rejectChatStartQuestion(sid, side, event.properties.id)
+            return
+          }
           void this.awaitingReply.ingest(sid, side, event.properties.id, event.properties.questions)
           if (sid !== sessionId) {
             patchChild(sid, (sub) => ({ ...sub, awaiting: true }))
@@ -3466,7 +4620,7 @@ export class AgentRunController {
             }
             // 空正文不建卡不覆盖；用户 prompt 回声过滤只用于非空 text
             if (!part.text) return
-            if (part.text.trim() === userPrompt.trim()) return
+            if (part.text.trim() === this.echoPrompt.trim()) return
             // 如果角色尚不可知，等待 message.updated
             if (role == null) return
             // US-ST-01: 结束时用整份 part.text 覆盖，清缓冲
@@ -3505,6 +4659,7 @@ export class AgentRunController {
             return
           }
           if (part.type === 'tool') {
+            this.noteLoadedSkill(part)
             if (part.tool === 'task') {
               const card = taskToolTimelineItem(part)
               applySnapshot(card)
@@ -3593,7 +4748,8 @@ export class AgentRunController {
           }
           if (event.properties.sessionID !== sessionId) return
           const { status } = event.properties
-          if (status.type === 'retry') {
+          const watch = retryWatchOnStatus(retrySince !== 0, sawSessionError, status.type)
+          if (watch === 'start' || watch === 'continue') {
             if (!retrySince) retrySince = Date.now()
             const waitSec = Math.max(1, Math.round((status.next - Date.now()) / 1000))
             lastRetryBody = [
@@ -3608,25 +4764,23 @@ export class AgentRunController {
               title: `模型调用失败，重试中 · 第 ${status.attempt} 次`,
               body: lastRetryBody,
             })
-            armWatchdog()
+            if (watch === 'start') armWatchdog()
             flushNow()
             return
           }
-          if (status.type === 'idle') {
-            if (retrySince && !sawSessionError) {
-              timeline.addSuffix({
-                id: 'session-retry',
-                kind: 'system',
-                time: nowTime(),
-                title: '模型重试已恢复',
-                body: `${lastRetryBody}\n已恢复，继续执行。`,
-              })
-              flushNow()
-            }
-            retrySince = 0
-            sawSessionError = false
-            disarmWatchdog()
+          if (watch === 'recover') {
+            timeline.addSuffix({
+              id: 'session-retry',
+              kind: 'system',
+              time: nowTime(),
+              title: '模型重试已恢复',
+              body: `${lastRetryBody}\n已恢复，继续执行。`,
+            })
+            flushNow()
           }
+          retrySince = 0
+          sawSessionError = false
+          disarmWatchdog()
           return
         }
 
@@ -3635,26 +4789,41 @@ export class AgentRunController {
       }
     }
 
+    const record: { stop: () => void; sessionId: string; alive: boolean } = {
+      sessionId,
+      alive: true,
+      stop: () => {
+        if (stopped) return
+        stopped = true
+        subscription.abort()
+        record.alive = false
+        if (this.eventBridge === record) this.eventBridge = null
+        disarmWatchdog()
+        if (flushTimer != null) {
+          clearTimeout(flushTimer)
+          flushTimer = null
+        }
+        // 换会话时卸掉。不在这里再 flush 旧时间线，避免盖住新任务。
+        // 启任务卡还开着时留着：按钮已经启动后，再提交只追加「已有任务在运行」。
+        this.permissionGate.clear()
+        if (this.hooks.lifecycle || !this.awaitingReply.isPendingChatStart()) this.awaitingReply.dispose()
+      },
+    }
+    this.eventBridge = record
+
     void (async () => {
       try {
-        const sub = await client.event.subscribe()
+        const sub = await client.event.subscribe({}, { signal: subscription.signal })
         for await (const event of sub.stream) {
           if (stopped) break
           handleEvent(event)
         }
       } catch (err) {
-        failEventBridge(err)
+        if (!stopped) failEventBridge(err)
+      } finally {
+        record.alive = false
+        if (this.eventBridge === record) this.eventBridge = null
       }
     })()
-
-    return {
-      stop: () => {
-        stopped = true
-        disarmWatchdog()
-        this.awaitingReply.dispose()
-        // US-ST-02: 停止时 flush 最后一帧
-        flushNow()
-      },
-    }
   }
 }

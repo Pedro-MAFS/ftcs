@@ -32,6 +32,12 @@ R3 词 → Places Search（pageSize=任务指令 places_result_limit）→ 过�
 - 用户说「开始 R3」「地图发现」「discover-leads-r3」
 - `GOOGLE_PLACES_API_KEY` 已配置（`places-api` MCP）；探索页「开始 R3」须 Preflight 通过
 
+## 任务调用
+
+通过产品列表确认 `scope.product_id`。可在 parameters 指定 max_queries，使用桌面返回的本轮渠道和数量限制。
+
+必填不明确时用 `question` 补齐，用户取消就结束。参数齐全后在当前会话调用 `lead-store.task_begin`，task_type 为 `discover-leads-r3`。收到 running 后按 `prepared.instructions` 和下面的步骤执行；收尾调用 `lead-store.task_done`，传回本次 task_id 和实际结果。调用格式见工作区 AGENTS.md。
+
 ## 前置条件
 
 - MCP：`lead-store`、`places-api`、`search-api`、`chrome-devtools`

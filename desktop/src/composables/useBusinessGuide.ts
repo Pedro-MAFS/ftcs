@@ -2,6 +2,7 @@ import { nextTick, ref, watch, type Ref } from 'vue'
 import type { Router } from 'vue-router'
 import { useRouter } from 'vue-router'
 import { landingSettled, onLandingSettled } from './useDefaultLanding'
+import { useMainViewTabs } from './useMainViewTabs'
 import { useOnboarding } from './useOnboarding'
 
 export interface GuideStepSpec {
@@ -22,7 +23,7 @@ export const GUIDE_STEPS: GuideStepSpec[] = [
     route: 'profile',
     guide: 'og-profile-new-explore',
     title: '确认画像',
-    body: '在这一页查看并保存画像。点「新建探索任务」时会先按画像扩展关键词，再去找客户。',
+    body: '在这一页查看并保存画像。点「扩展关键词」后，再去找客户。',
   },
   {
     route: 'explore',
@@ -160,7 +161,7 @@ async function revealStep(
   if (!spec || !router || token !== showToken) return 'cancelled'
   if (useOnboarding().open.value) return 'blocked'
   if (router.currentRoute.value.name !== spec.route) {
-    await router.push({ name: spec.route })
+    await useMainViewTabs().openPageTab(spec.route)
   }
   if (token !== showToken) return 'cancelled'
   if (useOnboarding().open.value) return 'blocked'

@@ -1,29 +1,32 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
 import Icon from '../shared/Icon.vue'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import { useWorkspace } from '../../composables/useWorkspace'
+import { useWorkspaceLayout } from '../../composables/useWorkspaceLayout'
+import { isPageKey, useMainViewTabs } from '../../composables/useMainViewTabs'
 import { useSettingsNav } from '../../composables/useSettingsNav'
+import { productAvatarGlyph } from './product-avatar'
 import {
   PIPELINE_TO_SECTION,
   type PipelineStepStatus,
   type ProductStatusTone,
-  type WorkspaceSection,
 } from '../../types/workspace'
 import type { SettingsCategory } from '../../types/settings'
 
 defineProps<{
-  section: WorkspaceSection
+  settings: boolean
 }>()
-
-const router = useRouter()
-const { products, activeProductId, pipelineSteps, selectProduct, deleteProduct, createDraftProduct } =
+const { products, activeProductId, latestTask, generating, pipelineSteps, selectProduct, deleteProduct, createDraftProduct, refreshProducts } =
   useWorkspace()
+const { widths, pipelineColumnCollapsed, collapsePipelineColumn, expandPipelineColumn } =
+  useWorkspaceLayout()
+const { openPageTab } = useMainViewTabs()
 const { activeCategory, setCategory } = useSettingsNav()
 
 const deletingId = ref('')
 const creatingDraft = ref(false)
+const refreshingProducts = ref(false)
 const deleteError = ref('')
 const confirmOpen = ref(false)
 const pendingDelete = ref<{ id: string; label: string } | null>(null)
@@ -53,7 +56,7 @@ function productToneClass(tone: ProductStatusTone): string {
 
 function onPipelineClick(stepId: string): void {
   const target = PIPELINE_TO_SECTION[stepId as keyof typeof PIPELINE_TO_SECTION]
-  if (target) void router.push({ name: target })
+  if (target && isPageKey(target)) void openPageTab(target)
 }
 
 function onSettingsCat(id: SettingsCategory): void {
@@ -115,20 +118,87 @@ async function onCreateDraft(): Promise<void> {
       deleteError.value = res.message
       return
     }
-    await router.push({ name: 'profile' })
+    await openPageTab('profile')
   } catch (err) {
     deleteError.value = err instanceof Error ? err.message : String(err)
   } finally {
     creatingDraft.value = false
   }
 }
+
+async function onRefreshProducts(): Promise<void> {
+  if (refreshingProducts.value) return
+  refreshingProducts.value = true
+  deleteError.value = ''
+  try {
+    await refreshProducts(!activeProductId.value)
+  } catch (error) {
+    deleteError.value = error instanceof Error ? error.message : '刷新产品列表失败'
+  } finally {
+    refreshingProducts.value = false
+  }
+}
 </script>
 
 <template>
-  <aside class="sidebar" :aria-label="section === 'settings' ? '设置分类' : '产品与流水线'">
-    <template v-if="section === 'settings'">
+  <aside
+    class="sidebar"
+    :class="{ 'is-collapsed': pipelineColumnCollapsed }"
+    :style="{ width: `${widths.pipeline}px` }"
+    :aria-label="pipelineColumnCollapsed ? (settings ? '设置分类' : '产品') : settings ? '设置分类' : '产品与流水线'"
+  >
+    <template v-if="pipelineColumnCollapsed && settings">
+      <button
+        type="button"
+        class="icon-btn"
+        title="展开"
+        aria-label="展开设置分类"
+        @click="expandPipelineColumn"
+      >
+        <Icon name="panel-left-open" :size="14" />
+      </button>
+    </template>
+
+    <template v-else-if="pipelineColumnCollapsed">
+      <button
+        type="button"
+        class="icon-btn"
+        title="展开"
+        aria-label="展开产品栏"
+        @click="expandPipelineColumn"
+      >
+        <Icon name="panel-left-open" :size="14" />
+      </button>
+      <button type="button" class="icon-btn" title="刷新产品列表" aria-label="刷新产品列表" :disabled="refreshingProducts" @click="onRefreshProducts">
+        <Icon name="refresh-cw" :size="14" />
+      </button>
+      <div class="sidebar__avatars">
+        <button
+          v-for="product in products"
+          :key="product.id"
+          type="button"
+          class="product-avatar"
+          :class="{ 'is-current': product.id === activeProductId }"
+          :title="product.name"
+          @click="selectProduct(product.id)"
+        >
+          {{ productAvatarGlyph(product.name) }}
+        </button>
+      </div>
+    </template>
+
+    <template v-else-if="settings">
       <div class="sidebar__head">
         <span>设置分类</span>
+        <button
+          type="button"
+          class="icon-btn"
+          title="收起"
+          aria-label="收起设置分类"
+          @click="collapsePipelineColumn"
+        >
+          <Icon name="panel-left-close" :size="14" />
+        </button>
       </div>
       <button
         v-for="cat in settingsCats"
@@ -145,18 +215,35 @@ async function onCreateDraft(): Promise<void> {
     <template v-else>
       <div class="sidebar__head">
         <span>产品</span>
-        <button
-          type="button"
-          class="icon-btn"
-          title="新建空白草稿"
-          aria-label="新建空白草稿"
-          :disabled="creatingDraft"
-          @click="onCreateDraft"
-        >
-          <Icon name="plus" :size="14" />
-        </button>
+        <div class="sidebar__head-actions">
+          <button type="button" class="icon-btn" title="刷新产品列表" aria-label="刷新产品列表" :disabled="refreshingProducts" @click="onRefreshProducts">
+            <Icon name="refresh-cw" :size="14" />
+          </button>
+          <button
+            type="button"
+            class="icon-btn"
+            title="新建空白草稿"
+            aria-label="新建空白草稿"
+            :disabled="creatingDraft"
+            @click="onCreateDraft"
+          >
+            <Icon name="plus" :size="14" />
+          </button>
+          <button
+            type="button"
+            class="icon-btn"
+            title="收起"
+            aria-label="收起产品栏"
+            @click="collapsePipelineColumn"
+          >
+            <Icon name="panel-left-close" :size="14" />
+          </button>
+        </div>
       </div>
 
+      <p v-if="generating && latestTask?.task_type === 'extract-product-profile'" role="status">
+        {{ latestTask.state === 'preparing' ? '正在准备新产品资料…' : '正在生成新产品画像…' }}
+      </p>
       <p v-if="deleteError" class="sidebar__error">{{ deleteError }}</p>
 
       <div
@@ -175,7 +262,7 @@ async function onCreateDraft(): Promise<void> {
           <button
             type="button"
             class="product-item__delete"
-            :disabled="deletingId === product.id"
+            :disabled="deletingId === product.id || (generating && latestTask?.scope.product_id === product.id)"
             :title="deletingId === product.id ? '删除中…' : '删除产品'"
             aria-label="删除产品"
             @click="requestDelete($event, product.id, product.companyName)"
@@ -190,7 +277,7 @@ async function onCreateDraft(): Promise<void> {
             :class="productToneClass(product.statusTone)"
           >{{ product.statusLabel }}</span>
           <span class="product-item__sep">·</span>
-          <span class="product-item__date">{{ product.updatedLabel }}</span>
+          <span class="product-item__date">{{ generating && latestTask?.scope.product_id === product.id ? '任务进行中' : product.updatedLabel }}</span>
         </span>
       </div>
 

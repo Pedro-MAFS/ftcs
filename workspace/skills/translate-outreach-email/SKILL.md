@@ -32,6 +32,12 @@ outputs:
 - 用户在邮件页点击「生成/刷新中文对照」
 - 用户说「翻译这封开发信」「出中文对照」
 
+## 任务调用
+
+只读已有草稿元数据，确定 `scope.product_id`、`scope.lead_id`、`scope.recipient_key`。公司稿用 company，个人稿选择实际槽位。使用桌面返回的外文主题和正文。
+
+必填不明确时用 `question` 补齐，用户取消就结束。参数齐全后在当前会话调用 `lead-store.task_begin`，task_type 为 `translate-outreach-email`。收到 running 后按 `prepared.instructions` 和下面的步骤执行；收尾调用 `lead-store.task_done`，传回本次 task_id 和实际结果。调用格式见工作区 AGENTS.md。
+
 ## 前置条件
 
 - MCP `lead-store` 已配置

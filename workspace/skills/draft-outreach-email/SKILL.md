@@ -34,6 +34,12 @@ outputs:
 - 用户说「生成邮件」「写开发信」「为客户准备触达邮件」
 - Phase 1 最后一环，完成后进入人工审核
 
+## 任务调用
+
+确定 `scope.product_id` 和 `parameters.mode`。批量用 batch，可传已选的 lead_ids，未指定时由桌面选取待起草线索。单封或重写用 slot，并在 scope 指明实际 lead_id 和 recipient_key。公司稿用 company，个人稿选实际槽位。
+
+必填不明确时用 `question` 补齐，用户取消就结束。参数齐全后在当前会话调用 `lead-store.task_begin`，task_type 为 `draft-outreach-email`。收到 running 后按 `prepared.instructions` 和下面的步骤执行；收尾调用 `lead-store.task_done`，传回本次 task_id 和实际结果。调用格式见工作区 AGENTS.md。
+
 ## 前置条件
 
 - MCP `lead-store` 已配置

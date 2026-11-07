@@ -81,7 +81,7 @@ Composer「发送」保持禁用；不因 SSE 改造而开放自由对话。
 
 | type | 时间线动作 |
 |------|------------|
-| `session.status` | `retry`：更新「重试中」suffix，记录 `retrySince`，启动看门狗；`idle`：若曾 retry 且无 `session.error` 则改为「已恢复」；`busy`：不清除 `retrySince` |
+| `session.status` | `retry`：更新「重试中」suffix，记录 `retrySince`，首次进入才启动看门狗；离开 `retry`（`busy` 或 `idle`）且无 `session.error`：改为「已恢复」并释放看门狗。连续处于 `retry` 才计时 |
 | `session.error` | suffix「模型调用失败」，正文用 `formatMessageError(properties.error)` |
 | `session.idle` | **不接**。忙闲只看 `session.status.properties.status.type` |
 

@@ -1,3 +1,7 @@
+import { markExplorationRunFailed } from './exploration/exploration-writer'
+import { TaskJournal } from './tasks/journal'
+import type { TaskSkill } from './tasks/lifecycle'
+import { recipientKeyFromEmail as slotKeyForEmail } from './emails/emails-reader'
 import {
   app,
   BrowserWindow,
@@ -10,7 +14,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadDesktopEnvFile } from './config/load-desktop-env'
 import { IPC } from './ipc/types'
-import type { AppStatus } from './ipc/types'
+import type { AppStatus, SaveTextToDownloadsInput } from './ipc/types'
+import { saveTextToDownloads } from './session/save-text-to-downloads'
 import { getWorkspaceRoot } from './config/paths'
 import { OpenCodeRuntime } from './opencode/runtime'
 import {
@@ -25,7 +30,7 @@ import {
   setWorkflowNotifySuppressed,
   showTaskDoneNotification,
 } from './notify/task-done-notify'
-import { formatTaskDoneNotifyBody } from './notify/task-done-notify-body'
+import { formatTaskDoneNotifyBody, taskLabelForNotify } from './notify/task-done-notify-body'
 import {
   detectSystemGoogleProxy,
   testGooglePlacesConnectivity,
@@ -47,7 +52,8 @@ import {
 } from './gateway/places-official-runtime'
 import { placesOfficialKeyMemory } from './gateway/places-official-key-memory'
 import { setPlacesMcpInjection } from './opencode/places-mcp-env'
-import { writeUserPrefs } from './config/user-prefs'
+import { writeUserPrefs, readUserPrefs } from './config/user-prefs'
+import { storedMainViewLayout, writableMainViewLayout } from './config/main-view-layout'
 import { initializeWorkspace, ensureMcpServersReady } from './config/workspace-init'
 import {
   addWebsite,
@@ -87,7 +93,6 @@ import type {
   GetEmailRecipientPoolInput,
 } from './ipc/types'
 import { AgentRunController, capDraftOutreachLeadIds } from './opencode/agent-runner'
-import { bootstrapProductFromLibrary } from './profile/profile-bootstrap'
 import { listProductSummaries, loadProfile } from './profile/profile-reader'
 import { createEmptyDraftProfile, saveProductProfile, softDeleteProductProfile } from './profile/profile-writer'
 import { loadExpansion, saveExpansion } from './keywords/keywords-reader'
@@ -211,6 +216,9 @@ import {
   type UiThemeMode,
 } from './theme/ui-theme'
 import { applyExploreIntensity } from './explore/explore-intensity'
+import { installConsoleLogging } from './logging/console-log'
+
+const desktopLog = installConsoleLogging(path.join(app.getPath('userData'), 'logs'))
 
 // 尽早加载 desktop/.env（electron-vite 不会把 FTCS_* 写入 process.env）
 loadDesktopEnvFile()
@@ -252,7 +260,7 @@ let isQuitting = false
 let startHidden = false
 
 async function reloadOpenCodeRuntime(): Promise<void> {
-  if (!runtime) runtime = new OpenCodeRuntime()
+  if (!runtime) runtime = new OpenCodeRuntime({ taskReceiver: getAgentRunner })
   await runtime.restart()
 }
 
@@ -260,34 +268,39 @@ function getAgentRunner(): AgentRunController {
   if (!agentRunner) {
     agentRunner = new AgentRunController(() => runtime?.getClient() ?? null, {
       reloadRuntime: reloadOpenCodeRuntime,
+      preflight: (kind, options) => runAgentPreflight(kind, { runtime, isAgentRunning: () => false }, options),
+      refreshPlaces: () => runtime ? runtime.refreshPlacesMcp() : Promise.reject(new Error('服务未就绪')),
+      lifecycle: true,
     })
   }
   return agentRunner
 }
 
-/** 最近一次 Agent state.skill，供 done 通知文案（US-N-02） */
-let lastAgentSkill = ''
+let taskJournal: { root: string; journal: TaskJournal } | undefined
+function getTaskJournal() {
+  const root = getWorkspaceRoot()
+  if (taskJournal?.root !== root) {
+    const journal = new TaskJournal(root, task => {
+      if (task.scope.product_id && task.run_id) markExplorationRunFailed(task.scope.product_id, task.run_id, task.message, root)
+    })
+    taskJournal = { root, journal }
+  }
+  return taskJournal.journal
+}
 
 function emitAgentEvent(
   sender: Electron.WebContents | null | undefined,
   payload: import('./ipc/types').AgentEventPayload,
 ): void {
   try {
-    if (payload.type === 'state' && payload.skill) {
-      lastAgentSkill = payload.skill
-    }
-    if (payload.type === 'done') {
-      const body = formatTaskDoneNotifyBody({
-        skill: lastAgentSkill,
-        ok: payload.ok,
-        message: payload.message || '',
-      })
-      const shown = showTaskDoneNotification({ ok: payload.ok, body })
-      console.log('[ftcs:notify] done→show', {
-        skill: lastAgentSkill,
-        ok: payload.ok,
-        shown,
-        bodyPreview: body.slice(0, 80),
+    if (payload.type === 'task.changed') {
+      const task = payload.task
+      getTaskJournal().record(task)
+      if (task.finished_at) showTaskDoneNotification({
+        ok: task.state === 'succeeded',
+        body: task.state === 'partial' || task.state === 'interrupted'
+          ? `${taskLabelForNotify(task.task_type, task.message)}${task.state === 'partial' ? '部分完成' : '已中断'}`
+          : formatTaskDoneNotifyBody({ skill: task.task_type, ok: task.state === 'succeeded', message: task.message }),
       })
     }
   } catch (err) {
@@ -357,6 +370,10 @@ function getWindowOptions(): BrowserWindowConstructorOptions {
 async function createWindow(): Promise<void> {
   mainWindow = allowCreatedWebContentsDuring(() => new BrowserWindow(getWindowOptions()))
   const win = mainWindow
+  win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    const levels = ['debug', 'info', 'warn', 'error']
+    desktopLog.write('renderer', levels[level] ?? 'log', `${message} (${sourceId}:${line})`)
+  })
 
   /**
    * Windows + titleBarOverlay：
@@ -690,7 +707,7 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.OPENCODE_START, async () => {
     if (!runtime) {
-      runtime = new OpenCodeRuntime()
+      runtime = new OpenCodeRuntime({ taskReceiver: getAgentRunner })
     }
     await runtime.start()
     return {
@@ -722,7 +739,7 @@ function registerIpcHandlers(): void {
   })
   ipcMain.handle(IPC.OPENCODE_RESTART, async () => {
     if (!runtime) {
-      runtime = new OpenCodeRuntime()
+      runtime = new OpenCodeRuntime({ taskReceiver: getAgentRunner })
     }
     if (getAgentRunner().isRunning()) {
       await getAgentRunner().abortCurrent()
@@ -747,6 +764,13 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SETTINGS_GET, () => getSettingsSnapshot())
+  ipcMain.handle(IPC.LAYOUT_GET, () => storedMainViewLayout(readUserPrefs().mainViewLayout))
+  ipcMain.handle(IPC.LAYOUT_SET, (_event, input: unknown) => {
+    const next = writableMainViewLayout(input)
+    if (!next) return storedMainViewLayout(readUserPrefs().mainViewLayout)
+    const saved = writeUserPrefs({ mainViewLayout: next })
+    return storedMainViewLayout(saved.mainViewLayout)
+  })
   ipcMain.handle(IPC.SETTINGS_SET_OPEN_AT_LOGIN, (_event, enabled: boolean) => {
     applyOpenAtLogin(Boolean(enabled))
     return { ok: true as const, openAtLogin: Boolean(enabled) }
@@ -844,6 +868,11 @@ function registerIpcHandlers(): void {
     return { ok: true }
   })
   ipcMain.handle(IPC.APP_GET_VERSION, () => getAppVersion())
+  ipcMain.handle(
+    IPC.APP_SAVE_TEXT_TO_DOWNLOADS,
+    (_event, input: SaveTextToDownloadsInput) =>
+      saveTextToDownloads(app.getPath('downloads'), input),
+  )
   ipcMain.handle(IPC.UPDATE_CHECK, async (_event, opts?: { forceNotify?: boolean }) =>
     runUpdateCheck(opts),
   )
@@ -905,7 +934,7 @@ function registerIpcHandlers(): void {
     placesOfficialKeyMemory.clear()
     setPlacesMcpInjection({ kind: 'default' })
     if (!runtime) {
-      runtime = new OpenCodeRuntime()
+      runtime = new OpenCodeRuntime({ taskReceiver: getAgentRunner })
     }
     await runtime.restart()
     return {
@@ -921,7 +950,7 @@ function registerIpcHandlers(): void {
       })
       if (result.ok) {
         if (!runtime) {
-          runtime = new OpenCodeRuntime()
+          runtime = new OpenCodeRuntime({ taskReceiver: getAgentRunner })
         }
         await runtime.restart()
       }
@@ -959,7 +988,7 @@ function registerIpcHandlers(): void {
     await ensureMcpServersReady(dir)
 
     if (!runtime) {
-      runtime = new OpenCodeRuntime()
+      runtime = new OpenCodeRuntime({ taskReceiver: getAgentRunner })
     }
     await runtime.restart()
     return {
@@ -1352,25 +1381,12 @@ function registerIpcHandlers(): void {
       if (!productId || typeof productId !== 'string') {
         return { ok: false, message: '缺少 productId' }
       }
-      const preflight = await gateAgentStart('expand-keywords')
-      if (!preflight.ok) {
-        return { ok: false, message: preflight.message }
-      }
 
       const sender = event.sender
-      void getAgentRunner()
-        .runExpandKeywords(productId, (payload) => emitAgentEvent(sender, payload))
-        .catch((err) => {
-          emitAgentEvent(sender, {
-            type: 'done',
-            ok: false,
-            productId,
-            message: err instanceof Error ? err.message : String(err),
-          })
-        })
+      const taskId = getAgentRunner().launchButton('expand-keywords', { product_id: productId }, {}, payload => emitAgentEvent(sender, payload))
 
       return {
-        ok: true,
+        ok: true, taskId,
         message: `正在为 ${productId} 扩展关键词…`,
         productId,
       }
@@ -1387,25 +1403,12 @@ function registerIpcHandlers(): void {
       if (!productId || typeof productId !== 'string') {
         return { ok: false, message: '缺少 productId' }
       }
-      const preflight = await gateAgentStart('score-and-dedupe')
-      if (!preflight.ok) {
-        return { ok: false, message: preflight.message }
-      }
 
       const sender = event.sender
-      void getAgentRunner()
-        .runScoreAndDedupe(productId, (payload) => emitAgentEvent(sender, payload))
-        .catch((err) => {
-          emitAgentEvent(sender, {
-            type: 'done',
-            ok: false,
-            productId,
-            message: err instanceof Error ? err.message : String(err),
-          })
-        })
+      const taskId = getAgentRunner().launchButton('score-and-dedupe', { product_id: productId }, {}, payload => emitAgentEvent(sender, payload))
 
       return {
-        ok: true,
+        ok: true, taskId,
         message: `正在为 ${productId} 评分去重…`,
         productId,
       }
@@ -1440,31 +1443,11 @@ function registerIpcHandlers(): void {
           typeof input?.leadId === 'string' && input.leadId.trim()
             ? input.leadId.trim()
             : ''
-        const preflight = await gateAgentStart('enrich-lead-contacts')
-        if (!preflight.ok) {
-          return { ok: false, message: preflight.message }
-        }
 
         const verifyEmails = getSettingsSnapshot().hunterVerifyEmails
         const sender = event.sender
         const targets = leadIds.length > 0 ? leadIds : leadId ? [leadId] : undefined
-        void getAgentRunner()
-          .enrichLeadContacts(
-            {
-              productId,
-              leadIds: targets,
-              verifyEmails,
-            },
-            (payload) => emitAgentEvent(sender, payload),
-          )
-          .catch((err) => {
-            emitAgentEvent(sender, {
-              type: 'done',
-              ok: false,
-              productId,
-              message: err instanceof Error ? err.message : String(err),
-            })
-          })
+        const taskId = getAgentRunner().launchButton('enrich-lead-contacts', { product_id: productId }, { lead_ids: targets, verify_emails: verifyEmails }, payload => emitAgentEvent(sender, payload))
 
         const scope =
           targets && targets.length === 1
@@ -1473,7 +1456,7 @@ function registerIpcHandlers(): void {
               ? `${targets.length} 条线索`
               : '全部待补全线索'
         return {
-          ok: true,
+          ok: true, taskId,
           message: `正在为 ${scope} 补全联系人${verifyEmails ? '（含验邮）' : ''}…`,
           productId,
           leadId: targets?.length === 1 ? targets[0] : undefined,
@@ -1600,10 +1583,6 @@ function registerIpcHandlers(): void {
       if (!productId || typeof productId !== 'string') {
         return { ok: false, message: '缺少 productId' }
       }
-      const preflight = await gateAgentStart('draft-email')
-      if (!preflight.ok) {
-        return { ok: false, message: preflight.message }
-      }
 
       const leadIds = Array.isArray(input.leadIds)
         ? input.leadIds.filter((id) => typeof id === 'string' && id.trim())
@@ -1613,26 +1592,13 @@ function registerIpcHandlers(): void {
       const capped = capDraftOutreachLeadIds(targetIds, { rankedByScore: !explicit })
 
       const sender = event.sender
-      void getAgentRunner()
-        .runDraftOutreachEmail(
-          productId,
-          (payload) => emitAgentEvent(sender, payload),
-          { leadIds },
-        )
-        .catch((err) => {
-          emitAgentEvent(sender, {
-            type: 'done',
-            ok: false,
-            productId,
-            message: err instanceof Error ? err.message : String(err),
-          })
-        })
+      const taskId = getAgentRunner().launchButton('draft-outreach-email', { product_id: productId }, { mode: 'batch', lead_ids: leadIds }, payload => emitAgentEvent(sender, payload))
 
       const scope = explicit
         ? `${capped.leadIds.length} 条指定线索`
         : '全部待起草已评分线索'
       return {
-        ok: true,
+        ok: true, taskId,
         message:
           capped.notice || `正在为 ${productId} 起草开发信（${scope}）…`,
         productId,
@@ -1657,35 +1623,14 @@ function registerIpcHandlers(): void {
         return { ok: false, message: '缺少 leadId' }
       }
       const audience = input.audience === 'person' ? 'person' : 'company'
-      const preflight = await gateAgentStart('draft-email')
-      if (!preflight.ok) {
-        return { ok: false, message: preflight.message }
-      }
 
       const sender = event.sender
-      void getAgentRunner()
-        .runDraftOutreachEmailSlot(
-          {
-            productId,
-            leadId,
-            audience,
-            email: typeof input.email === 'string' ? input.email : undefined,
-            recipientKey:
-              typeof input.recipientKey === 'string' ? input.recipientKey : undefined,
-          },
-          (payload) => emitAgentEvent(sender, payload),
-        )
-        .catch((err) => {
-          emitAgentEvent(sender, {
-            type: 'done',
-            ok: false,
-            productId,
-            message: err instanceof Error ? err.message : String(err),
-          })
-        })
+      const recipientKey = audience === 'company' ? 'company' : (input.recipientKey || slotKeyForEmail(input.email ?? ''))
+      if (!recipientKey) throw new Error('个人向起草需要收件槽或邮箱')
+      const taskId = getAgentRunner().launchButton('draft-outreach-email', { product_id: productId, lead_id: leadId, recipient_key: recipientKey }, { mode: 'slot', email: input.email }, payload => emitAgentEvent(sender, payload))
 
       return {
-        ok: true,
+        ok: true, taskId,
         message: `正在为线索 ${leadId} 起草/重写当前收件人开发信…`,
         productId,
         leadId,
@@ -1713,28 +1658,12 @@ function registerIpcHandlers(): void {
         typeof input.recipientKey === 'string' && input.recipientKey.trim()
           ? input.recipientKey.trim()
           : 'company'
-      const preflight = await gateAgentStart('draft-email')
-      if (!preflight.ok) {
-        return { ok: false, message: preflight.message }
-      }
 
       const sender = event.sender
-      void getAgentRunner()
-        .runTranslateOutreachEmail(
-          { productId, leadId, recipientKey },
-          (payload) => emitAgentEvent(sender, payload),
-        )
-        .catch((err) => {
-          emitAgentEvent(sender, {
-            type: 'done',
-            ok: false,
-            productId,
-            message: err instanceof Error ? err.message : String(err),
-          })
-        })
+      const taskId = getAgentRunner().launchButton('translate-outreach-email', { product_id: productId, lead_id: leadId, recipient_key: recipientKey }, {}, payload => emitAgentEvent(sender, payload))
 
       return {
-        ok: true,
+        ok: true, taskId,
         message: `正在生成中文对照…`,
         productId,
         leadId,
@@ -1754,32 +1683,12 @@ function registerIpcHandlers(): void {
       if (!productId || typeof productId !== 'string') {
         return { ok: false, message: '缺少 productId' }
       }
-      const preflight = await gateAgentStart('discover-leads')
-      if (!preflight.ok) {
-        return { ok: false, message: preflight.message }
-      }
 
       const sender = event.sender
-      void getAgentRunner()
-        .runDiscoverLeads(
-          productId,
-          (payload) => emitAgentEvent(sender, payload),
-          {
-            channel: 'r1',
-            maxQueries: input.maxQueries,
-          },
-        )
-        .catch((err) => {
-          emitAgentEvent(sender, {
-            type: 'done',
-            ok: false,
-            productId,
-            message: err instanceof Error ? err.message : String(err),
-          })
-        })
+      const taskId = getAgentRunner().launchButton('discover-leads', { product_id: productId }, { max_queries: input.maxQueries }, payload => emitAgentEvent(sender, payload))
 
       return {
-        ok: true,
+        ok: true, taskId,
         message: '正在准备…',
         productId,
       }
@@ -1797,32 +1706,12 @@ function registerIpcHandlers(): void {
       if (!productId || typeof productId !== 'string') {
         return { ok: false, message: '缺少 productId' }
       }
-      const preflight = await gateAgentStart('discover-leads-r2')
-      if (!preflight.ok) {
-        return { ok: false, message: preflight.message }
-      }
 
       const sender = event.sender
-      void getAgentRunner()
-        .runDiscoverLeads(
-          productId,
-          (payload) => emitAgentEvent(sender, payload),
-          {
-            channel: 'r2',
-            maxQueries: input.maxQueries,
-          },
-        )
-        .catch((err) => {
-          emitAgentEvent(sender, {
-            type: 'done',
-            ok: false,
-            productId,
-            message: err instanceof Error ? err.message : String(err),
-          })
-        })
+      const taskId = getAgentRunner().launchButton('discover-leads-r2', { product_id: productId }, { max_queries: input.maxQueries }, payload => emitAgentEvent(sender, payload))
 
       return {
-        ok: true,
+        ok: true, taskId,
         message: '正在准备…',
         productId,
       }
@@ -1840,32 +1729,12 @@ function registerIpcHandlers(): void {
       if (!productId || typeof productId !== 'string') {
         return { ok: false, message: '缺少 productId' }
       }
-      const preflight = await gateAgentStart('discover-leads-r3')
-      if (!preflight.ok) {
-        return { ok: false, message: preflight.message }
-      }
 
       const sender = event.sender
-      void getAgentRunner()
-        .runDiscoverLeads(
-          productId,
-          (payload) => emitAgentEvent(sender, payload),
-          {
-            channel: 'r3',
-            maxQueries: input.maxQueries,
-          },
-        )
-        .catch((err) => {
-          emitAgentEvent(sender, {
-            type: 'done',
-            ok: false,
-            productId,
-            message: err instanceof Error ? err.message : String(err),
-          })
-        })
+      const taskId = getAgentRunner().launchButton('discover-leads-r3', { product_id: productId }, { max_queries: input.maxQueries }, payload => emitAgentEvent(sender, payload))
 
       return {
-        ok: true,
+        ok: true, taskId,
         message: '正在准备…',
         productId,
       }
@@ -1886,38 +1755,48 @@ function registerIpcHandlers(): void {
     return getAgentRunner().replyToPendingQuestion(input)
   })
 
+  ipcMain.handle(IPC.AGENT_REPLY_PERMISSION, async (_event, input: unknown) => {
+    return getAgentRunner().replyToPendingPermission(input)
+  })
+
+  ipcMain.handle(IPC.AGENT_NOTE_PRODUCT, async (_event, productId: unknown) => {
+    getAgentRunner().noteActiveProduct(typeof productId === 'string' ? productId : '')
+    return { ok: true }
+  })
+
+  ipcMain.handle(IPC.TASK_SNAPSHOT, () => getTaskJournal().snapshot())
+  ipcMain.handle(IPC.WORKFLOW_LAUNCH_STEP, async (event, node: string, productId: string, origin: 'workflow' | 'schedule') => {
+    const skills: Record<string, TaskSkill> = {
+      'discover-r1': 'discover-leads', 'discover-r2': 'discover-leads-r2', 'discover-r3': 'discover-leads-r3',
+      'expand-keywords': 'expand-keywords', 'score-and-dedupe': 'score-and-dedupe',
+      'enrich-lead-contacts': 'enrich-lead-contacts', 'draft-outreach-email': 'draft-outreach-email',
+    }
+    if (!Object.hasOwn(skills, node) || !['schedule', 'workflow'].includes(origin)) throw new Error('未知编排步骤')
+    const runner = getAgentRunner()
+    await runner.waitForFinishedButton()
+    const parameters = node === 'draft-outreach-email' ? { mode: 'batch' as const } :
+      node === 'enrich-lead-contacts' ? { verify_emails: getSettingsSnapshot().hunterVerifyEmails } : {}
+    return runner.launchButton(skills[node], { product_id: productId }, parameters, payload => emitAgentEvent(event.sender, payload), origin)
+  })
+  ipcMain.handle(IPC.AGENT_CREATE_SESSION, (event) =>
+    getAgentRunner().createChatSession(payload => emitAgentEvent(event.sender, payload)),
+  )
+  ipcMain.handle(IPC.AGENT_CURRENT_SESSION, () => getAgentRunner().currentChatSessionId())
+  ipcMain.handle(IPC.AGENT_SEND_MESSAGE, async (event, text: unknown, productId: unknown) => {
+    if (typeof productId === 'string') {
+      getAgentRunner().noteActiveProduct(productId)
+    }
+    const message = typeof text === 'string' ? text : ''
+    const sender = event.sender
+    return getAgentRunner().sendFreeDialogue(message, (payload) => emitAgentEvent(sender, payload))
+  })
+
   ipcMain.handle(IPC.PROFILE_GENERATE, async (event, input: ProfileGenerateInput) => {
     try {
-      const preflight = await gateAgentStart('extract-profile', {
-        requireBuiltinBrowser: (input?.websitePaths ?? []).length > 0,
-      })
-      if (!preflight.ok) {
-        return { ok: false, message: preflight.message }
-      }
 
-      const bootstrap = await bootstrapProductFromLibrary({
-        websitePaths: input?.websitePaths ?? [],
-        filePaths: input?.filePaths ?? [],
-      })
-
-      const sender = event.sender
-      void getAgentRunner()
-        .runExtractProfile(bootstrap, (payload) => emitAgentEvent(sender, payload))
-        .catch((err) => {
-          emitAgentEvent(sender, {
-            type: 'done',
-            ok: false,
-            productId: bootstrap.productId,
-            message: err instanceof Error ? err.message : String(err),
-          })
-        })
-
-      return {
-        ok: true,
-        message: `已分配 ${bootstrap.productId}，正在生成画像…`,
-        productId: bootstrap.productId,
-        skipped: bootstrap.skipped,
-      }
+      const sources = [...(input?.websitePaths ?? []), ...(input?.filePaths ?? [])]
+      const taskId = getAgentRunner().launchButton('extract-product-profile', {}, { library_sources: sources }, payload => emitAgentEvent(event.sender, payload))
+      return { ok: true, taskId, message: '正在准备产品资料…' }
     } catch (err) {
       return {
         ok: false,
@@ -1928,7 +1807,7 @@ function registerIpcHandlers(): void {
 }
 
 async function bootstrapOpenCode(): Promise<void> {
-  runtime = new OpenCodeRuntime()
+  runtime = new OpenCodeRuntime({ taskReceiver: getAgentRunner })
   try {
     await runtime.start()
   } catch (err) {

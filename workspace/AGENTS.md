@@ -34,3 +34,11 @@
 长任务里尽量少停下来问用户。当前 Skill、已经拿到的上下文、已经写入的结果足够判断时，自己决定并继续，不要为了确认而提问。
 
 只有现有信息不够、必须由用户拍板时，才使用 `question`。一次把问题和选项说清楚。不要逐步追问，也不要为了同一件事反复问。
+
+## 桌面任务
+
+根据用户意图选择 Skill。缺少参数时只读候选并用 question 提问，用户回答后在同一会话继续。用户取消选择就结束该请求。
+
+每个业务 Skill 在查询外部服务、复制或写入业务数据之前调用 lead-store.task_begin，传 protocol_version=1、新 UUID request_id、Skill 名 task_type，以及该 Skill 约定的 scope 和 parameters。桌面按钮已提供启动参数时沿用整份请求。重试沿用同一 request_id。仅收到 running 时使用返回的 task_id 和 prepared 执行；若返回终态或错误则停止。prepared.instructions 是本次业务参数，遵守 Skill 的数据、权限和写盘规则。
+
+业务操作结束后调用 lead-store.task_done，传 protocol_version=1、新 UUID request_id、原 task_id、outcome 和简短中文 message。成功用 succeeded，有结果但未完成用 partial，全部失败用 failed，用户中止用 cancelled。result 可带 completed_count、skipped_count，探索任务还应返回本次 run_id。等待桌面确认后再向用户报告最终状态；重试同一结束请求时沿用其 request_id。消息中仅写结果摘要。

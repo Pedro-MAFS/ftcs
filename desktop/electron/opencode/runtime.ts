@@ -1,3 +1,6 @@
+import { pathToFileURL } from 'node:url'
+import path from 'node:path'
+import { openTaskBridge, type TaskReceiver } from '../tasks/bridge'
 import { createOpencode } from '@opencode-ai/sdk/v2'
 import type { Config, OpencodeClient } from '@opencode-ai/sdk/v2'
 import fs from 'node:fs'
@@ -58,7 +61,10 @@ export class OpenCodeRuntime {
   private readonly previousCwd: string
   private abort: AbortController | null = null
 
-  constructor(options?: { port?: number }) {
+  private taskBridge?: Awaited<ReturnType<typeof openTaskBridge>>
+  private taskReceiver?: () => TaskReceiver
+  constructor(options?: { port?: number; taskReceiver?: () => TaskReceiver }) {
+    this.taskReceiver = options?.taskReceiver
     this.preferredPort = options?.port ?? getDefaultOpenCodePort()
     this.activePort = this.preferredPort
     this.previousCwd = process.cwd()
@@ -163,6 +169,17 @@ export class OpenCodeRuntime {
         process.env,
       )
 
+      if (this.taskReceiver) {
+        const bridge = await openTaskBridge(this.taskReceiver)
+        this.taskBridge = bridge
+        process.env.FTCS_TASK_URL = bridge.url
+        process.env.FTCS_TASK_PLUGIN_KEY = bridge.pluginKey
+        config.plugin = [...(config.plugin ?? []), pathToFileURL(path.join(workspaceRoot, 'config/opencode/task-context.mjs')).href]
+        const store = config.mcp?.['lead-store']
+        if (!store || !('type' in store) || store.type !== 'local') throw new Error('任务通道需要本地 lead-store')
+        store.timeout = Math.max(store.timeout ?? 0, 10 * 60_000)
+        store.environment = { ...store.environment, FTCS_TASK_URL: bridge.url, FTCS_TASK_MCP_KEY: bridge.mcpKey, FTCS_TASK_PLUGIN_KEY: '' }
+      }
       this.appendLog(`启动 OpenCode（SDK Server+Client）`)
       this.appendLog(`工作区: ${workspaceRoot}`)
       this.appendLog(`二进制: ${binaryPath}`)
@@ -195,7 +212,19 @@ export class OpenCodeRuntime {
    * 停止本 App 托管的 OpenCode。
    * 必须在 Electron before-quit 里用 preventDefault + await，否则进程会残留。
    */
+  async refreshPlacesMcp(): Promise<void> {
+    if (!this.client) throw new Error('服务未就绪')
+    const root = getWorkspaceRoot()
+    const config = rewriteMcpWorkspaceEnv(readOpenCodeConfig(getOpenCodeConfigPath(root)) as Config, root).mcp?.['places-api']
+    if (!config || !('type' in config) || config.type !== 'local') throw new Error('Places 配置无效')
+    const reply = await this.client.mcp.add({ name: 'places-api', config })
+    if (reply.error || reply.data?.['places-api']?.status !== 'connected') throw new Error('Places MCP 配置切换失败')
+    markPlacesMcpInjectionApplied()
+  }
+
   async stop(): Promise<void> {
+    this.taskBridge?.close()
+    this.taskBridge = undefined
     this.abort?.abort()
     this.abort = null
 

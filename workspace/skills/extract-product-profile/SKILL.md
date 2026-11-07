@@ -28,6 +28,14 @@ outputs:
 - 用户提供**产品图片**（jpg/png/webp 等），需要从画面提取产品信息
 - 用户说「建立产品画像」「分析我的产品」「提取产品信息」
 
+## 任务调用
+
+新建画像时，确认用户选择的资料库来源。需要选择时从 `data/library/files/` 列出原始资料，包括普通文件、Office、PDF、图片和网站书签，展开目录并用真实相对路径供用户多选。将选中的路径放入 `parameters.library_sources`，`scope.product_id` 为 null。桌面分配产品 ID、复制资料并抽取侧车，使用返回的 `product_id`、`website_urls` 和 `input_files`。
+
+修改已有画像时，确认真实产品 ID 和用户想修改的内容。用该 ID 填写 `scope.product_id`，`parameters` 传空对象。开始后先调用 `product_get` 读取当前画像，再按用户要求修改并用同一个产品 ID 调用 `product_save`。保留未要求修改的字段，修改数组中的某项时提交合并后的完整数组。此分支不需要选择资料库来源。
+
+必填不明确时用 `question` 补齐，用户取消就结束。参数齐全后在当前会话调用 `lead-store.task_begin`，task_type 为 `extract-product-profile`。收到 running 后按 `prepared.instructions` 和下面的步骤执行；收尾调用 `lead-store.task_done`，传回本次 task_id 和实际结果。调用格式见工作区 AGENTS.md。
+
 ## 前置条件
 
 - 工作区内存在 `config/scoring-rules.yaml`（就绪度阈值等）
@@ -53,8 +61,7 @@ outputs:
 
 ### Step 0：初始化
 
-1. 若用户未提供 `product_id`，调用 `lead-store.product_generate_id`
-2. 调用 `lead-store.inputs_ensure_dir` 确保 `inputs/` 目录存在
+使用 task_begin 返回的产品 ID 及该产品的 inputs 清单。
 
 ### Step 1：判断输入类型
 
@@ -227,7 +234,7 @@ outputs:
 2. 检查返回的 `readiness` 和 `status`：
   - `status == "ready"` → 告知用户画像已就绪，可进入关键词扩展
   - `status == "draft"` → 根据 `follow_up_questions` 向用户追问缺失信息
-3. 用户补充后，再次 `product_save` 更新（传入相同 `product_id`）
+3. 若需等待用户补充信息，先结束本次任务。用户补充后，以相同 `product_id` 调用新的 `task_begin`，再更新画像。
 
 ### Step 5：输出摘要
 

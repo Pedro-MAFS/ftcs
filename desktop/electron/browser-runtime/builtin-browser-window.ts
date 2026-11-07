@@ -1,5 +1,3 @@
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import {
   app,
   BrowserWindow,
@@ -7,10 +5,9 @@ import {
   screen,
   type WebContents,
 } from 'electron'
-import captionHtml from './caption.html?raw'
-import overlayHtml from './overlay.html?raw'
 import { CAPTION_HEIGHT, THUMB, anchorExpanded, anchorTopRight } from './anchor'
-import { attachMainWindowFollow, type MainWindowFollowController } from './follow-main-window'
+import { browserTabTitles } from './browser-tab-title'
+import { type MainWindowFollowController } from './follow-main-window'
 import { isAdoptableTabUrl } from './cdp-filter'
 import {
   beginTabAdoption,
@@ -23,15 +20,19 @@ import {
   tokenPageUrl,
   unregisterBrowserPage,
 } from './cdp-gateway'
-import type { BuiltinBrowserMode, BuiltinBrowserUiState, ScreenRect } from './types'
+import type {
+  BuiltinBrowserMode,
+  BuiltinBrowserSlot,
+  BuiltinBrowserTabsPayload,
+  BuiltinBrowserUiState,
+  ScreenRect,
+} from './types'
 import { IPC } from '../ipc/types'
 import {
   CHROME_COMMAND_PREFIX,
   detachedAfterMode,
   isBusinessNavigation,
   modeAfterEnsure,
-  modeAfterUserDismiss,
-  navigationMode,
   parseChromeCommand,
   showsThumbnailOverlay,
   shouldRepaintBuiltinBrowser,
@@ -47,8 +48,6 @@ import {
   setTabCloseHost,
   type TabOrigin,
 } from './tab-lifecycle'
-
-const moduleDir = path.dirname(fileURLToPath(import.meta.url))
 
 /** 与放大标题条一致的实色。WebContentsView 默认是白底，失焦后合成层丢掉就会露白。 */
 const BROWSER_CHROME_BG = '#1A1A1A'
@@ -74,6 +73,12 @@ let destroyAllowed = false
 let appQuitting = false
 
 let browserWindow: BrowserWindow | null = null
+/** 网页 view 的父级。用户路径是主窗口，不再另开一扇浏览窗。 */
+let hostWindow: BrowserWindow | null = null
+let slotBounds: ScreenRect | null = null
+let shownBrowserKey: string | null = null
+let focusKey: string | null = null
+const FALLBACK_SLOT: ScreenRect = { x: 0, y: 0, width: 800, height: 600 }
 let pageView: WebContentsView | null = null
 let overlayView: WebContentsView | null = null
 let follow: MainWindowFollowController | null = null
@@ -168,7 +173,7 @@ export function getBuiltinBrowserUiState(): BuiltinBrowserUiState {
 }
 
 export function isBuiltinWindowAlive(): boolean {
-  return Boolean(browserWindow && !browserWindow.isDestroyed())
+  return Boolean(hostWindow && !hostWindow.isDestroyed() && tabs.some((tab) => tab.origin === 'seed'))
 }
 
 export function getBuiltinBrowserMode(): BuiltinBrowserMode {
@@ -215,19 +220,19 @@ function createBrowserTab(origin: TabOrigin, taskId: string | null): BrowserTab 
 function bindBrowserTab(tab: BrowserTab): void {
   const contents = tab.view.webContents
   contents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) void openBrowserTab(url)
+    if (/^https?:\/\//i.test(url)) void openBrowserTab(url, { focus: true })
     return { action: 'deny' }
   })
   contents.on('page-title-updated', (_event, title) => {
     const next = title.trim()
-    if (next) tab.title = next
     if (tab === activeTab && next) pageTitle = next
     publishUi()
   })
   const onUrl = (_event: unknown, url: string) => {
     tab.url = url
-    if (tab === activeTab) applyPageUrl(url)
-    else publishUi()
+    if (tab === activeTab) pageUrlLabel = displayUrl(url)
+    publishMainTabs()
+    publishUi()
   }
   contents.on('did-navigate', (event, url) => {
     onUrl(event, url)
@@ -245,10 +250,13 @@ function bindBrowserTab(tab: BrowserTab): void {
   })
 }
 
-function openBrowserTab(url: string): Promise<{ id: string; url: string }> {
+function openBrowserTab(
+  url: string,
+  options: { focus: boolean; forceUser?: boolean },
+): Promise<{ id: string; url: string; key: string }> {
   const run = tabQueue.then(
-    () => openBrowserTabNow(url),
-    () => openBrowserTabNow(url),
+    () => openBrowserTabNow(url, options),
+    () => openBrowserTabNow(url, options),
   )
   tabQueue = run.then(
     () => undefined,
@@ -257,10 +265,19 @@ function openBrowserTab(url: string): Promise<{ id: string; url: string }> {
   return run
 }
 
-async function openBrowserTabNow(requested: string): Promise<{ id: string; url: string }> {
-  const win = browserWindow
-  if (!win || win.isDestroyed()) throw new Error('builtin page not ready')
-  const taskId = getCurrentBrowserTaskId()
+export function openUserBuiltinBrowserTab(): Promise<{ key: string }> {
+  return openBrowserTab('about:blank', { focus: true, forceUser: true }).then((opened) => ({
+    key: opened.key,
+  }))
+}
+
+async function openBrowserTabNow(
+  requested: string,
+  options: { focus: boolean; forceUser?: boolean },
+): Promise<{ id: string; url: string; key: string }> {
+  const host = hostWindow
+  if (!host || host.isDestroyed()) throw new Error('builtin page not ready')
+  const taskId = options.forceUser ? null : getCurrentBrowserTaskId()
   const plan = reclaimBeforeOpen(
     tabs.map((tab) => ({ id: tab.key, origin: tab.origin, taskId: tab.taskId })),
     taskId,
@@ -279,8 +296,9 @@ async function openBrowserTabNow(requested: string): Promise<{ id: string; url: 
       if (item.id) before.add(item.id)
     }
     tab = createBrowserTab(taskId ? 'task' : 'user', taskId)
-    win.contentView.addChildView(tab.view)
-    selectTab(tab)
+    host.contentView.addChildView(tab.view)
+    placeView(tab.view, false)
+    if (options.focus) focusKey = tab.key
     try {
       await tab.view.webContents.loadURL(loadedUrl)
     } catch {
@@ -290,9 +308,10 @@ async function openBrowserTabNow(requested: string): Promise<{ id: string; url: 
     if (!id) throw new Error('new tab did not appear')
     tab.targetId = id
     registerBrowserPage(id)
+    publishMainTabs()
     publishUi()
     applyCurrentMetrics()
-    return { id, url: loadedUrl }
+    return { id, url: loadedUrl, key: tab.key }
   } catch (err) {
     for (const id of listBrowserPageIds()) {
       if (!before.has(id)) unregisterBrowserPage(id)
@@ -338,10 +357,11 @@ export async function closeTabsForTask(
       publishUi()
     }
   }
+  publishMainTabs()
   return { closed: planned.closed, remaining: tabs.length }
 }
 
-async function closeBrowserTab(id: string): Promise<boolean> {
+export async function closeBrowserTab(id: string): Promise<boolean> {
   const tab = findTab(id)
   if (!tab || tabs.length <= 1) return false
   dropTab(tab)
@@ -351,13 +371,14 @@ async function closeBrowserTab(id: string): Promise<boolean> {
 async function activateBrowserTab(id: string): Promise<boolean> {
   const tab = findTab(id)
   if (!tab) return false
-  selectTab(tab)
+  activeTab = tab
+  pageView = tab.view
   return true
 }
 
 function registerTabHost(): void {
   setBuiltinBrowserTabHost({
-    openTab: openBrowserTab,
+    openTab: (url) => openBrowserTab(url, { focus: false }),
     closeTab: closeBrowserTab,
     activateTab: activateBrowserTab,
   })
@@ -386,7 +407,7 @@ function dropTab(tab: BrowserTab): void {
   const wasActive = activeTab === tab
   tabs.splice(index, 1)
   if (tab.targetId) unregisterBrowserPage(tab.targetId)
-  const win = browserWindow
+  const win = hostWindow
   if (win && !win.isDestroyed()) {
     try {
       win.contentView.removeChildView(tab.view)
@@ -401,19 +422,19 @@ function dropTab(tab: BrowserTab): void {
       // 页面已经关掉
     }
   }
-  if (!wasActive) {
-    publishUi()
-    return
+  if (shownBrowserKey === tab.key) {
+    shownBrowserKey = null
+    for (const item of tabs) placeView(item.view, false)
   }
-  const next = tabs[Math.min(index, tabs.length - 1)]
-  if (next) {
-    selectTab(next)
-    return
+  if (wasActive) {
+    activeTab = tabs[Math.min(index, tabs.length - 1)] ?? null
+    pageView = activeTab?.view ?? null
+    if (!activeTab) {
+      pageTitle = '内置浏览器'
+      pageUrlLabel = '尚未打开页面'
+    }
   }
-  activeTab = null
-  pageView = null
-  pageTitle = '内置浏览器'
-  pageUrlLabel = '尚未打开页面'
+  publishMainTabs()
   publishUi()
 }
 
@@ -460,110 +481,18 @@ function delay(ms: number): Promise<void> {
 
 export async function ensureBuiltinBrowserWindow(main: BrowserWindow): Promise<boolean> {
   if (appQuitting) return false
-  if (browserWindow && !browserWindow.isDestroyed()) return false
-  const win = allowCreatedWebContentsDuring(
-    () =>
-      new BrowserWindow({
-        width: THUMB.width,
-        height: THUMB.height,
-        show: false,
-        frame: false,
-        parent: main,
-        modal: false,
-        skipTaskbar: true,
-        resizable: false,
-        minimizable: false,
-        maximizable: false,
-        fullscreenable: false,
-        focusable: true,
-        backgroundColor: BROWSER_CHROME_BG,
-        roundedCorners: true,
-        title: '内置浏览器',
-        webPreferences: {
-          preload: captionPreloadPath(),
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-          webviewTag: false,
-        },
-      }),
-  )
-  browserWindow = win
+  if (hostWindow && !hostWindow.isDestroyed() && tabs.some((tab) => tab.origin === 'seed')) return false
+  hostWindow = main
   mode = modeAfterEnsure()
-  win.on('show', onBrowserShow)
-  win.on('hide', publishUi)
-  win.on('focus', scheduleBuiltinBrowserRepaint)
-  main.on('focus', scheduleBuiltinBrowserRepaint)
-  win.on('blur', noteBuiltinBrowserBackgrounded)
-  main.on('blur', noteBuiltinBrowserBackgrounded)
-  win.once('closed', () => {
-    if (!main.isDestroyed()) {
-      main.removeListener('focus', scheduleBuiltinBrowserRepaint)
-      main.removeListener('blur', noteBuiltinBrowserBackgrounded)
-    }
-  })
-  if (win.isVisible()) win.hide()
-
   const tab = createBrowserTab('seed', null)
-  win.contentView.addChildView(tab.view)
+  main.contentView.addChildView(tab.view)
+  placeView(tab.view, false)
   activeTab = tab
   pageView = tab.view
-
-  const overlay = allowCreatedWebContentsDuring(
-    () =>
-      new WebContentsView({
-        webPreferences: {
-          preload: captionPreloadPath(),
-          contextIsolation: true,
-          nodeIntegration: false,
-          sandbox: true,
-          webviewTag: false,
-        },
-      }),
-  )
-  overlayView = overlay
-  overlay.setVisible(false)
-  win.contentView.addChildView(overlay)
-  applyOverlayChrome()
-  overlay.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  attachChromeCommands(overlay.webContents)
-  attachChromeCommands(win.webContents)
-
-  win.on('moved', () => {
-    if (Date.now() < ignoreBuiltinBrowserMoveUntil) return
-    if (!browserWindow || browserWindow.isDestroyed() || mode !== 'thumbnail') return
-    const bounds = browserWindow.getBounds()
-    if (expectedBounds && near(bounds, expectedBounds)) return
-    detached = true
-    lastThumbBounds = bounds
-  })
-  win.on('close', (event) => {
-    if (destroyAllowed || appQuitting) return
-    event.preventDefault()
-    void setBuiltinBrowserMode(modeAfterUserDismiss())
-  })
-  follow = attachMainWindowFollow(main, {
-    getMode: () => mode,
-    isDetached: () => detached,
-    isBrowserVisible: () => Boolean(browserWindow && !browserWindow.isDestroyed() && browserWindow.isVisible()),
-    reanchor: () => {
-      const bounds = boundsFor('thumbnail')
-      applyBounds(bounds)
-      layoutViews('thumbnail', bounds)
-    },
-    showInactive: () => showBuiltinBrowserInactive(),
-    hideBrowser: () => {
-      if (browserWindow && !browserWindow.isDestroyed()) browserWindow.hide()
-    },
-    onMainClosed: () => noteBuiltinBrowserQuitting(),
-  })
-  follow.setVisibleBefore(false)
-  await win.loadURL(dataHtml(captionHtml))
-  await overlay.webContents.loadURL(dataHtml(overlayHtml))
   const token = tokenPageUrl()
   if (token) await tab.view.webContents.loadURL(token)
   registerTabHost()
-  await setBuiltinBrowserMode(modeAfterEnsure())
+  publishMainTabs()
   return true
 }
 
@@ -578,10 +507,16 @@ export function setBuiltinBrowserMode(next: BuiltinBrowserMode): Promise<void> {
 
 export async function reinforceBuiltinBrowserViewport(): Promise<void> {
   const win = browserWindow
-  if (!win || win.isDestroyed()) return
+  if (win && !win.isDestroyed()) {
+    keepTabsAwake()
+    const viewport = viewportForMode(mode, win.getBounds())
+    await applyDeviceMetrics(viewport.width, viewport.height)
+    return
+  }
+  if (!hostWindow || hostWindow.isDestroyed()) return
   keepTabsAwake()
-  const viewport = viewportForMode(mode, win.getBounds())
-  await applyDeviceMetrics(viewport.width, viewport.height)
+  const bounds = boundsForViews()
+  await applyDeviceMetrics(bounds.width, bounds.height)
 }
 
 export function showBuiltinBrowserInactive(): void {
@@ -609,12 +544,33 @@ export async function showBuiltinBrowserFromTitleBar(): Promise<void> {
 
 export function destroyBuiltinBrowserWindow(): void {
   destroyAllowed = true
+  const host = hostWindow
+  hostWindow = null
+  for (const tab of tabs) {
+    if (host && !host.isDestroyed()) {
+      try {
+        host.contentView.removeChildView(tab.view)
+      } catch {
+        // 这一页已经不在主窗口上
+      }
+    }
+    if (!tab.view.webContents.isDestroyed()) {
+      try {
+        tab.view.webContents.close()
+      } catch {
+        // 页面已经关掉
+      }
+    }
+  }
   const win = browserWindow
   browserWindow = null
   pageView = null
   overlayView = null
   tabs = []
   activeTab = null
+  slotBounds = null
+  shownBrowserKey = null
+  focusKey = null
   setBuiltinBrowserTabHost(null)
   mode = modeAfterEnsure()
   detached = false
@@ -1083,19 +1039,14 @@ function workAreaFor(main: BrowserWindow | null | undefined): ScreenRect {
 }
 
 function applyPageUrl(url: string): void {
-  if (!url || url.includes('/__ftcs_builtin_page__') || url.startsWith('about:')) {
-    pageTitle = '内置浏览器'
-    pageUrlLabel = '尚未打开页面'
-    publishUi()
-    return
-  }
-  pageUrlLabel = url
-  const next = navigationMode(mode, url)
-  if (next !== mode) {
-    void setBuiltinBrowserMode(next)
-    return
-  }
+  pageUrlLabel = displayUrl(url)
+  publishMainTabs()
   publishUi()
+}
+
+function displayUrl(url: string): string {
+  if (!url || url.includes('/__ftcs_builtin_page__') || url.startsWith('about:')) return '尚未打开页面'
+  return url
 }
 
 function publishUi(): void {
@@ -1123,16 +1074,97 @@ function publishUi(): void {
   for (const listener of uiListeners) listener(state)
 }
 
-function near(actual: ScreenRect, expected: ScreenRect): boolean {
-  return Math.abs(actual.x - expected.x) <= 2 && Math.abs(actual.y - expected.y) <= 2
+function boundsForViews(): ScreenRect {
+  return slotBounds ?? FALLBACK_SLOT
 }
 
-function captionPreloadPath(): string {
-  return path.join(moduleDir, '../preload/caption.mjs')
+function placeView(view: WebContentsView, visible: boolean): void {
+  if (view.webContents.isDestroyed()) return
+  try {
+    view.setBounds(boundsForViews())
+    view.setVisible(visible)
+  } catch {
+    // 页面正在关闭
+  }
 }
 
-function dataHtml(html: string): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+export function setBuiltinBrowserSlot(input: BuiltinBrowserSlot): void {
+  const host = hostWindow
+  if (!host || host.isDestroyed()) return
+  const visible = input.visible && !host.isMinimized()
+  if (input.width > 0 && input.height > 0) {
+    slotBounds = {
+      x: Math.round(input.x),
+      y: Math.round(input.y),
+      width: Math.round(input.width),
+      height: Math.round(input.height),
+    }
+  }
+  shownBrowserKey = visible && input.browserKey ? input.browserKey : null
+  for (const tab of tabs) {
+    placeView(tab.view, tab.origin !== 'seed' && tab.key === shownBrowserKey)
+  }
+}
+
+export function navigateBuiltinBrowser(key: string, raw: string): Promise<boolean> {
+  const tab = tabs.find((item) => item.key === key && item.origin !== 'seed')
+  if (!tab || tab.view.webContents.isDestroyed()) return Promise.resolve(false)
+  const url = normalizeNavigationUrl(raw)
+  if (!url) return Promise.resolve(false)
+  return tab.view.webContents
+    .loadURL(url)
+    .then(() => true)
+    .catch(() => true)
+}
+
+export function controlBuiltinBrowser(key: string, action: 'back' | 'forward' | 'reload'): void {
+  const tab = tabs.find((item) => item.key === key && item.origin !== 'seed')
+  if (!tab || tab.view.webContents.isDestroyed()) return
+  const contents = tab.view.webContents
+  if (action === 'back' && contents.canGoBack()) contents.goBack()
+  else if (action === 'forward' && contents.canGoForward()) contents.goForward()
+  else if (action === 'reload') contents.reload()
+}
+
+export function getBuiltinBrowserTabs(): BuiltinBrowserTabsPayload {
+  return mainTabsPayload(false)
+}
+
+function publishMainTabs(): void {
+  const host = hostWindow
+  if (!host || host.isDestroyed()) return
+  const payload = mainTabsPayload(true)
+  try {
+    host.webContents.send(IPC.BUILTIN_BROWSER_TABS, payload)
+  } catch {
+    // 主窗正在关
+  }
+}
+
+function mainTabsPayload(includeFocus: boolean): BuiltinBrowserTabsPayload {
+  const visible = tabs.filter((tab) => tab.origin === 'user' || tab.origin === 'task')
+  const titles = browserTabTitles(visible.map((tab) => ({ key: tab.key, url: tab.url })))
+  const payload: BuiltinBrowserTabsPayload = {
+    tabs: visible.map((tab) => ({
+      browserKey: tab.key,
+      title: titles.get(tab.key) ?? '浏览器',
+      url: tab.url,
+      origin: tab.origin === 'task' ? 'task' : 'user',
+      taskId: tab.taskId,
+      canGoBack: !tab.view.webContents.isDestroyed() && tab.view.webContents.canGoBack(),
+      canGoForward: !tab.view.webContents.isDestroyed() && tab.view.webContents.canGoForward(),
+    })),
+    focusKey: includeFocus ? focusKey : null,
+  }
+  if (includeFocus) focusKey = null
+  return payload
+}
+
+function normalizeNavigationUrl(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed
+  return `https://${trimmed}`
 }
 
 setTabCloseHost((taskId) => closeTabsForTask(taskId))

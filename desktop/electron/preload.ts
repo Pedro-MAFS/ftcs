@@ -1,9 +1,11 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
+import type { SendFreeDialogueResult } from './opencode/free-dialogue'
 import type {
   AgentEventPayload,
   ReplyQuestionInput,
   ReplyQuestionResult,
+  ReplyPermissionResult,
   AppStatus,
   OpenCodeActionResult,
   ExploreTasksSnapshotDto,
@@ -42,7 +44,10 @@ import type {
   AgentPreflightKind,
   AgentPreflightOptions,
   AgentPreflightResult,
+  BuiltinBrowserSlot,
+  BuiltinBrowserTabsPayload,
   BuiltinBrowserUiState,
+  MainViewLayout,
   AuthActionResult,
   AuthSessionSnapshot,
   InboxAckResult,
@@ -78,6 +83,8 @@ import type {
   OfficeCliReadyResult,
   UpdateCheckResult,
   UpdateDownloadState,
+  SaveTextToDownloadsInput,
+  SaveTextToDownloadsResult,
   WorkflowDeletePlanResult,
   WorkflowListPlansResult,
   WorkflowPlanSaveInput,
@@ -103,6 +110,25 @@ const api = {
     ipcRenderer.on(IPC.BUILTIN_BROWSER_STATE, listener)
     return () => ipcRenderer.removeListener(IPC.BUILTIN_BROWSER_STATE, listener)
   },
+  getBuiltinBrowserTabs: (): Promise<BuiltinBrowserTabsPayload> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_GET_TABS),
+  onBuiltinBrowserTabs: (callback: (payload: BuiltinBrowserTabsPayload) => void): (() => void) => {
+    const listener = (_event: unknown, payload: BuiltinBrowserTabsPayload) => callback(payload)
+    ipcRenderer.on(IPC.BUILTIN_BROWSER_TABS, listener)
+    return () => ipcRenderer.removeListener(IPC.BUILTIN_BROWSER_TABS, listener)
+  },
+  openBuiltinBrowserTab: (): Promise<{ key: string }> => ipcRenderer.invoke(IPC.BUILTIN_BROWSER_OPEN),
+  closeBuiltinBrowserTab: (key: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_CLOSE, key),
+  navigateBuiltinBrowser: (key: string, url: string): Promise<boolean> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_NAVIGATE, key, url),
+  controlBuiltinBrowser: (key: string, action: 'back' | 'forward' | 'reload'): Promise<void> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_CONTROL, key, action),
+  setBuiltinBrowserSlot: (slot: BuiltinBrowserSlot): Promise<void> =>
+    ipcRenderer.invoke(IPC.BUILTIN_BROWSER_SET_SLOT, slot),
+  getMainViewLayout: (): Promise<MainViewLayout | null> => ipcRenderer.invoke(IPC.LAYOUT_GET),
+  setMainViewLayout: (layout: MainViewLayout): Promise<MainViewLayout | null> =>
+    ipcRenderer.invoke(IPC.LAYOUT_SET, layout),
   startOpenCode: (): Promise<OpenCodeActionResult> =>
     ipcRenderer.invoke(IPC.OPENCODE_START),
   stopOpenCode: (): Promise<OpenCodeActionResult> =>
@@ -232,6 +258,10 @@ const api = {
     ipcRenderer.invoke(IPC.RUNTIME_OFFICECLI_READY),
   quitApp: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.APP_QUIT),
   getAppVersion: (): Promise<string> => ipcRenderer.invoke(IPC.APP_GET_VERSION),
+  saveTextToDownloads: (
+    input: SaveTextToDownloadsInput,
+  ): Promise<SaveTextToDownloadsResult> =>
+    ipcRenderer.invoke(IPC.APP_SAVE_TEXT_TO_DOWNLOADS, input),
   checkForUpdate: (opts?: { forceNotify?: boolean }): Promise<UpdateCheckResult> =>
     ipcRenderer.invoke(IPC.UPDATE_CHECK, opts ?? {}),
   snoozeUpdate: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.UPDATE_SNOOZE),
@@ -290,7 +320,7 @@ const api = {
       scheduleId: string
       productId: string
       planId: string
-      reason: 'due' | 'catch-up'
+      reason: 'due'
     }) => void,
   ): (() => void) => {
     const listener = (
@@ -299,7 +329,7 @@ const api = {
         scheduleId: string
         productId: string
         planId: string
-        reason: 'due' | 'catch-up'
+        reason: 'due'
       },
     ) => {
       handler(payload)
@@ -365,8 +395,16 @@ const api = {
   generateProfile: (input: ProfileGenerateInput): Promise<ProfileGenerateResult> =>
     ipcRenderer.invoke(IPC.PROFILE_GENERATE, input),
   abortProfile: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.PROFILE_ABORT),
+  createAgentSession: (): Promise<{ ok: boolean; message: string }> => ipcRenderer.invoke(IPC.AGENT_CREATE_SESSION),
+  currentAgentSession: (): Promise<string | null> => ipcRenderer.invoke(IPC.AGENT_CURRENT_SESSION),
+  sendAgentMessage: (text: string, productId?: string): Promise<SendFreeDialogueResult> =>
+    ipcRenderer.invoke(IPC.AGENT_SEND_MESSAGE, text, productId),
+  noteActiveProduct: (productId: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.AGENT_NOTE_PRODUCT, productId),
   replyQuestion: (input: ReplyQuestionInput): Promise<ReplyQuestionResult> =>
     ipcRenderer.invoke(IPC.AGENT_REPLY_QUESTION, input),
+  replyPermission: (reply: 'once' | 'reject'): Promise<ReplyPermissionResult> =>
+    ipcRenderer.invoke(IPC.AGENT_REPLY_PERMISSION, reply),
   getProfile: (productId: string): Promise<ProfileDetail | null> =>
     ipcRenderer.invoke(IPC.PROFILE_GET, productId),
   listProfiles: (): Promise<ProfileSummary[]> => ipcRenderer.invoke(IPC.PROFILE_LIST),
@@ -453,6 +491,8 @@ const api = {
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_REJECT, input),
   approveEmailDraft: (input: ApproveEmailDraftInput): Promise<ApproveEmailDraftResult> =>
     ipcRenderer.invoke(IPC.EMAIL_DRAFT_APPROVE, input),
+  taskSnapshot: () => ipcRenderer.invoke(IPC.TASK_SNAPSHOT),
+  launchWorkflowStep: (node: string, productId: string, origin: string) => ipcRenderer.invoke(IPC.WORKFLOW_LAUNCH_STEP, node, productId, origin),
   onAgentEvent: (handler: (payload: AgentEventPayload) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: AgentEventPayload) => {
       handler(payload)
