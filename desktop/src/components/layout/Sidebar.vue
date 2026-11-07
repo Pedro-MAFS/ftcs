@@ -17,7 +17,7 @@ import type { SettingsCategory } from '../../types/settings'
 defineProps<{
   settings: boolean
 }>()
-const { products, activeProductId, latestTask, generating, pipelineSteps, selectProduct, deleteProduct, createDraftProduct } =
+const { products, activeProductId, latestTask, generating, pipelineSteps, selectProduct, deleteProduct, createDraftProduct, refreshProducts } =
   useWorkspace()
 const { widths, pipelineColumnCollapsed, collapsePipelineColumn, expandPipelineColumn } =
   useWorkspaceLayout()
@@ -26,6 +26,7 @@ const { activeCategory, setCategory } = useSettingsNav()
 
 const deletingId = ref('')
 const creatingDraft = ref(false)
+const refreshingProducts = ref(false)
 const deleteError = ref('')
 const confirmOpen = ref(false)
 const pendingDelete = ref<{ id: string; label: string } | null>(null)
@@ -124,6 +125,19 @@ async function onCreateDraft(): Promise<void> {
     creatingDraft.value = false
   }
 }
+
+async function onRefreshProducts(): Promise<void> {
+  if (refreshingProducts.value) return
+  refreshingProducts.value = true
+  deleteError.value = ''
+  try {
+    await refreshProducts(!activeProductId.value)
+  } catch (error) {
+    deleteError.value = error instanceof Error ? error.message : '刷新产品列表失败'
+  } finally {
+    refreshingProducts.value = false
+  }
+}
 </script>
 
 <template>
@@ -154,6 +168,9 @@ async function onCreateDraft(): Promise<void> {
         @click="expandPipelineColumn"
       >
         <Icon name="panel-left-open" :size="14" />
+      </button>
+      <button type="button" class="icon-btn" title="刷新产品列表" aria-label="刷新产品列表" :disabled="refreshingProducts" @click="onRefreshProducts">
+        <Icon name="refresh-cw" :size="14" />
       </button>
       <div class="sidebar__avatars">
         <button
@@ -199,6 +216,9 @@ async function onCreateDraft(): Promise<void> {
       <div class="sidebar__head">
         <span>产品</span>
         <div class="sidebar__head-actions">
+          <button type="button" class="icon-btn" title="刷新产品列表" aria-label="刷新产品列表" :disabled="refreshingProducts" @click="onRefreshProducts">
+            <Icon name="refresh-cw" :size="14" />
+          </button>
           <button
             type="button"
             class="icon-btn"
