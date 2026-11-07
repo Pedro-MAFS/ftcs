@@ -92,6 +92,30 @@ test('skill preparation and write permissions stay scoped to the product, round 
     runner.disconnect()
   })
   await submitted
+  const update = await runner.begin('s', {
+    protocol_version: 1,
+    request_id: randomUUID(),
+    task_type: 'extract-product-profile',
+    scope: { product_id: 'p' },
+    parameters: {},
+  })
+  assert.equal(update.state, 'running')
+  assert.ok('prepared' in update && update.prepared)
+  assert.match(String(update.prepared.instructions), /product_get/)
+  const updateCall = { sessionID: 's', callID: 'profile-update', tool: 'lead-store_product_save', taskID: update.task_id }
+  assert.equal(runner.authorize(updateCall, { product_id: 'p' }), update.task_id)
+  assert.throws(() => runner.authorize(updateCall, { product_id: 'other' }))
+  runner.recordWrite(updateCall, {})
+  const updateDone = await runner.done('s', { task_id: update.task_id, outcome: 'succeeded', message: '已更新' })
+  assert.equal(updateDone.state, 'succeeded')
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'data/products/p/profile.json'), 'utf8')).products[0].name, 'Widget')
+  await assert.rejects(runner.begin('s', {
+    protocol_version: 1,
+    request_id: randomUUID(),
+    task_type: 'extract-product-profile',
+    scope: { product_id: 'missing' },
+    parameters: {},
+  }), /未找到所选产品/)
   const run = async (
     skill: TaskSkill,
     tool: string,
@@ -140,5 +164,5 @@ test('skill preparation and write permissions stay scoped to the product, round 
   const slot = { product_id: 'p', lead_id: 'l', recipient_key: 'company' }
   await run('draft-outreach-email', 'email_draft_plan_slot', slot, { mode: 'slot' }, slot)
   await run('translate-outreach-email', 'email_draft_save_zh', slot, {}, slot)
-  assert.equal(records.filter((r) => r.finished_at).length, 9)
+  assert.equal(records.filter((r) => r.finished_at).length, 11)
 })
