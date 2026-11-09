@@ -102,13 +102,26 @@ function startPreview(port, mode = 'strict') {
   child.once('exit', () => children.delete(child))
   return child
 }
-async function readReady(child) {
+async function readReady(child, expectedPort) {
   let data = ''
   let errors = ''
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => finish(new Error('preview readiness timed out')), 10000)
+    let polling = false
+    const timer = setTimeout(() => finish(new Error('preview readiness timed out; stdout: ' + data.slice(-1000) + '; stderr: ' + errors.slice(-1000))), 20000)
+    const poll = expectedPort ? setInterval(async () => {
+      if (polling) return
+      polling = true
+      try {
+        const reply = await httpGet(expectedPort)
+        if (reply.status === 200) finish(null, expectedPort)
+      } catch {} finally { polling = false }
+    }, 250) : undefined
+    let finished = false
     function finish(error, value) {
+      if (finished) return
+      finished = true
       clearTimeout(timer)
+      if (poll) clearInterval(poll)
       child.stdout.off('data', onData)
       child.stderr.off('data', onError)
       child.off('exit', onExit)
@@ -117,7 +130,8 @@ async function readReady(child) {
     }
     function onData(chunk) {
       data += chunk.toString()
-      const match = data.match(/READY (\d+)/) || data.match(/https?:\/\/127\.0\.0\.1:(\d+)\//)
+      const clean = data.replace(/\x1b\[[0-9;]*m/g, '')
+      const match = clean.match(/READY (\d+)/) || clean.match(/https?:\/\/127\.0\.0\.1:(\d+)\//)
       if (match) finish(null, Number(match[1]))
     }
     function onError(chunk) { errors += chunk.toString() }
@@ -198,7 +212,7 @@ if (process.platform==='win32') {
 }
 const code='require("node:fs").writeFileSync('+JSON.stringify(target)+',"fixture")'
 const child=spawnSync(process.execPath,['-e',code],{encoding:'utf8',env:{PATH:process.env.PATH||'',SystemRoot:process.env.SystemRoot||''}})
-console.log(JSON.stringify({direct,symlink,relativeSymlink,childStatus:child.status,childFile:fs.existsSync(target),nativeStatus:native.status,nativeFile:fs.existsSync(nativeTarget),nativeSkipped:native.skipped}))
+console.log(JSON.stringify({direct,symlink,relativeSymlink,childStatus:child.status,childFile:fs.existsSync(target),nativeStatus:native.status,nativeFile:fs.existsSync(nativeTarget),nativeSkipped:native.skipped,nativeError:(native.stderr||native.error?.message||'').slice(-500),nativeOutput:(native.stdout||'').slice(-500)}))
 `)
 
 try {
@@ -292,7 +306,7 @@ try {
     await new Promise(resolve => available.close(resolve))
     const vite = startNpmPreview(['run', 'dev', '--', '--port', String(requested), '--strictPort'])
     try {
-      const actual = await readReady(vite)
+      const actual = await readReady(vite, requested)
       const reply = await httpGet(actual)
       record('vite-dev', actual === requested && reply.status === 200 && reply.text.includes('FTCS fixture') ? 'pass' : 'fail', { requestedPort: requested, actualPort: actual, httpStatus: reply.status })
       await stopTree(vite)
@@ -339,6 +353,7 @@ try {
   for (const child of children) {
     try { await stopTree(child) } catch (error) { record('cleanup', 'fail', { message: error.message }) }
   }
-  fs.rmSync(root, { recursive: true, force: true })
+  try { fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }) }
+  catch (error) { record('cleanup', 'fail', { path: root, message: error.message }) }
 }
 if (results.some(item => item.status === 'fail')) process.exitCode = 1
