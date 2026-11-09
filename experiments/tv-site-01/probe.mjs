@@ -206,7 +206,7 @@ const source=path.join(process.cwd(),'index.html')
 let native
 if (process.platform==='win32') {
   if (/[&|<>^%!]/.test(source + nativeTarget)) native = { skipped: '临时路径包含 cmd 特殊字符' }
-  else native = spawnSync(process.env.ComSpec||'cmd.exe',['/d','/s','/c','copy /y "'+source+'" "'+nativeTarget+'"'],{encoding:'utf8',env:{SystemRoot:process.env.SystemRoot||'',PATH:process.env.PATH||''}})
+  else native = spawnSync(process.env.ComSpec||'cmd.exe',['/d','/s','/c','copy /y "'+source+'" "'+nativeTarget+'"'],{encoding:'utf8',windowsVerbatimArguments:true,env:{SystemRoot:process.env.SystemRoot||'',PATH:process.env.PATH||''}})
 } else {
   native = spawnSync('/bin/cp',[source,nativeTarget],{encoding:'utf8'})
 }
