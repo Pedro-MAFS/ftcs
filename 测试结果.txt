@@ -35,3 +35,33 @@ Error: Cannot find module 'C:\WINDOWS\System32\experiments\tv-site-01\probe.mjs'
 }
 
 Node.js v24.18.0
+PS C:\WINDOWS\System32> F:
+PS F:\> cd .\workspace\
+PS F:\workspace> cd .\foreignscience-foreign-trade-customer-search\
+PS F:\workspace\foreignscience-foreign-trade-customer-search> cd ..
+PS F:\workspace> cd .\ftcs\
+PS F:\workspace\ftcs> node .\experiments\tv-site-01\probe.mjs
+{"id":"environment","status":"observed","detail":{"platform":"win32","arch":"x64","node":"v24.18.0","npm":"11.16.0"}}
+{"id":"npm-node-version","status":"observed","detail":{"node":"v24.18.0","executable":"C:\\Users\\11747\\AppData\\Roaming\\@ftcs\\desktop\\node-runtime\\node.exe","exit":0,"pathExit":0}}
+{"id":"npm-install-ignore-scripts","status":"pass","detail":{"exit":0,"outsideFixtureWritten":false,"error":""}}
+{"id":"npm-install-lifecycle","status":"exposed","detail":{"exit":0,"outsideFixtureWritten":true,"error":""}}
+{"id":"npm-build","status":"pass","detail":{"exit":0,"outputExists":true,"error":""}}
+{"id":"npm-script-boundary","status":"exposed","detail":{"outsideFixtureWritten":true,"exit":0}}
+{"id":"lexical-traversal","status":"pass","detail":{"rejected":true}}
+{"id":"symlink-realpath","status":"pass","detail":{"rejected":true}}
+{"id":"relative-symlink-setup","status":"skipped","detail":{"reason":"EPERM"}}
+{"id":"node-permission","status":"observed","detail":{"direct":"ERR_ACCESS_DENIED","symlink":"allowed","relativeSymlink":"ENOENT","childStatus":1,"childFile":false,"nativeStatus":1,"nativeFile":false,"nativeError":"�ļ�����Ŀ¼��������﷨����ȷ��\r\n","nativeOutput":"\\C:\\Users\\11747\\AppData\\Local\\Temp\\ftcs-tv-site-01-MyVeoi\\site\\index.html\\* \r\n�Ѹ���         0 ���ļ���\r\n","symlinkReady":true,"relativeLinkReady":false,"exit":0}}
+{"id":"npm-dev","status":"pass","detail":{"actualPort":61763,"httpStatus":200}}
+{"id":"npm-process-tree-cleanup","status":"pass","detail":{"portClosed":true,"grandchildAlive":false}}
+{"id":"vite-build","status":"pass","detail":{"exit":0,"error":""}}
+{"id":"vite-dev","status":"pass","detail":{"requestedPort":61766,"actualPort":61766,"httpStatus":200}}
+{"id":"vite-cleanup","status":"pass","detail":{"portClosed":true}}
+{"id":"port-occupied-strict","status":"pass","detail":{"message":"preview exited 1: EADDRINUSE"}}
+{"id":"preview-fallback","status":"pass","detail":{"occupiedPort":61772,"actualPort":61776,"httpStatus":200}}
+{"id":"preview-cleanup","status":"pass","detail":{"closed":true}}
+{"id":"preview-unexpected-exit","status":"pass","detail":{"exitCode":42,"portClosed":true}}
+PS F:\workspace\ftcs> node --experimental-strip-types .\experiments\tv-site-01\cdp-filter-test.mjs
+{"url":"http://localhost:5173/","shell":true,"adoptable":false}
+{"url":"http://localhost:5174/","shell":false,"adoptable":true}
+{"url":"http://127.0.0.1:5173/","shell":true,"adoptable":false}
+{"url":"http://127.0.0.1:5174/","shell":false,"adoptable":true}
