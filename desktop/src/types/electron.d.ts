@@ -1,3 +1,4 @@
+interface CloudflareState { connected: boolean; authorized?: boolean; pending?: boolean; accountId?: string; accountName?: string; accounts?: Array<{ id: string; name: string }>; message?: string }
 import type { AppStatus, OpenCodeActionResult } from './app'
 import type { AuthActionResult, AuthSessionSnapshot } from './auth'
 import type { LibraryMutationResult, LibrarySnapshot } from './library'
@@ -944,6 +945,11 @@ declare global {
       restartOpenCode: () => Promise<AppStatus>
       reconnectMcp: (name: string) => Promise<OpenCodeActionResult>
       getOpenCodeLogs: () => Promise<string[]>
+      getCloudflareState: () => Promise<CloudflareState>
+      connectCloudflare: () => Promise<CloudflareState & { ok: boolean; needsPageAuthorization?: boolean }>
+      cancelCloudflareAuth: () => Promise<void>
+      selectCloudflareAccount: (accountId: string) => Promise<CloudflareState & { ok: boolean }>
+      disconnectCloudflare: () => Promise<void>
       getGithubState: () => Promise<{ connected: boolean; authorized?: boolean; login?: string; message?: string; installUrl?: string }>
       startGithubAuth: () => Promise<{ ok: boolean; message?: string; userCode?: string; verificationUrl?: string; interval?: number }>
       pollGithubAuth: () => Promise<{ status: 'pending' | 'connected' | 'failed'; interval?: number; message?: string; login?: string }>

@@ -43,9 +43,9 @@ sequenceDiagram
     FTCS-->>用户: 显示 GitHub 已连接和账号
     用户->>FTCS: 在独立站页面点击连接 Cloudflare
     FTCS->>用户: 引导连接用户的 Cloudflare 账号
-    用户->>Cloudflare: 创建受限 API Token
-    用户->>FTCS: 配置 Cloudflare 账号和 Token
-    FTCS->>Cloudflare: 验证权限并查询账号及项目
+    用户->>Cloudflare: 登录并授权 FTCS OAuth 客户端
+    Cloudflare-->>FTCS: 返回授权结果
+    FTCS->>Cloudflare: 查询权限、账号及项目
     Cloudflare-->>FTCS: 返回可用账号与项目
     FTCS-->>用户: 显示 Cloudflare 已连接和账号
     用户->>FTCS: 点击发布
@@ -160,11 +160,11 @@ GitHub 仓库创建接口有明确的 token 类型和权限要求，不能假定
 
 ### 4.2 Cloudflare
 
-首期可提供**用户创建受限 Cloudflare API Token 并在桌面端配置**的方案：依据操作申请 Pages Read/Write 等必要权限和目标账号范围；不要求全局 API Key。首次授予 Cloudflare 访问 GitHub 仓库仍由用户在官方页面完成。Pages 官方 REST 指南说明了 API Token 和项目/部署接口的使用方式。[Pages REST API](https://developers.cloudflare.com/pages/configuration/api/)。
+Cloudflare 支持第三方 OAuth 客户端。FTCS 桌面端采用 **Authorization Code + PKCE**，用户在浏览器登录并选择账号，不需要手工创建 API Token；桌面端不保存 Client Secret。用户首次授予 Cloudflare 访问 GitHub 仓库仍需单独在官方页面完成。[Cloudflare OAuth 客户端](https://developers.cloudflare.com/fundamentals/oauth/create-an-oauth-client/)。
 
-此方案是可落地的候选方向，不等于已确认用户体验最佳或所有字段都能通过该 token 操作。Cloudflare 是否允许 FTCS 自有 OAuth 客户端、具体注册方式与授权范围，以及项目关联 API 对 Git 安装的前置条件，需要开发前进一步核对；不应冒用或打包其他产品的客户端身份。
+FTCS 已接入注册的公开 Client ID 和 `http://127.0.0.1:43862/callback` 本机回调。首次连接时，为确定 Pages 权限的实际 scope ID，先请求账号信息权限，再查询 Cloudflare scope 列表并请求 Pages 授权，因此可能需要用户在浏览器确认两次。待真实账号联测确认 ID 后可进一步简化。Cloudflare OAuth 用户令牌能否调用 scope 列表、实际权限及项目关联 API 的前置条件均待真实联测；获取 Token 不等于写入权限已验证。
 
-两个平台的 token 均需使用操作系统提供的凭据存储，日志、Git remote URL、配置文件和提交内容中不出现明文 token。超期、撤销与账号切换须支持重新连接；具体权限粒度和存储实现进入详设。
+两个平台的 token 均使用操作系统提供的凭据加密，日志、Git remote URL、配置文件和提交内容中不出现明文 token。超期、撤销与账号切换须支持重新连接；本地断开与服务商端撤销是不同操作。
 
 ## 5. 发布状态与版本关联
 
@@ -182,7 +182,7 @@ GitHub 仓库创建接口有明确的 token 类型和权限要求，不能假定
 用户已确认本研究通过；研究阶段无需用户手工完成完整建站发布，也不以测试站点上线为本文的通过条件。以下属于后续设计或开发联调的**未实证项**，不能当作已验证的事实：
 
 1. FTCS 的 GitHub App/桌面授权是否需要自有服务端；新建个人或组织仓库的最小授权组合。
-2. Cloudflare 是否支持适合 FTCS 的官方 OAuth 客户端；若使用用户 API Token，最低权限和账号选择体验。
+2. Cloudflare OAuth 用户令牌能否获取 scope 列表、Pages 最低权限及多账号选择体验。
 3. Cloudflare GitHub App 已安装后，Pages 项目能否完全通过公开 API 创建、关联指定仓库并触发首次部署；不支持时采用官方页面引导和项目选择。
 4. API 返回的实际部署 SHA、状态、生产别名及重试行为，和多次推送/并发时的匹配策略。
 5. 组织管理员审批、私有仓库、授权撤销、非快进推送、构建失败和网络中断的真实响应与恢复方式。

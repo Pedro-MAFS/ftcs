@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
+import type { CloudflareState, CloudflareAction } from './cloudflare/cloudflare-auth'
 import type { GithubState, GithubStart, GithubPoll } from './github/github-auth'
 import type { SendFreeDialogueResult } from './opencode/free-dialogue'
 import type {
@@ -138,6 +139,11 @@ const api = {
   reconnectMcp: (name: string): Promise<OpenCodeActionResult> =>
     ipcRenderer.invoke(IPC.OPENCODE_MCP_RECONNECT, name),
   getOpenCodeLogs: (): Promise<string[]> => ipcRenderer.invoke(IPC.OPENCODE_GET_LOGS),
+  getCloudflareState: (): Promise<CloudflareState> => ipcRenderer.invoke(IPC.CLOUDFLARE_GET_STATE),
+  connectCloudflare: (): Promise<CloudflareAction> => ipcRenderer.invoke(IPC.CLOUDFLARE_CONNECT),
+  cancelCloudflareAuth: (): Promise<void> => ipcRenderer.invoke(IPC.CLOUDFLARE_CANCEL),
+  selectCloudflareAccount: (accountId: string): Promise<CloudflareAction> => ipcRenderer.invoke(IPC.CLOUDFLARE_SELECT_ACCOUNT, accountId),
+  disconnectCloudflare: (): Promise<void> => ipcRenderer.invoke(IPC.CLOUDFLARE_DISCONNECT),
   getGithubState: (): Promise<GithubState> => ipcRenderer.invoke(IPC.GITHUB_GET_STATE),
   startGithubAuth: (): Promise<GithubStart> => ipcRenderer.invoke(IPC.GITHUB_START_AUTH),
   pollGithubAuth: (): Promise<GithubPoll> => ipcRenderer.invoke(IPC.GITHUB_POLL_AUTH),

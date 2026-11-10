@@ -10,6 +10,65 @@ const busy = ref(false)
 const code = ref('')
 const message = ref('')
 const deviceUrl = 'https://github.com/login/device'
+const cfConnected = ref(false)
+const cfAuthorized = ref(false)
+const cfAccountId = ref('')
+const cfAccountName = ref('')
+const cfAccounts = ref<Array<{ id: string; name: string }>>([])
+const cfChoose = ref(false)
+const cfBusy = ref(false)
+const cfMessage = ref('')
+let cfAttempt = 0
+function applyCloudflareState(state: { connected: boolean; authorized?: boolean; accountId?: string; accountName?: string; accounts?: Array<{ id: string; name: string }>; message?: string }) {
+  cfConnected.value = state.connected
+  cfAuthorized.value = state.authorized ?? false
+  cfAccountId.value = state.accountId ?? ''
+  cfAccountName.value = state.accountName ?? ''
+  cfAccounts.value = state.accounts ?? []
+  cfMessage.value = state.message ?? ''
+  if (state.connected) cfChoose.value = false
+}
+async function refreshCloudflare() {
+  if (!window.ftcs?.getCloudflareState) return
+  const current = cfAttempt
+  try { const state = await window.ftcs.getCloudflareState(); if (current === cfAttempt) applyCloudflareState(state) }
+  catch { cfMessage.value = '无法检查 Cloudflare 连接，请重试。' }
+}
+async function connectCloudflare() {
+  if (!window.ftcs?.connectCloudflare || cfBusy.value) return
+  const current = ++cfAttempt
+  cfBusy.value = true
+  cfMessage.value = ''
+  try {
+    let result = await window.ftcs.connectCloudflare()
+    if (current !== cfAttempt) return
+    if (result.needsPageAuthorization) {
+      cfMessage.value = '账号授权完成，请在浏览器继续确认 Pages 权限。'
+      result = await window.ftcs.connectCloudflare()
+    }
+    if (current === cfAttempt) applyCloudflareState(result)
+  }
+  catch { if (current === cfAttempt) cfMessage.value = 'Cloudflare 连接失败，请重试。' }
+  finally { if (current === cfAttempt) cfBusy.value = false }
+}
+async function cancelCloudflare() {
+  cfAttempt++
+  try { await window.ftcs!.cancelCloudflareAuth() } finally { cfBusy.value = false; cfMessage.value = '已取消 Cloudflare 授权。' }
+}
+async function chooseCloudflareAccount(accountId: string) {
+  if (!accountId || cfBusy.value) return
+  const current = ++cfAttempt
+  cfBusy.value = true
+  try { const result = await window.ftcs!.selectCloudflareAccount(accountId); if (current === cfAttempt) applyCloudflareState(result) }
+  catch { cfMessage.value = '无法选择 Cloudflare 账号，请重试。' }
+  finally { if (current === cfAttempt) cfBusy.value = false }
+}
+async function disconnectCloudflare() {
+  cfAttempt++
+  try { await window.ftcs!.disconnectCloudflare(); applyCloudflareState({ connected: false, message: '已移除本机 Cloudflare 授权。' }); cfBusy.value = false }
+  catch { cfMessage.value = '移除 Cloudflare 授权失败，请重试。' }
+}
+async function refreshAll() { await Promise.all([refresh(), refreshCloudflare()]) }
 let timer: ReturnType<typeof setTimeout> | undefined
 let attempt = 0
 async function refresh() {
@@ -69,21 +128,27 @@ async function copyCode() {
   catch { message.value = '无法复制，请手动输入授权码。' }
 }
 function publish() {
-  message.value = connected.value ? '发布前请先连接 Cloudflare；发布功能将在后续开发中提供。' : '发布前请先连接 GitHub 和 Cloudflare。'
+  if (!connected.value || !cfConnected.value) {
+    const missing = [!connected.value ? 'GitHub' : '', !cfConnected.value ? 'Cloudflare' : ''].filter(Boolean).join(' 和 ')
+    message.value = `发布前请先连接 ${missing}。`
+  } else message.value = '发布功能将在后续开发中提供。'
 }
-onMounted(() => { void refresh() })
-onUnmounted(() => { attempt++; if (timer) clearTimeout(timer); void window.ftcs?.cancelGithubAuth?.() })
+onMounted(() => { void refreshAll() })
+onUnmounted(() => { cfAttempt++; attempt++; if (timer) clearTimeout(timer); void window.ftcs?.cancelGithubAuth?.(); void window.ftcs?.cancelCloudflareAuth?.() })
 </script>
 
 <template>
   <div class="site-page">
-    <header class="page-header"><div><h1>独立站</h1><p>创建、预览并发布属于你的品牌网站</p></div><div class="header-actions"><button class="btn secondary" type="button" @click="refresh"><Icon name="refresh-cw" /> 刷新</button><button class="btn primary" type="button" @click="publish">发布网站</button></div></header>
+    <header class="page-header"><div><h1>独立站</h1><p>创建、预览并发布属于你的品牌网站</p></div><div class="header-actions"><button class="btn secondary" type="button" @click="refreshAll"><Icon name="refresh-cw" /> 刷新</button><button class="btn primary" type="button" @click="publish">发布网站</button></div></header>
     <div class="connections" aria-label="账号连接">
       <div class="connection"><button v-if="!connected && !authorized" class="btn secondary" type="button" :disabled="busy" @click="connect"><Icon name="plus" /> {{ busy ? '正在连接 GitHub' : '连接 GitHub' }}</button><template v-else><span class="connection-status"><span class="dot" /> GitHub · {{ login }} · {{ connected ? '已连接' : '待完成安装' }}</span><button v-if="installUrl" class="text-button" type="button" @click="openInstall">安装 GitHub App</button><button class="text-button" type="button" @click="disconnect">断开</button></template></div>
-      <button class="btn secondary" type="button" @click="message = 'Cloudflare 连接将在后续开发中提供。'"><Icon name="plus" /> 连接 Cloudflare</button>
+      <div class="connection"><button v-if="!cfConnected" class="btn secondary" type="button" :disabled="cfBusy" @click="connectCloudflare"><Icon name="plus" /> {{ cfBusy ? '正在连接 Cloudflare' : '连接 Cloudflare' }}</button><span v-else class="connection-status" :title="cfAccountId"><span class="dot" /> Cloudflare · {{ cfAccountName }} · 已连接</span><button v-if="cfConnected && cfAccounts.length > 1" class="text-button" type="button" @click="cfChoose = !cfChoose">切换账号</button><button v-if="cfAuthorized" class="text-button" type="button" @click="disconnectCloudflare">断开</button></div>
       <span class="context">当前工作区的站点连接</span>
     </div>
     <div v-if="code" class="auth-panel" role="status"><div><strong>在 GitHub 完成授权</strong><p>在浏览器输入下方授权码，并按 GitHub 提示选择账号和授权范围。</p></div><div class="auth-actions"><code>{{ code }}</code><button class="btn secondary" type="button" @click="copyCode">复制</button><button class="btn secondary" type="button" @click="openDevice">打开 GitHub</button><button class="text-button" type="button" @click="cancel">取消</button></div><p>等待 GitHub 确认授权…</p></div>
+    <div v-if="cfBusy" class="auth-panel" role="status"><strong>等待 Cloudflare 授权</strong><p>请在浏览器登录并授权，完成后返回 FTCS。</p><div class="auth-actions"><button class="btn secondary" type="button" @click="cancelCloudflare">取消</button></div></div>
+    <div v-if="(!cfConnected || cfChoose) && cfAccounts.length > 1" class="auth-panel"><strong>选择 Cloudflare 账号</strong><p>请选择用于独立站的账号。</p><div class="auth-actions"><button v-for="account in cfAccounts" :key="account.id" class="btn secondary" type="button" :disabled="cfBusy" @click="chooseCloudflareAccount(account.id)">{{ account.name }}</button></div></div>
+    <p v-if="cfMessage" class="notice" role="status">{{ cfMessage }}</p>
     <p v-if="message" class="notice" role="status">{{ message }}</p>
     <section class="site-card"><div class="site-card-title"><div class="site-icon"><Icon name="globe" :size="20" /></div><div><h2>工作区独立站</h2><p>一个工作区对应一个全局站点</p></div><span class="badge">尚未创建</span></div><div class="site-details"><div><span>线上地址</span><strong>尚未发布</strong></div><div><span>最近发布</span><strong>—</strong></div><div><span>本地站点</span><strong>尚未创建</strong></div></div></section>
     <section class="section"><div class="section-header"><div><h2>本地预览</h2><p>在发布前查看当前工作区的网站</p></div><button class="btn secondary" type="button" disabled>打开预览</button></div><div class="empty-preview"><Icon name="globe" :size="28" /><strong>还没有站点</strong><p>站点创建功能将在后续开发中提供。</p></div></section>

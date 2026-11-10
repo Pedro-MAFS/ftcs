@@ -1,3 +1,4 @@
+import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount } from './cloudflare/cloudflare-auth'
 import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub } from './github/github-auth'
 import { markExplorationRunFailed } from './exploration/exploration-writer'
 import { TaskJournal } from './tasks/journal'
@@ -649,6 +650,11 @@ function registerIpcHandlers(): void {
     await shell.openExternal(parsed.toString())
     return { ok: true, message: '已打开浏览器' }
   })
+  ipcMain.handle(IPC.CLOUDFLARE_GET_STATE, () => getCloudflareState())
+  ipcMain.handle(IPC.CLOUDFLARE_CONNECT, () => connectCloudflare())
+  ipcMain.handle(IPC.CLOUDFLARE_CANCEL, () => cancelCloudflareAuth())
+  ipcMain.handle(IPC.CLOUDFLARE_SELECT_ACCOUNT, (_event, accountId: unknown) => selectCloudflareAccount(accountId))
+  ipcMain.handle(IPC.CLOUDFLARE_DISCONNECT, () => disconnectCloudflare())
   ipcMain.handle(IPC.GITHUB_GET_STATE, () => getGithubState())
   ipcMain.handle(IPC.GITHUB_START_AUTH, () => startGithubAuth())
   ipcMain.handle(IPC.GITHUB_POLL_AUTH, () => pollGithubAuth())

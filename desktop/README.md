@@ -165,3 +165,9 @@ npx electron-builder --win # 产出 release/
 - `FTCS_GITHUB_APP_SLUG`：GitHub App 页面 URL 中 `/apps/` 后的标识，用于在用户授权账号后引导安装 App；更换 Client ID 时应同时设置对应标识。
 
 Client ID 和 App 标识不是密钥。不要将 Client Secret 或 App 私钥写入应用、日志或仓库。授权所得的用户令牌仅在系统凭据加密可用时保存。用户授权账号与安装 App、授权仓库是不同步骤；安装完成后在独立站页面点击刷新检查状态。
+
+### Cloudflare OAuth 连接
+
+独立站使用 Cloudflare OAuth Authorization Code + PKCE。默认客户端 ID 为 FTCS 注册的公开 ID，本机回调地址为 `http://127.0.0.1:43862/callback`。可以使用 `FTCS_CLOUDFLARE_CLIENT_ID` 和 `FTCS_CLOUDFLARE_SCOPES` 环境变量覆盖默认客户端与权限；首次连接先请求账号信息权限，用获得的用户令牌查询 Cloudflare 提供的 scope 列表，再引导用户确认 Pages 权限；因此首次连接可能需要两次浏览器确认。覆盖权限时必须使用与 OAuth 客户端注册时勾选的权限一致的 scope ID。
+
+用户在浏览器登录和选择授权账号，FTCS 自动查询账号并验证 Pages 读取权限，令牌使用 Electron safeStorage 加密保存在应用数据目录。连接成功不代表 Pages 写权限已验证。断开连接仅删除本地凭据；如需撤销 Cloudflare 端授权，请前往 Cloudflare 控制台。Cloudflare 对 GitHub 仓库的访问仍需另外完成 Git 集成。
