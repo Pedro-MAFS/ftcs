@@ -123,6 +123,52 @@ function finish(result: CloudflareAction): void {
   p.server.close(() => p.resolve(result))
   p.server.closeIdleConnections()
 }
+function writeCallbackPage(res: http.ServerResponse, result: 'success' | 'continue' | 'failure'): void {
+  const content = {
+    success: { icon: '✓', title: 'Cloudflare 授权完成', description: '请返回 FTCS 继续使用独立站。', detail: '如果你有多个 Cloudflare 账号，请在 FTCS 中选择要使用的账号。' },
+    continue: { icon: '✓', title: '账号授权完成', description: '请返回 FTCS，继续确认 Pages 权限。', detail: 'FTCS 将打开 Cloudflare 授权页面，完成后即可继续。' },
+    failure: { icon: '!', title: '授权未完成', description: '请返回 FTCS 查看原因并重试。', detail: '你可以关闭此页面，回到 FTCS 后继续操作。' },
+  }[result]
+  const failed = result === 'failure'
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+  })
+  res.end(`<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${content.title} · FTCS</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #141414; color: #e4e4e4; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    main { width: min(100%, 440px); padding: 36px 32px 32px; background: #1a1a1a; border: 1px solid #303030; border-radius: 12px; }
+    .brand { display: flex; align-items: center; gap: 10px; color: #e4e4e4; font-size: 14px; font-weight: 700; letter-spacing: .02em; }
+    .brand-mark { display: grid; place-items: center; width: 28px; height: 28px; background: #3b82f6; border-radius: 7px; color: #fff; font-weight: 700; }
+    .icon { display: grid; place-items: center; width: 48px; height: 48px; margin-top: 38px; border-radius: 50%; background: ${failed ? '#3b2727' : '#19362a'}; color: ${failed ? '#f87171' : '#4ade80'}; font-size: 25px; font-weight: 600; }
+    h1 { margin: 20px 0 8px; font-size: 22px; line-height: 1.4; }
+    .description { margin: 0; color: #e4e4e4; font-size: 15px; line-height: 1.6; }
+    .detail { margin: 10px 0 0; color: #a0a0a0; font-size: 13px; line-height: 1.7; }
+    footer { margin-top: 32px; padding-top: 18px; border-top: 1px solid #303030; color: #888; font-size: 12px; }
+    @media (max-width: 480px) { main { padding: 28px 24px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand"><span class="brand-mark">F</span><span>FTCS · 外贸获客</span></div>
+    <div class="icon" aria-hidden="true">${content.icon}</div>
+    <h1>${content.title}</h1>
+    <p class="description">${content.description}</p>
+    <p class="detail">${content.detail}</p>
+    <footer>此页面可以关闭</footer>
+  </main>
+</body>
+</html>`)
+}
 function callback(req: http.IncomingMessage, res: http.ServerResponse): void {
   const p = pending
   if (!p || req.method !== 'GET') { res.writeHead(404); res.end(); return }
@@ -135,7 +181,7 @@ function callback(req: http.IncomingMessage, res: http.ServerResponse): void {
   if (!code) {
     const error = url.searchParams.get('error')
     const message = error === 'invalid_scope' ? 'Cloudflare 权限范围与客户端配置不匹配，请检查已选权限。' : error === 'access_denied' ? 'Cloudflare 授权被拒绝。' : 'Cloudflare 授权未完成。'
-    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); res.end('授权未完成，请返回 FTCS。')
+    writeCallbackPage(res, 'failure')
     finish({ ok: false, connected: false, message }); return
   }
   p.processing = true
@@ -148,20 +194,18 @@ function callback(req: http.IncomingMessage, res: http.ServerResponse): void {
       if (!process.env.FTCS_CLOUDFLARE_SCOPES?.trim() && !discoveredScopes) {
         discoveredScopes = await discoverPageScopes(credentials.accessToken)
         if (current !== generation || pending !== p) { res.writeHead(410); res.end(); return }
-        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' })
-        res.end('账号授权完成，请返回 FTCS 继续确认 Pages 权限。')
+        writeCallbackPage(res, 'continue')
         finish({ ok: true, connected: false, needsPageAuthorization: true, message: '请继续确认 Cloudflare Pages 权限。' })
         return
       }
       save(credentials)
       const state = await inspect(credentials, current)
       if (current !== generation || pending !== p) { res.writeHead(410); res.end(); return }
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' })
-      res.end('授权完成，请返回 FTCS。')
+      writeCallbackPage(res, 'success')
       finish({ ok: true, ...state })
     } catch (error) {
       if (current !== generation || pending !== p) { res.writeHead(410); res.end(); return }
-      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }); res.end('授权处理失败，请返回 FTCS。')
+      writeCallbackPage(res, 'failure')
       finish({ ok: false, connected: false, message: error instanceof Error ? error.message : 'Cloudflare 授权失败。' })
     }
   })()
