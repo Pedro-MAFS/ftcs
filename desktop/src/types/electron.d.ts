@@ -944,6 +944,11 @@ declare global {
       restartOpenCode: () => Promise<AppStatus>
       reconnectMcp: (name: string) => Promise<OpenCodeActionResult>
       getOpenCodeLogs: () => Promise<string[]>
+      getGithubState: () => Promise<{ connected: boolean; authorized?: boolean; login?: string; message?: string; installUrl?: string }>
+      startGithubAuth: () => Promise<{ ok: boolean; message?: string; userCode?: string; verificationUrl?: string; interval?: number }>
+      pollGithubAuth: () => Promise<{ status: 'pending' | 'connected' | 'failed'; interval?: number; message?: string; login?: string }>
+      cancelGithubAuth: () => Promise<void>
+      disconnectGithub: () => Promise<void>
       getAuthSession: () => Promise<AuthSessionSnapshot>
       loginWithOAuth: () => Promise<AuthActionResult>
       cancelOAuthLogin: () => Promise<AuthActionResult>

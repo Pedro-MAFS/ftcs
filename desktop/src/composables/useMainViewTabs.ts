@@ -3,7 +3,7 @@ import { useRouter, type LocationQueryRaw, type Router } from 'vue-router'
 import type { BuiltinBrowserTabsPayload } from '../types/electron'
 import { showToast } from './useToast'
 
-export type PageKey = 'home' | 'input' | 'profile' | 'explore' | 'leads' | 'email'
+export type PageKey = 'home' | 'input' | 'profile' | 'explore' | 'leads' | 'email' | 'site'
 
 export const PAGE_TITLE: Record<PageKey, string> = {
   home: '首页',
@@ -12,6 +12,7 @@ export const PAGE_TITLE: Record<PageKey, string> = {
   explore: '获客探索',
   leads: '线索库',
   email: '邮件审核',
+  site: '独立站',
 }
 
 export const PAGE_COMPONENT: Record<PageKey, string> = {
@@ -21,11 +22,12 @@ export const PAGE_COMPONENT: Record<PageKey, string> = {
   explore: 'ExploreView',
   leads: 'LeadsView',
   email: 'EmailView',
+  site: 'SiteView',
 }
 
 const BUSINESS_PAGES = new Set<PageKey>(['input', 'profile', 'explore', 'leads', 'email'])
 
-export type BusinessPage = Exclude<PageKey, 'home'>
+export type BusinessPage = Exclude<PageKey, 'home' | 'site'>
 
 export interface PageTab {
   id: `page:${PageKey}`

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
+import type { GithubState, GithubStart, GithubPoll } from './github/github-auth'
 import type { SendFreeDialogueResult } from './opencode/free-dialogue'
 import type {
   AgentEventPayload,
@@ -137,6 +138,11 @@ const api = {
   reconnectMcp: (name: string): Promise<OpenCodeActionResult> =>
     ipcRenderer.invoke(IPC.OPENCODE_MCP_RECONNECT, name),
   getOpenCodeLogs: (): Promise<string[]> => ipcRenderer.invoke(IPC.OPENCODE_GET_LOGS),
+  getGithubState: (): Promise<GithubState> => ipcRenderer.invoke(IPC.GITHUB_GET_STATE),
+  startGithubAuth: (): Promise<GithubStart> => ipcRenderer.invoke(IPC.GITHUB_START_AUTH),
+  pollGithubAuth: (): Promise<GithubPoll> => ipcRenderer.invoke(IPC.GITHUB_POLL_AUTH),
+  cancelGithubAuth: (): Promise<void> => ipcRenderer.invoke(IPC.GITHUB_CANCEL_AUTH),
+  disconnectGithub: (): Promise<void> => ipcRenderer.invoke(IPC.GITHUB_DISCONNECT),
   getAuthSession: (): Promise<AuthSessionSnapshot> =>
     ipcRenderer.invoke(IPC.AUTH_GET_SESSION),
   loginWithOAuth: (): Promise<AuthActionResult> => ipcRenderer.invoke(IPC.AUTH_LOGIN),

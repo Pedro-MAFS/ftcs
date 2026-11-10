@@ -1,3 +1,4 @@
+import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub } from './github/github-auth'
 import { markExplorationRunFailed } from './exploration/exploration-writer'
 import { TaskJournal } from './tasks/journal'
 import type { TaskSkill } from './tasks/lifecycle'
@@ -648,6 +649,11 @@ function registerIpcHandlers(): void {
     await shell.openExternal(parsed.toString())
     return { ok: true, message: '已打开浏览器' }
   })
+  ipcMain.handle(IPC.GITHUB_GET_STATE, () => getGithubState())
+  ipcMain.handle(IPC.GITHUB_START_AUTH, () => startGithubAuth())
+  ipcMain.handle(IPC.GITHUB_POLL_AUTH, () => pollGithubAuth())
+  ipcMain.handle(IPC.GITHUB_CANCEL_AUTH, () => cancelGithubAuth())
+  ipcMain.handle(IPC.GITHUB_DISCONNECT, () => disconnectGithub())
   ipcMain.handle(IPC.AUTH_GET_SESSION, () => getAuthSession())
   ipcMain.handle(IPC.AUTH_LOGIN, async () => {
     const result = await startLogin()

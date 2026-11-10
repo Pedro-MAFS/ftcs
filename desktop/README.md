@@ -156,3 +156,12 @@ npx electron-builder --win # 产出 release/
 - **只改** 仓库 `workspace/skills/`、`workspace/mcp-servers/`、`workspace/config/`（模板源）
 - MCP 发布入口为自包含 `dist/mcp.js`（esbuild）；`places-api` 另将 `undici` 等生产依赖打入安装包模板 `node_modules`，同步到用户工作区，**用户机不再 npm install**
 - 运行时工作区由应用同步生成，业务数据写在运行时 `data/`，不要提交用户 `userData`
+
+### GitHub App 授权开发配置
+
+独立站的 GitHub 连接使用 GitHub App 的 Device Flow。维护者需先注册 GitHub App、启用 Device Flow，并根据实际用途设置仓库权限。桌面端已内置 FTCS 应用的公开 Client ID 和 App 标识。开发测试其他 GitHub App 时，可在启动桌面进程前用以下环境变量覆盖：
+
+- `FTCS_GITHUB_CLIENT_ID`：GitHub App 的 Client ID。
+- `FTCS_GITHUB_APP_SLUG`：GitHub App 页面 URL 中 `/apps/` 后的标识，用于在用户授权账号后引导安装 App；更换 Client ID 时应同时设置对应标识。
+
+Client ID 和 App 标识不是密钥。不要将 Client Secret 或 App 私钥写入应用、日志或仓库。授权所得的用户令牌仅在系统凭据加密可用时保存。用户授权账号与安装 App、授权仓库是不同步骤；安装完成后在独立站页面点击刷新检查状态。

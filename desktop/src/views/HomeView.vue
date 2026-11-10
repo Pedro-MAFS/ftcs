@@ -15,6 +15,7 @@ const cards: Array<{
   { title: '探索', detail: '扩展关键词并找客户', open: () => void tabs.openPageTab('explore') },
   { title: '线索', detail: '原始与已评分线索', open: () => void tabs.openPageTab('leads') },
   { title: '邮件', detail: '审阅开发信草稿', open: () => void tabs.openPageTab('email') },
+  { title: '独立站', detail: '管理网站与发布连接', open: () => void tabs.openPageTab('site') },
   { title: '浏览器', detail: '打开客户网站', open: () => void tabs.openUserBrowserTab() },
 ]
 </script>
