@@ -1,5 +1,6 @@
 import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount } from './cloudflare/cloudflare-auth'
 import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub } from './github/github-auth'
+import { adoptSite, createSite, getSiteSnapshot } from './site/site-project'
 import { markExplorationRunFailed } from './exploration/exploration-writer'
 import { TaskJournal } from './tasks/journal'
 import type { TaskSkill } from './tasks/lifecycle'
@@ -18,7 +19,7 @@ import { loadDesktopEnvFile } from './config/load-desktop-env'
 import { IPC } from './ipc/types'
 import type { AppStatus, SaveTextToDownloadsInput } from './ipc/types'
 import { saveTextToDownloads } from './session/save-text-to-downloads'
-import { getWorkspaceRoot } from './config/paths'
+import { getRepoRoot, getWorkspaceRoot } from './config/paths'
 import { OpenCodeRuntime } from './opencode/runtime'
 import {
   getSettingsSnapshot,
@@ -649,6 +650,33 @@ function registerIpcHandlers(): void {
     }
     await shell.openExternal(parsed.toString())
     return { ok: true, message: '已打开浏览器' }
+  })
+  ipcMain.handle(IPC.SITE_GET, () => getSiteSnapshot(getWorkspaceRoot()))
+  const currentSiteWorkspace = (expected: unknown): string => {
+    const root = path.resolve(getWorkspaceRoot())
+    const comparable = (value: string) => process.platform === 'win32' ? value.toLowerCase() : value
+    if (typeof expected !== 'string' || comparable(path.resolve(expected)) !== comparable(root)) throw new Error('当前工作区已改变，请刷新后重试。')
+    return root
+  }
+  ipcMain.handle(IPC.SITE_CREATE, (_event, expected: unknown) => {
+    try {
+      const root = currentSiteWorkspace(expected)
+      const template = app.isPackaged ? path.join(process.resourcesPath, 'site-template') : path.join(getRepoRoot(), 'desktop', 'site-template')
+      return { ok: true, snapshot: createSite(root, template) }
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) } }
+  })
+  ipcMain.handle(IPC.SITE_ADOPT, (_event, expected: unknown) => {
+    try { return { ok: true, snapshot: adoptSite(currentSiteWorkspace(expected)) } }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) } }
+  })
+  ipcMain.handle(IPC.SITE_OPEN_DIRECTORY, async (_event, kind: unknown, expected: unknown) => {
+    if (kind !== 'workspace' && kind !== 'project') return { ok: false, message: '无效的目录类型。' }
+    try {
+      const state = getSiteSnapshot(currentSiteWorkspace(expected))
+      if (kind === 'project' && !['ready', 'existing', 'empty', 'invalid'].includes(state.status)) return { ok: false, message: '站点目录不可用，请先检查工作区。' }
+      const error = await shell.openPath(kind === 'workspace' ? state.workspaceRoot : state.projectPath)
+      return error ? { ok: false, message: `无法打开目录：${error}` } : { ok: true }
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) } }
   })
   ipcMain.handle(IPC.CLOUDFLARE_GET_STATE, () => getCloudflareState())
   ipcMain.handle(IPC.CLOUDFLARE_CONNECT, () => connectCloudflare())

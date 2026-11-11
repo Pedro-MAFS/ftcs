@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
 import type { CloudflareState, CloudflareAction } from './cloudflare/cloudflare-auth'
 import type { GithubState, GithubStart, GithubPoll } from './github/github-auth'
+import type { SiteSnapshot } from './site/site-project'
 import type { SendFreeDialogueResult } from './opencode/free-dialogue'
 import type {
   AgentEventPayload,
@@ -96,6 +97,10 @@ import type {
 const api = {
   platform: process.platform as NodeJS.Platform,
   getAppStatus: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.APP_GET_STATUS),
+  getSite: (): Promise<SiteSnapshot> => ipcRenderer.invoke(IPC.SITE_GET),
+  createSite: (workspaceRoot: string): Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }> => ipcRenderer.invoke(IPC.SITE_CREATE, workspaceRoot),
+  adoptSite: (workspaceRoot: string): Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }> => ipcRenderer.invoke(IPC.SITE_ADOPT, workspaceRoot),
+  openSiteDirectory: (kind: 'project' | 'workspace', workspaceRoot: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_OPEN_DIRECTORY, kind, workspaceRoot),
   openExternal: (url: string): Promise<{ ok: boolean; message: string }> =>
     ipcRenderer.invoke(IPC.APP_OPEN_EXTERNAL, url),
   checkAgentPreflight: (

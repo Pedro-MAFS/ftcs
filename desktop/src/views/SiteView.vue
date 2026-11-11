@@ -1,7 +1,42 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onActivated, onMounted, onUnmounted, ref } from 'vue'
 import Icon from '../components/shared/Icon.vue'
 defineOptions({ name: 'SiteView' })
+type SiteState = Awaited<ReturnType<NonNullable<Window['ftcs']>['getSite']>>
+const site = ref<SiteState | null>(null)
+const siteBusy = ref(false)
+const siteMessage = ref('')
+const confirmRecreate = ref(false)
+let siteRequest = 0
+const siteLabel = computed(() => {
+  const labels: Record<SiteState['status'], string> = { not_created: '尚未创建', empty: '目录为空', existing: '发现已有站点', ready: '本地站点已创建', missing: '站点目录不存在', invalid: '项目需要处理', error: '无法读取站点' }
+  return site.value ? labels[site.value.status] : '正在检查'
+})
+async function refreshSite() {
+  if (!window.ftcs?.getSite) return
+  const request = ++siteRequest
+  try {
+    const state = await window.ftcs.getSite()
+    if (request === siteRequest) { site.value = state; confirmRecreate.value = false }
+  } catch { if (request === siteRequest) siteMessage.value = '无法检查本地站点，请重试。' }
+}
+async function changeSite(action: 'create' | 'adopt') {
+  if (!window.ftcs || !site.value || siteBusy.value) return
+  const root = site.value.workspaceRoot
+  siteBusy.value = true
+  siteMessage.value = ''
+  try {
+    const result = action === 'create' ? await window.ftcs.createSite(root) : await window.ftcs.adoptSite(root)
+    await refreshSite()
+    if (site.value?.workspaceRoot === root) siteMessage.value = result.ok ? (action === 'create' ? '站点项目已创建。' : '已使用当前工作区中的站点项目。') : (result.message || '操作失败，请检查后重试。')
+  } catch { siteMessage.value = '站点操作失败，请检查后重试。'; await refreshSite() }
+  finally { siteBusy.value = false }
+}
+async function openSiteDirectory(kind: 'project' | 'workspace') {
+  if (!site.value) return
+  try { const result = await window.ftcs?.openSiteDirectory(kind, site.value.workspaceRoot); if (!result?.ok) siteMessage.value = result?.message || '无法打开目录。' }
+  catch { siteMessage.value = '无法打开目录。' }
+}
 const connected = ref(false)
 const login = ref('')
 const authorized = ref(false)
@@ -68,7 +103,7 @@ async function disconnectCloudflare() {
   try { await window.ftcs!.disconnectCloudflare(); applyCloudflareState({ connected: false, message: '已移除本机 Cloudflare 授权。' }); cfBusy.value = false }
   catch { cfMessage.value = '移除 Cloudflare 授权失败，请重试。' }
 }
-async function refreshAll() { await Promise.all([refresh(), refreshCloudflare()]) }
+async function refreshAll() { await Promise.all([refresh(), refreshCloudflare(), refreshSite()]) }
 let timer: ReturnType<typeof setTimeout> | undefined
 let attempt = 0
 async function refresh() {
@@ -133,8 +168,9 @@ function publish() {
     message.value = `发布前请先连接 ${missing}。`
   } else message.value = '发布功能将在后续开发中提供。'
 }
-onMounted(() => { void refreshAll() })
-onUnmounted(() => { cfAttempt++; attempt++; if (timer) clearTimeout(timer); void window.ftcs?.cancelGithubAuth?.(); void window.ftcs?.cancelCloudflareAuth?.() })
+onMounted(() => { void refreshAll(); window.addEventListener('focus', refreshSite) })
+onActivated(() => { void refreshSite() })
+onUnmounted(() => { siteRequest++; window.removeEventListener('focus', refreshSite); cfAttempt++; attempt++; if (timer) clearTimeout(timer); void window.ftcs?.cancelGithubAuth?.(); void window.ftcs?.cancelCloudflareAuth?.() })
 </script>
 
 <template>
@@ -150,8 +186,26 @@ onUnmounted(() => { cfAttempt++; attempt++; if (timer) clearTimeout(timer); void
     <div v-if="(!cfConnected || cfChoose) && cfAccounts.length > 1" class="auth-panel"><strong>选择 Cloudflare 账号</strong><p>请选择用于独立站的账号。</p><div class="auth-actions"><button v-for="account in cfAccounts" :key="account.id" class="btn secondary" type="button" :disabled="cfBusy" @click="chooseCloudflareAccount(account.id)">{{ account.name }}</button></div></div>
     <p v-if="cfMessage" class="notice" role="status">{{ cfMessage }}</p>
     <p v-if="message" class="notice" role="status">{{ message }}</p>
-    <section class="site-card"><div class="site-card-title"><div class="site-icon"><Icon name="globe" :size="20" /></div><div><h2>工作区独立站</h2><p>一个工作区对应一个全局站点</p></div><span class="badge">尚未创建</span></div><div class="site-details"><div><span>线上地址</span><strong>尚未发布</strong></div><div><span>最近发布</span><strong>—</strong></div><div><span>本地站点</span><strong>尚未创建</strong></div></div></section>
-    <section class="section"><div class="section-header"><div><h2>本地预览</h2><p>在发布前查看当前工作区的网站</p></div><button class="btn secondary" type="button" disabled>打开预览</button></div><div class="empty-preview"><Icon name="globe" :size="28" /><strong>还没有站点</strong><p>站点创建功能将在后续开发中提供。</p></div></section>
+    <p v-if="siteMessage" class="notice" role="status">{{ siteMessage }}</p>
+    <section class="site-card">
+      <div class="site-card-title"><div class="site-icon"><Icon name="globe" :size="20" /></div><div><h2>工作区独立站</h2><p>一个工作区对应一个全局站点</p></div><span class="badge">{{ siteLabel }}</span></div>
+      <div class="site-details"><div><span>线上地址</span><strong>尚未发布</strong></div><div><span>最近发布</span><strong>—</strong></div><div><span>本地站点</span><strong>{{ siteLabel }}</strong></div></div>
+      <div v-if="site" class="site-local">
+        <p>{{ site.message }}</p><p class="site-path" :title="site.projectPath">{{ site.projectPath }}</p>
+        <p v-if="site.status === 'ready' && site.dependencies === 'missing'">尚未检测到已安装的项目依赖；预览功能将在后续提供。</p>
+        <p v-else-if="site.status === 'ready'">依赖和预览状态将在后续验证。</p>
+        <div class="site-actions">
+          <button v-if="site.status === 'not_created' || site.status === 'empty'" class="btn primary" type="button" :disabled="siteBusy" @click="changeSite('create')">{{ siteBusy ? '正在创建…' : site.status === 'empty' ? '在此初始化' : '创建站点' }}</button>
+          <button v-if="site.status === 'existing'" class="btn primary" type="button" :disabled="siteBusy" @click="changeSite('adopt')">使用此站点</button>
+          <button v-if="site.status === 'missing' && !confirmRecreate" class="btn secondary" type="button" :disabled="siteBusy" @click="confirmRecreate = true">重新创建</button>
+          <button v-if="['ready', 'existing', 'empty', 'invalid'].includes(site.status)" class="btn secondary" type="button" @click="openSiteDirectory('project')">打开站点目录</button>
+          <button v-if="['missing', 'invalid', 'error'].includes(site.status)" class="btn secondary" type="button" @click="openSiteDirectory('workspace')">打开工作区</button>
+          <button v-if="site.status !== 'ready' && site.status !== 'not_created'" class="btn secondary" type="button" :disabled="siteBusy" @click="refreshSite">重新检查</button>
+        </div>
+        <div v-if="confirmRecreate" class="recreate-confirm"><p>将创建新的站点模板。原站点如有备份，可先恢复到此目录；重新创建后需检查原有发布关联。</p><div class="site-actions"><button class="btn primary" type="button" :disabled="siteBusy" @click="changeSite('create')">确认重新创建</button><button class="btn secondary" type="button" @click="confirmRecreate = false">取消</button></div></div>
+      </div>
+    </section>
+    <section class="section"><div class="section-header"><div><h2>本地预览</h2><p>在发布前查看当前工作区的网站</p></div><button class="btn secondary" type="button" disabled>打开预览</button></div><div class="empty-preview"><Icon name="globe" :size="28" /><strong>{{ site?.status === 'ready' ? '本地预览尚未开放' : '还没有可预览的站点' }}</strong><p>本地预览功能将在后续开发中提供。</p></div></section>
     <section class="section"><div class="section-header"><div><h2>发布记录</h2><p>查看网站发布和部署状态</p></div></div><div class="empty-record">暂无发布记录</div></section>
   </div>
 </template>
@@ -160,4 +214,5 @@ onUnmounted(() => { cfAttempt++; attempt++; if (timer) clearTimeout(timer); void
 .site-page{width:100%;flex:1;min-height:0;overflow-y:auto;max-width:1100px;margin:0 auto;padding:32px 36px 56px;color:var(--text)}
 .page-header,.section-header,.site-card-title,.connections,.header-actions,.connection,.auth-actions{display:flex;align-items:center}
 .page-header,.section-header{justify-content:space-between;gap:16px}.page-header h1{font-size:24px;margin:0 0 6px}.page-header p,.section p,.site-card-title p,.auth-panel p{color:var(--text-secondary);font-size:12px;margin:4px 0 0}.header-actions,.connections,.auth-actions,.connection{gap:10px}.connections{margin:24px 0;flex-wrap:wrap}.context{color:var(--text-muted);font-size:12px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}.btn:disabled{opacity:.5;cursor:not-allowed}.secondary{color:var(--text);background:var(--bg-elevated);border:1px solid var(--border)}.primary{color:white;background:var(--accent);border:1px solid var(--accent)}.text-button{color:var(--accent);background:none;border:0;cursor:pointer;font-size:12px}.connection-status{font-size:12px;color:var(--text);padding:8px 10px;border:1px solid var(--border);border-radius:6px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--success);margin-right:4px}.site-card,.auth-panel,.empty-record{border:1px solid var(--border);background:var(--bg-panel);border-radius:8px}.site-card-title{padding:18px 20px;gap:12px;border-bottom:1px solid var(--border)}.site-card-title h2,.section h2{font-size:15px;margin:0}.site-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:8px;color:var(--accent);background:var(--accent-muted)}.badge{margin-left:auto;color:var(--text-secondary);background:var(--bg-hover);border-radius:5px;padding:5px 8px;font-size:11px}.site-details{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:20px}.site-details div{display:grid;gap:8px;font-size:12px}.site-details span{color:var(--text-secondary)}.site-details strong{font-weight:500}.section{margin-top:28px}.section-header{margin-bottom:14px}.empty-preview{height:200px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text-secondary)}.empty-preview strong{color:var(--text);font-size:13px}.empty-record{padding:24px;text-align:center;color:var(--text-secondary);font-size:12px}.auth-panel{padding:16px;margin-bottom:16px}.auth-actions{margin-top:14px;flex-wrap:wrap}.auth-actions code{font-size:18px;letter-spacing:.1em;color:var(--text)}.notice{margin:0 0 16px;color:var(--text-secondary);font-size:12px}@media(max-width:700px){.site-page{padding:24px 18px}.page-header{align-items:flex-start}.site-details{grid-template-columns:1fr}.context{width:100%}}
+.site-local{border-top:1px solid var(--border);padding:16px 20px;font-size:12px;color:var(--text-secondary)}.site-local p{margin:0 0 8px}.site-path{overflow-wrap:anywhere}.site-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.recreate-confirm{margin-top:14px;padding:12px;background:var(--bg-hover);border-radius:6px}
 </style>

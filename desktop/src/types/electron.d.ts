@@ -1,4 +1,5 @@
 interface CloudflareState { connected: boolean; authorized?: boolean; pending?: boolean; accountId?: string; accountName?: string; accounts?: Array<{ id: string; name: string }>; message?: string }
+interface SiteSnapshot { status: 'not_created' | 'empty' | 'existing' | 'ready' | 'missing' | 'invalid' | 'error'; workspaceRoot: string; projectPath: string; message: string; dependencies: 'missing' | 'unknown' }
 import type { AppStatus, OpenCodeActionResult } from './app'
 import type { AuthActionResult, AuthSessionSnapshot } from './auth'
 import type { LibraryMutationResult, LibrarySnapshot } from './library'
@@ -923,6 +924,10 @@ declare global {
     ftcs?: {
       platform: NodeJS.Platform
       getAppStatus: () => Promise<AppStatus>
+      getSite: () => Promise<SiteSnapshot>
+      createSite: (workspaceRoot: string) => Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }>
+      adoptSite: (workspaceRoot: string) => Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }>
+      openSiteDirectory: (kind: 'project' | 'workspace', workspaceRoot: string) => Promise<{ ok: boolean; message?: string }>
       openExternal: (url: string) => Promise<{ ok: boolean; message: string }>
       checkAgentPreflight: (
         kind: AgentPreflightKind,
