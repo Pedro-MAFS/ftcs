@@ -4,6 +4,8 @@ import type { CloudflareState, CloudflareAction } from './cloudflare/cloudflare-
 import type { GithubState, GithubStart, GithubPoll } from './github/github-auth'
 import type { GithubRepository, GithubBranch } from './github/github-repositories'
 import type { SiteSnapshot } from './site/site-project'
+import type { ReleaseRecord, PublishPreview } from './site/site-publish'
+import type { PagesProject, PagesStatus } from './cloudflare/cloudflare-pages'
 import type { RunKind, SiteRuntimeSnapshot } from './site/site-runtime'
 import type { SendFreeDialogueResult } from './opencode/free-dialogue'
 import type {
@@ -100,6 +102,17 @@ const api = {
   platform: process.platform as NodeJS.Platform,
   getAppStatus: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.APP_GET_STATUS),
   getSite: (): Promise<SiteSnapshot> => ipcRenderer.invoke(IPC.SITE_GET),
+  getSiteRelease: (root: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_GET, root),
+  prepareSiteRelease: (root: string, id: number, branch: string, acceptReadme: boolean): Promise<{ ok: true; value: PublishPreview } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_PREPARE, root, id, branch, acceptReadme),
+  cancelSiteRelease: (root: string): Promise<{ ok: true; value: void } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_CANCEL, root),
+  getSiteReleaseFile: (root: string, id: string, name: string): Promise<{ ok: true; value: { text?: string; message?: string } } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_FILE, root, id, name),
+  commitSiteRelease: (root: string, id: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_COMMIT, root, id),
+  recoverSiteRelease: (root: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_RECOVER, root),
+  listSitePages: (root: string): Promise<{ ok: true; value: { accountId: string; projects: PagesProject[] } } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_LIST, root),
+  createSitePages: (root: string, name: string, nodeVersion: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_CREATE, root, name, nodeVersion),
+  clearPendingSitePages: (root: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_CLEAR_PENDING, root),
+  bindSitePages: (root: string, name: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_BIND, root, name),
+  getSitePagesStatus: (root: string): Promise<{ ok: true; value: PagesStatus } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_STATUS, root),
   createSite: (workspaceRoot: string): Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }> => ipcRenderer.invoke(IPC.SITE_CREATE, workspaceRoot),
   adoptSite: (workspaceRoot: string): Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }> => ipcRenderer.invoke(IPC.SITE_ADOPT, workspaceRoot),
   openSiteDirectory: (kind: 'project' | 'workspace', workspaceRoot: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_OPEN_DIRECTORY, kind, workspaceRoot),

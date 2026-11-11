@@ -72,4 +72,21 @@ test('empty repository and unknown errors provide actionable feedback', async ()
   await assert.rejects(service().branches(1), /初始化/)
 })
 
+test('commit uses the confirmed branch head as an atomic condition', async () => {
+  const head = '1'.repeat(40), committed = '2'.repeat(40)
+  globalThis.fetch = async (input, init) => {
+    assert.equal(String(input), 'https://api.github.com/graphql')
+    const body = JSON.parse(String(init?.body))
+    assert.equal(body.variables.input.expectedHeadOid, head)
+    assert.equal(body.variables.input.branch.repositoryNameWithOwner, 'owner/site-1')
+    assert.equal(body.variables.input.branch.branchName, 'main')
+    assert.deepEqual(body.variables.input.fileChanges.additions, [{ path: 'image.png', contents: 'AP8=' }])
+    return Response.json({ data: { createCommitOnBranch: { commit: { oid: committed } } } })
+  }
+  const repository = { id: 1, owner: 'owner', name: 'site-1', fullName: 'owner/site-1', private: true, defaultBranch: 'main', writeAccess: 'yes' as const }
+  assert.equal(await service().commit(repository, 'main', head, [{ path: 'image.png', contents: 'AP8=' }], []), committed)
+  globalThis.fetch = async () => Response.json({ errors: [{ message: 'expectedHeadOid did not match' }] })
+  await assert.rejects(service().commit(repository, 'main', head, [], []), /未确认提交/)
+})
+
 test.after(() => { globalThis.fetch = originalFetch })

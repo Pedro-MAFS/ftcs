@@ -8,6 +8,7 @@ export type GithubRepository = {
   writeAccess: 'yes' | 'no' | 'unknown'
 }
 export type GithubBranch = { name: string; protected: boolean }
+export type GithubTreeFile = { path: string; sha: string; mode: string }
 
 type Installation = { id: number; permissions?: { contents?: string } }
 type ApiRepo = {
@@ -85,5 +86,35 @@ export class GithubRepositories {
     const repo = await this.request<ApiRepo>('/user/repos', { method: 'POST', body: JSON.stringify({ name, private: privateRepo, auto_init: true }) })
     if (typeof repo.full_name !== 'string' || !repo.full_name) throw new Error('仓库创建结果不完整，请到 GitHub 检查后刷新。')
     return { fullName: repo.full_name }
+  }
+
+  async tree(repositoryId: number, branch: string): Promise<{ repository: GithubRepository; head: string; files: GithubTreeFile[] }> {
+    const repository = (await this.list()).find(item => item.id === repositoryId)
+    if (!repository || repository.writeAccess !== 'yes') throw new Error('仓库不可写或授权已变化，请检查 GitHub 权限。')
+    if (typeof branch !== 'string' || !branch || branch.length > 255) throw new Error('请选择有效的分支。')
+    const base = `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}`
+    const result = await this.request<{ commit?: { sha?: string; commit?: { tree?: { sha?: string } } }; protected?: boolean }>(`${base}/branches/${encodeURIComponent(branch)}`)
+    const head = result.commit?.sha
+    const treeSha = result.commit?.commit?.tree?.sha
+    if (!head || !/^[a-f0-9]{40}$/i.test(head) || !treeSha || !/^[a-f0-9]{40}$/i.test(treeSha)) throw new Error('无法确认 GitHub 分支版本。')
+    const tree = await this.request<{ truncated?: boolean; tree?: Array<{ path: string; sha: string; type: string; mode: string }> }>(`${base}/git/trees/${treeSha}?recursive=1`)
+    if (tree.truncated || !Array.isArray(tree.tree)) throw new Error('仓库文件过多或返回不完整，无法安全发布。')
+    const files: GithubTreeFile[] = []
+    for (const item of tree.tree) {
+      if (item.type === 'tree') continue
+      if (item.type !== 'blob' || !['100644', '100755'].includes(item.mode) || typeof item.path !== 'string' || !/^[a-f0-9]{40}$/i.test(item.sha)) throw new Error(`仓库包含暂不支持的文件：${item.path || '未知路径'}`)
+      files.push({ path: item.path, sha: item.sha, mode: item.mode })
+    }
+    return { repository, head, files }
+  }
+
+  async commit(repository: GithubRepository, branch: string, expectedHead: string, additions: Array<{ path: string; contents: string }>, deletions: Array<{ path: string }>): Promise<string> {
+    if (!/^[a-f0-9]{40}$/i.test(expectedHead) || !branch) throw new Error('提交基线无效。')
+    const query = `mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }`
+    const input = { branch: { repositoryNameWithOwner: repository.fullName, branchName: branch }, expectedHeadOid: expectedHead, message: { headline: 'Publish website from FTCS' }, fileChanges: { additions, deletions } }
+    const result = await this.request<{ data?: { createCommitOnBranch?: { commit?: { oid?: string } } }; errors?: Array<{ message?: string }> }>('/graphql', { method: 'POST', body: JSON.stringify({ query, variables: { input } }) })
+    const sha = result.data?.createCommitOnBranch?.commit?.oid
+    if (result.errors?.length || !sha || !/^[a-f0-9]{40}$/i.test(sha)) throw new Error('GitHub 未确认提交。分支可能已变化、受保护或授权不足；请刷新并检查仓库后重试。')
+    return sha
   }
 }

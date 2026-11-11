@@ -89,7 +89,7 @@ async function refreshSite() {
   const request = ++siteRequest
   try {
     const state = await window.ftcs.getSite()
-    if (request === siteRequest) { site.value = state; confirmRecreate.value = false; await refreshSiteRuntime() }
+    if (request === siteRequest) { site.value = state; confirmRecreate.value = false; await refreshSiteRuntime(); await refreshRelease() }
   } catch { if (request === siteRequest) siteMessage.value = '无法检查本地站点，请重试。' }
 }
 async function changeSite(action: 'create' | 'adopt') {
@@ -241,6 +241,8 @@ type Branch = NonNullable<Awaited<ReturnType<NonNullable<Window['ftcs']>['listGi
 const publishOpen = ref(false)
 const publishStarting = ref(false)
 const publishBusy = ref(false)
+const preparingRelease = ref(false)
+const cancellingRelease = ref(false)
 const publishError = ref('')
 const repositories = ref<Repository[]>([])
 const selectedRepository = ref<number | null>(null)
@@ -250,6 +252,26 @@ const repoSearch = ref('')
 const createRepoOpen = ref(false)
 const newRepoName = ref('')
 const newRepoPrivate = ref(true)
+const acceptInitialReadme = ref(false)
+const previewFileName = ref('')
+const previewFileText = ref('')
+type Release = Extract<Awaited<ReturnType<NonNullable<Window['ftcs']>['getSiteRelease']>>, { ok: true }>['value']
+type Preview = Extract<Awaited<ReturnType<NonNullable<Window['ftcs']>['prepareSiteRelease']>>, { ok: true }>['value']
+type Pages = Extract<Awaited<ReturnType<NonNullable<Window['ftcs']>['listSitePages']>>, { ok: true }>['value']['projects']
+type Deployment = Extract<Awaited<ReturnType<NonNullable<Window['ftcs']>['getSitePagesStatus']>>, { ok: true }>['value']
+const release = ref<Release | null>(null)
+const preview = ref<Preview | null>(null)
+const pageProjects = ref<Pages>([])
+const selectedPage = ref('')
+const showPages = ref(false)
+const createPageOpen = ref(false)
+const pageName = ref('')
+const pageNodeVersion = ref('24')
+const confirmClearPage = ref(false)
+const deployment = ref<Deployment | null>(null)
+const deploymentError = ref('')
+let checkingDeployment = false
+let deploymentTimer: ReturnType<typeof setInterval> | undefined
 let publishRequest = 0
 const filteredRepositories = computed(() => repositories.value.filter(repo => repo.fullName.toLowerCase().includes(repoSearch.value.toLowerCase().trim())))
 const chosenRepository = computed(() => repositories.value.find(repo => repo.id === selectedRepository.value))
@@ -263,6 +285,7 @@ async function loadRepositories() {
   selectedRepository.value = null
   selectedBranch.value = ''
   branches.value = []
+  preview.value = null
   try {
     const result = await window.ftcs.listGithubRepositories(root)
     if (request !== publishRequest || site.value?.workspaceRoot !== root) return
@@ -274,9 +297,11 @@ async function loadRepositories() {
 async function chooseRepository(id: number) {
   if (!site.value || !window.ftcs || publishBusy.value) return
   selectedRepository.value = id
+  acceptInitialReadme.value = false
   selectedBranch.value = ''
   branches.value = []
   publishError.value = ''
+  preview.value = null
   const repo = repositories.value.find(item => item.id === id)
   if (!repo) return
   const root = site.value.workspaceRoot
@@ -291,6 +316,132 @@ async function chooseRepository(id: number) {
   } catch { if (request === publishRequest) publishError.value = '无法读取分支，请重试。' }
   finally { if (request === publishRequest) publishBusy.value = false }
 }
+async function refreshRelease() {
+  if (!site.value || !window.ftcs) return
+  const root = site.value.workspaceRoot
+  const result = await window.ftcs.getSiteRelease(root)
+  if (site.value?.workspaceRoot !== root) return
+  if (result.ok) {
+    release.value = result.value
+    if (result.value.cloudflare) await refreshDeployment()
+    else { deployment.value = null; deploymentError.value = '' }
+  }
+}
+async function refreshDeployment() {
+  if (!site.value || !release.value?.cloudflare || !window.ftcs || checkingDeployment) return
+  const root = site.value.workspaceRoot
+  checkingDeployment = true
+  try {
+    const result = await window.ftcs.getSitePagesStatus(root)
+    if (site.value?.workspaceRoot !== root) return
+    if (result.ok) {
+      deployment.value = result.value; deploymentError.value = ''
+      if (result.value.state === 'success' && result.value.productionCurrent === true) {
+        const latest = await window.ftcs.getSiteRelease(root)
+        if (latest.ok && site.value?.workspaceRoot === root) release.value = latest.value
+      }
+    }
+    else { deploymentError.value = result.message; deployment.value = null }
+  } catch { deploymentError.value = '无法查询 Cloudflare 部署状态。'; deployment.value = null }
+  finally { checkingDeployment = false }
+}
+async function prepareRelease() {
+  if (!site.value || !window.ftcs || !chosenRepository.value || !selectedBranch.value || publishBusy.value) return
+  const root = site.value.workspaceRoot
+  const request = ++publishRequest
+  publishBusy.value = true; preparingRelease.value = true; publishError.value = ''; preview.value = null
+  try {
+    const result = await window.ftcs.prepareSiteRelease(root, chosenRepository.value.id, selectedBranch.value, acceptInitialReadme.value)
+    if (request !== publishRequest || site.value?.workspaceRoot !== root) return
+    if (result.ok) preview.value = result.value
+    else publishError.value = result.message
+  } catch { if (request === publishRequest) publishError.value = '构建检查未完成，请检查后重试。' }
+  finally { if (request === publishRequest) { publishBusy.value = false; preparingRelease.value = false; cancellingRelease.value = false } }
+}
+async function cancelReleaseBuild() {
+  if (!site.value || !window.ftcs || cancellingRelease.value) return
+  cancellingRelease.value = true
+  try { const result = await window.ftcs.cancelSiteRelease(site.value.workspaceRoot); if (!result.ok) { publishError.value = result.message; cancellingRelease.value = false } }
+  catch { publishError.value = '无法取消构建检查，请重试。'; cancellingRelease.value = false }
+}
+async function showPreviewFile(name: string) {
+  if (!site.value || !window.ftcs || !preview.value) return
+  const root = site.value.workspaceRoot, id = preview.value.id
+  try {
+    const result = await window.ftcs.getSiteReleaseFile(root, id, name)
+    if (site.value?.workspaceRoot !== root || preview.value?.id !== id) return
+    previewFileName.value = name
+    previewFileText.value = result.ok ? result.value.text ?? result.value.message ?? '' : result.message
+  } catch { previewFileName.value = name; previewFileText.value = '无法读取快照文件。' }
+}
+async function commitRelease() {
+  if (!site.value || !window.ftcs || !preview.value || publishBusy.value) return
+  const root = site.value.workspaceRoot
+  const request = ++publishRequest
+  publishBusy.value = true; publishError.value = ''
+  try {
+    const result = await window.ftcs.commitSiteRelease(root, preview.value.id)
+    if (request !== publishRequest || site.value?.workspaceRoot !== root) return
+    preview.value = null
+    if (result.ok) { release.value = result.value; deployment.value = null; deploymentError.value = ''; publishOpen.value = false; await refreshDeployment() }
+    else { publishError.value = `${result.message} 请先检查发布记录中的提交状态。`; await refreshRelease() }
+  } catch { if (request === publishRequest) { publishError.value = '提交结果未知，请先检查发布记录。'; await refreshRelease() } }
+  finally { if (request === publishRequest) publishBusy.value = false }
+}
+async function recoverRelease() {
+  if (!site.value || !window.ftcs || publishBusy.value) return
+  publishBusy.value = true; publishError.value = ''
+  try { const result = await window.ftcs.recoverSiteRelease(site.value.workspaceRoot); if (result.ok) { release.value = result.value; deployment.value = null; deploymentError.value = ''; await refreshDeployment(); message.value = '已根据 GitHub 的当前状态检查提交结果。' } else message.value = result.message }
+  catch { message.value = '无法确认提交结果，请检查 GitHub 后重试。' }
+  finally { publishBusy.value = false }
+}
+async function loadPages() {
+  if (!site.value || !window.ftcs || publishBusy.value) return
+  const root = site.value.workspaceRoot
+  publishBusy.value = true; deploymentError.value = ''; showPages.value = true
+  try { const result = await window.ftcs.listSitePages(root); if (site.value?.workspaceRoot !== root) return; if (result.ok) { pageProjects.value = result.value.projects; if (release.value?.pendingPages?.accountId === result.value.accountId && pageProjects.value.some(p => p.name === release.value?.pendingPages?.project)) selectedPage.value = release.value.pendingPages.project } else deploymentError.value = result.message }
+  catch { deploymentError.value = '无法读取 Cloudflare Pages 项目。' }
+  finally { publishBusy.value = false }
+}
+async function createPages() {
+  if (!site.value || !window.ftcs || publishBusy.value) return
+  const root = site.value.workspaceRoot
+  publishBusy.value = true; deploymentError.value = ''
+  try {
+    const result = await window.ftcs.createSitePages(root, pageName.value.trim(), pageNodeVersion.value)
+    if (site.value?.workspaceRoot !== root) return
+    if (result.ok) { release.value = result.value; createPageOpen.value = false; await refreshDeployment() }
+    else { await refreshRelease(); deploymentError.value = `${result.message} 请检查项目创建结果；如需授权 GitHub，请在 Cloudflare 控制台完成。` }
+  } catch { await refreshRelease(); deploymentError.value = '项目创建结果未知，请先检查 Cloudflare，避免重复创建。' }
+  finally { publishBusy.value = false }
+}
+async function clearPendingPage() {
+  if (!site.value || !window.ftcs || publishBusy.value) return
+  publishBusy.value = true
+  try { const result = await window.ftcs.clearPendingSitePages(site.value.workspaceRoot); if (result.ok) { release.value = result.value; confirmClearPage.value = false; deploymentError.value = '' } else deploymentError.value = result.message }
+  catch { deploymentError.value = '无法清除待确认状态。' }
+  finally { publishBusy.value = false }
+}
+async function bindPages() {
+  if (!site.value || !window.ftcs || !selectedPage.value || publishBusy.value) return
+  const root = site.value.workspaceRoot
+  publishBusy.value = true; deploymentError.value = ''
+  try {
+    const result = await window.ftcs.bindSitePages(root, selectedPage.value)
+    if (site.value?.workspaceRoot !== root) return
+    if (result.ok) { release.value = result.value; showPages.value = false; await refreshDeployment() }
+    else deploymentError.value = result.message
+  } catch { deploymentError.value = '无法关联 Cloudflare Pages 项目。' }
+  finally { publishBusy.value = false }
+}
+async function openCloudflarePages() {
+  if (!/^[a-f0-9]{32}$/i.test(cfAccountId.value)) { deploymentError.value = '请先连接并选择 Cloudflare 账号。'; return }
+  await window.ftcs?.openExternal(`https://dash.cloudflare.com/${cfAccountId.value}/pages`)
+}
+async function openOnlineSite(url: string) {
+  try { const parsed = new URL(url); if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.pages.dev')) throw new Error('invalid'); await window.ftcs?.openExternal(parsed.href) }
+  catch { deploymentError.value = '网站地址无效，请在 Cloudflare 控制台查看。' }
+}
 async function createRepository() {
   if (!site.value || !window.ftcs || publishBusy.value) return
   const root = site.value.workspaceRoot
@@ -304,6 +455,8 @@ async function createRepository() {
     createRepoOpen.value = false
     newRepoName.value = ''
     publishBusy.value = false
+    preparingRelease.value = false
+    cancellingRelease.value = false
     await loadRepositories()
     if (site.value?.workspaceRoot !== root) return
     const created = repositories.value.find(repo => repo.fullName === result.repository?.fullName)
@@ -341,11 +494,16 @@ watch(() => site.value?.workspaceRoot, (next, previous) => {
     selectedBranch.value = ''
     createRepoOpen.value = false
     publishError.value = ''
+    release.value = null
+    preview.value = null
+    deployment.value = null
+    pageProjects.value = []
+    showPages.value = false
   }
 })
-onMounted(() => { removeRuntimeListener = window.ftcs?.onSiteRuntime?.(applySiteRuntime); void refreshAll(); window.addEventListener('focus', refreshSite) })
+onMounted(() => { removeRuntimeListener = window.ftcs?.onSiteRuntime?.(applySiteRuntime); void refreshAll(); window.addEventListener('focus', refreshSite); deploymentTimer = setInterval(() => void refreshDeployment(), 15000) })
 onActivated(() => { void refreshSite() })
-onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; publishRequest++; window.removeEventListener('focus', refreshSite); cfAttempt++; attempt++; if (timer) clearTimeout(timer); void window.ftcs?.cancelGithubAuth?.(); void window.ftcs?.cancelCloudflareAuth?.() })
+onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; publishRequest++; window.removeEventListener('focus', refreshSite); cfAttempt++; attempt++; if (timer) clearTimeout(timer); if (deploymentTimer) clearInterval(deploymentTimer); void window.ftcs?.cancelGithubAuth?.(); void window.ftcs?.cancelCloudflareAuth?.() })
 </script>
 
 <template>
@@ -367,14 +525,15 @@ onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; publishRequest++; 
       <p v-if="publishError" class="notice" role="alert">{{ publishError }}</p>
       <div class="site-actions"><input v-model="repoSearch" class="local-input" placeholder="搜索已授权的仓库" aria-label="搜索仓库" /><button class="btn secondary" type="button" :disabled="publishBusy" @click="loadRepositories">刷新仓库</button><button class="btn secondary" type="button" :disabled="publishBusy" @click="createRepoOpen = !createRepoOpen">创建个人仓库</button><button class="text-button" type="button" @click="openGithubNewRepository">在 GitHub 创建</button><button class="text-button" type="button" @click="openGithubInstallations">管理仓库授权</button></div>
       <div v-if="createRepoOpen" class="inline-box"><strong>创建 {{ login }} 的个人仓库</strong><p>将在 GitHub 创建仓库并用 README 初始化分支；不会上传站点。即使仓库为私有，网站发布后仍可能公开访问。</p><div class="site-actions"><input v-model="newRepoName" class="local-input" placeholder="仓库名称" aria-label="新仓库名称" /><label><input v-model="newRepoPrivate" type="checkbox" /> 私有仓库</label><button class="btn primary" type="button" :disabled="publishBusy || !newRepoName.trim()" @click="createRepository">确认创建</button><button class="btn secondary" type="button" :disabled="publishBusy" @click="createRepoOpen = false">取消</button></div></div>
-      <p v-if="publishBusy">正在读取 GitHub，请稍候…</p>
+      <p v-if="publishBusy">正在处理，请稍候；依赖安装和构建可能需要几分钟… <button v-if="preparingRelease" class="text-button" type="button" :disabled="cancellingRelease" @click="cancelReleaseBuild">{{ cancellingRelease ? '正在取消…' : '取消构建检查' }}</button></p>
       <p v-else-if="!filteredRepositories.length">没有找到已授权的仓库。请在 GitHub 创建仓库，或调整 FTCS GitHub App 的仓库授权后刷新。</p>
       <div v-if="filteredRepositories.length" class="repo-list"><button v-for="repo in filteredRepositories" :key="repo.id" type="button" class="repo-item" :class="{ selected: selectedRepository === repo.id }" :disabled="publishBusy" @click="chooseRepository(repo.id)"><span>{{ repo.fullName }} · {{ repo.private ? '私有' : '公开' }}</span><span>{{ repo.writeAccess === 'yes' ? '仓库权限允许写入' : repo.writeAccess === 'no' ? '无写入权限' : '写入权限待确认' }}</span></button></div>
-      <div v-if="chosenRepository" class="inline-box"><strong>{{ chosenRepository.fullName }}</strong><p v-if="chosenRepository.writeAccess !== 'yes'">当前无法确认仓库可写。请检查 GitHub 用户权限以及 FTCS App 的 Contents 写入权限和仓库授权。</p><div v-if="branches.length" class="site-actions"><label for="site-branch">生产分支</label><select id="site-branch" v-model="selectedBranch" class="local-input"><option value="" disabled>请选择分支</option><option v-for="branch in branches" :key="branch.name" :value="branch.name">{{ branch.name }}{{ branch.protected ? '（受保护）' : '' }}</option></select></div><p v-if="chosenBranch?.protected">该分支受保护，后续提交可能需要额外权限或通过 GitHub 审核。</p><p v-if="!branches.length && !publishBusy">没有可选分支时，请先在 GitHub 初始化仓库。</p><p>仓库选择仅用于本次准备，源码提交和 Cloudflare 部署将在后续步骤提供。</p></div>
+      <div v-if="chosenRepository" class="inline-box"><strong>{{ chosenRepository.fullName }}</strong><p v-if="chosenRepository.writeAccess !== 'yes'">当前无法确认仓库可写。请检查 GitHub 用户权限以及 FTCS App 的 Contents 写入权限和仓库授权。</p><div v-if="branches.length" class="site-actions"><label for="site-branch">生产分支</label><select id="site-branch" v-model="selectedBranch" class="local-input" :disabled="publishBusy" @change="preview = null"><option value="" disabled>请选择分支</option><option v-for="branch in branches" :key="branch.name" :value="branch.name">{{ branch.name }}{{ branch.protected ? '（受保护）' : '' }}</option></select></div><p v-if="chosenBranch?.protected">该分支受保护，提交可能需要额外权限或通过 GitHub 审核。</p><p v-if="!branches.length && !publishBusy">没有可选分支时，请先在 GitHub 初始化仓库。</p><p><label><input v-model="acceptInitialReadme" type="checkbox" :disabled="publishBusy" @change="preview = null" /> 如果仓库只包含 GitHub 创建的默认 README，同意用站点文件替换</label></p><p>检查会复制站点源码，使用 FTCS 的 Node 联网安装依赖并运行构建脚本，不修改原站点。检查通过后还需确认才会推送。</p><div class="site-actions"><button class="btn primary" type="button" :disabled="publishBusy || !selectedBranch || chosenRepository.writeAccess !== 'yes' || !!release?.pending" @click="prepareRelease">检查源码并构建</button></div></div>
+      <div v-if="preview" class="inline-box"><strong>确认发布 {{ preview.target.fullName }} · {{ preview.target.branch }}</strong><p>{{ preview.target.private ? '私有仓库' : '公开仓库' }}；下列源码会被推送，网站仍可能公开访问。推送后 Cloudflare 可能立即自动部署。</p><p>源码快照 {{ preview.hash.slice(0, 12) }} · 构建通过<span v-if="preview.noChanges"> · 源码没有变化，不创建新提交</span></p><details><summary>查看 {{ preview.files.length }} 个源码文件和 {{ preview.deleted.length }} 个删除项</summary><div class="file-list"><div v-for="item in preview.files" :key="item.path"><button class="text-button" type="button" @click="showPreviewFile(item.path)">{{ item.change }} · {{ item.path }} · {{ item.size }} B</button></div><div v-for="item in preview.deleted" :key="item">删除 · {{ item }}</div></div><div v-if="previewFileName"><strong>{{ previewFileName }}</strong><pre>{{ previewFileText }}</pre></div></details><details><summary>构建日志</summary><pre>{{ preview.log }}</pre></details><div class="site-actions"><button class="btn primary" type="button" :disabled="publishBusy" @click="commitRelease">{{ preview.noChanges ? '确认使用此版本' : '确认推送到 GitHub' }}</button><button class="btn secondary" type="button" :disabled="publishBusy" @click="preview = null">取消</button></div></div>
     </section>
     <section class="site-card">
       <div class="site-card-title"><div class="site-icon"><Icon name="globe" :size="20" /></div><div><h2>工作区独立站</h2><p>一个工作区对应一个全局站点</p></div><span class="badge">{{ siteLabel }}</span></div>
-      <div class="site-details"><div><span>线上地址</span><strong>尚未发布</strong></div><div><span>最近发布</span><strong>—</strong></div><div><span>本地站点</span><strong>{{ siteLabel }}</strong></div></div>
+      <div class="site-details"><div><span>线上地址</span><strong>{{ deployment?.productionUrl || '尚未确认' }}</strong></div><div><span>最近发布</span><strong>{{ deployment?.message || (release?.commitSha ? '已推送，等待关联 Cloudflare' : '—') }}</strong></div><div><span>本地站点</span><strong>{{ siteLabel }}</strong></div></div>
       <div v-if="site" class="site-local">
         <p>{{ site.message }}</p><p class="site-path" :title="site.projectPath">{{ site.projectPath }}</p>
         <div class="site-actions">
@@ -409,7 +568,23 @@ onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; publishRequest++; 
         <details v-if="localRun.build.log"><summary>构建日志</summary><pre>{{ localRun.build.log }}</pre></details>
       </div><div v-else class="empty-record">创建站点后可以检查构建。</div>
     </section>
-    <section class="section"><div class="section-header"><div><h2>发布记录</h2><p>查看网站发布和部署状态</p></div></div><div class="empty-record">暂无发布记录</div></section>
+    <section class="section">
+      <div class="section-header"><div><h2>发布记录</h2><p>查看网站发布和部署状态</p></div></div>
+      <div v-if="!release?.commitSha && !release?.pending" class="empty-record">暂无发布记录</div>
+      <div v-else class="local-panel">
+        <div v-if="release?.pending" class="inline-box"><strong>GitHub 提交结果待确认</strong><p>上次请求可能已完成，先检查远端状态，不要重复创建提交。</p><div class="site-actions"><button class="btn secondary" :disabled="publishBusy" @click="recoverRelease">检查提交状态</button></div></div>
+        <template v-if="release?.commitSha && release.target">
+          <div class="local-row"><div><strong>GitHub · 已推送</strong><p>{{ release.target.fullName }} · {{ release.target.branch }}</p><p>版本：{{ release.commitSha }}</p></div></div>
+          <div class="local-row"><div><strong>Cloudflare Pages · {{ release.cloudflare?.project || '尚未关联' }}</strong><p>{{ deployment?.message || (release.cloudflare ? '等待查询部署状态。' : '创建或选择关联相同仓库的 Pages 项目。') }}</p><p v-if="deploymentError" role="alert">{{ deploymentError }}</p><p v-if="deployment?.deploymentId">部署 ID：{{ deployment.deploymentId }}</p></div><div class="site-actions"><button class="btn secondary" :disabled="publishBusy" @click="openCloudflarePages">打开 Cloudflare</button><button class="btn secondary" :disabled="publishBusy || !!release.pendingPages" @click="createPageOpen = !createPageOpen">创建 Pages 项目</button><button class="btn secondary" :disabled="publishBusy" @click="loadPages">选择 Pages 项目</button><button v-if="release.cloudflare" class="btn secondary" @click="refreshDeployment">刷新状态</button><button v-if="deployment?.productionUrl" class="btn primary" @click="openOnlineSite(deployment.productionUrl)">打开网站</button></div></div>
+          <div v-if="release.pendingPages" class="inline-box"><strong>项目 {{ release.pendingPages.project }} 的创建结果待确认</strong><p>请先刷新项目列表或到 Cloudflare 查看。若项目存在，选择并确认关联；未确认结果前不会自动重复创建。</p><div class="site-actions"><button class="btn secondary" :disabled="publishBusy" @click="loadPages">检查项目列表</button><button class="text-button" :disabled="publishBusy" @click="confirmClearPage = true">我已检查，重新操作</button></div><div v-if="confirmClearPage"><p>请确认已在 Cloudflare 检查项目是否创建。清除后可以重新尝试，但不会删除任何云端项目。</p><button class="btn secondary" :disabled="publishBusy" @click="clearPendingPage">确认清除待检查状态</button></div></div>
+          <div v-if="createPageOpen && !release.pendingPages" class="inline-box"><strong>创建 Cloudflare Pages 项目</strong><p>将创建 GitHub 集成项目，关联 {{ release.target.fullName }} · {{ release.target.branch }}；构建命令 npm run build，产物目录 {{ localRun?.outputDir }}。创建后可能立即公开部署。</p><p>Cloudflare 需要独立获准访问 GitHub 仓库；如创建失败，请先在官方页面完成授权。</p><div class="site-actions"><input v-model="pageName" class="local-input" placeholder="小写项目名，例如 my-site" aria-label="Pages 项目名称" /><label>Node <select v-model="pageNodeVersion"><option>22</option><option>24</option><option>26</option></select></label><button class="btn primary" :disabled="publishBusy || !pageName.trim()" @click="createPages">确认创建并关联</button><button class="btn secondary" :disabled="publishBusy" @click="createPageOpen = false">取消</button></div></div>
+          <div v-if="showPages" class="inline-box"><strong>关联 Cloudflare Pages 项目</strong><p>请在 Cloudflare 授权 GitHub 仓库并创建 Git 集成项目；生产分支为 {{ release.target.branch }}，构建命令为 npm run build，产物目录为 {{ localRun?.outputDir }}。创建或关联时可能立即开始部署。</p><p>默认模板建议设置 NODE_VERSION 为 24。完成后返回并刷新项目。</p><div class="site-actions"><select v-model="selectedPage" class="local-input"><option value="" disabled>选择 Pages 项目</option><option v-for="project in pageProjects" :key="project.name" :value="project.name">{{ project.name }} · {{ project.owner }}/{{ project.repo }}</option></select><button class="btn secondary" :disabled="publishBusy" @click="loadPages">刷新项目</button><button class="btn primary" :disabled="publishBusy || !selectedPage" @click="bindPages">确认关联</button></div></div>
+          <div v-if="release.lastOnline" class="inline-box"><strong>最近确认上线的版本</strong><p>{{ release.lastOnline.project }} · {{ release.lastOnline.commitSha.slice(0, 12) }} · {{ new Date(release.lastOnline.confirmedAt).toLocaleString() }}</p><p>地址：{{ release.lastOnline.url }}。当前线上版本以 Cloudflare 最新状态为准。</p></div>
+          <p v-if="deployment?.state === 'success'">默认模板需要在 Cloudflare 构建环境中设置 SITE_URL 并重新部署，才能按正式地址生成 sitemap。</p>
+          <details v-if="release.history?.length"><summary>查看 GitHub 推送记录</summary><p v-for="item in release.history" :key="`${item.target.fullName}-${item.target.branch}-${item.commitSha}`">{{ new Date(item.at).toLocaleString() }} · {{ item.target.fullName }} · {{ item.target.branch }} · {{ item.commitSha.slice(0, 12) }}</p></details>
+        </template>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -420,4 +595,5 @@ onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; publishRequest++; 
 .site-local{border-top:1px solid var(--border);padding:16px 20px;font-size:12px;color:var(--text-secondary)}.site-local p{margin:0 0 8px}.site-path{overflow-wrap:anywhere}.site-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.recreate-confirm{margin-top:14px;padding:12px;background:var(--bg-hover);border-radius:6px}
 .local-panel{border:1px solid var(--border);background:var(--bg-panel);border-radius:8px;padding:4px 20px 18px;font-size:12px}.local-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid var(--border)}.local-row .site-actions{margin:0}.local-row p,.inline-box p{margin-top:6px;color:var(--text-secondary);overflow-wrap:anywhere}.inline-box{margin-top:12px;padding:14px;border-radius:6px;background:var(--bg-hover)}.local-input{min-width:220px;flex:1;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated);color:var(--text);padding:8px}.local-panel details{margin-top:12px;color:var(--text-secondary)}.local-panel summary{cursor:pointer}.local-panel pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg-hover);padding:10px;border-radius:6px;font-size:11px}
 .publish-panel{margin:0 0 20px;padding:20px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);font-size:12px}.publish-panel h2{font-size:15px;margin:0}.publish-panel p{color:var(--text-secondary)}.repo-list{display:grid;gap:6px;max-height:260px;overflow-y:auto;margin-top:14px}.repo-item{display:flex;justify-content:space-between;gap:12px;text-align:left;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);border-radius:6px;padding:10px;cursor:pointer}.repo-item.selected{border-color:var(--accent);background:var(--accent-muted)}.repo-item:disabled{opacity:.6;cursor:wait}
+.publish-panel .notice{white-space:pre-wrap}.publish-panel details{margin-top:12px}.publish-panel summary{cursor:pointer}.publish-panel pre,.file-list{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg-panel);padding:10px;border-radius:6px;font-size:11px}.file-list button{text-align:left;white-space:normal;overflow-wrap:anywhere}
 </style>

@@ -115,6 +115,16 @@ export async function getCloudflareState(): Promise<CloudflareState> {
     return await inspect(credentials, current)
   } catch (error) { return { connected: false, authorized: !!load(), message: error instanceof Error ? error.message : '无法检查 Cloudflare 连接。' } }
 }
+/** Main-process only: never expose the token to the renderer. */
+export async function getCloudflareCredentials(): Promise<{ accessToken: string; accountId: string }> {
+  const current = generation
+  const state = await getCloudflareState()
+  if (current !== generation) throw new Error('Cloudflare 授权已变化，请重新检查。')
+  if (!state.connected || !state.accountId) throw new Error(state.message || '请先连接 Cloudflare 并选择账号。')
+  const credentials = await getValidToken()
+  if (current !== generation || !credentials || credentials.accountId !== state.accountId) throw new Error('Cloudflare 账号已变化，请重新检查。')
+  return { accessToken: credentials.accessToken, accountId: state.accountId }
+}
 function finish(result: CloudflareAction): void {
   const p = pending
   if (!p) return

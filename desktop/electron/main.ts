@@ -1,7 +1,9 @@
-import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount } from './cloudflare/cloudflare-auth'
+import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount, getCloudflareCredentials } from './cloudflare/cloudflare-auth'
+import { CloudflarePages, verifyPagesProject, type PagesProject } from './cloudflare/cloudflare-pages'
 import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub, getGithubAccessToken } from './github/github-auth'
 import { GithubRepositories } from './github/github-repositories'
-import { adoptSite, createSite, getSiteSnapshot } from './site/site-project'
+import { adoptSite, createSite, getSiteOutput, getSiteSnapshot } from './site/site-project'
+import { SitePublish, readRelease, type ReleaseRecord } from './site/site-publish'
 import { SiteRuntime, type RunKind } from './site/site-runtime'
 import { resolveConfiguredNode } from './runtime/node-paths'
 import { resolveBestNode } from './runtime/resolve-node'
@@ -264,6 +266,10 @@ const siteRuntime = new SiteRuntime(resolveConfiguredNode, getWorkspaceRoot, sna
   if (snapshot.preview.state !== 'running') clearVerifiedPreviewTargets()
   broadcastToWindows(IPC.SITE_RUNTIME_EVENT, snapshot)
 }, async () => (await resolveBestNode()).bestOk)
+const githubRepositories = new GithubRepositories(getGithubAccessToken)
+const sitePublish = new SitePublish(githubRepositories, async () => resolveConfiguredNode() ?? (await resolveBestNode()).bestOk, getWorkspaceRoot)
+const pages = new CloudflarePages(getCloudflareCredentials)
+let pagesCreationInFlight = false
 let sitePreviewTab: string | undefined
 let runtime: OpenCodeRuntime | null = null
 let agentRunner: AgentRunController | null = null
@@ -719,7 +725,63 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.CLOUDFLARE_SELECT_ACCOUNT, (_event, accountId: unknown) => selectCloudflareAccount(accountId))
   ipcMain.handle(IPC.CLOUDFLARE_DISCONNECT, () => disconnectCloudflare())
   ipcMain.handle(IPC.GITHUB_GET_STATE, () => getGithubState())
-  const githubRepositories = new GithubRepositories(getGithubAccessToken)
+  const releaseAction = async <T>(fn: () => T | Promise<T>): Promise<{ ok: true; value: T } | { ok: false; message: string }> => {
+    try { return { ok: true, value: await fn() } } catch (error) { return { ok: false, message: error instanceof Error ? error.message : '操作失败。' } }
+  }
+  const verifyPages = (record: ReleaseRecord, project: PagesProject, root: string) => {
+    const repo = record.target
+    if (!repo || !record.commitSha || record.pending) throw new Error('请先确认 GitHub 推送已完成。')
+    const output = getSiteOutput(root)
+    if (!output) throw new Error('请先设置静态产物目录。')
+    if (!record.outputDir || output !== record.outputDir) throw new Error('静态产物目录已变化，请重新检查并发布站点。')
+    verifyPagesProject(project, { ...repo, output })
+  }
+  ipcMain.handle(IPC.SITE_RELEASE_GET, (_event, root: unknown) => releaseAction(() => readRelease(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_RELEASE_PREPARE, (_event, root: unknown, id: unknown, branch: unknown, acceptReadme: unknown) => releaseAction(() => sitePublish.prepare(currentSiteWorkspace(root), id as number, branch as string, acceptReadme === true)))
+  ipcMain.handle(IPC.SITE_RELEASE_CANCEL, (_event, root: unknown) => releaseAction(() => sitePublish.cancelBuild(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_RELEASE_FILE, (_event, root: unknown, id: unknown, name: unknown) => releaseAction(() => sitePublish.previewFile(currentSiteWorkspace(root), String(id), String(name))))
+  ipcMain.handle(IPC.SITE_RELEASE_COMMIT, (_event, root: unknown, id: unknown) => releaseAction(() => sitePublish.commit(currentSiteWorkspace(root), String(id))))
+  ipcMain.handle(IPC.SITE_RELEASE_RECOVER, (_event, root: unknown) => releaseAction(() => sitePublish.recover(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_PAGES_LIST, (_event, root: unknown) => releaseAction(async () => { currentSiteWorkspace(root); const credentials = await getCloudflareCredentials(); const projects = await pages.list(credentials.accountId); currentSiteWorkspace(root); return { accountId: credentials.accountId, projects } }))
+  ipcMain.handle(IPC.SITE_PAGES_CREATE, (_event, root: unknown, name: unknown, nodeVersion: unknown) => releaseAction(async () => {
+    if (pagesCreationInFlight) throw new Error('项目创建正在进行，请稍候。')
+    pagesCreationInFlight = true
+    try {
+      const workspace = currentSiteWorkspace(root); const record = readRelease(workspace)
+      if (!record.target || !record.commitSha || record.pending || record.pendingPages) throw new Error('请先完成 GitHub 推送并确认之前的项目创建结果。')
+      if (typeof name !== 'string' || !/^[a-z0-9][a-z0-9-]{0,57}$/.test(name) || typeof nodeVersion !== 'string' || !/^(?:22|24|26)$/.test(nodeVersion)) throw new Error('请填写有效的 Pages 项目名和 Node 版本。')
+      const credentials = await getCloudflareCredentials()
+      const existing = await pages.list(credentials.accountId); currentSiteWorkspace(root)
+      if (existing.some(project => project.name === name)) throw new Error('项目名称已存在，请选择现有项目或使用其他名称。')
+      const output = getSiteOutput(workspace)
+      if (!output) throw new Error('请先设置静态产物目录。')
+      if (output !== record.outputDir) throw new Error('静态产物目录已变化，请重新检查并发布站点。')
+      sitePublish.beginPages(workspace, record.commitSha, record.target.id, record.target.branch, credentials.accountId, name)
+      const project = await pages.create(credentials.accountId, name, record.target, output, nodeVersion)
+      currentSiteWorkspace(root); verifyPages(record, project, workspace)
+      return sitePublish.bindPages(workspace, record.commitSha, record.target.id, record.target.branch, credentials.accountId, project.name)
+    } finally { pagesCreationInFlight = false }
+  }))
+  ipcMain.handle(IPC.SITE_PAGES_CLEAR_PENDING, (_event, root: unknown) => releaseAction(() => {
+    if (pagesCreationInFlight) throw new Error('项目创建正在进行，请稍候。')
+    return sitePublish.clearPendingPages(currentSiteWorkspace(root))
+  }))
+  ipcMain.handle(IPC.SITE_PAGES_BIND, (_event, root: unknown, name: unknown) => releaseAction(async () => {
+    if (pagesCreationInFlight) throw new Error('项目创建正在进行，请稍候。')
+    const workspace = currentSiteWorkspace(root); const record = readRelease(workspace); const credentials = await getCloudflareCredentials()
+    const result = await pages.project(credentials.accountId, String(name)); currentSiteWorkspace(root); verifyPages(record, result.project, workspace)
+    return sitePublish.bindPages(workspace, record.commitSha!, record.target!.id, record.target!.branch, credentials.accountId, result.project.name)
+  }))
+  ipcMain.handle(IPC.SITE_PAGES_STATUS, (_event, root: unknown) => releaseAction(async () => {
+    const workspace = currentSiteWorkspace(root); const record = readRelease(workspace)
+    if (!record.cloudflare || !record.target || !record.commitSha) throw new Error('尚未关联 Cloudflare Pages 项目。')
+    const project = await pages.project(record.cloudflare.accountId, record.cloudflare.project); currentSiteWorkspace(root); verifyPages(record, project.project, workspace)
+    const status = await pages.status(record.cloudflare.accountId, record.cloudflare.project, record.target.branch, record.commitSha); currentSiteWorkspace(root)
+    const latest = readRelease(workspace)
+    if (latest.commitSha !== record.commitSha || latest.target?.id !== record.target.id || latest.target?.branch !== record.target.branch || latest.cloudflare?.accountId !== record.cloudflare.accountId || latest.cloudflare?.project !== record.cloudflare.project) throw new Error('发布信息已变化，请重新刷新状态。')
+    if (status.state === 'success' && status.productionCurrent === true && status.deploymentId && status.productionUrl) sitePublish.noteOnline(workspace, record.commitSha, record.cloudflare.accountId, record.cloudflare.project, status.deploymentId, status.productionUrl)
+    return status
+  }))
   ipcMain.handle(IPC.GITHUB_REPOSITORIES, async (_event, root: unknown) => {
     try { currentSiteWorkspace(root); const repositories = await githubRepositories.list(); currentSiteWorkspace(root); return { ok: true, repositories } }
     catch (error) { return { ok: false, message: error instanceof Error ? error.message : '无法读取仓库。' } }
@@ -729,7 +791,7 @@ function registerIpcHandlers(): void {
     catch (error) { return { ok: false, message: error instanceof Error ? error.message : '无法读取分支。' } }
   })
   ipcMain.handle(IPC.GITHUB_CREATE_REPOSITORY, async (_event, root: unknown, name: unknown, privateRepo: unknown) => {
-    try { currentSiteWorkspace(root); if (getSiteSnapshot(getWorkspaceRoot()).status !== 'ready') throw new Error('请先创建或恢复本地站点。'); const repository = await githubRepositories.create(name as string, privateRepo as boolean); return { ok: true, repository } }
+    try { const workspace = currentSiteWorkspace(root); if (getSiteSnapshot(workspace).status !== 'ready') throw new Error('请先创建或恢复本地站点。'); const repository = await githubRepositories.create(name as string, privateRepo as boolean); await sitePublish.markCreated(workspace, repository.fullName); return { ok: true, repository } }
     catch (error) { return { ok: false, message: error instanceof Error ? error.message : '无法创建仓库。' } }
   })
   ipcMain.handle(IPC.GITHUB_START_AUTH, () => startGithubAuth())
@@ -1068,17 +1130,21 @@ function registerIpcHandlers(): void {
     const dir = await pickWorkspaceDirectory()
     if (!dir) return { path: null, restarted: false }
 
-    if (siteRuntime.hasActive()) {
+    if (siteRuntime.hasActive() || sitePublish.hasActive() || pagesCreationInFlight) {
       const choice = await dialog.showMessageBox({
         type: 'question',
         title: '切换工作区',
-        message: '当前站点仍有预览、安装或构建正在运行。',
-        detail: '切换前需要停止这些操作。',
+        message: '当前站点仍有预览、构建或发布操作正在运行。',
+        detail: '切换前需要停止本地操作；远端提交或项目创建需要等待结果。',
         buttons: ['停止并切换', '取消'],
         defaultId: 0,
         cancelId: 1,
       })
       if (choice.response !== 0) return { path: null, restarted: false }
+      if (pagesCreationInFlight || !await sitePublish.shutdown()) {
+        await dialog.showMessageBox({ type: 'error', message: '发布操作尚未停止或远端结果未确认，请稍后再切换工作区。' })
+        return { path: null, restarted: false }
+      }
       if (!await siteRuntime.shutdown()) {
         await dialog.showMessageBox({ type: 'error', message: '站点进程停止未确认，请检查后再切换工作区。' })
         return { path: null, restarted: false }
@@ -2003,6 +2069,7 @@ app.on('before-quit', (event) => {
 
   void (async () => {
     try {
+      await sitePublish.shutdown()
       await siteRuntime.shutdown()
       await shutdownBuiltinBrowser()
       await runtime?.stop()
