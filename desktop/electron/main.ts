@@ -1,6 +1,10 @@
 import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount } from './cloudflare/cloudflare-auth'
 import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub } from './github/github-auth'
 import { adoptSite, createSite, getSiteSnapshot } from './site/site-project'
+import { SiteRuntime, type RunKind } from './site/site-runtime'
+import { resolveConfiguredNode } from './runtime/node-paths'
+import { openSitePreviewTab } from './browser-runtime/builtin-browser-window'
+import { clearVerifiedPreviewTargets } from './browser-runtime/cdp-filter'
 import { markExplorationRunFailed } from './exploration/exploration-writer'
 import { TaskJournal } from './tasks/journal'
 import type { TaskSkill } from './tasks/lifecycle'
@@ -8,6 +12,7 @@ import { recipientKeyFromEmail as slotKeyForEmail } from './emails/emails-reader
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   nativeTheme,
   shell,
@@ -253,6 +258,11 @@ try {
 }
 
 let mainWindow: BrowserWindow | null = null
+const siteRuntime = new SiteRuntime(resolveConfiguredNode, getWorkspaceRoot, snapshot => {
+  if (snapshot.preview.state !== 'running') clearVerifiedPreviewTargets()
+  broadcastToWindows(IPC.SITE_RUNTIME_EVENT, snapshot)
+})
+let sitePreviewTab: string | undefined
 let runtime: OpenCodeRuntime | null = null
 let agentRunner: AgentRunController | null = null
 /** Electron 不会 await before-quit；需要 preventDefault + 二次 quit */
@@ -678,6 +688,29 @@ function registerIpcHandlers(): void {
       return error ? { ok: false, message: `无法打开目录：${error}` } : { ok: true }
     } catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) } }
   })
+  const siteAction = async (fn: () => unknown | Promise<unknown>) => {
+    try { await fn(); return { ok: true } }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) } }
+  }
+  ipcMain.handle(IPC.SITE_RUNTIME_GET, (_event, root: string) => siteRuntime.snapshot(currentSiteWorkspace(root)))
+  ipcMain.handle(IPC.SITE_RUNTIME_INSTALL, (_event, root: string, reinstall: unknown, thenPreview: unknown) => siteAction(() => siteRuntime.install(currentSiteWorkspace(root), reinstall === true, thenPreview === true)))
+  ipcMain.handle(IPC.SITE_RUNTIME_PREVIEW, (_event, root: string) => siteAction(() => siteRuntime.startPreview(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_RUNTIME_ADDRESS, (_event, root: string, id: string, url: string) => siteAction(() => siteRuntime.setPreviewUrl(currentSiteWorkspace(root), String(id), String(url))))
+  ipcMain.handle(IPC.SITE_RUNTIME_BUILD, (_event, root: string) => siteAction(() => siteRuntime.build(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_RUNTIME_OUTPUT, (_event, root: string, output: string) => siteAction(() => siteRuntime.setOutput(currentSiteWorkspace(root), String(output))))
+  ipcMain.handle(IPC.SITE_RUNTIME_CANCEL, (_event, root: string, kind: RunKind, id: string) => siteAction(() => {
+    if (!['install', 'preview', 'build'].includes(kind)) throw new Error('无效的操作类型。')
+    return siteRuntime.cancel(currentSiteWorkspace(root), kind, String(id))
+  }))
+  ipcMain.handle(IPC.SITE_RUNTIME_OPEN, (_event, root: string, id: string) => siteAction(async () => {
+    const url = siteRuntime.previewUrl(currentSiteWorkspace(root), String(id))
+    const browser = await ensureBuiltinBrowser()
+    if (!browser.ok) throw new Error('内置浏览器暂不可用，请重试。')
+    // Recheck after initialization in case the service stopped or workspace changed.
+    const current = siteRuntime.previewUrl(currentSiteWorkspace(root), String(id))
+    if (current !== url) throw new Error('预览地址已变化，请重试。')
+    sitePreviewTab = await openSitePreviewTab(url, siteRuntime.snapshot(currentSiteWorkspace(root)).preview.state === 'running', sitePreviewTab)
+  }))
   ipcMain.handle(IPC.CLOUDFLARE_GET_STATE, () => getCloudflareState())
   ipcMain.handle(IPC.CLOUDFLARE_CONNECT, () => connectCloudflare())
   ipcMain.handle(IPC.CLOUDFLARE_CANCEL, () => cancelCloudflareAuth())
@@ -1019,6 +1052,23 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.SETTINGS_PICK_WORKSPACE, async () => {
     const dir = await pickWorkspaceDirectory()
     if (!dir) return { path: null, restarted: false }
+
+    if (siteRuntime.hasActive()) {
+      const choice = await dialog.showMessageBox({
+        type: 'question',
+        title: '切换工作区',
+        message: '当前站点仍有预览、安装或构建正在运行。',
+        detail: '切换前需要停止这些操作。',
+        buttons: ['停止并切换', '取消'],
+        defaultId: 0,
+        cancelId: 1,
+      })
+      if (choice.response !== 0) return { path: null, restarted: false }
+      if (!await siteRuntime.shutdown()) {
+        await dialog.showMessageBox({ type: 'error', message: '站点进程停止未确认，请检查后再切换工作区。' })
+        return { path: null, restarted: false }
+      }
+    }
 
     const init = initializeWorkspace(dir, { forceManaged: true })
     writeUserPrefs({ workspaceRoot: dir })
@@ -1938,6 +1988,7 @@ app.on('before-quit', (event) => {
 
   void (async () => {
     try {
+      await siteRuntime.shutdown()
       await shutdownBuiltinBrowser()
       await runtime?.stop()
     } catch (err) {

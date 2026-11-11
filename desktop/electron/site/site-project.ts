@@ -127,3 +127,34 @@ export function adoptSite(workspaceRoot: string): SiteSnapshot {
   writeRecord(root, { version: 1, projectDir: 'website', buildOutputDir: null })
   return getSiteSnapshot(root)
 }
+
+/** The build destination is always a subdirectory of the current project. */
+export function resolveSiteOutput(projectPath: string, relative: string): string {
+  if (typeof relative !== 'string' || !relative.trim() || path.isAbsolute(relative) || path.win32.isAbsolute(relative)) throw new Error('产物目录必须是站点内的相对路径。')
+  const parts = relative.trim().split(/[\\/]+/)
+  if (parts.some(part => part === '..' || part === '.' || !part || part.includes(':'))) throw new Error('产物目录不能包含上级路径。')
+  let current = projectPath
+  for (const part of parts) {
+    current = path.join(current, part)
+    try {
+      const stat = fs.lstatSync(current)
+      if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('产物目录必须是站点内的普通目录。')
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+  }
+  return current
+}
+
+export function getSiteOutput(root: string): string | null {
+  return readRecord(path.resolve(root)).record?.buildOutputDir ?? null
+}
+
+export function setSiteOutput(root: string, relative: string): void {
+  root = path.resolve(root)
+  if (getSiteSnapshot(root).status !== 'ready') throw new Error('站点不可用，请先检查项目。')
+  const record = readRecord(root).record
+  if (!record) throw new Error('站点配置不可用。')
+  resolveSiteOutput(path.join(root, 'website'), relative)
+  writeRecord(root, { ...record, buildOutputDir: relative.trim().replace(/\\/g, '/') })
+}

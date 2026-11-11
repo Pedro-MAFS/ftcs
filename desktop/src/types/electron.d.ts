@@ -1,5 +1,7 @@
 interface CloudflareState { connected: boolean; authorized?: boolean; pending?: boolean; accountId?: string; accountName?: string; accounts?: Array<{ id: string; name: string }>; message?: string }
 interface SiteSnapshot { status: 'not_created' | 'empty' | 'existing' | 'ready' | 'missing' | 'invalid' | 'error'; workspaceRoot: string; projectPath: string; message: string; dependencies: 'missing' | 'unknown' }
+interface SiteRun { id: string; state: 'idle' | 'starting' | 'running' | 'address_pending' | 'stopping' | 'succeeded' | 'failed' | 'cancelled'; message: string; log: string; url?: string; startedAt?: string; finishedAt?: string; node?: string; output?: string }
+interface SiteRuntimeSnapshot { workspaceRoot: string; sequence: number; outputDir: string | null; dependencies: 'missing' | 'unknown' | 'not_required'; install: SiteRun; preview: SiteRun; build: SiteRun }
 import type { AppStatus, OpenCodeActionResult } from './app'
 import type { AuthActionResult, AuthSessionSnapshot } from './auth'
 import type { LibraryMutationResult, LibrarySnapshot } from './library'
@@ -928,6 +930,15 @@ declare global {
       createSite: (workspaceRoot: string) => Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }>
       adoptSite: (workspaceRoot: string) => Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }>
       openSiteDirectory: (kind: 'project' | 'workspace', workspaceRoot: string) => Promise<{ ok: boolean; message?: string }>
+      getSiteRuntime: (root: string) => Promise<SiteRuntimeSnapshot>
+      onSiteRuntime: (callback: (snapshot: SiteRuntimeSnapshot) => void) => () => void
+      installSiteDependencies: (root: string, reinstall: boolean, thenPreview: boolean) => Promise<{ ok: boolean; message?: string }>
+      startSitePreview: (root: string) => Promise<{ ok: boolean; message?: string }>
+      setSitePreviewAddress: (root: string, id: string, url: string) => Promise<{ ok: boolean; message?: string }>
+      openSitePreview: (root: string, id: string) => Promise<{ ok: boolean; message?: string }>
+      buildSite: (root: string) => Promise<{ ok: boolean; message?: string }>
+      setSiteOutput: (root: string, output: string) => Promise<{ ok: boolean; message?: string }>
+      cancelSiteRun: (root: string, kind: 'install' | 'preview' | 'build', id: string) => Promise<{ ok: boolean; message?: string }>
       openExternal: (url: string) => Promise<{ ok: boolean; message: string }>
       checkAgentPreflight: (
         kind: AgentPreflightKind,

@@ -3,6 +3,7 @@ import { IPC } from './ipc/types'
 import type { CloudflareState, CloudflareAction } from './cloudflare/cloudflare-auth'
 import type { GithubState, GithubStart, GithubPoll } from './github/github-auth'
 import type { SiteSnapshot } from './site/site-project'
+import type { RunKind, SiteRuntimeSnapshot } from './site/site-runtime'
 import type { SendFreeDialogueResult } from './opencode/free-dialogue'
 import type {
   AgentEventPayload,
@@ -101,6 +102,19 @@ const api = {
   createSite: (workspaceRoot: string): Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }> => ipcRenderer.invoke(IPC.SITE_CREATE, workspaceRoot),
   adoptSite: (workspaceRoot: string): Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }> => ipcRenderer.invoke(IPC.SITE_ADOPT, workspaceRoot),
   openSiteDirectory: (kind: 'project' | 'workspace', workspaceRoot: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_OPEN_DIRECTORY, kind, workspaceRoot),
+  getSiteRuntime: (root: string): Promise<SiteRuntimeSnapshot> => ipcRenderer.invoke(IPC.SITE_RUNTIME_GET, root),
+  onSiteRuntime: (callback: (snapshot: SiteRuntimeSnapshot) => void): (() => void) => {
+    const listener = (_event: unknown, snapshot: SiteRuntimeSnapshot) => callback(snapshot)
+    ipcRenderer.on(IPC.SITE_RUNTIME_EVENT, listener)
+    return () => ipcRenderer.removeListener(IPC.SITE_RUNTIME_EVENT, listener)
+  },
+  installSiteDependencies: (root: string, reinstall: boolean, thenPreview: boolean): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_INSTALL, root, reinstall, thenPreview),
+  startSitePreview: (root: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_PREVIEW, root),
+  setSitePreviewAddress: (root: string, id: string, url: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_ADDRESS, root, id, url),
+  openSitePreview: (root: string, id: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_OPEN, root, id),
+  buildSite: (root: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_BUILD, root),
+  setSiteOutput: (root: string, output: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_OUTPUT, root, output),
+  cancelSiteRun: (root: string, kind: RunKind, id: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_CANCEL, root, kind, id),
   openExternal: (url: string): Promise<{ ok: boolean; message: string }> =>
     ipcRenderer.invoke(IPC.APP_OPEN_EXTERNAL, url),
   checkAgentPreflight: (
