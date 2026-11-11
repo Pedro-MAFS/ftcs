@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
 import type { CloudflareState, CloudflareAction } from './cloudflare/cloudflare-auth'
 import type { GithubState, GithubStart, GithubPoll } from './github/github-auth'
+import type { GithubRepository, GithubBranch } from './github/github-repositories'
 import type { SiteSnapshot } from './site/site-project'
 import type { RunKind, SiteRuntimeSnapshot } from './site/site-runtime'
 import type { SendFreeDialogueResult } from './opencode/free-dialogue'
@@ -164,6 +165,9 @@ const api = {
   selectCloudflareAccount: (accountId: string): Promise<CloudflareAction> => ipcRenderer.invoke(IPC.CLOUDFLARE_SELECT_ACCOUNT, accountId),
   disconnectCloudflare: (): Promise<void> => ipcRenderer.invoke(IPC.CLOUDFLARE_DISCONNECT),
   getGithubState: (): Promise<GithubState> => ipcRenderer.invoke(IPC.GITHUB_GET_STATE),
+  listGithubRepositories: (root: string): Promise<{ ok: boolean; repositories?: GithubRepository[]; message?: string }> => ipcRenderer.invoke(IPC.GITHUB_REPOSITORIES, root),
+  listGithubBranches: (root: string, id: number): Promise<{ ok: boolean; branches?: GithubBranch[]; message?: string }> => ipcRenderer.invoke(IPC.GITHUB_BRANCHES, root, id),
+  createGithubRepository: (root: string, name: string, privateRepo: boolean): Promise<{ ok: boolean; repository?: { fullName: string }; message?: string }> => ipcRenderer.invoke(IPC.GITHUB_CREATE_REPOSITORY, root, name, privateRepo),
   startGithubAuth: (): Promise<GithubStart> => ipcRenderer.invoke(IPC.GITHUB_START_AUTH),
   pollGithubAuth: (): Promise<GithubPoll> => ipcRenderer.invoke(IPC.GITHUB_POLL_AUTH),
   cancelGithubAuth: (): Promise<void> => ipcRenderer.invoke(IPC.GITHUB_CANCEL_AUTH),

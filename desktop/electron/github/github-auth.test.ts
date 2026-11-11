@@ -9,7 +9,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-github-test-'))
 process.env.FTCS_GITHUB_TEST_DIR = dir
 const electron = `export const app={getPath(){return process.env.FTCS_GITHUB_TEST_DIR}};export const safeStorage={isEncryptionAvailable(){return true},encryptString(s){return Buffer.from('encrypted:'+s)},decryptString(b){return b.toString().slice(10)}};`
 registerHooks({ resolve(specifier, context, next) { return specifier === 'electron' ? { url: `data:text/javascript,${encodeURIComponent(electron)}`, shortCircuit: true } : next(specifier, context) } })
-const { startGithubAuth, pollGithubAuth, cancelGithubAuth, getGithubState, disconnectGithub } = await import('./github-auth.ts')
+const { startGithubAuth, pollGithubAuth, cancelGithubAuth, getGithubState, getGithubAccessToken, disconnectGithub } = await import('./github-auth.ts')
 const originalFetch = globalThis.fetch
 const originalNow = Date.now
 let now = 1_000_000
@@ -52,8 +52,10 @@ test('device authorization, app installation, refresh and disconnect', async () 
   now += 61000
   assert.equal((await getGithubState()).connected, true)
   assert.equal(refreshed, true)
+  assert.equal(await getGithubAccessToken(), 'access-2')
   disconnectGithub()
   assert.equal((await getGithubState()).connected, false)
+  await assert.rejects(getGithubAccessToken(), /连接 GitHub/)
   await startGithubAuth()
   cancelGithubAuth()
   assert.equal((await pollGithubAuth()).status, 'failed')

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onActivated, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onActivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import Icon from '../components/shared/Icon.vue'
 defineOptions({ name: 'SiteView' })
 type SiteState = Awaited<ReturnType<NonNullable<Window['ftcs']>['getSite']>>
@@ -234,20 +234,123 @@ async function copyCode() {
   try { await navigator.clipboard.writeText(code.value); message.value = '授权码已复制。' }
   catch { message.value = '无法复制，请手动输入授权码。' }
 }
-function publish() {
-  if (!connected.value || !cfConnected.value) {
-    const missing = [!connected.value ? 'GitHub' : '', !cfConnected.value ? 'Cloudflare' : ''].filter(Boolean).join(' 和 ')
-    message.value = `发布前请先连接 ${missing}。`
-  } else message.value = '发布功能将在后续开发中提供。'
+async function openGithubNewRepository() { await window.ftcs?.openExternal('https://github.com/new') }
+async function openGithubInstallations() { await window.ftcs?.openExternal('https://github.com/settings/installations') }
+type Repository = NonNullable<Awaited<ReturnType<NonNullable<Window['ftcs']>['listGithubRepositories']>>['repositories']>[number]
+type Branch = NonNullable<Awaited<ReturnType<NonNullable<Window['ftcs']>['listGithubBranches']>>['branches']>[number]
+const publishOpen = ref(false)
+const publishStarting = ref(false)
+const publishBusy = ref(false)
+const publishError = ref('')
+const repositories = ref<Repository[]>([])
+const selectedRepository = ref<number | null>(null)
+const branches = ref<Branch[]>([])
+const selectedBranch = ref('')
+const repoSearch = ref('')
+const createRepoOpen = ref(false)
+const newRepoName = ref('')
+const newRepoPrivate = ref(true)
+let publishRequest = 0
+const filteredRepositories = computed(() => repositories.value.filter(repo => repo.fullName.toLowerCase().includes(repoSearch.value.toLowerCase().trim())))
+const chosenRepository = computed(() => repositories.value.find(repo => repo.id === selectedRepository.value))
+const chosenBranch = computed(() => branches.value.find(branch => branch.name === selectedBranch.value))
+async function loadRepositories() {
+  if (!site.value || !window.ftcs || publishBusy.value) return
+  const root = site.value.workspaceRoot
+  const request = ++publishRequest
+  publishBusy.value = true
+  publishError.value = ''
+  selectedRepository.value = null
+  selectedBranch.value = ''
+  branches.value = []
+  try {
+    const result = await window.ftcs.listGithubRepositories(root)
+    if (request !== publishRequest || site.value?.workspaceRoot !== root) return
+    if (!result.ok) { repositories.value = []; publishError.value = result.message || '无法读取 GitHub 仓库。'; return }
+    repositories.value = result.repositories || []
+  } catch { if (request === publishRequest) publishError.value = '无法读取 GitHub 仓库，请检查网络后重试。' }
+  finally { if (request === publishRequest) publishBusy.value = false }
 }
+async function chooseRepository(id: number) {
+  if (!site.value || !window.ftcs || publishBusy.value) return
+  selectedRepository.value = id
+  selectedBranch.value = ''
+  branches.value = []
+  publishError.value = ''
+  const repo = repositories.value.find(item => item.id === id)
+  if (!repo) return
+  const root = site.value.workspaceRoot
+  const request = ++publishRequest
+  publishBusy.value = true
+  try {
+    const result = await window.ftcs.listGithubBranches(root, id)
+    if (request !== publishRequest || site.value?.workspaceRoot !== root) return
+    if (!result.ok) { publishError.value = result.message || '无法读取分支。'; return }
+    branches.value = result.branches || []
+    selectedBranch.value = branches.value.find(branch => branch.name === repo.defaultBranch)?.name || ''
+  } catch { if (request === publishRequest) publishError.value = '无法读取分支，请重试。' }
+  finally { if (request === publishRequest) publishBusy.value = false }
+}
+async function createRepository() {
+  if (!site.value || !window.ftcs || publishBusy.value) return
+  const root = site.value.workspaceRoot
+  const request = ++publishRequest
+  publishBusy.value = true
+  publishError.value = ''
+  try {
+    const result = await window.ftcs.createGithubRepository(root, newRepoName.value.trim(), newRepoPrivate.value)
+    if (request !== publishRequest || site.value?.workspaceRoot !== root) return
+    if (!result.ok) { publishError.value = `${result.message || '创建请求未完成。'} 请先到 GitHub 检查仓库是否已创建，再决定是否重试。`; return }
+    createRepoOpen.value = false
+    newRepoName.value = ''
+    publishBusy.value = false
+    await loadRepositories()
+    if (site.value?.workspaceRoot !== root) return
+    const created = repositories.value.find(repo => repo.fullName === result.repository?.fullName)
+    if (created) await chooseRepository(created.id)
+    else publishError.value = `仓库 ${result.repository?.fullName || ''} 已创建。如列表中没有它，请在 GitHub 为 FTCS App 授权该仓库后刷新。`
+  } catch { if (request === publishRequest) publishError.value = '创建结果未知，请先到 GitHub 检查仓库是否已创建，再决定是否重试。' }
+  finally { if (request === publishRequest) publishBusy.value = false }
+}
+async function publish() {
+  if (publishStarting.value || publishBusy.value) return
+  message.value = ''
+  publishStarting.value = true
+  try {
+    await refreshAll()
+    if (site.value?.status !== 'ready') { message.value = '发布前请先创建或恢复本地站点。'; return }
+    if (!localRun.value?.outputDir) { message.value = '发布前请先在构建检查中设置静态产物目录。'; return }
+    if (!connected.value || !cfConnected.value) {
+      const missing = [!connected.value ? 'GitHub' : '', !cfConnected.value ? 'Cloudflare' : ''].filter(Boolean).join(' 和 ')
+      message.value = `发布前请先连接 ${missing}。`
+      return
+    }
+    publishOpen.value = true
+    await loadRepositories()
+  } catch { message.value = '无法检查发布条件，请检查连接后重试。' }
+  finally { publishStarting.value = false }
+}
+watch(() => site.value?.workspaceRoot, (next, previous) => {
+  if (previous && next !== previous) {
+    publishRequest++
+    publishOpen.value = false
+    publishBusy.value = false
+    repositories.value = []
+    selectedRepository.value = null
+    branches.value = []
+    selectedBranch.value = ''
+    createRepoOpen.value = false
+    publishError.value = ''
+  }
+})
 onMounted(() => { removeRuntimeListener = window.ftcs?.onSiteRuntime?.(applySiteRuntime); void refreshAll(); window.addEventListener('focus', refreshSite) })
 onActivated(() => { void refreshSite() })
-onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; window.removeEventListener('focus', refreshSite); cfAttempt++; attempt++; if (timer) clearTimeout(timer); void window.ftcs?.cancelGithubAuth?.(); void window.ftcs?.cancelCloudflareAuth?.() })
+onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; publishRequest++; window.removeEventListener('focus', refreshSite); cfAttempt++; attempt++; if (timer) clearTimeout(timer); void window.ftcs?.cancelGithubAuth?.(); void window.ftcs?.cancelCloudflareAuth?.() })
 </script>
 
 <template>
   <div class="site-page">
-    <header class="page-header"><div><h1>独立站</h1><p>创建、预览并发布属于你的品牌网站</p></div><div class="header-actions"><button class="btn secondary" type="button" @click="refreshAll"><Icon name="refresh-cw" /> 刷新</button><button class="btn primary" type="button" @click="publish">发布网站</button></div></header>
+    <header class="page-header"><div><h1>独立站</h1><p>创建、预览并发布属于你的品牌网站</p></div><div class="header-actions"><button class="btn secondary" type="button" @click="refreshAll"><Icon name="refresh-cw" /> 刷新</button><button class="btn primary" type="button" :disabled="publishStarting || publishBusy" @click="publish">{{ publishStarting ? '正在检查…' : '发布网站' }}</button></div></header>
     <div class="connections" aria-label="账号连接">
       <div class="connection"><button v-if="!connected && !authorized" class="btn secondary" type="button" :disabled="busy" @click="connect"><Icon name="plus" /> {{ busy ? '正在连接 GitHub' : '连接 GitHub' }}</button><template v-else><span class="connection-status"><span class="dot" /> GitHub · {{ login }} · {{ connected ? '已连接' : '待完成安装' }}</span><button v-if="installUrl" class="text-button" type="button" @click="openInstall">安装 GitHub App</button><button class="text-button" type="button" @click="disconnect">断开</button></template></div>
       <div class="connection"><button v-if="!cfConnected" class="btn secondary" type="button" :disabled="cfBusy" @click="connectCloudflare"><Icon name="plus" /> {{ cfBusy ? '正在连接 Cloudflare' : '连接 Cloudflare' }}</button><span v-else class="connection-status" :title="cfAccountId"><span class="dot" /> Cloudflare · {{ cfAccountName }} · 已连接</span><button v-if="cfConnected && cfAccounts.length > 1" class="text-button" type="button" @click="cfChoose = !cfChoose">切换账号</button><button v-if="cfAuthorized" class="text-button" type="button" @click="disconnectCloudflare">断开</button></div>
@@ -259,6 +362,16 @@ onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; window.removeEvent
     <p v-if="cfMessage" class="notice" role="status">{{ cfMessage }}</p>
     <p v-if="message" class="notice" role="status">{{ message }}</p>
     <p v-if="siteMessage" class="notice" role="status">{{ siteMessage }}</p>
+    <section v-if="publishOpen" class="publish-panel" aria-label="发布准备">
+      <div class="section-header"><div><h2>发布准备 · 选择 GitHub 仓库</h2><p>选择网站源码的目标仓库和生产分支。当前步骤不会上传站点或发布网站。</p></div><button class="text-button" type="button" :disabled="publishBusy" @click="publishOpen = false">关闭</button></div>
+      <p v-if="publishError" class="notice" role="alert">{{ publishError }}</p>
+      <div class="site-actions"><input v-model="repoSearch" class="local-input" placeholder="搜索已授权的仓库" aria-label="搜索仓库" /><button class="btn secondary" type="button" :disabled="publishBusy" @click="loadRepositories">刷新仓库</button><button class="btn secondary" type="button" :disabled="publishBusy" @click="createRepoOpen = !createRepoOpen">创建个人仓库</button><button class="text-button" type="button" @click="openGithubNewRepository">在 GitHub 创建</button><button class="text-button" type="button" @click="openGithubInstallations">管理仓库授权</button></div>
+      <div v-if="createRepoOpen" class="inline-box"><strong>创建 {{ login }} 的个人仓库</strong><p>将在 GitHub 创建仓库并用 README 初始化分支；不会上传站点。即使仓库为私有，网站发布后仍可能公开访问。</p><div class="site-actions"><input v-model="newRepoName" class="local-input" placeholder="仓库名称" aria-label="新仓库名称" /><label><input v-model="newRepoPrivate" type="checkbox" /> 私有仓库</label><button class="btn primary" type="button" :disabled="publishBusy || !newRepoName.trim()" @click="createRepository">确认创建</button><button class="btn secondary" type="button" :disabled="publishBusy" @click="createRepoOpen = false">取消</button></div></div>
+      <p v-if="publishBusy">正在读取 GitHub，请稍候…</p>
+      <p v-else-if="!filteredRepositories.length">没有找到已授权的仓库。请在 GitHub 创建仓库，或调整 FTCS GitHub App 的仓库授权后刷新。</p>
+      <div v-if="filteredRepositories.length" class="repo-list"><button v-for="repo in filteredRepositories" :key="repo.id" type="button" class="repo-item" :class="{ selected: selectedRepository === repo.id }" :disabled="publishBusy" @click="chooseRepository(repo.id)"><span>{{ repo.fullName }} · {{ repo.private ? '私有' : '公开' }}</span><span>{{ repo.writeAccess === 'yes' ? '仓库权限允许写入' : repo.writeAccess === 'no' ? '无写入权限' : '写入权限待确认' }}</span></button></div>
+      <div v-if="chosenRepository" class="inline-box"><strong>{{ chosenRepository.fullName }}</strong><p v-if="chosenRepository.writeAccess !== 'yes'">当前无法确认仓库可写。请检查 GitHub 用户权限以及 FTCS App 的 Contents 写入权限和仓库授权。</p><div v-if="branches.length" class="site-actions"><label for="site-branch">生产分支</label><select id="site-branch" v-model="selectedBranch" class="local-input"><option value="" disabled>请选择分支</option><option v-for="branch in branches" :key="branch.name" :value="branch.name">{{ branch.name }}{{ branch.protected ? '（受保护）' : '' }}</option></select></div><p v-if="chosenBranch?.protected">该分支受保护，后续提交可能需要额外权限或通过 GitHub 审核。</p><p v-if="!branches.length && !publishBusy">没有可选分支时，请先在 GitHub 初始化仓库。</p><p>仓库选择仅用于本次准备，源码提交和 Cloudflare 部署将在后续步骤提供。</p></div>
+    </section>
     <section class="site-card">
       <div class="site-card-title"><div class="site-icon"><Icon name="globe" :size="20" /></div><div><h2>工作区独立站</h2><p>一个工作区对应一个全局站点</p></div><span class="badge">{{ siteLabel }}</span></div>
       <div class="site-details"><div><span>线上地址</span><strong>尚未发布</strong></div><div><span>最近发布</span><strong>—</strong></div><div><span>本地站点</span><strong>{{ siteLabel }}</strong></div></div>
@@ -306,4 +419,5 @@ onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; window.removeEvent
 .page-header,.section-header{justify-content:space-between;gap:16px}.page-header h1{font-size:24px;margin:0 0 6px}.page-header p,.section p,.site-card-title p,.auth-panel p{color:var(--text-secondary);font-size:12px;margin:4px 0 0}.header-actions,.connections,.auth-actions,.connection{gap:10px}.connections{margin:24px 0;flex-wrap:wrap}.context{color:var(--text-muted);font-size:12px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}.btn:disabled{opacity:.5;cursor:not-allowed}.secondary{color:var(--text);background:var(--bg-elevated);border:1px solid var(--border)}.primary{color:white;background:var(--accent);border:1px solid var(--accent)}.text-button{color:var(--accent);background:none;border:0;cursor:pointer;font-size:12px}.connection-status{font-size:12px;color:var(--text);padding:8px 10px;border:1px solid var(--border);border-radius:6px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--success);margin-right:4px}.site-card,.auth-panel,.empty-record{border:1px solid var(--border);background:var(--bg-panel);border-radius:8px}.site-card-title{padding:18px 20px;gap:12px;border-bottom:1px solid var(--border)}.site-card-title h2,.section h2{font-size:15px;margin:0}.site-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:8px;color:var(--accent);background:var(--accent-muted)}.badge{margin-left:auto;color:var(--text-secondary);background:var(--bg-hover);border-radius:5px;padding:5px 8px;font-size:11px}.site-details{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:20px}.site-details div{display:grid;gap:8px;font-size:12px}.site-details span{color:var(--text-secondary)}.site-details strong{font-weight:500}.section{margin-top:28px}.section-header{margin-bottom:14px}.empty-preview{height:200px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text-secondary)}.empty-preview strong{color:var(--text);font-size:13px}.empty-record{padding:24px;text-align:center;color:var(--text-secondary);font-size:12px}.auth-panel{padding:16px;margin-bottom:16px}.auth-actions{margin-top:14px;flex-wrap:wrap}.auth-actions code{font-size:18px;letter-spacing:.1em;color:var(--text)}.notice{margin:0 0 16px;color:var(--text-secondary);font-size:12px}@media(max-width:700px){.site-page{padding:24px 18px}.page-header{align-items:flex-start}.site-details{grid-template-columns:1fr}.context{width:100%}}
 .site-local{border-top:1px solid var(--border);padding:16px 20px;font-size:12px;color:var(--text-secondary)}.site-local p{margin:0 0 8px}.site-path{overflow-wrap:anywhere}.site-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.recreate-confirm{margin-top:14px;padding:12px;background:var(--bg-hover);border-radius:6px}
 .local-panel{border:1px solid var(--border);background:var(--bg-panel);border-radius:8px;padding:4px 20px 18px;font-size:12px}.local-row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid var(--border)}.local-row .site-actions{margin:0}.local-row p,.inline-box p{margin-top:6px;color:var(--text-secondary);overflow-wrap:anywhere}.inline-box{margin-top:12px;padding:14px;border-radius:6px;background:var(--bg-hover)}.local-input{min-width:220px;flex:1;border:1px solid var(--border);border-radius:6px;background:var(--bg-elevated);color:var(--text);padding:8px}.local-panel details{margin-top:12px;color:var(--text-secondary)}.local-panel summary{cursor:pointer}.local-panel pre{max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg-hover);padding:10px;border-radius:6px;font-size:11px}
+.publish-panel{margin:0 0 20px;padding:20px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);font-size:12px}.publish-panel h2{font-size:15px;margin:0}.publish-panel p{color:var(--text-secondary)}.repo-list{display:grid;gap:6px;max-height:260px;overflow-y:auto;margin-top:14px}.repo-item{display:flex;justify-content:space-between;gap:12px;text-align:left;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text);border-radius:6px;padding:10px;cursor:pointer}.repo-item.selected{border-color:var(--accent);background:var(--accent-muted)}.repo-item:disabled{opacity:.6;cursor:wait}
 </style>

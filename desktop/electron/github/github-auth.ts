@@ -64,6 +64,16 @@ export function getGithubState(): Promise<GithubState> {
   if (!statePromise) statePromise = checkGithubState().finally(() => { statePromise = null })
   return statePromise
 }
+/** Main-process only. Never send this token to a renderer. */
+export async function getGithubAccessToken(): Promise<string> {
+  const current = generation
+  const state = await getGithubState()
+  if (current !== generation) throw new Error('GitHub 授权已变化，请重新检查。')
+  if (!state.connected) throw new Error(state.message || '请先连接 GitHub 并安装 FTCS GitHub App。')
+  const tokens = readTokens()
+  if (!tokens) throw new Error('GitHub 授权不可用，请重新连接。')
+  return tokens.accessToken
+}
 async function checkGithubState(): Promise<GithubState> {
   const current = generation
   const saved = readTokens()

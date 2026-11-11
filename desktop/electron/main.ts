@@ -1,5 +1,6 @@
 import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount } from './cloudflare/cloudflare-auth'
-import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub } from './github/github-auth'
+import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub, getGithubAccessToken } from './github/github-auth'
+import { GithubRepositories } from './github/github-repositories'
 import { adoptSite, createSite, getSiteSnapshot } from './site/site-project'
 import { SiteRuntime, type RunKind } from './site/site-runtime'
 import { resolveConfiguredNode } from './runtime/node-paths'
@@ -718,6 +719,19 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.CLOUDFLARE_SELECT_ACCOUNT, (_event, accountId: unknown) => selectCloudflareAccount(accountId))
   ipcMain.handle(IPC.CLOUDFLARE_DISCONNECT, () => disconnectCloudflare())
   ipcMain.handle(IPC.GITHUB_GET_STATE, () => getGithubState())
+  const githubRepositories = new GithubRepositories(getGithubAccessToken)
+  ipcMain.handle(IPC.GITHUB_REPOSITORIES, async (_event, root: unknown) => {
+    try { currentSiteWorkspace(root); const repositories = await githubRepositories.list(); currentSiteWorkspace(root); return { ok: true, repositories } }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : '无法读取仓库。' } }
+  })
+  ipcMain.handle(IPC.GITHUB_BRANCHES, async (_event, root: unknown, id: unknown) => {
+    try { currentSiteWorkspace(root); const branches = await githubRepositories.branches(id as number); currentSiteWorkspace(root); return { ok: true, branches } }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : '无法读取分支。' } }
+  })
+  ipcMain.handle(IPC.GITHUB_CREATE_REPOSITORY, async (_event, root: unknown, name: unknown, privateRepo: unknown) => {
+    try { currentSiteWorkspace(root); if (getSiteSnapshot(getWorkspaceRoot()).status !== 'ready') throw new Error('请先创建或恢复本地站点。'); const repository = await githubRepositories.create(name as string, privateRepo as boolean); return { ok: true, repository } }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : '无法创建仓库。' } }
+  })
   ipcMain.handle(IPC.GITHUB_START_AUTH, () => startGithubAuth())
   ipcMain.handle(IPC.GITHUB_POLL_AUTH, () => pollGithubAuth())
   ipcMain.handle(IPC.GITHUB_CANCEL_AUTH, () => cancelGithubAuth())
