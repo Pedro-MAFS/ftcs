@@ -20,11 +20,14 @@ export class SiteRuntime {
   private runs: Record<RunKind, SiteRun> = { install: emptyRun(), preview: emptyRun(), build: emptyRun() }
   private active: Partial<Record<RunKind, Active>> = {}
   private installFingerprint = ''
+  private lastResolvedNode = ''
   private configuredNode: () => { exe: string; source: string } | null
+  private findAvailableNode: () => Promise<{ exe: string; source: string } | null>
   private currentRoot: () => string
   private publish: (snapshot: SiteRuntimeSnapshot) => void
-  constructor(configuredNode: () => { exe: string; source: string } | null, currentRoot: () => string, publish: (snapshot: SiteRuntimeSnapshot) => void) {
+  constructor(configuredNode: () => { exe: string; source: string } | null, currentRoot: () => string, publish: (snapshot: SiteRuntimeSnapshot) => void, findAvailableNode: () => Promise<{ exe: string; source: string } | null> = async () => null) {
     this.configuredNode = configuredNode
+    this.findAvailableNode = findAvailableNode
     this.currentRoot = currentRoot
     this.publish = publish
   }
@@ -38,6 +41,7 @@ export class SiteRuntime {
       this.root = normalized
       this.runs = { install: emptyRun(), preview: emptyRun(), build: emptyRun() }
       this.installFingerprint = ''
+      this.lastResolvedNode = ''
     }
     return normalized
   }
@@ -62,7 +66,7 @@ export class SiteRuntime {
       }
       fs.statSync(path.join(project, 'node_modules'))
       try { hash.update(fs.readFileSync(path.join(project, 'node_modules', '.package-lock.json'))) } catch { hash.update('no-installed-lock') }
-      const node = this.configuredNode()?.exe || ''
+      const node = this.configuredNode()?.exe || this.lastResolvedNode
       hash.update(node)
       try { hash.update(String(fs.statSync(node).mtimeMs)) } catch { hash.update('missing-node') }
       return hash.digest('hex')
@@ -123,8 +127,13 @@ export class SiteRuntime {
   }
   private async runtime(root: string, run: Active, kind: RunKind): Promise<NodeRuntime> {
     this.assertCurrent(root, run)
-    const runtime = await resolveSiteNode(this.configuredNode(), this.project(root))
+    // Prefer the desktop-managed runtime. If none is configured, reuse FTCS's
+    // existing resolver, which handles private binding and installed Node versions.
+    const node = this.configuredNode() ?? await this.findAvailableNode()
     this.assertCurrent(root, run)
+    const runtime = await resolveSiteNode(node, this.project(root))
+    this.assertCurrent(root, run)
+    this.lastResolvedNode = runtime.exe
     this.update(kind, run, { node: `${runtime.version} · npm ${runtime.npmVersion} · ${runtime.source}` })
     return runtime
   }

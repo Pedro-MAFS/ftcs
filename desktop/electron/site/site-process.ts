@@ -20,7 +20,7 @@ export function siteEnv(nodeExe: string): NodeJS.ProcessEnv {
 }
 
 export async function resolveSiteNode(node: { exe: string; source: string } | null, projectPath: string): Promise<NodeRuntime> {
-  if (!node) throw new Error('尚未配置 Node，请先在环境设置中准备 Node。')
+  if (!node) throw new Error('未找到可用的 Node，请在 FTCS 运行环境设置中检查或准备 Node。')
   const exe = path.resolve(node.exe)
   const dir = path.dirname(exe)
   const candidates = [path.join(dir, 'node_modules/npm/bin/npm-cli.js'), path.resolve(dir, '../lib/node_modules/npm/bin/npm-cli.js')]

@@ -160,6 +160,55 @@ test('limits preview addresses and does not inherit FTCS credentials', () => {
   finally { delete process.env.FTCS_TEST_SECRET }
 })
 
+test('uses the existing FTCS Node resolver when no private runtime is configured', { timeout: 30000 }, async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-site-node-fallback-'))
+  let fallbackCalls = 0
+  const runtime = new SiteRuntime(() => null, () => root, () => {}, async () => {
+    fallbackCalls++
+    return { exe: process.execPath, source: 'registry InstallPath' }
+  })
+  try {
+    createSite(root, path.resolve('site-template'))
+    const project = path.join(root, 'website')
+    fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({ name: 'test-site', version: '1.0.0', scripts: { dev: 'node -v', build: 'node build.cjs' } }))
+    fs.writeFileSync(path.join(project, 'build.cjs'), "const f=require('fs');f.mkdirSync('dist',{recursive:true});f.writeFileSync('dist/index.html',process.execPath)")
+    runtime.build(root)
+    await until(() => ['succeeded', 'failed'].includes(runtime.snapshot(root).build.state))
+    const result = runtime.snapshot(root).build
+    assert.equal(result.state, 'succeeded', `${result.message}\n${result.log}`)
+    assert.match(result.node || '', /registry InstallPath/)
+    assert.equal(fs.readFileSync(path.join(project, 'dist/index.html'), 'utf8'), process.execPath)
+    assert.equal(fallbackCalls, 1)
+  } finally { await runtime.shutdown(); fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('configured Node takes precedence and a missing fallback reports a clear error', { timeout: 30000 }, async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-site-node-priority-'))
+  let fallbackCalls = 0
+  const runtime = new SiteRuntime(() => ({ exe: process.execPath, source: 'private' }), () => root, () => {}, async () => {
+    fallbackCalls++
+    throw new Error('不应调用回退解析')
+  })
+  try {
+    createSite(root, path.resolve('site-template'))
+    const project = path.join(root, 'website')
+    fs.writeFileSync(path.join(project, 'package.json'), JSON.stringify({ name: 'test-site', version: '1.0.0', scripts: { dev: 'node -v', build: 'node build.cjs' } }))
+    fs.writeFileSync(path.join(project, 'build.cjs'), "const f=require('fs');f.mkdirSync('dist',{recursive:true});f.writeFileSync('dist/index.html','ok')")
+    runtime.build(root)
+    await until(() => ['succeeded', 'failed'].includes(runtime.snapshot(root).build.state))
+    assert.equal(runtime.snapshot(root).build.state, 'succeeded')
+    assert.match(runtime.snapshot(root).build.node || '', /private/)
+    assert.equal(fallbackCalls, 0)
+
+    const missing = new SiteRuntime(() => null, () => root, () => {}, async () => null)
+    try {
+      missing.build(root)
+      await until(() => missing.snapshot(root).build.state === 'failed')
+      assert.match(missing.snapshot(root).build.message, /未找到可用的 Node/)
+    } finally { await missing.shutdown() }
+  } finally { await runtime.shutdown(); fs.rmSync(root, { recursive: true, force: true }) }
+})
+
 test('default template installs from its lockfile, previews and builds', { timeout: 180000, skip: process.env.FTCS_SITE_FULL_TEST !== '1' }, async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-site-full-'))
   const runtime = new SiteRuntime(() => ({ exe: process.execPath, source: 'test' }), () => root, () => {})

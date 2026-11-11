@@ -3,6 +3,7 @@ import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disc
 import { adoptSite, createSite, getSiteSnapshot } from './site/site-project'
 import { SiteRuntime, type RunKind } from './site/site-runtime'
 import { resolveConfiguredNode } from './runtime/node-paths'
+import { resolveBestNode } from './runtime/resolve-node'
 import { openSitePreviewTab } from './browser-runtime/builtin-browser-window'
 import { clearVerifiedPreviewTargets } from './browser-runtime/cdp-filter'
 import { markExplorationRunFailed } from './exploration/exploration-writer'
@@ -261,7 +262,7 @@ let mainWindow: BrowserWindow | null = null
 const siteRuntime = new SiteRuntime(resolveConfiguredNode, getWorkspaceRoot, snapshot => {
   if (snapshot.preview.state !== 'running') clearVerifiedPreviewTargets()
   broadcastToWindows(IPC.SITE_RUNTIME_EVENT, snapshot)
-})
+}, async () => (await resolveBestNode()).bestOk)
 let sitePreviewTab: string | undefined
 let runtime: OpenCodeRuntime | null = null
 let agentRunner: AgentRunController | null = null
