@@ -57,4 +57,19 @@ test('creates a GitHub-backed project with the confirmed target and build settin
   assert.equal(calls, 0)
   assert.equal((await api().create(account, 'my-site', { id: 1, owner: 'owner', name: 'site', branch: 'main' }, 'dist', '24')).name, 'my-site')
 })
+test('surfaces Cloudflare error codes and messages while hiding credentials', async () => {
+  globalThis.fetch = async () => Response.json({ success: false, errors: [{ code: 8000007, message: 'GitHub access denied for secret; Bearer other-token' }] }, { status: 400 })
+  await assert.rejects(api().create(account, 'my-site', { id: 1, owner: 'owner', name: 'site', branch: 'main' }, 'dist', '24'), error => {
+    assert.ok(error instanceof Error)
+    assert.match(error.message, /HTTP 400.*代码 8000007.*GitHub access denied/)
+    assert.doesNotMatch(error.message, /secret|other-token/)
+    return true
+  })
+})
+test('handles non-JSON errors and success=false responses', async () => {
+  globalThis.fetch = async () => new Response('Bad Request', { status: 400 })
+  await assert.rejects(api().list(account), /HTTP 400/)
+  globalThis.fetch = async () => Response.json({ success: false, errors: [{ code: 1234, message: 'request rejected' }] })
+  await assert.rejects(api().list(account), /HTTP 200.*代码 1234.*request rejected/)
+})
 test.after(() => { globalThis.fetch = previous })

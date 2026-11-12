@@ -1,4 +1,5 @@
 type Credentials = { accessToken: string; accountId: string }
+type CloudflareResponse<T> = { success?: boolean; result?: T; result_info?: { total_pages?: number }; errors?: Array<{ code?: unknown; message?: unknown }> }
 type Deployment = { id?: string; environment?: string; url?: string; latest_stage?: { name?: string; status?: string }; deployment_trigger?: { metadata?: { commit_hash?: string; branch?: string } } }
 type Project = { name?: string; subdomain?: string; production_branch?: string; source?: { type?: string; config?: { owner?: string; repo_name?: string; repo_id?: string | number; production_branch?: string; production_deployments_enabled?: boolean } }; build_config?: { build_command?: string; destination_dir?: string; root_dir?: string }; canonical_deployment?: Deployment }
 export type PagesProject = { name: string; subdomain: string; owner: string; repo: string; repoId: string; branch: string; buildCommand: string; output: string; rootDir: string; autoDeploy: boolean | null; type: string }
@@ -19,10 +20,19 @@ export class CloudflarePages {
     const credentials = await this.credentials()
     if (credentials.accountId !== accountId) throw new Error('Cloudflare 账号已变化，请重新选择项目。')
     const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/pages${suffix}`, { ...init, headers: { Authorization: `Bearer ${credentials.accessToken}`, Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}) }, signal: AbortSignal.timeout(15000), redirect: 'error' })
-    if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? 'Cloudflare 授权失效或缺少 Pages 权限。' : `Cloudflare 请求失败（HTTP ${response.status}）。`)
-    const data = await response.json() as { success?: boolean; result: T; result_info?: { total_pages?: number } }
-    if (!data.success || !data.result) throw new Error('Cloudflare 返回的数据不完整。')
-    return data
+    let data: CloudflareResponse<T> | undefined
+    try { data = await response.json() as CloudflareResponse<T> } catch { /* Some error responses are not JSON. */ }
+    if (!response.ok || data?.success === false) {
+      const details = Array.isArray(data?.errors) ? data.errors.slice(0, 3).map(error => {
+        const code = typeof error?.code === 'number' && Number.isSafeInteger(error.code) ? `代码 ${error.code}` : ''
+        const message = typeof error?.message === 'string' ? error.message.split(credentials.accessToken).join('[已隐藏]').replace(/\bBearer\s+\S+/gi, 'Bearer [已隐藏]').replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 300).trim() : ''
+        return [code, message].filter(Boolean).join('：')
+      }).filter(Boolean).join('；') : ''
+      const summary = response.status === 401 || response.status === 403 ? 'Cloudflare 授权无效或缺少所需权限' : 'Cloudflare 请求失败'
+      throw new Error(`${summary}（HTTP ${response.status}）${details ? `：${details}` : '。'}`)
+    }
+    if (!data?.success || !data.result) throw new Error('Cloudflare 返回的数据不完整。')
+    return { result: data.result, result_info: data.result_info }
   }
   private parse(project: Project): PagesProject {
     const config = project.source?.config
