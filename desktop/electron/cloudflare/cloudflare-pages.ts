@@ -1,5 +1,13 @@
 type Credentials = { accessToken: string; accountId: string }
-type CloudflareResponse<T> = { success?: boolean; result?: T; result_info?: { total_pages?: number }; errors?: Array<{ code?: unknown; message?: unknown }> }
+type PageInfo = { total_pages?: number; per_page?: number }
+type CloudflareResponse<T> = { success?: boolean; result?: T; result_info?: PageInfo; errors?: Array<{ code?: unknown; message?: unknown }> }
+// Cloudflare's Pages API examples use 20; use the same size for both list endpoints.
+const PAGE_SIZE = 20
+function lastPage(info: PageInfo | undefined, page: number, count: number): boolean {
+  if (typeof info?.total_pages === 'number' && Number.isInteger(info.total_pages) && info.total_pages >= 0) return page >= info.total_pages
+  const actualSize = typeof info?.per_page === 'number' && Number.isInteger(info.per_page) && info.per_page > 0 ? info.per_page : PAGE_SIZE
+  return count < actualSize
+}
 type Deployment = { id?: string; environment?: string; url?: string; latest_stage?: { name?: string; status?: string }; deployment_trigger?: { metadata?: { commit_hash?: string; branch?: string } } }
 type Project = { name?: string; subdomain?: string; production_branch?: string; source?: { type?: string; config?: { owner?: string; repo_name?: string; repo_id?: string | number; production_branch?: string; production_deployments_enabled?: boolean } }; build_config?: { build_command?: string; destination_dir?: string; root_dir?: string }; canonical_deployment?: Deployment }
 export type PagesProject = { name: string; subdomain: string; owner: string; repo: string; repoId: string; branch: string; buildCommand: string; output: string; rootDir: string; autoDeploy: boolean | null; type: string }
@@ -16,7 +24,7 @@ export function verifyPagesProject(project: PagesProject, expected: { id: number
 export class CloudflarePages {
   private readonly credentials: () => Promise<Credentials>
   constructor(credentials: () => Promise<Credentials>) { this.credentials = credentials }
-  private async request<T>(accountId: string, suffix: string, init?: RequestInit): Promise<{ result: T; result_info?: { total_pages?: number } }> {
+  private async request<T>(accountId: string, suffix: string, init?: RequestInit): Promise<{ result: T; result_info?: PageInfo }> {
     const credentials = await this.credentials()
     if (credentials.accountId !== accountId) throw new Error('Cloudflare 账号已变化，请重新选择项目。')
     const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/pages${suffix}`, { ...init, headers: { Authorization: `Bearer ${credentials.accessToken}`, Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}) }, signal: AbortSignal.timeout(15000), redirect: 'error' })
@@ -42,11 +50,10 @@ export class CloudflarePages {
   async list(accountId: string): Promise<PagesProject[]> {
     const result: PagesProject[] = []
     for (let page = 1; page <= 100; page++) {
-      const data = await this.request<Project[]>(accountId, `/projects?per_page=100&page=${page}`)
+      const data = await this.request<Project[]>(accountId, `/projects?per_page=${PAGE_SIZE}&page=${page}`)
       if (!Array.isArray(data.result)) throw new Error('Cloudflare 项目列表无效。')
       result.push(...data.result.map(project => this.parse(project)))
-      const total = data.result_info?.total_pages
-      if (typeof total === 'number' ? page >= total : data.result.length < 100) return result
+      if (lastPage(data.result_info, page, data.result.length)) return result
     }
     throw new Error('Cloudflare 项目过多，无法完整读取。')
   }
@@ -65,11 +72,10 @@ export class CloudflarePages {
     const { project, raw } = await this.project(accountId, name)
     const matches: Deployment[] = []
     for (let page = 1; page <= 20; page++) {
-      const data = await this.request<Deployment[]>(accountId, `/projects/${encodeURIComponent(name)}/deployments?per_page=100&page=${page}`)
+      const data = await this.request<Deployment[]>(accountId, `/projects/${encodeURIComponent(name)}/deployments?per_page=${PAGE_SIZE}&page=${page}`)
       if (!Array.isArray(data.result)) throw new Error('Cloudflare 部署列表无效。')
       matches.push(...data.result.filter(item => item.environment === 'production' && item.deployment_trigger?.metadata?.commit_hash === sha && item.deployment_trigger.metadata.branch === branch))
-      const total = data.result_info?.total_pages
-      if (matches.length || (typeof total === 'number' ? page >= total : data.result.length < 100)) break
+      if (matches.length || lastPage(data.result_info, page, data.result.length)) break
       if (page === 20) throw new Error('Cloudflare 部署记录过多，请到控制台查看。')
     }
     const latest = matches[0]

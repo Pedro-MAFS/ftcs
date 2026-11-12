@@ -39,6 +39,32 @@ test('does not query a different Cloudflare account', async () => {
   await assert.rejects(api().list('b'.repeat(32)), /账号已变化/)
   assert.equal(called, false)
 })
+test('uses Pages-compatible list size and reads all project pages', async () => {
+  const seen: number[] = []
+  globalThis.fetch = async input => {
+    const url = new URL(String(input))
+    assert.equal(url.searchParams.get('per_page'), '20')
+    const page = Number(url.searchParams.get('page')); seen.push(page)
+    return Response.json({ success: true, result: page === 1 ? Array.from({ length: 20 }, (_, i) => ({ ...project, name: `site-${i}` })) : [{ ...project, name: 'site-last' }], result_info: { total_pages: 2, per_page: 20 } })
+  }
+  const projects = await api().list(account)
+  assert.equal(projects.length, 21)
+  assert.equal(projects.at(-1)?.name, 'site-last')
+  assert.deepEqual(seen, [1, 2])
+})
+test('finds a matching deployment on a later page using the reported page size', async () => {
+  const seen: number[] = []
+  globalThis.fetch = async input => {
+    const url = new URL(String(input))
+    if (!url.pathname.endsWith('/deployments')) return Response.json({ success: true, result: project })
+    assert.equal(url.searchParams.get('per_page'), '20')
+    const page = Number(url.searchParams.get('page')); seen.push(page)
+    return Response.json({ success: true, result: page === 1 ? [deployment('old', 'a'.repeat(40))] : [deployment('current', sha)], result_info: { per_page: 1 } })
+  }
+  const result = await api().status(account, 'my-site', 'main', sha)
+  assert.equal(result.state, 'success')
+  assert.deepEqual(seen, [1, 2])
+})
 test('creates a GitHub-backed project with the confirmed target and build settings', async () => {
   let calls = 0
   globalThis.fetch = async (_input, init) => {
