@@ -2,10 +2,10 @@ interface CloudflareState { connected: boolean; authorized?: boolean; pending?: 
 interface SiteSnapshot { status: 'not_created' | 'empty' | 'existing' | 'ready' | 'missing' | 'invalid' | 'error'; workspaceRoot: string; projectPath: string; message: string; dependencies: 'missing' | 'unknown' }
 interface SiteRun { id: string; state: 'idle' | 'starting' | 'running' | 'address_pending' | 'stopping' | 'succeeded' | 'failed' | 'cancelled'; message: string; log: string; url?: string; startedAt?: string; finishedAt?: string; node?: string; output?: string }
 interface SiteRuntimeSnapshot { workspaceRoot: string; sequence: number; outputDir: string | null; dependencies: 'missing' | 'unknown' | 'not_required'; install: SiteRun; preview: SiteRun; build: SiteRun }
-interface SiteRelease { version: 1; createdRepositories: string[]; target?: { id: number; owner: string; name: string; fullName: string; branch: string; private: boolean }; commitSha?: string; snapshotHash?: string; pending?: { target: { id: number; fullName: string; branch: string }; base: string }; pendingPages?: { accountId: string; project: string; commitSha: string }; cloudflare?: { accountId: string; project: string }; history?: Array<{ target: { fullName: string; branch: string }; commitSha: string; at: string }>; lastOnline?: { commitSha: string; project: string; url: string; confirmedAt: string } }
+interface SiteRelease { version: 1; createdRepositories: string[]; target?: { id: number; owner: string; name: string; fullName: string; branch: string; private: boolean }; commitSha?: string; snapshotHash?: string; pending?: { target: { id: number; fullName: string; branch: string }; base: string }; pendingPages?: { accountId: string; project: string; commitSha: string }; pendingDeployment?: { accountId: string; project: string; commitSha: string; deploymentId?: string; requestedAt: string }; buildNotice?: string; cloudflare?: { accountId: string; project: string }; history?: Array<{ target: { fullName: string; branch: string }; commitSha: string; at: string }>; lastOnline?: { commitSha: string; project: string; url: string; confirmedAt: string } }
 interface SitePublishPreview { id: string; target: { fullName: string; branch: string; private: boolean }; head: string; hash: string; files: Array<{ path: string; size: number; change: '新增' | '修改' | '未变化' }>; deleted: string[]; log: string; noChanges: boolean }
 interface PagesProject { name: string; subdomain: string; owner: string; repo: string; repoId: string; branch: string; buildCommand: string; output: string; rootDir: string; autoDeploy: boolean | null; type: string }
-interface PagesStatus { state: 'waiting' | 'building' | 'success' | 'failed' | 'unknown'; message: string; deploymentId?: string; deploymentUrl?: string; productionUrl?: string; productionCurrent?: boolean }
+interface PagesStatus { state: 'waiting' | 'building' | 'success' | 'failed' | 'skipped' | 'unknown'; message: string; deploymentId?: string; deploymentUrl?: string; productionUrl?: string; productionCurrent?: boolean }
 type SiteResult<T> = { ok: true; value: T } | { ok: false; message: string }
 import type { AppStatus, OpenCodeActionResult } from './app'
 import type { AuthActionResult, AuthSessionSnapshot } from './auth'
@@ -983,6 +983,8 @@ declare global {
       clearPendingSitePages: (root: string) => Promise<SiteResult<SiteRelease>>
       bindSitePages: (root: string, name: string) => Promise<SiteResult<SiteRelease>>
       getSitePagesStatus: (root: string) => Promise<SiteResult<PagesStatus>>
+      startSiteDeployment: (root: string) => Promise<SiteResult<SiteRelease>>
+      clearSitePendingDeployment: (root: string) => Promise<SiteResult<SiteRelease>>
       listGithubRepositories: (root: string) => Promise<{ ok: boolean; repositories?: Array<{ id: number; owner: string; name: string; fullName: string; private: boolean; defaultBranch: string; writeAccess: 'yes' | 'no' | 'unknown'; contentsAccess: 'write' | 'read' | 'none' | 'unknown' }>; message?: string }>
       listGithubBranches: (root: string, id: number) => Promise<{ ok: boolean; branches?: Array<{ name: string; protected: boolean }>; message?: string }>
       createGithubRepository: (root: string, name: string, privateRepo: boolean) => Promise<{ ok: boolean; repository?: { fullName: string }; message?: string }>

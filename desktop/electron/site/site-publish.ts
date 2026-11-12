@@ -7,7 +7,7 @@ import { buildSiteSnapshot, collectSiteSnapshot, type PublishSnapshot } from './
 
 type Target = { id: number; owner: string; name: string; fullName: string; branch: string; private: boolean }
 type RecordedFile = { path: string; sha: string; mode: string }
-export type ReleaseRecord = { version: 1; createdRepositories: string[]; target?: Target; commitSha?: string; snapshotHash?: string; outputDir?: string; pending?: { target: Target; base: string; files: RecordedFile[]; snapshotHash?: string; outputDir?: string }; pendingPages?: { accountId: string; project: string; commitSha: string }; cloudflare?: { accountId: string; project: string }; history?: Array<{ target: Target; commitSha: string; at: string }>; lastOnline?: { target: Target; commitSha: string; accountId: string; project: string; deploymentId: string; url: string; confirmedAt: string } }
+export type ReleaseRecord = { version: 1; createdRepositories: string[]; target?: Target; commitSha?: string; snapshotHash?: string; outputDir?: string; pending?: { target: Target; base: string; files: RecordedFile[]; snapshotHash?: string; outputDir?: string }; pendingPages?: { accountId: string; project: string; commitSha: string }; pendingDeployment?: { accountId: string; project: string; commitSha: string; requestedAt: string; deploymentId?: string }; cloudflare?: { accountId: string; project: string }; history?: Array<{ target: Target; commitSha: string; at: string }>; lastOnline?: { target: Target; commitSha: string; accountId: string; project: string; deploymentId: string; url: string; confirmedAt: string } }
 export type PublishPreview = { id: string; target: Target; head: string; hash: string; files: Array<{ path: string; size: number; change: '新增' | '修改' | '未变化' }>; deleted: string[]; log: string; noChanges: boolean }
 type Ready = { id: string; root: string; repository: GithubRepository; branch: string; head: string; output: string; snapshot: PublishSnapshot; additions: Array<{ path: string; contents: string }>; deletions: Array<{ path: string }> }
 
@@ -88,6 +88,7 @@ export class SitePublish {
       const record = readRelease(root)
       if (record.pending) throw new Error('上一次提交结果待确认，请先检查发布记录。')
       if (record.pendingPages) throw new Error('Cloudflare 项目创建结果待确认，请先检查发布记录。')
+      if (record.pendingDeployment) throw new Error('Cloudflare 构建请求结果待确认，请先检查发布记录。')
       const bound = record.target?.id === repositoryId && record.target.branch === branch && !!record.commitSha
       if (bound && record.commitSha !== remote.head) throw new Error('GitHub 分支已被其他操作修改，请先协调远端内容。')
       const initialReadme = createHash('sha1').update(`blob ${Buffer.byteLength(`# ${remote.repository.name}\n`)}\0# ${remote.repository.name}\n`).digest('hex')
@@ -139,6 +140,7 @@ export class SitePublish {
       const record = readRelease(root)
       if (record.pending) throw new Error('上一次提交结果待确认，请先检查发布记录。')
       if (record.pendingPages) throw new Error('Cloudflare 项目创建结果待确认，请先检查发布记录。')
+      if (record.pendingDeployment) throw new Error('Cloudflare 构建请求结果待确认，请先检查发布记录。')
       const nextTarget = target(remote.repository, ready.branch)
       if (!ready.additions.length && !ready.deletions.length) {
         if (record.target?.id !== nextTarget.id || record.target.branch !== nextTarget.branch) delete record.cloudflare
@@ -187,6 +189,7 @@ export class SitePublish {
     root = this.assertRoot(root)
     const record = readRelease(root)
     if (!record.target || record.target.id !== targetId || record.target.branch !== branch || record.pending || !record.commitSha || record.commitSha !== expectedSha) throw new Error('发布版本已变化，请刷新后重试。')
+    if (record.pendingDeployment && (record.pendingDeployment.accountId !== accountId || record.pendingDeployment.project !== project)) throw new Error('已有 Cloudflare 构建请求待确认，请先检查。')
     record.cloudflare = { accountId, project }
     delete record.pendingPages
     saveRelease(root, record)
@@ -208,6 +211,36 @@ export class SitePublish {
     delete record.pendingPages
     saveRelease(root, record)
     return record
+  }
+  beginDeployment(root: string, sha: string, targetId: number, branch: string, accountId: string, project: string): void {
+    if (this.busy) throw new Error('已有发布操作正在进行。')
+    root = this.assertRoot(root)
+    const record = readRelease(root)
+    if (!record.target || record.target.id !== targetId || record.target.branch !== branch || record.pending || record.pendingPages || record.pendingDeployment || record.commitSha !== sha || record.cloudflare?.accountId !== accountId || record.cloudflare.project !== project) throw new Error('发布目标已变化或已有构建请求待确认，请刷新后重试。')
+    record.pendingDeployment = { accountId, project, commitSha: sha, requestedAt: new Date().toISOString() }
+    saveRelease(root, record)
+  }
+  noteDeployment(root: string, sha: string, accountId: string, project: string, deploymentId: string): void {
+    root = this.assertRoot(root)
+    const record = readRelease(root); const pending = record.pendingDeployment
+    if (!pending || pending.commitSha !== sha || pending.accountId !== accountId || pending.project !== project) throw new Error('构建请求状态已变化，请到 Cloudflare 核对。')
+    pending.deploymentId = deploymentId; saveRelease(root, record)
+  }
+  confirmDeployment(root: string, sha: string, accountId: string, project: string, deploymentId: string, createdAt?: string): void {
+    if (this.busy) return
+    root = this.assertRoot(root)
+    const record = readRelease(root); const pending = record.pendingDeployment
+    if (!pending || pending.commitSha !== sha || pending.accountId !== accountId || pending.project !== project || pending.deploymentId && pending.deploymentId !== deploymentId) return
+    if (!pending.deploymentId) {
+      const created = Date.parse(createdAt || ''), requested = Date.parse(pending.requestedAt)
+      if (!Number.isFinite(created) || !Number.isFinite(requested) || created < requested - 2000) return
+    }
+    delete record.pendingDeployment; saveRelease(root, record)
+  }
+  clearPendingDeployment(root: string): ReleaseRecord {
+    if (this.busy) throw new Error('已有发布操作正在进行。')
+    root = this.assertRoot(root)
+    const record = readRelease(root); delete record.pendingDeployment; saveRelease(root, record); return record
   }
   noteOnline(root: string, expectedSha: string, accountId: string, project: string, deploymentId: string, url: string): void {
     if (this.busy) return

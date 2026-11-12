@@ -16,6 +16,7 @@ registerHooks({ resolve(specifier, context, next) {
 } })
 const { collectSiteSnapshot, buildSiteSnapshot } = await import('./site-publish-snapshot.ts')
 const { SitePublish, readRelease } = await import('./site-publish.ts')
+const { SiteDeployment } = await import('./site-deployment.ts')
 const gitHash = (bytes: Buffer) => createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
 const make = () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-release-test-'))
@@ -147,5 +148,47 @@ test('a README-only repository requires consent and other remote files remain pr
     assert.equal(ready.files.find(item => item.path === 'README.md')?.change, '修改')
     remote = [...remote, { path: 'other.txt', sha: gitHash(Buffer.from('preserve')), mode: '100644' }]
     await assert.rejects(publisher.prepare(root, 1, 'main', true), /已有仓库内容/)
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('starts one Cloudflare build for the verified commit and retains uncertain requests', async () => {
+  const { root } = make()
+  const sha = '1'.repeat(40)
+  const target = { id: 1, owner: 'owner', name: 'site', fullName: 'owner/site', private: true, branch: 'main', defaultBranch: 'main', writeAccess: 'yes' as const, contentsAccess: 'write' as const }
+  const account = 'a'.repeat(32)
+  fs.writeFileSync(path.join(root, '.ftcs/site-release.json'), JSON.stringify({ version: 1, createdRepositories: [], target, commitSha: sha, outputDir: 'dist', cloudflare: { accountId: account, project: 'site-pages' } }))
+  let head = sha, requests = 0, state = 'waiting', fail = false
+  const github = { async tree() { return { repository: target, head, files: [] } } }
+  const pages = {
+    async project() { return { project: {} } },
+    async status() { return { state } },
+    async createDeployment(_account: string, _project: string, branch: string) { requests++; assert.equal(branch, 'main'); if (fail) throw new Error('timeout'); return { id: 'deployment-1', branch, commitSha: sha } },
+  }
+  const publisher = new SitePublish(github as never, async () => null, () => root)
+  const deployer = new SiteDeployment(github as never, pages as never, publisher, () => root, () => {})
+  try {
+    head = '2'.repeat(40)
+    await assert.rejects(deployer.start(root), /分支已变化/)
+    assert.equal(requests, 0)
+    head = sha
+    const started = await deployer.start(root)
+    assert.equal(started.pendingDeployment?.deploymentId, 'deployment-1')
+    await assert.rejects(deployer.start(root), /构建请求状态/)
+    publisher.confirmDeployment(root, sha, account, 'site-pages', 'other-id')
+    assert.ok(readRelease(root).pendingDeployment)
+    publisher.confirmDeployment(root, sha, account, 'site-pages', 'deployment-1')
+    assert.equal(readRelease(root).pendingDeployment, undefined)
+    state = 'building'
+    await deployer.start(root)
+    assert.equal(requests, 1)
+    state = 'waiting'; fail = true
+    await assert.rejects(deployer.start(root), /timeout/)
+    assert.ok(readRelease(root).pendingDeployment)
+    await assert.rejects(deployer.start(root), /构建请求状态/)
+    assert.equal(requests, 2)
+    publisher.confirmDeployment(root, sha, account, 'site-pages', 'old-deployment', '2000-01-01T00:00:00Z')
+    assert.ok(readRelease(root).pendingDeployment)
+    publisher.confirmDeployment(root, sha, account, 'site-pages', 'new-deployment', new Date().toISOString())
+    assert.equal(readRelease(root).pendingDeployment, undefined)
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })

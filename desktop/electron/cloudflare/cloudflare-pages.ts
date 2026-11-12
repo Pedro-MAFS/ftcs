@@ -14,10 +14,10 @@ function lastPage(info: PageInfo | undefined, page: number, count: number): bool
   const actualSize = typeof info?.per_page === 'number' && Number.isInteger(info.per_page) && info.per_page > 0 ? info.per_page : PAGE_SIZE
   return count < actualSize
 }
-type Deployment = { id?: string; environment?: string; url?: string; latest_stage?: { name?: string; status?: string }; deployment_trigger?: { metadata?: { commit_hash?: string; branch?: string } } }
+type Deployment = { id?: string; environment?: string; url?: string; created_on?: string; is_skipped?: boolean; latest_stage?: { name?: string; status?: string }; deployment_trigger?: { metadata?: { commit_hash?: string; branch?: string } } }
 type Project = { name?: string; subdomain?: string; production_branch?: string; source?: { type?: string; config?: { owner?: string; repo_name?: string; repo_id?: string | number; production_branch?: string; production_deployments_enabled?: boolean } }; build_config?: { build_command?: string; destination_dir?: string; root_dir?: string }; canonical_deployment?: Deployment }
 export type PagesProject = { name: string; subdomain: string; owner: string; repo: string; repoId: string; branch: string; buildCommand: string; output: string; rootDir: string; autoDeploy: boolean | null; type: string }
-export type PagesStatus = { state: 'waiting' | 'building' | 'success' | 'failed' | 'unknown'; message: string; deploymentId?: string; deploymentUrl?: string; productionUrl?: string; productionCurrent?: boolean }
+export type PagesStatus = { state: 'waiting' | 'building' | 'success' | 'failed' | 'skipped' | 'unknown'; message: string; deploymentId?: string; deploymentUrl?: string; productionUrl?: string; productionCurrent?: boolean; createdAt?: string }
 
 export function verifyPagesProject(project: PagesProject, expected: { id: number; owner: string; name: string; branch: string; output: string }): void {
   if (project.type !== 'github' || project.owner.toLowerCase() !== expected.owner.toLowerCase() || project.repo.toLowerCase() !== expected.name.toLowerCase() || project.repoId && project.repoId !== String(expected.id)) throw new Error('Cloudflare 项目关联的 GitHub 仓库不匹配，请在控制台调整或选择其他项目。')
@@ -33,7 +33,7 @@ export class CloudflarePages {
   private async request<T>(accountId: string, suffix: string, init?: RequestInit): Promise<{ result: T; result_info?: PageInfo }> {
     const credentials = await this.credentials()
     if (credentials.accountId !== accountId) throw new Error('Cloudflare 账号已变化，请重新选择项目。')
-    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/pages${suffix}`, { ...init, headers: { Authorization: `Bearer ${credentials.accessToken}`, Accept: 'application/json', ...(init?.body ? { 'Content-Type': 'application/json' } : {}) }, signal: AbortSignal.timeout(15000), redirect: 'error' })
+    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/pages${suffix}`, { ...init, headers: { Authorization: `Bearer ${credentials.accessToken}`, Accept: 'application/json', ...(typeof init?.body === 'string' ? { 'Content-Type': 'application/json' } : {}) }, signal: AbortSignal.timeout(15000), redirect: 'error' })
     let data: CloudflareResponse<T> | undefined
     try { data = await response.json() as CloudflareResponse<T> } catch { /* Some error responses are not JSON. */ }
     if (!response.ok || data?.success === false) {
@@ -74,6 +74,16 @@ export class CloudflarePages {
     const data = await inStage('创建 Cloudflare Pages 项目失败', () => this.request<Project>(accountId, '/projects', { method: 'POST', body: JSON.stringify(body) }))
     return this.parse(data.result)
   }
+  async createDeployment(accountId: string, name: string, branch: string): Promise<{ id: string; branch?: string; commitSha?: string }> {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(name) || typeof branch !== 'string' || !branch || branch.length > 255) throw new Error('项目名或分支无效。')
+    // The API builds the branch HEAD. Do not submit a commit_hash as metadata:
+    // it cannot pin the source revision and could misrepresent a concurrent push.
+    const body = new FormData()
+    body.set('branch', branch)
+    const data = await inStage('触发 Cloudflare 构建失败', () => this.request<Deployment>(accountId, `/projects/${encodeURIComponent(name)}/deployments`, { method: 'POST', body }))
+    if (typeof data.result.id !== 'string' || !data.result.id) throw new Error('Cloudflare 未返回部署 ID，请先检查控制台，避免重复触发。')
+    return { id: data.result.id, branch: data.result.deployment_trigger?.metadata?.branch, commitSha: data.result.deployment_trigger?.metadata?.commit_hash }
+  }
   async status(accountId: string, name: string, branch: string, sha: string): Promise<PagesStatus> {
     const { project, raw } = await this.project(accountId, name)
     const matches: Deployment[] = []
@@ -88,10 +98,10 @@ export class CloudflarePages {
     if (!latest) return { state: 'waiting', message: '已推送，等待 Cloudflare 创建此版本的生产部署。' }
     const status = latest.latest_stage?.status
     const stage = latest.latest_stage?.name
-    const state = status === 'success' && stage === 'deploy' ? 'success' : status === 'failure' || status === 'canceled' ? 'failed' : status === 'active' || status === 'idle' || status === 'success' && !!stage ? 'building' : 'unknown'
+    const state = latest.is_skipped === true ? 'skipped' : status === 'success' && stage === 'deploy' ? 'success' : status === 'failure' || status === 'canceled' ? 'failed' : status === 'active' || status === 'idle' || status === 'success' && !!stage ? 'building' : 'unknown'
     const canonical = raw.canonical_deployment?.id
     const productionCurrent = canonical && latest.id ? canonical === latest.id : undefined
     const productionUrl = /^[a-z0-9.-]+\.pages\.dev$/i.test(project.subdomain) ? `https://${project.subdomain}` : undefined
-    return { state, message: state === 'success' ? (productionCurrent === true ? '该版本已部署，并且是当前线上版本。' : productionCurrent === false ? '该版本部署成功，但不是当前线上版本。' : '该版本部署成功，当前线上版本待确认。') : state === 'building' ? 'Cloudflare 正在构建或部署。' : state === 'failed' ? 'Cloudflare 构建或部署失败，请在控制台查看日志。' : 'Cloudflare 部署状态待确认。', deploymentId: latest.id, deploymentUrl: latest.url, productionUrl, productionCurrent }
+    return { state, message: state === 'success' ? (productionCurrent === true ? '该版本已部署，并且是当前线上版本。' : productionCurrent === false ? '该版本部署成功，但不是当前线上版本。' : '该版本部署成功，当前线上版本待确认。') : state === 'building' ? 'Cloudflare 正在构建或部署。' : state === 'failed' ? 'Cloudflare 构建或部署失败，请在控制台查看日志。' : state === 'skipped' ? 'Cloudflare 跳过了此次部署，请检查部署设置。' : 'Cloudflare 部署状态待确认。', deploymentId: latest.id, deploymentUrl: latest.url, productionUrl, productionCurrent, createdAt: latest.created_on }
   }
 }

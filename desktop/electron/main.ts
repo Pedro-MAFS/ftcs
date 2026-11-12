@@ -4,6 +4,7 @@ import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disc
 import { GithubRepositories } from './github/github-repositories'
 import { adoptSite, createSite, getSiteOutput, getSiteSnapshot } from './site/site-project'
 import { SitePublish, readRelease, type ReleaseRecord } from './site/site-publish'
+import { SiteDeployment } from './site/site-deployment'
 import { SiteRuntime, type RunKind } from './site/site-runtime'
 import { resolveConfiguredNode } from './runtime/node-paths'
 import { resolveBestNode } from './runtime/resolve-node'
@@ -736,6 +737,7 @@ function registerIpcHandlers(): void {
     if (!record.outputDir || output !== record.outputDir) throw new Error('静态产物目录已变化，请重新检查并发布站点。')
     verifyPagesProject(project, { ...repo, output })
   }
+  const siteDeployment = new SiteDeployment(githubRepositories, pages, sitePublish, getWorkspaceRoot, verifyPages)
   ipcMain.handle(IPC.SITE_RELEASE_GET, (_event, root: unknown) => releaseAction(() => readRelease(currentSiteWorkspace(root))))
   ipcMain.handle(IPC.SITE_RELEASE_PREPARE, (_event, root: unknown, id: unknown, branch: unknown, acceptReadme: unknown) => releaseAction(() => sitePublish.prepare(currentSiteWorkspace(root), id as number, branch as string, acceptReadme === true)))
   ipcMain.handle(IPC.SITE_RELEASE_CANCEL, (_event, root: unknown) => releaseAction(() => sitePublish.cancelBuild(currentSiteWorkspace(root))))
@@ -759,7 +761,9 @@ function registerIpcHandlers(): void {
       sitePublish.beginPages(workspace, record.commitSha, record.target.id, record.target.branch, credentials.accountId, name)
       const project = await pages.create(credentials.accountId, name, record.target, output, nodeVersion)
       currentSiteWorkspace(root); verifyPages(record, project, workspace)
-      return sitePublish.bindPages(workspace, record.commitSha, record.target.id, record.target.branch, credentials.accountId, project.name)
+      sitePublish.bindPages(workspace, record.commitSha, record.target.id, record.target.branch, credentials.accountId, project.name)
+      try { return await siteDeployment.start(workspace) }
+      catch (error) { return { ...readRelease(workspace), buildNotice: `项目已创建，但首次构建未确认：${error instanceof Error ? error.message : String(error)}` } }
     } finally { pagesCreationInFlight = false }
   }))
   ipcMain.handle(IPC.SITE_PAGES_CLEAR_PENDING, (_event, root: unknown) => releaseAction(() => {
@@ -770,7 +774,9 @@ function registerIpcHandlers(): void {
     if (pagesCreationInFlight) throw new Error('项目创建正在进行，请稍候。')
     const workspace = currentSiteWorkspace(root); const record = readRelease(workspace); const credentials = await getCloudflareCredentials()
     const result = await pages.project(credentials.accountId, String(name)); currentSiteWorkspace(root); verifyPages(record, result.project, workspace)
-    return sitePublish.bindPages(workspace, record.commitSha!, record.target!.id, record.target!.branch, credentials.accountId, result.project.name)
+    sitePublish.bindPages(workspace, record.commitSha!, record.target!.id, record.target!.branch, credentials.accountId, result.project.name)
+    try { return await siteDeployment.start(workspace) }
+    catch (error) { return { ...readRelease(workspace), buildNotice: `项目已关联，但首次构建未确认：${error instanceof Error ? error.message : String(error)}` } }
   }))
   ipcMain.handle(IPC.SITE_PAGES_STATUS, (_event, root: unknown) => releaseAction(async () => {
     const workspace = currentSiteWorkspace(root); const record = readRelease(workspace)
@@ -779,8 +785,14 @@ function registerIpcHandlers(): void {
     const status = await pages.status(record.cloudflare.accountId, record.cloudflare.project, record.target.branch, record.commitSha); currentSiteWorkspace(root)
     const latest = readRelease(workspace)
     if (latest.commitSha !== record.commitSha || latest.target?.id !== record.target.id || latest.target?.branch !== record.target.branch || latest.cloudflare?.accountId !== record.cloudflare.accountId || latest.cloudflare?.project !== record.cloudflare.project) throw new Error('发布信息已变化，请重新刷新状态。')
+    if (status.deploymentId) sitePublish.confirmDeployment(workspace, record.commitSha, record.cloudflare.accountId, record.cloudflare.project, status.deploymentId, status.createdAt)
     if (status.state === 'success' && status.productionCurrent === true && status.deploymentId && status.productionUrl) sitePublish.noteOnline(workspace, record.commitSha, record.cloudflare.accountId, record.cloudflare.project, status.deploymentId, status.productionUrl)
     return status
+  }))
+  ipcMain.handle(IPC.SITE_PAGES_DEPLOY, (_event, root: unknown) => releaseAction(() => siteDeployment.start(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_PAGES_CLEAR_DEPLOYMENT, (_event, root: unknown) => releaseAction(() => {
+    if (siteDeployment.isActive() || pagesCreationInFlight) throw new Error('构建请求正在进行，请稍候。')
+    return sitePublish.clearPendingDeployment(currentSiteWorkspace(root))
   }))
   ipcMain.handle(IPC.GITHUB_REPOSITORIES, async (_event, root: unknown) => {
     try { currentSiteWorkspace(root); const repositories = await githubRepositories.list(); currentSiteWorkspace(root); return { ok: true, repositories } }

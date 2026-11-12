@@ -109,6 +109,8 @@ export const IPC = {
   SITE_PAGES_CLEAR_PENDING: 'site:pages-clear-pending',
   SITE_PAGES_BIND: 'site:pages-bind',
   SITE_PAGES_STATUS: 'site:pages-status',
+  SITE_PAGES_DEPLOY: 'site:pages-deploy',
+  SITE_PAGES_CLEAR_DEPLOYMENT: 'site:pages-clear-deployment',
   SITE_CREATE: 'site:create',
   SITE_ADOPT: 'site:adopt',
   SITE_OPEN_DIRECTORY: 'site:open-directory',

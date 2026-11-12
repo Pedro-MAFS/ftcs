@@ -21,7 +21,7 @@ test('requires matching GitHub repository, branch and build settings', async () 
 })
 
 test('only a production deployment of the exact SHA can succeed', async () => {
-  let deployments = [deployment('old', 'a'.repeat(40)), deployment('preview', sha, 'preview')]
+  let deployments: Array<ReturnType<typeof deployment> & { is_skipped?: boolean }> = [deployment('old', 'a'.repeat(40)), deployment('preview', sha, 'preview')]
   globalThis.fetch = async input => Response.json({ success: true, result: String(input).includes('/deployments?') ? deployments : project, result_info: { total_pages: 1 } })
   assert.equal((await api().status(account, 'my-site', 'main', sha)).state, 'waiting')
   deployments = [deployment('current', sha)]
@@ -31,6 +31,8 @@ test('only a production deployment of the exact SHA can succeed', async () => {
   assert.equal((await api().status(account, 'my-site', 'main', sha)).productionCurrent, false)
   deployments = [{ ...deployment('current', sha), latest_stage: { name: 'build', status: 'success' } }]
   assert.equal((await api().status(account, 'my-site', 'main', sha)).state, 'building')
+  deployments = [{ ...deployment('current', sha), is_skipped: true }]
+  assert.equal((await api().status(account, 'my-site', 'main', sha)).state, 'skipped')
 })
 
 test('does not query a different Cloudflare account', async () => {
@@ -84,6 +86,18 @@ test('creates a GitHub-backed project with the confirmed target and build settin
   await assert.rejects(api().create(account, '../bad', { id: 1, owner: 'owner', name: 'site', branch: 'main' }, 'dist', '24'), /项目名/)
   assert.equal(calls, 0)
   assert.equal((await api().create(account, 'my-site', { id: 1, owner: 'owner', name: 'site', branch: 'main' }, 'dist', '24')).name, 'my-site')
+})
+test('starts a Git build from branch HEAD without claiming to pin a commit', async () => {
+  globalThis.fetch = async (input, init) => {
+    assert.match(String(input), /\/projects\/my-site\/deployments$/)
+    assert.equal(init?.method, 'POST')
+    assert.ok(init?.body instanceof FormData)
+    assert.equal((init.body as FormData).get('branch'), 'main')
+    assert.equal((init.body as FormData).get('commit_hash'), null)
+    assert.equal(new Headers(init?.headers).has('Content-Type'), false)
+    return Response.json({ success: true, result: deployment('created', sha) })
+  }
+  assert.deepEqual(await api().createDeployment(account, 'my-site', 'main'), { id: 'created', branch: 'main', commitSha: sha })
 })
 test('surfaces Cloudflare error codes and messages while hiding credentials', async () => {
   globalThis.fetch = async () => Response.json({ success: false, errors: [{ code: 8000007, message: 'GitHub access denied for secret; Bearer other-token' }] }, { status: 400 })

@@ -268,6 +268,7 @@ const createPageOpen = ref(false)
 const pageName = ref('')
 const pageNodeVersion = ref('24')
 const confirmClearPage = ref(false)
+const confirmClearDeployment = ref(false)
 const deployment = ref<Deployment | null>(null)
 const deploymentError = ref('')
 let checkingDeployment = false
@@ -336,7 +337,7 @@ async function refreshDeployment() {
     if (site.value?.workspaceRoot !== root) return
     if (result.ok) {
       deployment.value = result.value; deploymentError.value = ''
-      if (result.value.state === 'success' && result.value.productionCurrent === true) {
+      if (result.value.deploymentId) {
         const latest = await window.ftcs.getSiteRelease(root)
         if (latest.ok && site.value?.workspaceRoot === root) release.value = latest.value
       }
@@ -410,7 +411,7 @@ async function createPages() {
   try {
     const result = await window.ftcs.createSitePages(root, pageName.value.trim(), pageNodeVersion.value)
     if (site.value?.workspaceRoot !== root) return
-    if (result.ok) { release.value = result.value; createPageOpen.value = false; await refreshDeployment() }
+    if (result.ok) { release.value = result.value; createPageOpen.value = false; await refreshDeployment(); if (result.value.buildNotice) deploymentError.value = result.value.buildNotice }
     else { await refreshRelease(); deploymentError.value = `${result.message} 请检查项目创建结果；如需授权 GitHub，请在 Cloudflare 控制台完成。` }
   } catch { await refreshRelease(); deploymentError.value = '项目创建结果未知，请先检查 Cloudflare，避免重复创建。' }
   finally { publishBusy.value = false }
@@ -429,9 +430,28 @@ async function bindPages() {
   try {
     const result = await window.ftcs.bindSitePages(root, selectedPage.value)
     if (site.value?.workspaceRoot !== root) return
-    if (result.ok) { release.value = result.value; showPages.value = false; await refreshDeployment() }
+    if (result.ok) { release.value = result.value; showPages.value = false; await refreshDeployment(); if (result.value.buildNotice) deploymentError.value = result.value.buildNotice }
     else deploymentError.value = result.message
   } catch { deploymentError.value = '无法关联 Cloudflare Pages 项目。' }
+  finally { publishBusy.value = false }
+}
+async function startDeployment() {
+  if (!site.value || !window.ftcs || publishBusy.value) return
+  const root = site.value.workspaceRoot
+  publishBusy.value = true; deploymentError.value = ''
+  try {
+    const result = await window.ftcs.startSiteDeployment(root)
+    if (site.value?.workspaceRoot !== root) return
+    if (result.ok) { release.value = result.value; await refreshDeployment() }
+    else { await refreshRelease(); deploymentError.value = result.message }
+  } catch { await refreshRelease(); deploymentError.value = '构建请求结果未知，请先到 Cloudflare 检查。' }
+  finally { publishBusy.value = false }
+}
+async function clearPendingDeployment() {
+  if (!site.value || !window.ftcs || publishBusy.value) return
+  publishBusy.value = true
+  try { const result = await window.ftcs.clearSitePendingDeployment(site.value.workspaceRoot); if (result.ok) { release.value = result.value; confirmClearDeployment.value = false; deploymentError.value = ''; await refreshDeployment() } else deploymentError.value = result.message }
+  catch { deploymentError.value = '无法清除待确认状态。' }
   finally { publishBusy.value = false }
 }
 async function openCloudflarePages() {
@@ -575,10 +595,11 @@ onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; publishRequest++; 
         <div v-if="release?.pending" class="inline-box"><strong>GitHub 提交结果待确认</strong><p>上次请求可能已完成，先检查远端状态，不要重复创建提交。</p><div class="site-actions"><button class="btn secondary" :disabled="publishBusy" @click="recoverRelease">检查提交状态</button></div></div>
         <template v-if="release?.commitSha && release.target">
           <div class="local-row"><div><strong>GitHub · 已推送</strong><p>{{ release.target.fullName }} · {{ release.target.branch }}</p><p>版本：{{ release.commitSha }}</p></div></div>
-          <div class="local-row"><div><strong>Cloudflare Pages · {{ release.cloudflare?.project || '尚未关联' }}</strong><p>{{ deployment?.message || (release.cloudflare ? '等待查询部署状态。' : '创建或选择关联相同仓库的 Pages 项目。') }}</p><p v-if="deploymentError" role="alert">{{ deploymentError }}</p><p v-if="deployment?.deploymentId">部署 ID：{{ deployment.deploymentId }}</p></div><div class="site-actions"><button class="btn secondary" :disabled="publishBusy" @click="openCloudflarePages">打开 Cloudflare</button><button class="btn secondary" :disabled="publishBusy || !!release.pendingPages" @click="createPageOpen = !createPageOpen">创建 Pages 项目</button><button class="btn secondary" :disabled="publishBusy" @click="loadPages">选择 Pages 项目</button><button v-if="release.cloudflare" class="btn secondary" @click="refreshDeployment">刷新状态</button><button v-if="deployment?.productionUrl" class="btn primary" @click="openOnlineSite(deployment.productionUrl)">打开网站</button></div></div>
+          <div class="local-row"><div><strong>Cloudflare Pages · {{ release.cloudflare?.project || '尚未关联' }}</strong><p>{{ deployment?.message || (release.cloudflare ? '等待查询部署状态。' : '创建或选择关联相同仓库的 Pages 项目。') }}</p><p v-if="deploymentError" role="alert">{{ deploymentError }}</p><p v-if="deployment?.deploymentId">部署 ID：{{ deployment.deploymentId }}</p></div><div class="site-actions"><button class="btn secondary" :disabled="publishBusy" @click="openCloudflarePages">打开 Cloudflare</button><button class="btn secondary" :disabled="publishBusy || !!release.pendingPages" @click="createPageOpen = !createPageOpen">创建 Pages 项目</button><button class="btn secondary" :disabled="publishBusy" @click="loadPages">选择 Pages 项目</button><button v-if="release.cloudflare" class="btn secondary" @click="refreshDeployment">刷新状态</button><button v-if="release.cloudflare && !release.pendingDeployment && (deployment?.state === 'waiting' || deployment?.state === 'failed' || deployment?.state === 'skipped')" class="btn primary" :disabled="publishBusy" @click="startDeployment">{{ deployment?.state === 'waiting' ? '开始构建' : '重新构建' }}</button><button v-if="deployment?.productionUrl" class="btn primary" @click="openOnlineSite(deployment.productionUrl)">打开网站</button></div></div>
+          <div v-if="release.pendingDeployment" class="inline-box"><strong>Cloudflare 构建请求待确认</strong><p>请先刷新状态或在 Cloudflare 检查部署记录，避免重复触发。{{ release.pendingDeployment.deploymentId ? `部署 ID：${release.pendingDeployment.deploymentId}` : '' }}</p><button class="text-button" :disabled="publishBusy" @click="confirmClearDeployment = true">我已检查，重新操作</button><div v-if="confirmClearDeployment"><p>请确认 Cloudflare 没有尚在处理的对应部署。清除后可以重新触发，不会删除云端部署。</p><div class="site-actions"><button class="btn secondary" :disabled="publishBusy" @click="clearPendingDeployment">确认清除待检查状态</button><button class="btn secondary" @click="confirmClearDeployment = false">取消</button></div></div></div>
           <div v-if="release.pendingPages" class="inline-box"><strong>项目 {{ release.pendingPages.project }} 的创建结果待确认</strong><p>请先刷新项目列表或到 Cloudflare 查看。若项目存在，选择并确认关联；未确认结果前不会自动重复创建。</p><div class="site-actions"><button class="btn secondary" :disabled="publishBusy" @click="loadPages">检查项目列表</button><button class="text-button" :disabled="publishBusy" @click="confirmClearPage = true">我已检查，重新操作</button></div><div v-if="confirmClearPage"><p>请确认已在 Cloudflare 检查项目是否创建。清除后可以重新尝试，但不会删除任何云端项目。</p><button class="btn secondary" :disabled="publishBusy" @click="clearPendingPage">确认清除待检查状态</button></div></div>
           <div v-if="createPageOpen && !release.pendingPages" class="inline-box"><strong>创建 Cloudflare Pages 项目</strong><p>将创建 GitHub 集成项目，关联 {{ release.target.fullName }} · {{ release.target.branch }}；构建命令 npm run build，产物目录 {{ localRun?.outputDir }}。创建后可能立即公开部署。</p><p>Cloudflare 需要独立获准访问 GitHub 仓库；如创建失败，请先在官方页面完成授权。</p><div class="site-actions"><input v-model="pageName" class="local-input" placeholder="小写项目名，例如 my-site" aria-label="Pages 项目名称" /><label>Node <select v-model="pageNodeVersion"><option>22</option><option>24</option><option>26</option></select></label><button class="btn primary" :disabled="publishBusy || !pageName.trim()" @click="createPages">确认创建并关联</button><button class="btn secondary" :disabled="publishBusy" @click="createPageOpen = false">取消</button></div></div>
-          <div v-if="showPages" class="inline-box"><strong>关联 Cloudflare Pages 项目</strong><p>请在 Cloudflare 授权 GitHub 仓库并创建 Git 集成项目；生产分支为 {{ release.target.branch }}，构建命令为 npm run build，产物目录为 {{ localRun?.outputDir }}。创建或关联时可能立即开始部署。</p><p>默认模板建议设置 NODE_VERSION 为 24。完成后返回并刷新项目。</p><div class="site-actions"><select v-model="selectedPage" class="local-input"><option value="" disabled>选择 Pages 项目</option><option v-for="project in pageProjects" :key="project.name" :value="project.name">{{ project.name }} · {{ project.owner }}/{{ project.repo }}</option></select><button class="btn secondary" :disabled="publishBusy" @click="loadPages">刷新项目</button><button class="btn primary" :disabled="publishBusy || !selectedPage" @click="bindPages">确认关联</button></div></div>
+          <div v-if="showPages" class="inline-box"><strong>关联 Cloudflare Pages 项目</strong><p>请在 Cloudflare 授权 GitHub 仓库并创建 Git 集成项目；生产分支为 {{ release.target.branch }}，构建命令为 npm run build，产物目录为 {{ localRun?.outputDir }}。创建或关联时可能立即开始部署。</p><p>默认模板建议设置 NODE_VERSION 为 24。完成后返回并刷新项目。</p><div class="site-actions"><select v-model="selectedPage" class="local-input"><option value="" disabled>选择 Pages 项目</option><option v-for="project in pageProjects" :key="project.name" :value="project.name">{{ project.name }} · {{ project.owner }}/{{ project.repo }}</option></select><button class="btn secondary" :disabled="publishBusy" @click="loadPages">刷新项目</button><button class="btn primary" :disabled="publishBusy || !selectedPage" @click="bindPages">确认关联</button><button class="btn secondary" :disabled="publishBusy" @click="showPages = false; selectedPage = ''">取消</button></div></div>
           <div v-if="release.lastOnline" class="inline-box"><strong>最近确认上线的版本</strong><p>{{ release.lastOnline.project }} · {{ release.lastOnline.commitSha.slice(0, 12) }} · {{ new Date(release.lastOnline.confirmedAt).toLocaleString() }}</p><p>地址：{{ release.lastOnline.url }}。当前线上版本以 Cloudflare 最新状态为准。</p></div>
           <p v-if="deployment?.state === 'success'">默认模板需要在 Cloudflare 构建环境中设置 SITE_URL 并重新部署，才能按正式地址生成 sitemap。</p>
           <details v-if="release.history?.length"><summary>查看 GitHub 推送记录</summary><p v-for="item in release.history" :key="`${item.target.fullName}-${item.target.branch}-${item.commitSha}`">{{ new Date(item.at).toLocaleString() }} · {{ item.target.fullName }} · {{ item.target.branch }} · {{ item.commitSha.slice(0, 12) }}</p></details>
