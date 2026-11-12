@@ -22,7 +22,7 @@ test('requires matching GitHub repository, branch and build settings', async () 
 
 test('only a production deployment of the exact SHA can succeed', async () => {
   let deployments = [deployment('old', 'a'.repeat(40)), deployment('preview', sha, 'preview')]
-  globalThis.fetch = async input => Response.json({ success: true, result: String(input).includes('/deployments?') ? deployments : project })
+  globalThis.fetch = async input => Response.json({ success: true, result: String(input).includes('/deployments?') ? deployments : project, result_info: { total_pages: 1 } })
   assert.equal((await api().status(account, 'my-site', 'main', sha)).state, 'waiting')
   deployments = [deployment('current', sha)]
   const result = await api().status(account, 'my-site', 'main', sha)
@@ -39,16 +39,17 @@ test('does not query a different Cloudflare account', async () => {
   await assert.rejects(api().list('b'.repeat(32)), /账号已变化/)
   assert.equal(called, false)
 })
-test('uses Pages-compatible list size and reads all project pages', async () => {
+test('uses the verified connection-check query for the first project page and reads later pages', async () => {
   const seen: number[] = []
   globalThis.fetch = async input => {
     const url = new URL(String(input))
-    assert.equal(url.searchParams.get('per_page'), '20')
-    const page = Number(url.searchParams.get('page')); seen.push(page)
-    return Response.json({ success: true, result: page === 1 ? Array.from({ length: 20 }, (_, i) => ({ ...project, name: `site-${i}` })) : [{ ...project, name: 'site-last' }], result_info: { total_pages: 2, per_page: 20 } })
+    assert.equal(url.searchParams.get('per_page'), '1')
+    assert.notEqual(url.searchParams.get('page'), '1')
+    const page = Number(url.searchParams.get('page') || 1); seen.push(page)
+    return Response.json({ success: true, result: page === 1 ? [{ ...project, name: 'site-first' }] : [{ ...project, name: 'site-last' }], result_info: { total_pages: 2, per_page: 1 } })
   }
   const projects = await api().list(account)
-  assert.equal(projects.length, 21)
+  assert.equal(projects.length, 2)
   assert.equal(projects.at(-1)?.name, 'site-last')
   assert.deepEqual(seen, [1, 2])
 })
@@ -57,8 +58,9 @@ test('finds a matching deployment on a later page using the reported page size',
   globalThis.fetch = async input => {
     const url = new URL(String(input))
     if (!url.pathname.endsWith('/deployments')) return Response.json({ success: true, result: project })
-    assert.equal(url.searchParams.get('per_page'), '20')
-    const page = Number(url.searchParams.get('page')); seen.push(page)
+    assert.equal(url.searchParams.get('per_page'), '1')
+    assert.notEqual(url.searchParams.get('page'), '1')
+    const page = Number(url.searchParams.get('page') || 1); seen.push(page)
     return Response.json({ success: true, result: page === 1 ? [deployment('old', 'a'.repeat(40))] : [deployment('current', sha)], result_info: { per_page: 1 } })
   }
   const result = await api().status(account, 'my-site', 'main', sha)
@@ -97,5 +99,10 @@ test('handles non-JSON errors and success=false responses', async () => {
   await assert.rejects(api().list(account), /HTTP 400/)
   globalThis.fetch = async () => Response.json({ success: false, errors: [{ code: 1234, message: 'request rejected' }] })
   await assert.rejects(api().list(account), /HTTP 200.*代码 1234.*request rejected/)
+})
+test('identifies whether list or creation returned the Cloudflare error', async () => {
+  globalThis.fetch = async () => Response.json({ success: false, errors: [{ code: 8000024, message: 'Invalid list options' }] }, { status: 400 })
+  await assert.rejects(api().list(account), /查询 Cloudflare 项目列表失败.*8000024/)
+  await assert.rejects(api().create(account, 'my-site', { id: 1, owner: 'owner', name: 'site', branch: 'main' }, 'dist', '24'), /创建 Cloudflare Pages 项目失败.*8000024/)
 })
 test.after(() => { globalThis.fetch = previous })
