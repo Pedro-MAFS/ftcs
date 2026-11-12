@@ -6,6 +6,7 @@ export type GithubRepository = {
   private: boolean
   defaultBranch: string
   writeAccess: 'yes' | 'no' | 'unknown'
+  contentsAccess: 'write' | 'read' | 'none' | 'unknown'
 }
 export type GithubBranch = { name: string; protected: boolean }
 export type GithubTreeFile = { path: string; sha: string; mode: string }
@@ -14,6 +15,10 @@ type Installation = { id: number; permissions?: { contents?: string } }
 type ApiRepo = {
   id: number; name: string; full_name: string; private: boolean; default_branch: string
   owner: { login: string }; permissions?: { push?: boolean; admin?: boolean }
+}
+class GithubApiError extends Error {
+  status: number
+  constructor(status: number, message: string) { super(message); this.status = status }
 }
 
 /** API-only client: caller supplies credentials in the main process. */
@@ -31,7 +36,7 @@ export class GithubRepositories {
     if (!response.ok) {
       if (response.status === 401) throw new Error('GitHub 授权已失效，请重新连接。')
       if (response.status === 403) throw new Error('GitHub 拒绝了请求，请检查应用权限、组织策略或请求次数限制。')
-      if (response.status === 404) throw new Error('未找到仓库，或 FTCS App 尚未获准访问该仓库。')
+      if (response.status === 404) throw new GithubApiError(404, '未找到仓库，或 FTCS App 尚未获准访问该仓库。')
       if (response.status === 409) throw new Error('该仓库尚无分支，请先在 GitHub 初始化仓库。')
       if (response.status === 422) throw new Error('GitHub 未接受请求，请检查仓库名称是否可用。')
       throw new Error(`GitHub 请求失败（${response.status}），请稍后重试。`)
@@ -62,8 +67,9 @@ export class GithubRepositories {
         if (!Number.isSafeInteger(repo.id) || typeof repo.owner?.login !== 'string' || typeof repo.name !== 'string' || typeof repo.full_name !== 'string' || typeof repo.private !== 'boolean') throw new Error('GitHub 返回的仓库信息不完整。')
         const appContents = installation.permissions?.contents
         const push = repo.permissions?.push
-        const writeAccess = appContents === undefined || push === undefined ? 'unknown' : appContents === 'write' && push ? 'yes' : 'no'
-        repos.set(repo.id, { id: repo.id, owner: repo.owner.login, name: repo.name, fullName: repo.full_name, private: repo.private, defaultBranch: repo.default_branch || '', writeAccess })
+        const contentsAccess = !installation.permissions ? 'unknown' : appContents === 'write' ? 'write' : appContents === 'read' ? 'read' : 'none'
+        const writeAccess = contentsAccess === 'none' || contentsAccess === 'read' || push === false ? 'no' : contentsAccess === 'unknown' || push === undefined ? 'unknown' : 'yes'
+        repos.set(repo.id, { id: repo.id, owner: repo.owner.login, name: repo.name, fullName: repo.full_name, private: repo.private, defaultBranch: repo.default_branch || '', writeAccess, contentsAccess })
       }
     }
     return [...repos.values()].sort((a, b) => a.fullName.localeCompare(b.fullName))
@@ -73,8 +79,22 @@ export class GithubRepositories {
     if (!Number.isSafeInteger(repositoryId) || repositoryId <= 0) throw new Error('无效的仓库。')
     const repo = (await this.list()).find(item => item.id === repositoryId)
     if (!repo) throw new Error('仓库不可用，请刷新列表并检查 FTCS App 授权范围。')
+    if (repo.contentsAccess === 'none') throw new Error('FTCS GitHub App 尚未获得仓库 Contents 权限，无法读取分支。请在 GitHub App 设置中将 Repository permissions → Contents 设为 Read and write，并在安装授权页面接受更新后刷新。')
     const endpoint = `/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}/branches`
-    const items = await this.pages<GithubBranch>(endpoint, value => value as GithubBranch[])
+    let items: GithubBranch[]
+    try { items = await this.pages<GithubBranch>(endpoint, value => value as GithubBranch[]) }
+    catch (error) {
+      if (error instanceof GithubApiError && error.status === 404) {
+        try {
+          await this.request<unknown>(`/repos/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}`)
+        } catch (probe) {
+          if (probe instanceof GithubApiError && probe.status === 404) throw new Error('仓库出现在授权列表中，但当前 GitHub 授权无法读取仓库（404）。请检查 FTCS App 对该仓库的授权和 Contents 权限；如刚调整权限，请接受 GitHub 的权限更新并重新连接 GitHub 后重试。')
+          throw new Error('读取仓库分支失败，且无法确认仓库访问状态，请检查网络和 GitHub 授权后重试。')
+        }
+        throw new Error('仓库信息可读取，但 GitHub 未返回分支（404）。请确认仓库已有初始提交，以及当前 GitHub 授权已获得 Contents 权限；如刚调整权限，请接受权限更新并重新连接后重试。')
+      }
+      throw error
+    }
     return items.map(branch => {
       if (typeof branch.name !== 'string' || typeof branch.protected !== 'boolean') throw new Error('GitHub 返回的分支信息不完整。')
       return { name: branch.name, protected: branch.protected }

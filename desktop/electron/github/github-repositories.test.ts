@@ -83,10 +83,39 @@ test('commit uses the confirmed branch head as an atomic condition', async () =>
     assert.deepEqual(body.variables.input.fileChanges.additions, [{ path: 'image.png', contents: 'AP8=' }])
     return Response.json({ data: { createCommitOnBranch: { commit: { oid: committed } } } })
   }
-  const repository = { id: 1, owner: 'owner', name: 'site-1', fullName: 'owner/site-1', private: true, defaultBranch: 'main', writeAccess: 'yes' as const }
+  const repository = { id: 1, owner: 'owner', name: 'site-1', fullName: 'owner/site-1', private: true, defaultBranch: 'main', writeAccess: 'yes' as const, contentsAccess: 'write' as const }
   assert.equal(await service().commit(repository, 'main', head, [{ path: 'image.png', contents: 'AP8=' }], []), committed)
   globalThis.fetch = async () => Response.json({ errors: [{ message: 'expectedHeadOid did not match' }] })
   await assert.rejects(service().commit(repository, 'main', head, [], []), /未确认提交/)
+})
+
+test('reports missing Contents permission before querying branches', async () => {
+  let branchRequested = false
+  globalThis.fetch = async input => {
+    const pathname = new URL(String(input)).pathname
+    if (pathname === '/user/installations') return Response.json({ installations: [{ id: 1, permissions: { metadata: 'read' } }] })
+    if (pathname === '/user/installations/1/repositories') return Response.json({ repositories: [repo(1)] })
+    branchRequested = true; return new Response('', { status: 404 })
+  }
+  assert.equal((await service().list())[0].writeAccess, 'no')
+  await assert.rejects(service().branches(1), /Contents 权限/)
+  assert.equal(branchRequested, false)
+})
+
+test('distinguishes inaccessible repository and inaccessible branches after a 404', async () => {
+  let metadataAccessible = false
+  globalThis.fetch = async input => {
+    const pathname = new URL(String(input)).pathname
+    if (pathname === '/user/installations') return Response.json({ installations: [{ id: 1, permissions: { contents: 'write' } }] })
+    if (pathname === '/user/installations/1/repositories') return Response.json({ repositories: [repo(1)] })
+    if (pathname === '/repos/owner/site-1/branches') return new Response('', { status: 404 })
+    if (pathname === '/repos/owner/site-1') return metadataAccessible ? Response.json(repo(1)) : new Response('', { status: 404 })
+    throw new Error('unexpected request')
+  }
+  assert.equal((await service().list())[0].writeAccess, 'yes')
+  await assert.rejects(service().branches(1), /授权无法读取仓库/)
+  metadataAccessible = true
+  await assert.rejects(service().branches(1), /仓库信息可读取.*初始提交/)
 })
 
 test.after(() => { globalThis.fetch = originalFetch })

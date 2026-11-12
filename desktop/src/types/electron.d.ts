@@ -983,7 +983,7 @@ declare global {
       clearPendingSitePages: (root: string) => Promise<SiteResult<SiteRelease>>
       bindSitePages: (root: string, name: string) => Promise<SiteResult<SiteRelease>>
       getSitePagesStatus: (root: string) => Promise<SiteResult<PagesStatus>>
-      listGithubRepositories: (root: string) => Promise<{ ok: boolean; repositories?: Array<{ id: number; owner: string; name: string; fullName: string; private: boolean; defaultBranch: string; writeAccess: 'yes' | 'no' | 'unknown' }>; message?: string }>
+      listGithubRepositories: (root: string) => Promise<{ ok: boolean; repositories?: Array<{ id: number; owner: string; name: string; fullName: string; private: boolean; defaultBranch: string; writeAccess: 'yes' | 'no' | 'unknown'; contentsAccess: 'write' | 'read' | 'none' | 'unknown' }>; message?: string }>
       listGithubBranches: (root: string, id: number) => Promise<{ ok: boolean; branches?: Array<{ name: string; protected: boolean }>; message?: string }>
       createGithubRepository: (root: string, name: string, privateRepo: boolean) => Promise<{ ok: boolean; repository?: { fullName: string }; message?: string }>
       startGithubAuth: () => Promise<{ ok: boolean; message?: string; userCode?: string; verificationUrl?: string; interval?: number }>
