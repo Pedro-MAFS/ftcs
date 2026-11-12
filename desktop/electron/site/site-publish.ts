@@ -91,7 +91,8 @@ export class SitePublish {
       const bound = record.target?.id === repositoryId && record.target.branch === branch && !!record.commitSha
       if (bound && record.commitSha !== remote.head) throw new Error('GitHub 分支已被其他操作修改，请先协调远端内容。')
       const initialReadme = createHash('sha1').update(`blob ${Buffer.byteLength(`# ${remote.repository.name}\n`)}\0# ${remote.repository.name}\n`).digest('hex')
-      const ownInitial = (record.createdRepositories.includes(remote.repository.fullName) || acceptInitialReadme) && remote.files.length === 1 && remote.files[0].path === 'README.md' && remote.files[0].sha === initialReadme
+      const readmeOnly = remote.files.length === 1 && remote.files[0].path === 'README.md' && remote.files[0].mode === '100644'
+      const ownInitial = readmeOnly && (acceptInitialReadme || record.createdRepositories.includes(remote.repository.fullName) && remote.files[0].sha === initialReadme)
       if (!bound && remote.files.length && !ownInitial && !sameFiles(remote.files, recorded(snapshot))) throw new Error('已有仓库内容与站点不一致，请选择空仓库或先在 GitHub 协调内容。')
       const before = new Map(remote.files.map(f => [f.path, f]))
       const desired = new Set(snapshot.files.map(f => f.path))

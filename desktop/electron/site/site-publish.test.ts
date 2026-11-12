@@ -134,18 +134,18 @@ test('cancelling a build prevents a release from becoming ready', { timeout: 150
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })
 
-test('a manually created repository needs explicit consent for the exact default README', async () => {
+test('a README-only repository requires consent and other remote files remain protected', async () => {
   const { root, project } = make()
   fs.writeFileSync(path.join(project, 'README.md'), 'site readme')
   const repo = { id: 1, owner: 'owner', name: 'site', fullName: 'owner/site', private: true, defaultBranch: 'main', writeAccess: 'yes' as const }
-  let remote = [{ path: 'README.md', sha: gitHash(Buffer.from('# site\n')), mode: '100644' }]
+  let remote = [{ path: 'README.md', sha: gitHash(Buffer.from('user content')), mode: '100644' }]
   const github = { async tree() { return { repository: repo, head: '1'.repeat(40), files: remote } } }
   const publisher = new SitePublish(github as never, async () => ({ exe: process.execPath, source: 'test' }), () => root)
   try {
     await assert.rejects(publisher.prepare(root, 1, 'main'), /已有仓库内容/)
     const ready = await publisher.prepare(root, 1, 'main', true)
     assert.equal(ready.files.find(item => item.path === 'README.md')?.change, '修改')
-    remote = [{ path: 'README.md', sha: gitHash(Buffer.from('user content')), mode: '100644' }]
+    remote = [...remote, { path: 'other.txt', sha: gitHash(Buffer.from('preserve')), mode: '100644' }]
     await assert.rejects(publisher.prepare(root, 1, 'main', true), /已有仓库内容/)
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })

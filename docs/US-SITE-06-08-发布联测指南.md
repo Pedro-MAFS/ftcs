@@ -6,7 +6,7 @@
 
 1. 在测试工作区创建独立站，确认本地预览和构建检查可用。站点位于当前工作区的 `website/`，默认模板产物目录为 `dist`。
 2. 连接 GitHub 和 Cloudflare，并在 FTCS 选择目标 Cloudflare 账号。GitHub 上的 FTCS App 需要获准访问目标仓库，并具备仓库内容写入权限。
-3. 准备专用测试仓库及 Pages 项目名。可在 FTCS 尝试创建 GitHub 个人仓库；也可在 GitHub 手动创建并初始化 README，再在 FTCS 勾选允许替换默认 README。不要使用存放其他资料的仓库。
+3. 准备专用测试仓库及 Pages 项目名。可在 FTCS 尝试创建 GitHub 个人仓库；也可在 GitHub 手动创建并初始化 README，再在 FTCS 勾选允许替换或删除该 README。不要使用存放其他资料的仓库。
 4. Cloudflare 对 GitHub 的仓库访问授权与 FTCS GitHub App 授权是两回事。如果 Cloudflare 要求授权，需要在 Cloudflare/GitHub 官方页面单独完成。
 
 ## 首次发布
