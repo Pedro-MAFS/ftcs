@@ -17,6 +17,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { collectSiteSnapshot, buildSiteSnapshot } = await import('./site-publish-snapshot.ts')
 const { SitePublish, readRelease } = await import('./site-publish.ts')
 const { SiteDeployment } = await import('./site-deployment.ts')
+const { SiteSourceTracker } = await import('./site-source-tracker.ts')
 const gitHash = (bytes: Buffer) => createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
 const make = () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-release-test-'))
@@ -191,4 +192,25 @@ test('starts one Cloudflare build for the verified commit and retains uncertain 
     publisher.confirmDeployment(root, sha, account, 'site-pages', 'new-deployment', new Date().toISOString())
     assert.equal(readRelease(root).pendingDeployment, undefined)
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('site source watcher recomputes published status and rejects a changed workspace', { timeout: 10000 }, async () => {
+  const { root, project } = make()
+  let current = root
+  const snapshots: Array<{ state: string; hash?: string }> = []
+  const tracker = new SiteSourceTracker(() => current, snapshot => snapshots.push(snapshot))
+  try {
+    const initial = tracker.snapshot(root)
+    assert.equal(initial.state, 'unpublished'); assert.ok(initial.watching); assert.ok(initial.hash)
+    fs.writeFileSync(path.join(root, '.ftcs/site-release.json'), JSON.stringify({ version: 1, createdRepositories: [], commitSha: '1'.repeat(40), snapshotHash: initial.hash }))
+    assert.equal(tracker.snapshot(root).state, 'clean')
+    fs.writeFileSync(path.join(project, 'content.txt'), 'new content')
+    const deadline = Date.now() + 5000
+    while (!snapshots.some(item => item.state === 'changed') && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50))
+    assert.ok(snapshots.some(item => item.state === 'changed'))
+    fs.unlinkSync(path.join(project, 'content.txt'))
+    assert.equal(tracker.snapshot(root).state, 'clean')
+    current = path.join(root, 'other')
+    assert.throws(() => tracker.snapshot(root), /工作区已改变/)
+  } finally { tracker.close(); fs.rmSync(root, { recursive: true, force: true }) }
 })

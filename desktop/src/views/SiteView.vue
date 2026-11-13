@@ -1,10 +1,23 @@
 <script setup lang="ts">
-import { computed, onActivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import Icon from '../components/shared/Icon.vue'
+import { useWorkspace } from '../composables/useWorkspace'
+import { useWorkspaceLayout } from '../composables/useWorkspaceLayout'
 defineOptions({ name: 'SiteView' })
 type SiteState = Awaited<ReturnType<NonNullable<Window['ftcs']>['getSite']>>
 type SiteRuntimeState = Awaited<ReturnType<NonNullable<Window['ftcs']>['getSiteRuntime']>>
+type SiteSourceState = Awaited<ReturnType<NonNullable<Window['ftcs']>['getSiteSource']>>
 const site = ref<SiteState | null>(null)
+const { agentPrompt } = useWorkspace()
+const { fill, agentCollapsed, toggleAgentCollapsed, exitFill } = useWorkspaceLayout()
+async function editWithAgent() {
+  if (fill.value === 'main') exitFill()
+  if (agentCollapsed.value && fill.value === 'none') toggleAgentCollapsed()
+  if (!agentPrompt.value.trim()) agentPrompt.value = '请帮我修改独立站：'
+  await nextTick()
+  window.dispatchEvent(new Event('ftcs:focus-agent-composer'))
+}
+const source = ref<SiteSourceState | null>(null)
 const localRun = ref<SiteRuntimeState | null>(null)
 const localError = ref('')
 const installChoice = ref<'' | 'install' | 'preview'>('')
@@ -12,6 +25,23 @@ const addressInput = ref('')
 const outputInput = ref('')
 const editingOutput = ref(false)
 let removeRuntimeListener: (() => void) | undefined
+let removeSourceListener: (() => void) | undefined
+function applySiteSource(snapshot: SiteSourceState) {
+  if (site.value && snapshot.workspaceRoot !== site.value.workspaceRoot) return
+  if (source.value?.workspaceRoot === snapshot.workspaceRoot && source.value.sequence > snapshot.sequence) return
+  source.value = snapshot
+}
+async function refreshSource() {
+  if (!site.value || !window.ftcs) return
+  const root = site.value.workspaceRoot
+  try { const snapshot = await window.ftcs.getSiteSource(root); if (site.value?.workspaceRoot === root) applySiteSource(snapshot) }
+  catch { source.value = { workspaceRoot: root, sequence: 0, state: 'unknown', message: '无法检查站点源码，请刷新重试。', watching: false } }
+}
+const buildSourceMessage = computed(() => {
+  if (localRun.value?.build.state !== 'succeeded') return ''
+  if (!source.value?.watching || source.value.workspaceRoot !== localRun.value.workspaceRoot || !source.value.hash || !localRun.value.build.sourceHash) return '当前源码构建状态待确认。'
+  return source.value.hash === localRun.value.build.sourceHash ? '构建结果对应当前源码。' : '源码已变化，需重新检查构建。'
+})
 const runBusy = (state?: string) => !!state && ['starting', 'running', 'address_pending', 'stopping'].includes(state)
 const labels: Record<string, string> = { idle: '尚未开始', starting: '正在启动', running: '运行中', address_pending: '地址待确认', stopping: '正在停止', succeeded: '已完成', failed: '失败', cancelled: '已停止' }
 function applySiteRuntime(snapshot: SiteRuntimeState) {
@@ -70,7 +100,7 @@ async function submitAddress() {
 async function saveOutput() {
   if (!site.value || !window.ftcs) return
   await localAction(() => window.ftcs!.setSiteOutput(site.value!.workspaceRoot, outputInput.value))
-  if (!localError.value) { editingOutput.value = false; await refreshSiteRuntime() }
+  if (!localError.value) { editingOutput.value = false; await Promise.all([refreshSiteRuntime(), refreshSource()]) }
 }
 async function buildLocal() {
   if (!site.value || !window.ftcs) return
@@ -89,7 +119,7 @@ async function refreshSite() {
   const request = ++siteRequest
   try {
     const state = await window.ftcs.getSite()
-    if (request === siteRequest) { site.value = state; confirmRecreate.value = false; await refreshSiteRuntime(); await refreshRelease() }
+    if (request === siteRequest) { site.value = state; confirmRecreate.value = false; await refreshSiteRuntime(); await refreshSource(); await refreshRelease() }
   } catch { if (request === siteRequest) siteMessage.value = '无法检查本地站点，请重试。' }
 }
 async function changeSite(action: 'create' | 'adopt') {
@@ -384,7 +414,7 @@ async function commitRelease() {
     const result = await window.ftcs.commitSiteRelease(root, preview.value.id)
     if (request !== publishRequest || site.value?.workspaceRoot !== root) return
     preview.value = null
-    if (result.ok) { release.value = result.value; deployment.value = null; deploymentError.value = ''; publishOpen.value = false; await refreshDeployment() }
+    if (result.ok) { release.value = result.value; deployment.value = null; deploymentError.value = ''; publishOpen.value = false; await refreshSource(); await refreshDeployment() }
     else { publishError.value = `${result.message} 请先检查发布记录中的提交状态。`; await refreshRelease() }
   } catch { if (request === publishRequest) { publishError.value = '提交结果未知，请先检查发布记录。'; await refreshRelease() } }
   finally { if (request === publishRequest) publishBusy.value = false }
@@ -392,7 +422,7 @@ async function commitRelease() {
 async function recoverRelease() {
   if (!site.value || !window.ftcs || publishBusy.value) return
   publishBusy.value = true; publishError.value = ''
-  try { const result = await window.ftcs.recoverSiteRelease(site.value.workspaceRoot); if (result.ok) { release.value = result.value; deployment.value = null; deploymentError.value = ''; await refreshDeployment(); message.value = '已根据 GitHub 的当前状态检查提交结果。' } else message.value = result.message }
+  try { const result = await window.ftcs.recoverSiteRelease(site.value.workspaceRoot); if (result.ok) { release.value = result.value; deployment.value = null; deploymentError.value = ''; await refreshSource(); await refreshDeployment(); message.value = '已根据 GitHub 的当前状态检查提交结果。' } else message.value = result.message }
   catch { message.value = '无法确认提交结果，请检查 GitHub 后重试。' }
   finally { publishBusy.value = false }
 }
@@ -521,9 +551,9 @@ watch(() => site.value?.workspaceRoot, (next, previous) => {
     showPages.value = false
   }
 })
-onMounted(() => { removeRuntimeListener = window.ftcs?.onSiteRuntime?.(applySiteRuntime); void refreshAll(); window.addEventListener('focus', refreshSite); deploymentTimer = setInterval(() => void refreshDeployment(), 15000) })
+onMounted(() => { removeRuntimeListener = window.ftcs?.onSiteRuntime?.(applySiteRuntime); removeSourceListener = window.ftcs?.onSiteSource?.(applySiteSource); void refreshAll(); window.addEventListener('focus', refreshSite); deploymentTimer = setInterval(() => void refreshDeployment(), 15000) })
 onActivated(() => { void refreshSite() })
-onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; publishRequest++; window.removeEventListener('focus', refreshSite); cfAttempt++; attempt++; if (timer) clearTimeout(timer); if (deploymentTimer) clearInterval(deploymentTimer); void window.ftcs?.cancelGithubAuth?.(); void window.ftcs?.cancelCloudflareAuth?.() })
+onUnmounted(() => { removeRuntimeListener?.(); removeSourceListener?.(); siteRequest++; publishRequest++; window.removeEventListener('focus', refreshSite); cfAttempt++; attempt++; if (timer) clearTimeout(timer); if (deploymentTimer) clearInterval(deploymentTimer); void window.ftcs?.cancelGithubAuth?.(); void window.ftcs?.cancelCloudflareAuth?.() })
 </script>
 
 <template>
@@ -555,8 +585,9 @@ onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; publishRequest++; 
       <div class="site-card-title"><div class="site-icon"><Icon name="globe" :size="20" /></div><div><h2>工作区独立站</h2><p>一个工作区对应一个全局站点</p></div><span class="badge">{{ siteLabel }}</span></div>
       <div class="site-details"><div><span>线上地址</span><strong>{{ deployment?.productionUrl || '尚未确认' }}</strong></div><div><span>最近发布</span><strong>{{ deployment?.message || (release?.commitSha ? '已推送，等待关联 Cloudflare' : '—') }}</strong></div><div><span>本地站点</span><strong>{{ siteLabel }}</strong></div></div>
       <div v-if="site" class="site-local">
-        <p>{{ site.message }}</p><p class="site-path" :title="site.projectPath">{{ site.projectPath }}</p>
+        <p>{{ site.message }}</p><p class="site-path" :title="site.projectPath">{{ site.projectPath }}</p><p v-if="source && source.workspaceRoot === site.workspaceRoot">{{ source.message }}<span v-if="!source.watching && site.status === 'ready'"> 文件监听不可用，可手动刷新。</span></p>
         <div class="site-actions">
+          <button v-if="site.status === 'ready'" class="btn primary" type="button" @click="editWithAgent">让智能体修改</button>
           <button v-if="site.status === 'not_created' || site.status === 'empty'" class="btn primary" type="button" :disabled="siteBusy" @click="changeSite('create')">{{ siteBusy ? '正在创建…' : site.status === 'empty' ? '在此初始化' : '创建站点' }}</button>
           <button v-if="site.status === 'existing'" class="btn primary" type="button" :disabled="siteBusy" @click="changeSite('adopt')">使用此站点</button>
           <button v-if="site.status === 'missing' && !confirmRecreate" class="btn secondary" type="button" :disabled="siteBusy" @click="confirmRecreate = true">重新创建</button>
@@ -584,7 +615,7 @@ onUnmounted(() => { removeRuntimeListener?.(); siteRequest++; publishRequest++; 
       <div v-if="site?.status === 'ready' && localRun" class="local-panel">
         <div class="local-row"><div><strong>静态产物目录</strong><p>{{ localRun.outputDir || '尚未设置' }}</p></div><button v-if="!editingOutput" class="btn secondary" type="button" :disabled="runBusy(localRun.build.state)" @click="editingOutput = true">{{ localRun.outputDir ? '修改' : '设置目录' }}</button></div>
         <div v-if="editingOutput" class="site-actions"><input v-model="outputInput" class="local-input" placeholder="站点内的相对目录，例如 dist" aria-label="静态产物目录" /><button class="btn primary" type="button" @click="saveOutput">保存</button><button class="btn secondary" type="button" @click="editingOutput = false; outputInput = localRun.outputDir || ''">取消</button></div>
-        <div class="local-row"><div><strong>构建 · {{ labels[localRun.build.state] }}</strong><p>{{ localRun.build.message || '尚未执行构建。' }}</p><p v-if="localRun.build.finishedAt">完成时间：{{ new Date(localRun.build.finishedAt).toLocaleString() }}</p><p v-if="localRun.build.node">{{ localRun.build.node }}</p></div><div class="site-actions"><button v-if="!runBusy(localRun.build.state)" class="btn primary" type="button" :disabled="runBusy(localRun.install.state) || !localRun.outputDir" @click="buildLocal">检查构建</button><button v-else class="btn secondary" type="button" :disabled="localRun.build.state === 'stopping'" @click="cancelLocal('build')">取消构建</button></div></div>
+        <div class="local-row"><div><strong>构建 · {{ labels[localRun.build.state] }}</strong><p>{{ localRun.build.message || '尚未执行构建。' }}</p><p v-if="buildSourceMessage">{{ buildSourceMessage }}</p><p v-if="localRun.build.finishedAt">完成时间：{{ new Date(localRun.build.finishedAt).toLocaleString() }}</p><p v-if="localRun.build.node">{{ localRun.build.node }}</p></div><div class="site-actions"><button v-if="!runBusy(localRun.build.state)" class="btn primary" type="button" :disabled="runBusy(localRun.install.state) || !localRun.outputDir" @click="buildLocal">检查构建</button><button v-else class="btn secondary" type="button" :disabled="localRun.build.state === 'stopping'" @click="cancelLocal('build')">取消构建</button></div></div>
         <details v-if="localRun.build.log"><summary>构建日志</summary><pre>{{ localRun.build.log }}</pre></details>
       </div><div v-else class="empty-record">创建站点后可以检查构建。</div>
     </section>

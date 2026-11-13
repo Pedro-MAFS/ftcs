@@ -39,8 +39,9 @@ describe('opencode.json permission（US-FD-02 §5）', () => {
 
   it('硬边界拒绝，网页抓取仍要询问', () => {
     const permission = config.permission as Record<string, PermissionRule>
-    assert.equal(permission.edit, 'deny')
-    assert.equal(permission.bash, 'deny')
+    assert.equal(permission.edit, 'ask')
+    assert.equal(permission.bash, 'ask')
+    assert.equal(permission.shell, 'ask')
     assert.equal(permission.external_directory, 'deny')
     assert.equal(permission.webfetch, 'ask')
     assert.equal(permission.websearch, 'ask')

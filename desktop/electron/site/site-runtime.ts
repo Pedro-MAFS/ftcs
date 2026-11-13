@@ -4,12 +4,13 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { ChildProcess } from 'node:child_process'
 import { getSiteOutput, getSiteSnapshot, resolveSiteOutput, setSiteOutput } from './site-project'
 import { localPreviewUrl, ownsPort, reservePort, resolveSiteNode, responds, spawnNpm, stopProcess, type NodeRuntime } from './site-process'
+import { collectSiteSnapshot } from './site-publish-snapshot'
 
 export type RunKind = 'install' | 'preview' | 'build'
 export type RunState = 'idle' | 'starting' | 'running' | 'address_pending' | 'stopping' | 'succeeded' | 'failed' | 'cancelled'
-export interface SiteRun { id: string; state: RunState; message: string; log: string; url?: string; startedAt?: string; finishedAt?: string; node?: string; output?: string }
+export interface SiteRun { id: string; state: RunState; message: string; log: string; url?: string; startedAt?: string; finishedAt?: string; node?: string; output?: string; sourceHash?: string }
 export interface SiteRuntimeSnapshot { workspaceRoot: string; sequence: number; outputDir: string | null; dependencies: 'missing' | 'unknown' | 'not_required'; install: SiteRun; preview: SiteRun; build: SiteRun }
-type Active = { id: string; child?: ChildProcess; cancelled: boolean; poll?: ReturnType<typeof setInterval>; guard?: ReturnType<typeof setInterval>; timeout?: ReturnType<typeof setTimeout>; checking?: boolean; port?: number; candidate?: string }
+type Active = { id: string; child?: ChildProcess; cancelled: boolean; sourceChanged?: boolean; poll?: ReturnType<typeof setInterval>; guard?: ReturnType<typeof setInterval>; timeout?: ReturnType<typeof setTimeout>; checking?: boolean; port?: number; candidate?: string }
 
 const emptyRun = (): SiteRun => ({ id: '', state: 'idle', message: '', log: '' })
 function cleanLog(value: string): string { return value.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '') }
@@ -25,11 +26,13 @@ export class SiteRuntime {
   private findAvailableNode: () => Promise<{ exe: string; source: string } | null>
   private currentRoot: () => string
   private publish: (snapshot: SiteRuntimeSnapshot) => void
-  constructor(configuredNode: () => { exe: string; source: string } | null, currentRoot: () => string, publish: (snapshot: SiteRuntimeSnapshot) => void, findAvailableNode: () => Promise<{ exe: string; source: string } | null> = async () => null) {
+  private sourceWatchToken: (root: string) => number | null
+  constructor(configuredNode: () => { exe: string; source: string } | null, currentRoot: () => string, publish: (snapshot: SiteRuntimeSnapshot) => void, findAvailableNode: () => Promise<{ exe: string; source: string } | null> = async () => null, sourceWatchToken: (root: string) => number | null = () => null) {
     this.configuredNode = configuredNode
     this.findAvailableNode = findAvailableNode
     this.currentRoot = currentRoot
     this.publish = publish
+    this.sourceWatchToken = sourceWatchToken
   }
 
   private assertRoot(root: string) {
@@ -260,6 +263,9 @@ export class SiteRuntime {
         const index = path.join(resolveSiteOutput(project, output), 'index.html')
         let previous = ''
         try { const s = fs.statSync(index); previous = `${s.size}:${s.mtimeMs}` } catch { /* no previous build */ }
+        let beforeHash = ''
+        try { beforeHash = collectSiteSnapshot(project, output).hash } catch { /* Build can proceed, but current source cannot be certified. */ }
+        const watchToken = this.sourceWatchToken(root)
         this.update('build', run, { state: 'running', message: '正在构建…', output })
         const code = await this.launch('build', run, runtime, project, ['run', 'build'])
         if (run.cancelled) { this.end('build', run, 'cancelled', '构建已取消。'); return }
@@ -269,7 +275,9 @@ export class SiteRuntime {
         const stat = fs.lstatSync(path.join(currentOutput, 'index.html'))
         if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('产物目录缺少普通文件 index.html。')
         const unchanged = previous && previous === `${stat.size}:${stat.mtimeMs}`
-        this.end('build', run, 'succeeded', unchanged ? '本次构建通过；产物未检测到变化，请检查构建输出。' : '本次构建通过。', { output })
+        let sourceHash: string | undefined
+        try { const afterHash = collectSiteSnapshot(project, output).hash; if (watchToken !== null && this.sourceWatchToken(root) === watchToken && !run.sourceChanged && beforeHash && beforeHash === afterHash) sourceHash = afterHash } catch { /* Source status remains unknown. */ }
+        this.end('build', run, 'succeeded', unchanged ? '本次构建通过；产物未检测到变化，请检查构建输出。' : '本次构建通过。', { output, sourceHash })
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code
         this.end('build', run, run.cancelled ? 'cancelled' : 'failed', run.cancelled ? '构建已取消。' : code === 'ENOENT' ? '构建产物目录或 index.html 不存在。' : error instanceof Error ? error.message : String(error))
@@ -287,6 +295,9 @@ export class SiteRuntime {
     if (!await stopProcess(run.child)) this.update(kind, run, { state: 'running', message: '停止未确认，请检查并重试。' })
   }
   hasActive(): boolean { return Object.values(this.active).some(Boolean) }
+  noteSourceChange(root: string): void {
+    if (path.resolve(root) === this.root && this.active.build) this.active.build.sourceChanged = true
+  }
   async shutdown(): Promise<boolean> {
     let stopped = true
     await Promise.all(Object.entries(this.active).map(async ([kind, run]) => {

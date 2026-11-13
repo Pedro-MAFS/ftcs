@@ -4,6 +4,7 @@ import type { CloudflareState, CloudflareAction } from './cloudflare/cloudflare-
 import type { GithubState, GithubStart, GithubPoll } from './github/github-auth'
 import type { GithubRepository, GithubBranch } from './github/github-repositories'
 import type { SiteSnapshot } from './site/site-project'
+import type { SiteSourceSnapshot } from './site/site-source-tracker'
 import type { ReleaseRecord, PublishPreview } from './site/site-publish'
 import type { PagesProject, PagesStatus } from './cloudflare/cloudflare-pages'
 import type { RunKind, SiteRuntimeSnapshot } from './site/site-runtime'
@@ -102,6 +103,12 @@ const api = {
   platform: process.platform as NodeJS.Platform,
   getAppStatus: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.APP_GET_STATUS),
   getSite: (): Promise<SiteSnapshot> => ipcRenderer.invoke(IPC.SITE_GET),
+  getSiteSource: (root: string): Promise<SiteSourceSnapshot> => ipcRenderer.invoke(IPC.SITE_SOURCE_GET, root),
+  onSiteSource: (callback: (snapshot: SiteSourceSnapshot) => void): (() => void) => {
+    const listener = (_event: unknown, snapshot: SiteSourceSnapshot) => callback(snapshot)
+    ipcRenderer.on(IPC.SITE_SOURCE_EVENT, listener)
+    return () => ipcRenderer.removeListener(IPC.SITE_SOURCE_EVENT, listener)
+  },
   getSiteRelease: (root: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_GET, root),
   prepareSiteRelease: (root: string, id: number, branch: string, acceptReadme: boolean): Promise<{ ok: true; value: PublishPreview } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_PREPARE, root, id, branch, acceptReadme),
   cancelSiteRelease: (root: string): Promise<{ ok: true; value: void } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_CANCEL, root),

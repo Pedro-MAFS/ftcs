@@ -98,6 +98,8 @@ export const IPC = {
   AGENT_NOTE_PRODUCT: 'agent:note-product',
   APP_OPEN_EXTERNAL: 'app:open-external',
   SITE_GET: 'site:get',
+  SITE_SOURCE_GET: 'site:source-get',
+  SITE_SOURCE_EVENT: 'site:source-event',
   SITE_RELEASE_GET: 'site:release-get',
   SITE_RELEASE_PREPARE: 'site:release-prepare',
   SITE_RELEASE_CANCEL: 'site:release-cancel',
@@ -1135,6 +1137,8 @@ export interface ReplyQuestionResult {
 export type PermissionAskView = {
   permission: string
   tool?: string
+  command?: string
+  directory?: string
 } | null
 
 export interface ReplyPermissionResult {

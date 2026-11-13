@@ -1,6 +1,9 @@
 import { electronMockReady } from './register-electron-mock.ts'
 import assert from 'node:assert/strict'
 import { after, describe, it } from 'node:test'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import type { AgentEventPayload, AgentTimelineItem, AgentRunController } from './agent-runner.ts'
 import {
   FREE_DIALOGUE_NOT_READY,
@@ -95,6 +98,45 @@ after(() => {
 const describeSend = electronMockReady ? describe : describe.skip
 
 describeSend('sendFreeDialogue', () => {
+  it('uses a completed site skill to authorize only matching site edits and ask for a command', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-dialogue-site-'))
+    const site = path.join(root, 'website'); fs.mkdirSync(site); fs.mkdirSync(path.join(root, '.ftcs'))
+    fs.writeFileSync(path.join(site, 'package.json'), JSON.stringify({ scripts: { dev: 'vite', build: 'vite build' } }))
+    fs.writeFileSync(path.join(root, '.ftcs/site.json'), JSON.stringify({ version: 1, projectDir: 'website', buildOutputDir: 'dist' }))
+    const previousRoot = process.env.FTCS_WORKSPACE
+    process.env.FTCS_WORKSPACE = root
+    const stream = createEventStream(), emitted: AgentEventPayload[] = [], replies: Array<{ requestID: string; reply: string }> = []
+    let finishWait!: (value: { response: { status: number } }) => void
+    const waiting = new Promise<{ response: { status: number } }>(resolve => { finishWait = resolve })
+    const client = {
+      session: { async create() { return { data: { id: 'ses_site' } } }, async promptAsync() { return {} } },
+      event: { async subscribe() { return { stream: stream.stream } } },
+      permission: { async reply(call: { requestID: string; reply: string }) { replies.push(call); return { data: true } } },
+      v2: { session: { async wait() { return waiting } } },
+    }
+    const runner = new AgentRunController!(() => client as never)
+    const task = runner.sendFreeDialogue('修改网站', event => emitted.push(event))
+    const until = async (fn: () => boolean) => { const end = Date.now() + 3000; while (!fn() && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 10)); assert.ok(fn()) }
+    const part = (id: string, tool: string, state: Record<string, unknown>) => ({ type: 'message.part.updated', properties: { sessionID: 'ses_site', part: { id, messageID: 'msg', sessionID: 'ses_site', callID: id, type: 'tool', tool, state } } })
+    try {
+      await until(() => emitted.some(event => event.type === 'timeline'))
+      stream.push(part('skill-1', 'skill', { status: 'completed', input: { name: 'build-website' }, output: 'skill', title: 'skill', metadata: {}, time: { start: 1, end: 2 } }))
+      const file = path.join(site, 'page.vue')
+      stream.push(part('edit-1', 'write', { status: 'running', input: { filePath: file, content: 'hello' }, time: { start: 3 } }))
+      stream.push({ type: 'permission.asked', properties: { id: 'edit-permission', sessionID: 'ses_site', permission: 'edit', patterns: ['website/page.vue'], metadata: { filepath: file }, tool: { messageID: 'msg', callID: 'edit-1' } } })
+      await until(() => replies.some(item => item.requestID === 'edit-permission'))
+      assert.equal(replies.find(item => item.requestID === 'edit-permission')?.reply, 'once')
+      stream.push(part('shell-1', 'bash', { status: 'running', input: { command: 'npm run build', workdir: site }, time: { start: 4 } }))
+      stream.push({ type: 'permission.asked', properties: { id: 'shell-permission', sessionID: 'ses_site', permission: 'bash', patterns: ['npm run build'], metadata: { command: 'npm run build' }, tool: { messageID: 'msg', callID: 'shell-1' } } })
+      await until(() => emitted.some(event => event.type === 'permission-ask' && event.pending?.command === 'npm run build'))
+      assert.equal((await runner.replyToPendingPermission('reject')).ok, true)
+      assert.equal(replies.find(item => item.requestID === 'shell-permission')?.reply, 'reject')
+    } finally {
+      finishWait({ response: { status: 204 } }); await task; runner.disconnect(); stream.close()
+      if (previousRoot === undefined) delete process.env.FTCS_WORKSPACE; else process.env.FTCS_WORKSPACE = previousRoot
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
   it('creates a clean session and sends the next message to it', async () => {
     const prompts: Array<{ sessionID: string }> = []
     const emitted: AgentEventPayload[] = []

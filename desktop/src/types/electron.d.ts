@@ -1,7 +1,8 @@
 interface CloudflareState { connected: boolean; authorized?: boolean; pending?: boolean; accountId?: string; accountName?: string; accounts?: Array<{ id: string; name: string }>; message?: string }
 interface SiteSnapshot { status: 'not_created' | 'empty' | 'existing' | 'ready' | 'missing' | 'invalid' | 'error'; workspaceRoot: string; projectPath: string; message: string; dependencies: 'missing' | 'unknown' }
-interface SiteRun { id: string; state: 'idle' | 'starting' | 'running' | 'address_pending' | 'stopping' | 'succeeded' | 'failed' | 'cancelled'; message: string; log: string; url?: string; startedAt?: string; finishedAt?: string; node?: string; output?: string }
+interface SiteRun { id: string; state: 'idle' | 'starting' | 'running' | 'address_pending' | 'stopping' | 'succeeded' | 'failed' | 'cancelled'; message: string; log: string; url?: string; startedAt?: string; finishedAt?: string; node?: string; output?: string; sourceHash?: string }
 interface SiteRuntimeSnapshot { workspaceRoot: string; sequence: number; outputDir: string | null; dependencies: 'missing' | 'unknown' | 'not_required'; install: SiteRun; preview: SiteRun; build: SiteRun }
+interface SiteSourceSnapshot { workspaceRoot: string; sequence: number; state: 'not_ready' | 'unpublished' | 'clean' | 'changed' | 'unknown'; hash?: string; message: string; watching: boolean }
 interface SiteRelease { version: 1; createdRepositories: string[]; target?: { id: number; owner: string; name: string; fullName: string; branch: string; private: boolean }; commitSha?: string; snapshotHash?: string; pending?: { target: { id: number; fullName: string; branch: string }; base: string }; pendingPages?: { accountId: string; project: string; commitSha: string }; pendingDeployment?: { accountId: string; project: string; commitSha: string; deploymentId?: string; requestedAt: string }; buildNotice?: string; cloudflare?: { accountId: string; project: string }; history?: Array<{ target: { fullName: string; branch: string }; commitSha: string; at: string }>; lastOnline?: { commitSha: string; project: string; url: string; confirmedAt: string } }
 interface SitePublishPreview { id: string; target: { fullName: string; branch: string; private: boolean }; head: string; hash: string; files: Array<{ path: string; size: number; change: '新增' | '修改' | '未变化' }>; deleted: string[]; log: string; noChanges: boolean }
 interface PagesProject { name: string; subdomain: string; owner: string; repo: string; repoId: string; branch: string; buildCommand: string; output: string; rootDir: string; autoDeploy: boolean | null; type: string }
@@ -69,6 +70,8 @@ export type AwaitingUserReply = {
 export type PermissionAskView = {
   permission: string
   tool?: string
+  command?: string
+  directory?: string
 } | null
 
 export type AgentEventPayload =
@@ -972,6 +975,8 @@ declare global {
       selectCloudflareAccount: (accountId: string) => Promise<CloudflareState & { ok: boolean }>
       disconnectCloudflare: () => Promise<void>
       getGithubState: () => Promise<{ connected: boolean; authorized?: boolean; login?: string; message?: string; installUrl?: string }>
+      getSiteSource: (root: string) => Promise<SiteSourceSnapshot>
+      onSiteSource: (callback: (snapshot: SiteSourceSnapshot) => void) => () => void
       getSiteRelease: (root: string) => Promise<SiteResult<SiteRelease>>
       prepareSiteRelease: (root: string, id: number, branch: string, acceptReadme: boolean) => Promise<SiteResult<SitePublishPreview>>
       cancelSiteRelease: (root: string) => Promise<SiteResult<void>>

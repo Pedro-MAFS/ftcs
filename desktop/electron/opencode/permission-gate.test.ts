@@ -114,14 +114,14 @@ describe('readPermissionAsk', () => {
           tool: { messageID: 'msg', callID: 'call' },
         },
       }),
-      { id: 'req-1', permission: 'webfetch' },
+      { id: 'req-1', permission: 'webfetch', sessionId: 'ses', callId: 'call' },
     )
     assert.deepEqual(
       readPermissionAsk({
         type: 'permission.v2.asked',
         properties: { id: 'req-2', action: 'task', metadata: { tool: 'lead-store_product_list' } },
       }),
-      { id: 'req-2', permission: 'task', tool: 'lead-store_product_list' },
+      { id: 'req-2', permission: 'task', tool: 'lead-store_product_list', metadata: { tool: 'lead-store_product_list' } },
     )
     assert.equal(readPermissionAsk({ type: 'question.asked', properties: { id: 'q' } }), null)
   })

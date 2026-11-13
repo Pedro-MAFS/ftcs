@@ -33,12 +33,20 @@ export type PermissionReplyCall = {
 export type PermissionCardView = {
   permission: string
   tool?: string
+  command?: string
+  directory?: string
 }
 
 export type PermissionAsk = {
   id: string
   permission: string
   tool?: string
+  sessionId?: string
+  callId?: string
+  patterns?: string[]
+  metadata?: Record<string, unknown>
+  command?: string
+  directory?: string
 }
 
 export type ReplyPermissionResult = {
@@ -52,6 +60,7 @@ type PermissionHooks = {
   reply: (call: PermissionReplyCall) => Promise<PermissionReplyOutcome>
   emit: (pending: PermissionCardView | null) => void
   onReplyFailed: () => void
+  classifyHardBoundary?: (ask: PermissionAsk) => { action: 'allow' | 'ask' | 'deny'; command?: string; directory?: string }
 }
 
 export function isHardBoundaryPermission(permission: string): boolean {
@@ -105,7 +114,13 @@ export function readPermissionAsk(event: {
     event.type === 'permission.v2.asked' ? asString(props.action) : asString(props.permission)
   if (!permission) return null
   const tool = readToolKey(props.tool) ?? readToolKey(props.metadata)
-  return tool ? { id, permission, tool } : { id, permission }
+  const sessionId = asString(props.sessionID)
+  const toolInfo = asRecord(props.tool) ?? asRecord(props.source)
+  const callId = asString(toolInfo?.callID)
+  const rawPatterns = props.patterns ?? props.resources
+  const patterns = Array.isArray(rawPatterns) && rawPatterns.every(item => typeof item === 'string') ? rawPatterns as string[] : undefined
+  const metadata = asRecord(props.metadata)
+  return { id, permission, ...(tool ? { tool } : {}), ...(sessionId ? { sessionId } : {}), ...(callId ? { callId } : {}), ...(patterns ? { patterns } : {}), ...(metadata ? { metadata } : {}) }
 }
 
 export class PermissionCoordinator {
@@ -125,15 +140,31 @@ export class PermissionCoordinator {
       if (this.hooks.hasFailed()) return
       if (!ask.id || !ask.permission) return
       const running = this.hooks.isRunning()
-      if (running || isHardBoundaryPermission(ask.permission)) {
+      if (running) {
         await this.rejectNow(ask.id, running)
         return
+      }
+      let siteDecision: ReturnType<NonNullable<PermissionHooks['classifyHardBoundary']>> | undefined
+      if (isHardBoundaryPermission(ask.permission)) {
+        siteDecision = this.hooks.classifyHardBoundary?.(ask)
+        if (siteDecision?.action === 'allow') {
+          const outcome = await this.send({ requestID: ask.id, reply: 'once' })
+          if (outcome === 'failed') this.hooks.onReplyFailed()
+          return
+        }
+        if (siteDecision?.action !== 'ask') { await this.rejectNow(ask.id, false); return }
       }
       if (this.queue.some((item) => item.id === ask.id)) return
       this.queue.push({
         id: ask.id,
         permission: ask.permission,
         ...(ask.tool ? { tool: ask.tool } : {}),
+        ...(ask.sessionId ? { sessionId: ask.sessionId } : {}),
+        ...(ask.callId ? { callId: ask.callId } : {}),
+        ...(ask.patterns ? { patterns: ask.patterns } : {}),
+        ...(ask.metadata ? { metadata: ask.metadata } : {}),
+        ...(siteDecision?.command ? { command: siteDecision.command } : {}),
+        ...(siteDecision?.directory ? { directory: siteDecision.directory } : {}),
       })
       this.emitHead()
     })
@@ -148,6 +179,12 @@ export class PermissionCoordinator {
       if (!choice) return { ok: false, message: PERMISSION_INVALID_CHOICE_MESSAGE }
       const head = this.queue[0]
       if (!head) return { ok: false, message: PERMISSION_NONE_PENDING_MESSAGE }
+      if (isHardBoundaryPermission(head.permission) && (this.hooks.isRunning() || this.hooks.classifyHardBoundary?.(head).action !== 'ask')) {
+        await this.rejectNow(head.id, this.hooks.isRunning())
+        this.queue = this.queue.filter(item => item.id !== head.id)
+        this.emitHead()
+        return { ok: false, message: '授权上下文已变化，请重新发起操作。' }
+      }
       const epoch = this.epoch
       this.inflightId = head.id
       const outcome = await this.send({
@@ -221,7 +258,7 @@ export class PermissionCoordinator {
   private emitHead(force = false): void {
     const head = this.queue[0]
     const view: PermissionCardView | null = head
-      ? { permission: head.permission, ...(head.tool ? { tool: head.tool } : {}) }
+      ? { permission: head.permission, ...(head.tool ? { tool: head.tool } : {}), ...(head.command ? { command: head.command } : {}), ...(head.directory ? { directory: head.directory } : {}) }
       : null
     const key = JSON.stringify(view)
     if (!force && key === this.emittedKey) return

@@ -18,6 +18,8 @@ import {
 import { patchProfileSourceInputs } from '../profile/profile-writer'
 import { loadExpansion, type KeywordExpansion } from '../keywords/keywords-reader'
 import { getWorkspaceRoot } from '../config/paths'
+import { getSiteSnapshot } from '../site/site-project'
+import { decideSitePermission } from './site-permissions'
 import { googleRejectionFromToolPart } from '../../src/domain/places-official'
 import {
   beginPlacesDiscoverRun,
@@ -899,6 +901,9 @@ export class AgentRunController {
   private suppressDialogueStopped = false
   /** 本轮自由对话里 skill 工具加载到的技能名。按钮任务不写这里。 */
   private chatStepSkill: string | null = null
+  private websiteContext: { sessionId: string; root: string; token: number } | null = null
+  private websiteToolCalls = new Map<string, { tool: string; input: Record<string, unknown> }>()
+  private permissionProtocols = new Map<string, { protocol: 'v1' | 'v2'; sessionId: string }>()
   private activeProductId = ''
   private preservedChatTimeline: TimelineBuilder | null = null
   private chatNoticeSeq = 0
@@ -1528,6 +1533,12 @@ export class AgentRunController {
     this.permissionGate = new PermissionCoordinator({
       isRunning: () => this.running || !!this.lifecycle.current,
       hasFailed: () => this.permissionFailureHandled,
+      classifyHardBoundary: (ask) => {
+        const context = this.websiteContext
+        const root = getWorkspaceRoot()
+        if (!context || !this.dialogueActive || this.running || this.lifecycle.current || context.token !== this.dialogueToken || this.sessionId !== context.sessionId || getSiteSnapshot(root).status !== 'ready') return { action: 'deny' }
+        return decideSitePermission({ ask, activeSession: context.sessionId, activeRoot: context.root, currentRoot: root, toolCall: ask.callId ? this.websiteToolCalls.get(ask.callId) : undefined })
+      },
       reply: (call) => this.sendPermissionReply(call),
       emit: (pending) => {
         this.currentEmit?.({ type: 'permission-ask', pending })
@@ -1677,6 +1688,10 @@ export class AgentRunController {
     const name = readLoadedSkillName(part.tool, part.state.input)
     if (!name) return
     this.chatStepSkill = name
+    if (name === 'build-website' && part.state.status === 'completed' && this.dialogueActive && this.sessionId === part.sessionID && !this.lifecycle.current) {
+      const root = getWorkspaceRoot()
+      if (getSiteSnapshot(root).status === 'ready') this.websiteContext = { sessionId: part.sessionID, root, token: this.dialogueToken }
+    }
   }
 
   /**
@@ -1860,6 +1875,8 @@ export class AgentRunController {
     const token = ++this.dialogueToken
     this.permissionFailureHandled = false
     this.chatStepSkill = null
+    this.websiteContext = null
+    this.websiteToolCalls.clear()
     this.dialogueActive = true
     this.dialogueStopRequested = false
     this.autoAbortReason = null
@@ -2084,12 +2101,17 @@ export class AgentRunController {
     const client = this.getClient()
     if (!client) return 'failed'
     try {
-      const res = await client.permission.reply(call)
-      return classifyPermissionHttpResult({
+      const info = this.permissionProtocols.get(call.requestID)
+      const res = info?.protocol === 'v2'
+        ? await client.v2.session.permission.reply({ sessionID: info.sessionId, requestID: call.requestID, reply: call.reply, ...(call.message ? { message: call.message } : {}) })
+        : await client.permission.reply(call)
+      const result = classifyPermissionHttpResult({
         error: res.error,
         data: res.data,
         status: res.response?.status,
       })
+      if (result !== 'failed') this.permissionProtocols.delete(call.requestID)
+      return result
     } catch (error) {
       return classifyPermissionHttpResult({ error, data: undefined })
     }
@@ -4455,6 +4477,7 @@ export class AgentRunController {
           if (sid !== sessionId && !knownChildren.has(sid)) return
           const ask = readPermissionAsk(event)
           if (!ask) return
+          this.permissionProtocols.set(ask.id, { protocol: event.type === 'permission.v2.asked' ? 'v2' : 'v1', sessionId: sid })
           void this.permissionGate.onAsked(ask)
           return
         }
@@ -4659,6 +4682,10 @@ export class AgentRunController {
             return
           }
           if (part.type === 'tool') {
+            if (this.dialogueActive && part.sessionID === this.sessionId && part.state.status === 'running' && part.callID && part.state.input && typeof part.state.input === 'object') {
+              if (this.websiteToolCalls.size >= 200) this.websiteToolCalls.clear()
+              this.websiteToolCalls.set(part.callID, { tool: part.tool, input: part.state.input })
+            }
             this.noteLoadedSkill(part)
             if (part.tool === 'task') {
               const card = taskToolTimelineItem(part)

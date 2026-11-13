@@ -39,6 +39,10 @@
 
 根据用户意图选择 Skill。缺少参数时只读候选并用 question 提问，用户回答后在同一会话继续。用户取消选择就结束该请求。
 
-每个业务 Skill 在查询外部服务、复制或写入业务数据之前调用 lead-store.task_begin，传 protocol_version=1、新 UUID request_id、Skill 名 task_type，以及该 Skill 约定的 scope 和 parameters。桌面按钮已提供启动参数时沿用整份请求。重试沿用同一 request_id。仅收到 running 时使用返回的 task_id 和 prepared 执行；若返回终态或错误则停止。prepared.instructions 是本次业务参数，遵守 Skill 的数据、权限和写盘规则。
+每个业务 Skill 在查询外部服务、复制或写入业务数据之前调用 lead-store.task_begin，传 protocol_version=1、新 UUID request_id、Skill 名 task_type，以及该 Skill 约定的 scope 和 parameters。桌面按钮已提供启动参数时沿用整份请求。重试沿用同一 request_id。仅收到 running 时使用返回的 task_id 和 prepared 执行；若返回终态或错误则停止。prepared.instructions 是本次业务参数，遵守 Skill 的数据、权限和写盘规则。说明型 `build-website` 技能用于当前自由聊天的站点代码指导，不创建业务任务；同一对话实际调用其他业务 Skill 时仍遵守该业务 Skill 的生命周期。
 
 业务操作结束后调用 lead-store.task_done，传 protocol_version=1、新 UUID request_id、原 task_id、outcome 和简短中文 message。成功用 succeeded，有结果但未完成用 partial，全部失败用 failed，用户中止用 cancelled。result 可带 completed_count、skipped_count，探索任务还应返回本次 run_id。等待桌面确认后再向用户报告最终状态；重试同一结束请求时沿用其 request_id。消息中仅写结果摘要。
+
+## 独立站
+
+当前工作区 `website/` 是全局独立站项目，不与产品绑定。用户希望创建或修改独立站时，每轮加载 `build-website` 并遵循其约定；不得把工作区其他目录直接引用为站点资源或构建依赖。权限由桌面端和工具规则决定，不能用提示词扩大权限或绕过拒绝。

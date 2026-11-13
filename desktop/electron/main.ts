@@ -5,6 +5,7 @@ import { GithubRepositories } from './github/github-repositories'
 import { adoptSite, createSite, getSiteOutput, getSiteSnapshot } from './site/site-project'
 import { SitePublish, readRelease, type ReleaseRecord } from './site/site-publish'
 import { SiteDeployment } from './site/site-deployment'
+import { SiteSourceTracker } from './site/site-source-tracker'
 import { SiteRuntime, type RunKind } from './site/site-runtime'
 import { resolveConfiguredNode } from './runtime/node-paths'
 import { resolveBestNode } from './runtime/resolve-node'
@@ -266,7 +267,8 @@ let mainWindow: BrowserWindow | null = null
 const siteRuntime = new SiteRuntime(resolveConfiguredNode, getWorkspaceRoot, snapshot => {
   if (snapshot.preview.state !== 'running') clearVerifiedPreviewTargets()
   broadcastToWindows(IPC.SITE_RUNTIME_EVENT, snapshot)
-}, async () => (await resolveBestNode()).bestOk)
+}, async () => (await resolveBestNode()).bestOk, root => siteSource.watchToken(root))
+const siteSource = new SiteSourceTracker(getWorkspaceRoot, snapshot => broadcastToWindows(IPC.SITE_SOURCE_EVENT, snapshot), root => siteRuntime.noteSourceChange(root))
 const githubRepositories = new GithubRepositories(getGithubAccessToken)
 const sitePublish = new SitePublish(githubRepositories, async () => resolveConfiguredNode() ?? (await resolveBestNode()).bestOk, getWorkspaceRoot)
 const pages = new CloudflarePages(getCloudflareCredentials)
@@ -677,6 +679,7 @@ function registerIpcHandlers(): void {
     if (typeof expected !== 'string' || comparable(path.resolve(expected)) !== comparable(root)) throw new Error('当前工作区已改变，请刷新后重试。')
     return root
   }
+  ipcMain.handle(IPC.SITE_SOURCE_GET, (_event, expected: unknown) => siteSource.snapshot(currentSiteWorkspace(expected)))
   ipcMain.handle(IPC.SITE_CREATE, (_event, expected: unknown) => {
     try {
       const root = currentSiteWorkspace(expected)
@@ -1164,6 +1167,7 @@ function registerIpcHandlers(): void {
     }
 
     const init = initializeWorkspace(dir, { forceManaged: true })
+    siteSource.close()
     writeUserPrefs({ workspaceRoot: dir })
     process.env.FTCS_WORKSPACE = dir
 
@@ -2081,6 +2085,7 @@ app.on('before-quit', (event) => {
 
   void (async () => {
     try {
+      siteSource.close()
       await sitePublish.shutdown()
       await siteRuntime.shutdown()
       await shutdownBuiltinBrowser()

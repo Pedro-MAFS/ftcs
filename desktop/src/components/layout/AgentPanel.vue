@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import Icon from '../shared/Icon.vue'
 import AgentAwaitingReplyCard from './AgentAwaitingReplyCard.vue'
 import AgentPermissionCard from './AgentPermissionCard.vue'
@@ -77,6 +77,10 @@ const awaitingCardKey = computed(() => {
 })
 
 const timelineEl = ref<HTMLElement | null>(null)
+const composerEl = ref<HTMLTextAreaElement | null>(null)
+function focusComposer() { void nextTick(() => composerEl.value?.focus()) }
+onMounted(() => window.addEventListener('ftcs:focus-agent-composer', focusComposer))
+onUnmounted(() => window.removeEventListener('ftcs:focus-agent-composer', focusComposer))
 const composerHint = ref('')
 const creatingSession = ref(false)
 const pinToBottom = ref(true)
@@ -380,6 +384,7 @@ watch(
 
     <div class="agent-panel__composer">
       <textarea
+        ref="composerEl"
         v-model="agentPrompt"
         class="composer-input"
         rows="2"
