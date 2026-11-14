@@ -15,6 +15,7 @@ export interface TaskReceiver {
   done(session: string, request: Done): unknown
   recordWrite(context: ToolIdentity, result: Record<string, string>): void
   authorize(context: ToolIdentity, args: Record<string, unknown>): string | undefined
+  noteShellCall?(context: ToolIdentity, args: Record<string, unknown>): void
   siteTool?(context: ToolIdentity, name: string): Promise<unknown>
 }
 
@@ -58,6 +59,10 @@ export async function openTaskBridge(receiver: () => TaskReceiver) {
         if (![sessionID, callID, tool].every((v) => typeof v === 'string' && v.length > 0 && v.length < 256))
           throw new Error('无效调用上下文')
         const identity: ToolIdentity = { sessionID, callID, tool }
+        if (tool === 'bash' || tool === 'shell') {
+          receiver().noteShellCall?.(identity, body.args ?? {})
+          return reply(200, { ok: true })
+        }
         identity.taskID = receiver().authorize(identity, body.args ?? {})
         if (!tool.startsWith('lead-store_')) return reply(200, { ok: true })
         for (const [key, value] of tickets) if (value.expires < Date.now()) tickets.delete(key)

@@ -42,7 +42,7 @@ describe('opencode.json permission（US-FD-02 §5）', () => {
     assert.equal(permission.edit, 'ask')
     assert.equal(permission.bash, 'ask')
     assert.equal(permission.shell, 'ask')
-    assert.equal(permission.external_directory, 'deny')
+    assert.equal(permission.external_directory, 'ask')
     assert.equal(permission.webfetch, 'ask')
     assert.equal(permission.websearch, 'ask')
     assert.equal(permission.task, 'ask')

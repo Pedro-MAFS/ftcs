@@ -20,7 +20,7 @@ import { patchProfileSourceInputs } from '../profile/profile-writer'
 import { loadExpansion, type KeywordExpansion } from '../keywords/keywords-reader'
 import { getWorkspaceRoot } from '../config/paths'
 import { getSiteSnapshot } from '../site/site-project'
-import { decideSitePermission } from './site-permissions'
+import { decideChatShellPermission, decideSitePermission } from './site-permissions'
 import { googleRejectionFromToolPart } from '../../src/domain/places-official'
 import {
   beginPlacesDiscoverRun,
@@ -183,7 +183,7 @@ export type AgentEventPayload =
     }
   | {
       type: 'permission-ask'
-      pending: { permission: string; tool?: string } | null
+      pending: { permission: string; tool?: string; command?: string; directory?: string } | null
     }
 
 export type AgentEventSink = (event: AgentEventPayload) => void
@@ -903,7 +903,8 @@ export class AgentRunController {
   private suppressDialogueStopped = false
   /** 本轮自由对话里 skill 工具加载到的技能名。按钮任务不写这里。 */
   private chatStepSkill: string | null = null
-  private websiteContext: { sessionId: string; root: string; token: number } | null = null
+  private dialogueRoot = ''
+  private dialoguePermissionSessions = new Set<string>()
   private websiteToolCalls = new Map<string, { tool: string; input: Record<string, unknown> }>()
   private permissionProtocols = new Map<string, { protocol: 'v1' | 'v2'; sessionId: string }>()
   private activeProductId = ''
@@ -1124,7 +1125,7 @@ export class AgentRunController {
       throw new Error('工具调用不属于当前任务会话')
     const name = context.tool.slice('lead-store_'.length)
     if (['site_status', 'site_preview', 'site_open_preview', 'site_build', 'site_publish_prepare'].includes(name) && context.tool === `lead-store_${name}`) {
-      if (!this.siteContextActive(context)) throw new Error('请在当前自由聊天中先加载独立站技能。')
+      if (!this.siteContextActive(context)) throw new Error('当前会话或独立站不可用。')
       return
     }
     if (name === 'task_begin' || name === 'task_done') return
@@ -1198,15 +1199,21 @@ export class AgentRunController {
     return task.task_id
   }
 
+  noteShellCall(context: ToolIdentity, args: Record<string, unknown>): void {
+    if (!this.dialogueActive || this.running || this.lifecycle.current || this.abort?.signal.aborted) return
+    if (!['bash', 'shell'].includes(context.tool.toLowerCase())) return
+    this.websiteToolCalls.set(`${context.sessionID}\0${context.callID}`, { tool: context.tool, input: args })
+  }
+
   private siteContextActive(context: ToolIdentity): boolean {
-    const site = this.websiteContext
     const same = (value: string) => process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value)
-    return !!site && this.dialogueActive && !this.running && !this.lifecycle.current && !this.abort?.signal.aborted && context.sessionID === this.sessionId && site.sessionId === context.sessionID && site.token === this.dialogueToken && same(site.root) === same(getWorkspaceRoot()) && getSiteSnapshot(site.root).status === 'ready'
+    return !!this.dialogueRoot && this.dialogueActive && !this.running && !this.lifecycle.current && !this.abort?.signal.aborted && context.sessionID === this.sessionId && same(this.dialogueRoot) === same(getWorkspaceRoot()) && getSiteSnapshot(this.dialogueRoot).status === 'ready'
   }
 
   async siteTool(context: ToolIdentity, name: string): Promise<unknown> {
-    if (!this.siteContextActive(context) || !this.websiteContext || !this.hooks.siteTool) throw new Error('独立站会话或工具不可用。')
-    return this.hooks.siteTool(name, this.websiteContext.root, () => this.siteContextActive(context))
+    if (!this.siteContextActive(context) || !this.hooks.siteTool) throw new Error('独立站会话或工具不可用。')
+    const root = this.dialogueRoot, token = this.dialogueToken
+    return this.hooks.siteTool(name, root, () => this.dialogueToken === token && this.siteContextActive(context))
   }
 
   recordWrite(
@@ -1551,10 +1558,16 @@ export class AgentRunController {
       isRunning: () => this.running || !!this.lifecycle.current,
       hasFailed: () => this.permissionFailureHandled,
       classifyHardBoundary: (ask) => {
-        const context = this.websiteContext
         const root = getWorkspaceRoot()
-        if (!context || !this.dialogueActive || this.running || this.lifecycle.current || context.token !== this.dialogueToken || this.sessionId !== context.sessionId || getSiteSnapshot(root).status !== 'ready') return { action: 'deny' }
-        return decideSitePermission({ ask, activeSession: context.sessionId, activeRoot: context.root, currentRoot: root, toolCall: ask.callId ? this.websiteToolCalls.get(ask.callId) : undefined })
+        const same = (value: string) => process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value)
+        if (!this.dialogueRoot || !this.dialogueActive || this.running || this.lifecycle.current || this.abort?.signal.aborted || !ask.sessionId || !this.dialoguePermissionSessions.has(ask.sessionId) || same(this.dialogueRoot) !== same(root)) return { action: 'deny' }
+        const toolCall = ask.callId ? this.websiteToolCalls.get(`${ask.sessionId}\0${ask.callId}`) : undefined
+        const permission = ask.permission.trim().toLowerCase()
+        if (permission === 'bash' || permission === 'shell') return decideChatShellPermission(ask, toolCall)
+        // OpenCode may check an external workdir before the separate bash permission.
+        if (permission === 'external_directory' && toolCall && ['bash', 'shell'].includes(toolCall.tool.toLowerCase())) return { action: 'allow' }
+        if (permission !== 'edit' || getSiteSnapshot(root).status !== 'ready') return { action: 'deny' }
+        return decideSitePermission({ ask, activeSession: ask.sessionId, activeRoot: this.dialogueRoot, currentRoot: root, toolCall })
       },
       reply: (call) => this.sendPermissionReply(call),
       emit: (pending) => {
@@ -1705,10 +1718,6 @@ export class AgentRunController {
     const name = readLoadedSkillName(part.tool, part.state.input)
     if (!name) return
     this.chatStepSkill = name
-    if (name === 'build-website' && part.state.status === 'completed' && this.dialogueActive && this.sessionId === part.sessionID && !this.lifecycle.current) {
-      const root = getWorkspaceRoot()
-      if (getSiteSnapshot(root).status === 'ready') this.websiteContext = { sessionId: part.sessionID, root, token: this.dialogueToken }
-    }
   }
 
   /**
@@ -1892,7 +1901,8 @@ export class AgentRunController {
     const token = ++this.dialogueToken
     this.permissionFailureHandled = false
     this.chatStepSkill = null
-    this.websiteContext = null
+    this.dialogueRoot = getWorkspaceRoot()
+    this.dialoguePermissionSessions.clear()
     this.websiteToolCalls.clear()
     this.dialogueActive = true
     this.dialogueStopRequested = false
@@ -4494,6 +4504,7 @@ export class AgentRunController {
           if (sid !== sessionId && !knownChildren.has(sid)) return
           const ask = readPermissionAsk(event)
           if (!ask) return
+          if (this.dialogueActive) this.dialoguePermissionSessions.add(sid)
           this.permissionProtocols.set(ask.id, { protocol: event.type === 'permission.v2.asked' ? 'v2' : 'v1', sessionId: sid })
           void this.permissionGate.onAsked(ask)
           return
@@ -4627,6 +4638,7 @@ export class AgentRunController {
           if (knownChildren.has(event.properties.sessionID)) {
             const { part } = event.properties
             if (part.type === 'tool') {
+              if (this.dialogueActive && part.state.status === 'running' && part.callID && part.state.input && typeof part.state.input === 'object') this.websiteToolCalls.set(`${event.properties.sessionID}\0${part.callID}`, { tool: part.tool, input: part.state.input })
               pushChildStep(event.properties.sessionID, childToolStep(part))
               if (this.watchPlacesGoogleRejection && !this.placesRejectionHandled) {
                 const googleMessage = googleRejectionFromToolPart(part)
@@ -4701,7 +4713,7 @@ export class AgentRunController {
           if (part.type === 'tool') {
             if (this.dialogueActive && part.sessionID === this.sessionId && part.state.status === 'running' && part.callID && part.state.input && typeof part.state.input === 'object') {
               if (this.websiteToolCalls.size >= 200) this.websiteToolCalls.clear()
-              this.websiteToolCalls.set(part.callID, { tool: part.tool, input: part.state.input })
+              this.websiteToolCalls.set(`${part.sessionID}\0${part.callID}`, { tool: part.tool, input: part.state.input })
             }
             this.noteLoadedSkill(part)
             if (part.tool === 'task') {

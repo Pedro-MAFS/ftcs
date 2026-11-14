@@ -24,7 +24,7 @@
     "edit": "ask",
     "bash": "ask",
     "shell": "ask",
-    "external_directory": "deny",
+    "external_directory": "ask",
     "lsp": "deny",
     "webfetch": "ask",
     "websearch": "ask",

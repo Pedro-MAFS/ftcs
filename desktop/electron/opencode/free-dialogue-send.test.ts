@@ -98,7 +98,7 @@ after(() => {
 const describeSend = electronMockReady ? describe : describe.skip
 
 describeSend('sendFreeDialogue', () => {
-  it('uses a completed site skill to authorize only matching site edits and ask for a command', async () => {
+  it('authorizes site tools and matching edits without a skill, and asks for a shell command without workdir', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-dialogue-site-'))
     const site = path.join(root, 'website'); fs.mkdirSync(site); fs.mkdirSync(path.join(root, '.ftcs'))
     fs.writeFileSync(path.join(site, 'package.json'), JSON.stringify({ scripts: { dev: 'vite', build: 'vite build' } }))
@@ -121,8 +121,8 @@ describeSend('sendFreeDialogue', () => {
     try {
       await until(() => emitted.some(event => event.type === 'timeline'))
       const siteCall = { sessionID: 'ses_site', callID: 'site-call', tool: 'lead-store_site_preview' }
-      assert.throws(() => runner.authorize(siteCall, {}), /先加载独立站技能/)
-      stream.push(part('skill-1', 'skill', { status: 'completed', input: { name: 'build-website' }, output: 'skill', title: 'skill', metadata: {}, time: { start: 1, end: 2 } }))
+      assert.equal(runner.authorize(siteCall, {}), undefined)
+      assert.deepEqual(await runner.siteTool(siteCall, 'site_preview'), { name: 'site_preview', actualRoot: root, active: true })
       const file = path.join(site, 'page.vue')
       stream.push(part('edit-1', 'write', { status: 'running', input: { filePath: file, content: 'hello' }, time: { start: 3 } }))
       stream.push({ type: 'permission.asked', properties: { id: 'edit-permission', sessionID: 'ses_site', permission: 'edit', patterns: ['website/page.vue'], metadata: { filepath: file }, tool: { messageID: 'msg', callID: 'edit-1' } } })
@@ -131,9 +131,22 @@ describeSend('sendFreeDialogue', () => {
       assert.equal(runner.authorize(siteCall, {}), undefined)
       assert.deepEqual(await runner.siteTool(siteCall, 'site_preview'), { name: 'site_preview', actualRoot: root, active: true })
       assert.throws(() => runner.authorize({ ...siteCall, sessionID: 'other' }, {}), /会话/)
-      stream.push(part('shell-1', 'bash', { status: 'running', input: { command: 'npm run build', workdir: site }, time: { start: 4 } }))
+      process.env.FTCS_WORKSPACE = path.join(root, 'other-workspace')
+      assert.throws(() => runner.authorize(siteCall, {}), /不可用/)
+      process.env.FTCS_WORKSPACE = root
+      runner.noteShellCall({ sessionID: 'ses_site', callID: 'shell-external', tool: 'bash' }, { command: 'pwd', workdir: root })
+      stream.push({ type: 'permission.asked', properties: { id: 'external-permission', sessionID: 'ses_site', permission: 'external_directory', patterns: [root], metadata: { filepath: root }, tool: { messageID: 'msg', callID: 'shell-external' } } })
+      await until(() => replies.some(item => item.requestID === 'external-permission'))
+      assert.equal(replies.find(item => item.requestID === 'external-permission')?.reply, 'once')
+      stream.push({ type: 'permission.asked', properties: { id: 'external-shell-permission', sessionID: 'ses_site', permission: 'bash', patterns: ['pwd'], metadata: { command: 'pwd' }, tool: { messageID: 'msg', callID: 'shell-external' } } })
+      await until(() => emitted.some(event => event.type === 'permission-ask' && event.pending?.command === 'pwd'))
+      assert.equal((await runner.replyToPendingPermission('once')).ok, true)
+      assert.equal(replies.find(item => item.requestID === 'external-shell-permission')?.reply, 'once')
+      fs.renameSync(site, path.join(root, 'site-removed'))
+      stream.push(part('shell-1', 'bash', { status: 'running', input: { command: 'npm run build' }, time: { start: 4 } }))
       stream.push({ type: 'permission.asked', properties: { id: 'shell-permission', sessionID: 'ses_site', permission: 'bash', patterns: ['npm run build'], metadata: { command: 'npm run build' }, tool: { messageID: 'msg', callID: 'shell-1' } } })
       await until(() => emitted.some(event => event.type === 'permission-ask' && event.pending?.command === 'npm run build'))
+      assert.equal(emitted.find(event => event.type === 'permission-ask' && event.pending?.command === 'npm run build')?.pending?.directory, undefined)
       assert.equal((await runner.replyToPendingPermission('reject')).ok, true)
       assert.equal(replies.find(item => item.requestID === 'shell-permission')?.reply, 'reject')
     } finally {

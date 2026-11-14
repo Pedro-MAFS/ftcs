@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { PermissionAsk } from './permission-gate'
 
 export type SitePermissionDecision = { action: 'allow' | 'ask' | 'deny'; command?: string; directory?: string }
-type ToolCall = { tool: string; input: Record<string, unknown> }
+export type ToolCall = { tool: string; input: Record<string, unknown> }
 const deny: SitePermissionDecision = { action: 'deny' }
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
 
@@ -69,12 +69,15 @@ export function decideSitePermission(input: { ask: PermissionAsk; activeSession:
     }
     return targets.every(target => isSitePath(site, target)) ? { action: 'allow' } : deny
   }
-  if (permission === 'bash' || permission === 'shell') {
-    const call = input.toolCall
-    const command = call?.input.command
-    const directory = call?.input.workdir
-    if (!call || !['bash', 'shell'].includes(call.tool.toLowerCase()) || typeof command !== 'string' || !command.trim() || command.length > 10000 || metadata.command !== command || typeof directory !== 'string' || !isSitePath(site, directory, true)) return deny
-    return { action: 'ask', command, directory }
-  }
   return deny
+}
+
+/** Bash authorization is a user decision; workdir is optional and never a boundary. */
+export function decideChatShellPermission(ask: PermissionAsk, call?: ToolCall): SitePermissionDecision {
+  const tool = call?.tool.toLowerCase()
+  const input = tool === 'bash' || tool === 'shell' ? call?.input : undefined
+  const metadata = record(ask.metadata)
+  const command = typeof input?.command === 'string' && input.command ? input.command : typeof metadata?.command === 'string' && metadata.command ? metadata.command : undefined
+  const directory = typeof input?.workdir === 'string' && input.workdir ? input.workdir : undefined
+  return { action: 'ask', ...(command ? { command } : {}), ...(directory ? { directory } : {}) }
 }

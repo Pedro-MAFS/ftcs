@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
-import { decideSitePermission, isSitePath } from './site-permissions.ts'
+import { decideChatShellPermission, decideSitePermission, isSitePath } from './site-permissions.ts'
 import { PermissionCoordinator, readPermissionAsk } from './permission-gate.ts'
 
 test('site edits require the current session, complete targets, and reject links and escapes', () => {
@@ -31,17 +31,12 @@ test('site edits require the current session, complete targets, and reject links
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })
 
-test('shell permissions require a matching call and show its exact command and site directory', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-site-shell-'))
-  const site = path.join(root, 'website'); fs.mkdirSync(site)
-  try {
-    const ask = { id: '1', permission: 'bash', sessionId: 'ses', metadata: { command: 'npm run test' } }
-    const base = { ask, activeSession: 'ses', activeRoot: root, currentRoot: root }
-    assert.deepEqual(decideSitePermission({ ...base, toolCall: { tool: 'bash', input: { command: 'npm run test', workdir: site } } }), { action: 'ask', command: 'npm run test', directory: site })
-    assert.equal(decideSitePermission({ ...base }).action, 'deny')
-    assert.equal(decideSitePermission({ ...base, toolCall: { tool: 'bash', input: { command: 'other', workdir: site } } }).action, 'deny')
-    assert.equal(decideSitePermission({ ...base, toolCall: { tool: 'bash', input: { command: 'npm run test', workdir: root } } }).action, 'deny')
-  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+test('chat shell requests ask regardless of workdir or missing metadata', () => {
+  const ask = { id: '1', permission: 'bash', sessionId: 'ses', metadata: { command: 'npm run test' } }
+  assert.deepEqual(decideChatShellPermission(ask, { tool: 'bash', input: { command: 'npm run test' } }), { action: 'ask', command: 'npm run test' })
+  assert.deepEqual(decideChatShellPermission(ask, { tool: 'bash', input: { command: 'npm run test', workdir: '/elsewhere' } }), { action: 'ask', command: 'npm run test', directory: '/elsewhere' })
+  assert.deepEqual(decideChatShellPermission(ask), { action: 'ask', command: 'npm run test' })
+  assert.deepEqual(decideChatShellPermission({ id: '2', permission: 'shell' }), { action: 'ask' })
 })
 
 test('permission events carry v1/v2 resource and tool-call identity', () => {

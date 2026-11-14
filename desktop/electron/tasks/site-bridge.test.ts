@@ -5,9 +5,11 @@ import { openTaskBridge } from './bridge.ts'
 
 test('site bridge requires a single-use host ticket for the matching session and tool', async () => {
   let active = true, executions = 0
+  const shellCalls: Array<{ sessionID: string; command: unknown; workdir: unknown }> = []
   const bridge = await openTaskBridge(() => ({
     disconnect() {}, async begin() { return {} }, done() { return {} }, recordWrite() {},
     authorize(identity) { if (!active || identity.sessionID !== 's1') throw new Error('会话无效'); return undefined },
+    noteShellCall(identity, args) { shellCalls.push({ sessionID: identity.sessionID, command: args.command, workdir: args.workdir }) },
     async siteTool(_identity, name) { executions++; return { name } },
   }))
   const post = async (endpoint: string, key: string, body: unknown) => {
@@ -38,6 +40,8 @@ test('site bridge requires a single-use host ticket for the matching session and
       assert.equal(typeof args._ticket, 'string')
       assert.equal((await post('site_execute', bridge.mcpKey, { _ticket: args._ticket, name: 'site_build' })).status, 200)
       assert.equal(executions, 2)
+      await hook['tool.execute.before']({ sessionID: 's1', callID: 'c5', tool: 'bash' }, { args: { command: 'pwd' } })
+      assert.deepEqual(shellCalls, [{ sessionID: 's1', command: 'pwd', workdir: undefined }])
     } finally {
       if (oldUrl === undefined) delete process.env.FTCS_TASK_URL; else process.env.FTCS_TASK_URL = oldUrl
       if (oldKey === undefined) delete process.env.FTCS_TASK_PLUGIN_KEY; else process.env.FTCS_TASK_PLUGIN_KEY = oldKey
