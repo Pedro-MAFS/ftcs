@@ -6,6 +6,7 @@ import { adoptSite, createSite, getSiteOutput, getSiteSnapshot } from './site/si
 import { SitePublish, readRelease, type ReleaseRecord } from './site/site-publish'
 import { SiteDeployment } from './site/site-deployment'
 import { SiteSourceTracker } from './site/site-source-tracker'
+import { SiteAgentActions } from './site/site-agent-actions'
 import { SiteRuntime, type RunKind } from './site/site-runtime'
 import { resolveConfiguredNode } from './runtime/node-paths'
 import { resolveBestNode } from './runtime/resolve-node'
@@ -274,6 +275,23 @@ const sitePublish = new SitePublish(githubRepositories, async () => resolveConfi
 const pages = new CloudflarePages(getCloudflareCredentials)
 let pagesCreationInFlight = false
 let sitePreviewTab: string | undefined
+async function openManagedSitePreview(root: string, id: string, stillActive: () => boolean = () => true): Promise<void> {
+  const url = siteRuntime.previewUrl(root, id)
+  const browser = await ensureBuiltinBrowser()
+  if (!browser.ok) throw new Error('内置浏览器暂不可用，请重试。')
+  if (!stillActive() || siteRuntime.previewUrl(root, id) !== url) throw new Error('预览状态或会话已变化，请重试。')
+  sitePreviewTab = await openSitePreviewTab(url, siteRuntime.snapshot(root).preview.state === 'running', sitePreviewTab)
+}
+const siteAgentActions = new SiteAgentActions({
+  snapshot: root => { siteSource.snapshot(root); return siteRuntime.snapshot(root) },
+  startPreview: root => siteRuntime.startPreview(root),
+  build: root => siteRuntime.build(root),
+  openPreview: openManagedSitePreview,
+  release: readRelease,
+  connections: async () => { const [github, cloudflare] = await Promise.all([getGithubState(), getCloudflareState()]); return { github: github.connected, cloudflare: cloudflare.connected } },
+  prepare: (root, id, branch) => sitePublish.prepare(root, id, branch),
+  notify: (root, preview) => broadcastToWindows(IPC.SITE_AGENT_RELEASE_EVENT, { root, preview }),
+})
 let runtime: OpenCodeRuntime | null = null
 let agentRunner: AgentRunController | null = null
 /** Electron 不会 await before-quit；需要 preventDefault + 二次 quit */
@@ -294,6 +312,7 @@ function getAgentRunner(): AgentRunController {
       reloadRuntime: reloadOpenCodeRuntime,
       preflight: (kind, options) => runAgentPreflight(kind, { runtime, isAgentRunning: () => false }, options),
       refreshPlaces: () => runtime ? runtime.refreshPlacesMcp() : Promise.reject(new Error('服务未就绪')),
+      siteTool: (name, root, stillActive) => siteAgentActions.execute(name, root, stillActive),
       lifecycle: true,
     })
   }
@@ -715,13 +734,7 @@ function registerIpcHandlers(): void {
     return siteRuntime.cancel(currentSiteWorkspace(root), kind, String(id))
   }))
   ipcMain.handle(IPC.SITE_RUNTIME_OPEN, (_event, root: string, id: string) => siteAction(async () => {
-    const url = siteRuntime.previewUrl(currentSiteWorkspace(root), String(id))
-    const browser = await ensureBuiltinBrowser()
-    if (!browser.ok) throw new Error('内置浏览器暂不可用，请重试。')
-    // Recheck after initialization in case the service stopped or workspace changed.
-    const current = siteRuntime.previewUrl(currentSiteWorkspace(root), String(id))
-    if (current !== url) throw new Error('预览地址已变化，请重试。')
-    sitePreviewTab = await openSitePreviewTab(url, siteRuntime.snapshot(currentSiteWorkspace(root)).preview.state === 'running', sitePreviewTab)
+    await openManagedSitePreview(currentSiteWorkspace(root), String(id))
   }))
   ipcMain.handle(IPC.CLOUDFLARE_GET_STATE, () => getCloudflareState())
   ipcMain.handle(IPC.CLOUDFLARE_CONNECT, () => connectCloudflare())
@@ -742,10 +755,12 @@ function registerIpcHandlers(): void {
   }
   const siteDeployment = new SiteDeployment(githubRepositories, pages, sitePublish, getWorkspaceRoot, verifyPages)
   ipcMain.handle(IPC.SITE_RELEASE_GET, (_event, root: unknown) => releaseAction(() => readRelease(currentSiteWorkspace(root))))
-  ipcMain.handle(IPC.SITE_RELEASE_PREPARE, (_event, root: unknown, id: unknown, branch: unknown, acceptReadme: unknown) => releaseAction(() => sitePublish.prepare(currentSiteWorkspace(root), id as number, branch as string, acceptReadme === true)))
+  ipcMain.handle(IPC.SITE_AGENT_RELEASE_GET, (_event, root: unknown) => siteAgentActions.getPending(currentSiteWorkspace(root)))
+  ipcMain.handle(IPC.SITE_AGENT_RELEASE_CLEAR, (_event, root: unknown) => siteAgentActions.clear(currentSiteWorkspace(root)))
+  ipcMain.handle(IPC.SITE_RELEASE_PREPARE, (_event, root: unknown, id: unknown, branch: unknown, acceptReadme: unknown) => releaseAction(() => { const current = currentSiteWorkspace(root); siteAgentActions.clear(current); return sitePublish.prepare(current, id as number, branch as string, acceptReadme === true) }))
   ipcMain.handle(IPC.SITE_RELEASE_CANCEL, (_event, root: unknown) => releaseAction(() => sitePublish.cancelBuild(currentSiteWorkspace(root))))
   ipcMain.handle(IPC.SITE_RELEASE_FILE, (_event, root: unknown, id: unknown, name: unknown) => releaseAction(() => sitePublish.previewFile(currentSiteWorkspace(root), String(id), String(name))))
-  ipcMain.handle(IPC.SITE_RELEASE_COMMIT, (_event, root: unknown, id: unknown) => releaseAction(() => sitePublish.commit(currentSiteWorkspace(root), String(id))))
+  ipcMain.handle(IPC.SITE_RELEASE_COMMIT, (_event, root: unknown, id: unknown) => releaseAction(async () => { const current = currentSiteWorkspace(root); const result = await sitePublish.commit(current, String(id)); siteAgentActions.clear(current); return result }))
   ipcMain.handle(IPC.SITE_RELEASE_RECOVER, (_event, root: unknown) => releaseAction(() => sitePublish.recover(currentSiteWorkspace(root))))
   ipcMain.handle(IPC.SITE_PAGES_LIST, (_event, root: unknown) => releaseAction(async () => { currentSiteWorkspace(root); const credentials = await getCloudflareCredentials(); const projects = await pages.list(credentials.accountId); currentSiteWorkspace(root); return { accountId: credentials.accountId, projects } }))
   ipcMain.handle(IPC.SITE_PAGES_CREATE, (_event, root: unknown, name: unknown, nodeVersion: unknown) => releaseAction(async () => {
@@ -1168,6 +1183,7 @@ function registerIpcHandlers(): void {
 
     const init = initializeWorkspace(dir, { forceManaged: true })
     siteSource.close()
+    siteAgentActions.reset()
     writeUserPrefs({ workspaceRoot: dir })
     process.env.FTCS_WORKSPACE = dir
 

@@ -110,6 +110,13 @@ const api = {
     return () => ipcRenderer.removeListener(IPC.SITE_SOURCE_EVENT, listener)
   },
   getSiteRelease: (root: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_GET, root),
+  getAgentSiteRelease: (root: string): Promise<PublishPreview | null> => ipcRenderer.invoke(IPC.SITE_AGENT_RELEASE_GET, root),
+  clearAgentSiteRelease: (root: string): Promise<void> => ipcRenderer.invoke(IPC.SITE_AGENT_RELEASE_CLEAR, root),
+  onAgentSiteRelease: (callback: (value: { root: string; preview: PublishPreview }) => void): (() => void) => {
+    const listener = (_event: unknown, value: { root: string; preview: PublishPreview }) => callback(value)
+    ipcRenderer.on(IPC.SITE_AGENT_RELEASE_EVENT, listener)
+    return () => ipcRenderer.removeListener(IPC.SITE_AGENT_RELEASE_EVENT, listener)
+  },
   prepareSiteRelease: (root: string, id: number, branch: string, acceptReadme: boolean): Promise<{ ok: true; value: PublishPreview } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_PREPARE, root, id, branch, acceptReadme),
   cancelSiteRelease: (root: string): Promise<{ ok: true; value: void } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_CANCEL, root),
   getSiteReleaseFile: (root: string, id: string, name: string): Promise<{ ok: true; value: { text?: string; message?: string } } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_FILE, root, id, name),

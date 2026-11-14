@@ -29,6 +29,12 @@
 | `email_draft_save` | 保存/更新邮件草稿（智能体润色后） |
 | `email_draft_save_zh` | 仅写入中文对照 `subject_zh`/`body_zh`（不改外文） |
 | `email_draft_list` | 列出邮件草稿 |
+| `site_status` | 查询桌面端管理的站点预览、构建状态和依赖状态 |
+| `site_preview` / `site_open_preview` | 启动预览服务 / 在内置浏览器打开已确认的预览 |
+| `site_build` | 发起站点构建检查；通过 `site_status` 查询实际结果 |
+| `site_publish_prepare` | 为已确认的仓库和分支生成待审核发布快照，不直接推送 |
+
+站点工具不需要模型传入工作区路径或业务参数，`_ticket` 由桌面运行时注入，不应由模型填写。工具只能在当前自由聊天加载 `build-website` 后调用；运行中的业务任务不可使用。调用结果为 `ok` 和 `value`，失败时为 `ok: false`、`code` 和 `message`。预览、构建是异步操作，返回启动状态不代表已完成；发布准备成功后用户仍需在独立站页面核对快照和目标并确认推送。首次发布须先在页面选择目标。
 
 ## 开发
 

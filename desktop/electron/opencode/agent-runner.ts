@@ -1,5 +1,6 @@
 import { getSettingsSnapshot } from '../settings/settings-service'
 import { randomUUID } from 'node:crypto'
+import path from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
 import { TaskLifecycle, type Begin, type Done, type TaskRecord, type TaskSkill, isActive } from '../tasks/lifecycle'
 import type { ToolIdentity } from '../tasks/bridge'
@@ -858,6 +859,7 @@ export interface AgentRunHooks {
   lifecycle?: boolean
   refreshPlaces?: () => Promise<void>
   reloadRuntime?: () => Promise<void>
+  siteTool?: (name: string, root: string, stillActive: () => boolean) => Promise<unknown>
   /** 与按钮入口相同的 preflight。聊天启动在 session.create 之前调用。 */
   preflight?: (kind: ChatPreflightKind | 'enrich-lead-contacts', options?: { requireBuiltinBrowser?: boolean }) => Promise<{ ok: boolean; message: string }>
 }
@@ -1121,6 +1123,10 @@ export class AgentRunController {
     if (context.sessionID !== this.sessionId || !this.dialogueActive || this.abort?.signal.aborted)
       throw new Error('工具调用不属于当前任务会话')
     const name = context.tool.slice('lead-store_'.length)
+    if (['site_status', 'site_preview', 'site_open_preview', 'site_build', 'site_publish_prepare'].includes(name) && context.tool === `lead-store_${name}`) {
+      if (!this.siteContextActive(context)) throw new Error('请在当前自由聊天中先加载独立站技能。')
+      return
+    }
     if (name === 'task_begin' || name === 'task_done') return
     const task = this.lifecycle.current
     if (!task || task.state !== 'running') throw new Error('请先调用 task_begin，等待桌面确认再执行业务工具')
@@ -1190,6 +1196,17 @@ export class AgentRunController {
     if (['exploration_update', 'exploration_finish'].includes(name) && args.run_id !== this.explorationId)
       throw new Error('探索记录与任务不一致')
     return task.task_id
+  }
+
+  private siteContextActive(context: ToolIdentity): boolean {
+    const site = this.websiteContext
+    const same = (value: string) => process.platform === 'win32' ? path.resolve(value).toLowerCase() : path.resolve(value)
+    return !!site && this.dialogueActive && !this.running && !this.lifecycle.current && !this.abort?.signal.aborted && context.sessionID === this.sessionId && site.sessionId === context.sessionID && site.token === this.dialogueToken && same(site.root) === same(getWorkspaceRoot()) && getSiteSnapshot(site.root).status === 'ready'
+  }
+
+  async siteTool(context: ToolIdentity, name: string): Promise<unknown> {
+    if (!this.siteContextActive(context) || !this.websiteContext || !this.hooks.siteTool) throw new Error('独立站会话或工具不可用。')
+    return this.hooks.siteTool(name, this.websiteContext.root, () => this.siteContextActive(context))
   }
 
   recordWrite(

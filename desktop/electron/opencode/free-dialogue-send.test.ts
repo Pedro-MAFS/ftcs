@@ -114,18 +114,23 @@ describeSend('sendFreeDialogue', () => {
       permission: { async reply(call: { requestID: string; reply: string }) { replies.push(call); return { data: true } } },
       v2: { session: { async wait() { return waiting } } },
     }
-    const runner = new AgentRunController!(() => client as never)
+    const runner = new AgentRunController!(() => client as never, { siteTool: async (name, actualRoot, stillActive) => ({ name, actualRoot, active: stillActive() }) })
     const task = runner.sendFreeDialogue('修改网站', event => emitted.push(event))
     const until = async (fn: () => boolean) => { const end = Date.now() + 3000; while (!fn() && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 10)); assert.ok(fn()) }
     const part = (id: string, tool: string, state: Record<string, unknown>) => ({ type: 'message.part.updated', properties: { sessionID: 'ses_site', part: { id, messageID: 'msg', sessionID: 'ses_site', callID: id, type: 'tool', tool, state } } })
     try {
       await until(() => emitted.some(event => event.type === 'timeline'))
+      const siteCall = { sessionID: 'ses_site', callID: 'site-call', tool: 'lead-store_site_preview' }
+      assert.throws(() => runner.authorize(siteCall, {}), /先加载独立站技能/)
       stream.push(part('skill-1', 'skill', { status: 'completed', input: { name: 'build-website' }, output: 'skill', title: 'skill', metadata: {}, time: { start: 1, end: 2 } }))
       const file = path.join(site, 'page.vue')
       stream.push(part('edit-1', 'write', { status: 'running', input: { filePath: file, content: 'hello' }, time: { start: 3 } }))
       stream.push({ type: 'permission.asked', properties: { id: 'edit-permission', sessionID: 'ses_site', permission: 'edit', patterns: ['website/page.vue'], metadata: { filepath: file }, tool: { messageID: 'msg', callID: 'edit-1' } } })
       await until(() => replies.some(item => item.requestID === 'edit-permission'))
       assert.equal(replies.find(item => item.requestID === 'edit-permission')?.reply, 'once')
+      assert.equal(runner.authorize(siteCall, {}), undefined)
+      assert.deepEqual(await runner.siteTool(siteCall, 'site_preview'), { name: 'site_preview', actualRoot: root, active: true })
+      assert.throws(() => runner.authorize({ ...siteCall, sessionID: 'other' }, {}), /会话/)
       stream.push(part('shell-1', 'bash', { status: 'running', input: { command: 'npm run build', workdir: site }, time: { start: 4 } }))
       stream.push({ type: 'permission.asked', properties: { id: 'shell-permission', sessionID: 'ses_site', permission: 'bash', patterns: ['npm run build'], metadata: { command: 'npm run build' }, tool: { messageID: 'msg', callID: 'shell-1' } } })
       await until(() => emitted.some(event => event.type === 'permission-ask' && event.pending?.command === 'npm run build'))

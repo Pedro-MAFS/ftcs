@@ -1,5 +1,6 @@
 // The host supplies sessionID/callID. Never take identity from model arguments.
 const lifecycle = new Set(['lead-store_task_begin', 'lead-store_task_done'])
+const siteTools = new Set(['lead-store_site_status', 'lead-store_site_preview', 'lead-store_site_open_preview', 'lead-store_site_build', 'lead-store_site_publish_prepare'])
 const writes = new Set([
   'product_save',
   'inputs_ensure_dir',
@@ -27,6 +28,7 @@ export const TaskContext = async () => ({
   'tool.execute.before': async ({ sessionID, callID, tool }, { args }) => {
     if (
       !metered.has(tool) &&
+      !siteTools.has(tool) &&
       !lifecycle.has(tool) &&
       !(tool.startsWith('lead-store_') && writes.has(tool.slice(11)))
     )

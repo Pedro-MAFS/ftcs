@@ -978,6 +978,9 @@ declare global {
       getSiteSource: (root: string) => Promise<SiteSourceSnapshot>
       onSiteSource: (callback: (snapshot: SiteSourceSnapshot) => void) => () => void
       getSiteRelease: (root: string) => Promise<SiteResult<SiteRelease>>
+      getAgentSiteRelease: (root: string) => Promise<SitePublishPreview | null>
+      clearAgentSiteRelease: (root: string) => Promise<void>
+      onAgentSiteRelease: (callback: (value: { root: string; preview: SitePublishPreview }) => void) => () => void
       prepareSiteRelease: (root: string, id: number, branch: string, acceptReadme: boolean) => Promise<SiteResult<SitePublishPreview>>
       cancelSiteRelease: (root: string) => Promise<SiteResult<void>>
       getSiteReleaseFile: (root: string, id: string, name: string) => Promise<SiteResult<{ text?: string; message?: string }>>

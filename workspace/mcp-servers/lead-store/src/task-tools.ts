@@ -31,6 +31,15 @@ async function call(name: string, data: unknown) {
   }
 }
 export function registerTaskTools(server: McpServer) {
+  for (const [name, description] of [
+    ['site_status', 'Read the current FTCS website preview and build status.'],
+    ['site_preview', 'Start the FTCS-managed website preview service, or return its current state.'],
+    ['site_open_preview', 'Open the verified running FTCS website preview in the built-in browser.'],
+    ['site_build', 'Start an FTCS-managed website build check, or return its current state.'],
+    ['site_publish_prepare', 'Build and prepare a frozen publication snapshot for the previously selected GitHub target. The user must review and confirm publication in FTCS.'],
+  ] as const) {
+    server.tool(name, description, { _ticket: common._ticket }, (data) => call('site_execute', { ...data, name }))
+  }
   server.tool(
     'task_begin',
     'Start a desktop task after required inputs are selected. Reuse request_id when retrying. Use returned task_id and prepared inputs.',
