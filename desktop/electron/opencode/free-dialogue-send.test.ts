@@ -100,6 +100,65 @@ after(() => {
 const describeSend = electronMockReady ? describe : describe.skip
 
 describeSend('sendFreeDialogue', () => {
+  it('does not set a total reply deadline and can still be stopped', async (t) => {
+    const stream = createEventStream(), emitted: AgentEventPayload[] = [], delays: number[] = [], aborts: string[] = []
+    let entered!: () => void
+    const waiting = new Promise<void>(resolve => { entered = resolve })
+    const client = {
+      session: { async create() { return { data: { id: 'ses_unlimited' } } }, async promptAsync() { return {} }, async abort(input: { sessionID: string }) { aborts.push(input.sessionID); return {} } },
+      event: { async subscribe() { return { stream: stream.stream } } },
+      v2: { session: { async wait(_input: unknown, opts: { signal: AbortSignal }) {
+        entered()
+        await new Promise<void>(resolve => { if (opts.signal.aborted) resolve(); else opts.signal.addEventListener('abort', () => resolve(), { once: true }) })
+        return { response: { status: 204 } }
+      } } },
+    }
+    const runner = new AgentRunController!(() => client as never, { lifecycle: true })
+    const original = globalThis.setTimeout
+    t.mock.method(globalThis, 'setTimeout', ((...args: Parameters<typeof setTimeout>) => { delays.push(Number(args[1])); return original(...args) }) as typeof setTimeout)
+    const task = runner.sendFreeDialogue('执行一个长任务', event => emitted.push(event))
+    try {
+      await waiting
+      assert.equal(delays.some(delay => delay >= 12 * 60_000), false)
+      await runner.abortCurrent()
+      assert.equal((await task).accepted, true)
+      assert.deepEqual(aborts, ['ses_unlimited'])
+      assert.ok(timelineItems(emitted).some(item => item.body === FREE_DIALOGUE_STOPPED))
+    } finally { runner.disconnect(); stream.close() }
+  })
+
+  it('keeps polling after the former deadline when official wait is unavailable', async (t) => {
+    let now = 1_000_000, checks = 0
+    t.mock.method(Date, 'now', () => now)
+    const controller = new AbortController()
+    const client = {
+      v2: { session: { async wait() { return { response: { status: 503 } } } } },
+      session: { async status() {
+        checks++
+        if (checks === 1) now += 166 * 60_000
+        else controller.abort()
+        return { data: { ses_long: { type: 'busy' } } }
+      } },
+    }
+    const runner = new AgentRunController!(() => client as never)
+    const wait = runner as unknown as { waitForSessionIdle: (client: unknown, sessionId: string, signal: AbortSignal, timeout: number | null) => Promise<string> }
+    try {
+      assert.equal(await wait.waitForSessionIdle(client, 'ses_long', controller.signal, null), 'abort')
+      assert.equal(checks, 2)
+    } finally { runner.disconnect() }
+  })
+
+  it('preserves explicit deadlines for business task waits', async () => {
+    const client = { v2: { session: { async wait(_input: unknown, opts: { signal: AbortSignal }) {
+      await new Promise<void>(resolve => { if (opts.signal.aborted) resolve(); else opts.signal.addEventListener('abort', () => resolve(), { once: true }) })
+      return { response: { status: 204 } }
+    } } } }
+    const runner = new AgentRunController!(() => client as never)
+    const wait = runner as unknown as { waitForSessionIdle: (client: unknown, sessionId: string, signal: AbortSignal, timeout: number | null) => Promise<string> }
+    try { assert.equal(await wait.waitForSessionIdle(client, 'ses_task', new AbortController().signal, 20), 'timeout') }
+    finally { runner.disconnect() }
+  })
+
   it('sends attachment-only messages and permits reading only the chosen external file', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-reference-work-'))
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-reference-out-'))

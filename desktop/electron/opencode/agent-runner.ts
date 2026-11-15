@@ -2006,7 +2006,7 @@ export class AgentRunController {
         client,
         sessionId,
         signal,
-        this.hooks.lifecycle ? 165 * 60_000 : undefined,
+        null,
       )
       if (this.hooks.lifecycle)
         this.lifecycle.interrupt(
@@ -2025,19 +2025,6 @@ export class AgentRunController {
           return { ok: false, message: this.autoAbortReason, accepted: true }
         }
         return { ok: true, message: '', accepted: true }
-      }
-
-      if (idleResult === 'timeout') {
-        await client.session.abort({ sessionID: sessionId }).catch(() => undefined)
-        timeline.addSuffix({
-          id: `dialogue-timeout-${this.dialogueSerial}`,
-          kind: 'error',
-          time: nowTime(),
-          title: '错误',
-          body: '这一轮回复超时，请再发一次',
-        })
-        flushTimeline()
-        return { ok: false, message: '这一轮回复超时，请再发一次', accepted: true }
       }
 
       return { ok: true, message: '', accepted: true }
@@ -4197,7 +4184,7 @@ export class AgentRunController {
     client: OpencodeClient,
     sessionId: string,
     signal: AbortSignal,
-    timeoutMs = 12 * 60_000,
+    timeoutMs: number | null = 12 * 60_000,
   ): Promise<'idle' | 'abort' | 'timeout'> {
     if (signal.aborted) return 'abort'
     const started = Date.now()
@@ -4210,7 +4197,7 @@ export class AgentRunController {
     )
     if (official !== 'unavailable') return official
 
-    const remaining = Math.max(5_000, timeoutMs - (Date.now() - started))
+    const remaining = timeoutMs === null ? null : Math.max(5_000, timeoutMs - (Date.now() - started))
     return this.pollSessionIdle(client, sessionId, signal, remaining)
   }
 
@@ -4219,7 +4206,7 @@ export class AgentRunController {
     client: OpencodeClient,
     sessionId: string,
     signal: AbortSignal,
-    timeoutMs: number,
+    timeoutMs: number | null,
   ): Promise<'idle' | 'abort' | 'timeout' | 'unavailable'> {
     if (signal.aborted) return 'abort'
 
@@ -4227,7 +4214,7 @@ export class AgentRunController {
     const onParentAbort = () => local.abort()
     signal.addEventListener('abort', onParentAbort)
     let timedOut = false
-    const timer = setTimeout(() => {
+    const timer = timeoutMs === null ? null : setTimeout(() => {
       timedOut = true
       local.abort()
     }, timeoutMs)
@@ -4249,7 +4236,7 @@ export class AgentRunController {
       if (timedOut) return 'timeout'
       return 'unavailable'
     } finally {
-      clearTimeout(timer)
+      if (timer !== null) clearTimeout(timer)
       signal.removeEventListener('abort', onParentAbort)
     }
   }
@@ -4258,14 +4245,14 @@ export class AgentRunController {
     client: OpencodeClient,
     sessionId: string,
     signal: AbortSignal,
-    timeoutMs: number,
+    timeoutMs: number | null,
   ): Promise<'idle' | 'abort' | 'timeout'> {
     const started = Date.now()
     /** 避免 promptAsync 后瞬间仍是 idle 就误判结束 */
     let sawActive = false
     const activeDeadlineMs = 30_000
 
-    while (!signal.aborted && Date.now() - started < timeoutMs) {
+    while (!signal.aborted && (timeoutMs === null || Date.now() - started < timeoutMs)) {
       try {
         const status = await client.session.status({})
         const map = asRecord(status.data) ?? {}
