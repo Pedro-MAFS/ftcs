@@ -21,6 +21,20 @@ class GithubApiError extends Error {
   constructor(status: number, message: string) { super(message); this.status = status }
 }
 
+const GITHUB_READ_TIMEOUT_MS = 15_000
+// Publishing uploads all changed files in one request; network upload time can
+// exceed the short deadline used for metadata reads.
+const GITHUB_COMMIT_TIMEOUT_MS = 120_000
+
+function requestLabel(endpoint: string): string {
+  if (endpoint === '/graphql') return '提交源码'
+  if (endpoint.startsWith('/user/installations')) return '读取应用授权或仓库列表'
+  if (/\/git\/trees\//.test(endpoint)) return '读取仓库文件树'
+  if (/\/branches(?:\/|\?|$)/.test(endpoint)) return '读取仓库分支'
+  if (endpoint === '/user/repos') return '创建仓库'
+  return '读取仓库信息'
+}
+
 /** API-only client: caller supplies credentials in the main process. */
 export class GithubRepositories {
   private readonly accessToken: () => Promise<string>
@@ -28,20 +42,34 @@ export class GithubRepositories {
 
   private async request<T>(endpoint: string, init?: RequestInit): Promise<T> {
     const token = await this.accessToken()
-    const response = await fetch(`https://api.github.com${endpoint}`, {
-      ...init,
-      headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'User-Agent': 'FTCS-Desktop', 'X-GitHub-Api-Version': '2022-11-28', ...(init?.body ? { 'Content-Type': 'application/json' } : {}) },
-      signal: AbortSignal.timeout(15000), redirect: 'error',
-    })
+    const label = requestLabel(endpoint)
+    const timeoutMs = endpoint === '/graphql' && init?.method === 'POST' ? GITHUB_COMMIT_TIMEOUT_MS : GITHUB_READ_TIMEOUT_MS
+    let response: Response
+    try {
+      response = await fetch(`https://api.github.com${endpoint}`, {
+        ...init,
+        headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'User-Agent': 'FTCS-Desktop', 'X-GitHub-Api-Version': '2022-11-28', ...(init?.body ? { 'Content-Type': 'application/json' } : {}) },
+        signal: AbortSignal.timeout(timeoutMs), redirect: 'error',
+      })
+    } catch (error) {
+      if (error instanceof Error && error.name === 'TimeoutError') throw new Error(`GitHub ${label}请求超时（等待 ${timeoutMs / 1000} 秒）。请检查网络后重试。`)
+      throw new Error(`无法连接 GitHub（${label}），请检查网络后重试。`)
+    }
     if (!response.ok) {
       if (response.status === 401) throw new Error('GitHub 授权已失效，请重新连接。')
       if (response.status === 403) throw new Error('GitHub 拒绝了请求，请检查应用权限、组织策略或请求次数限制。')
       if (response.status === 404) throw new GithubApiError(404, '未找到仓库，或 FTCS App 尚未获准访问该仓库。')
       if (response.status === 409) throw new Error('该仓库尚无分支，请先在 GitHub 初始化仓库。')
       if (response.status === 422) throw new Error('GitHub 未接受请求，请检查仓库名称是否可用。')
-      throw new Error(`GitHub 请求失败（${response.status}），请稍后重试。`)
+      const requestId = response.headers.get('x-github-request-id')
+      const requestInfo = requestId && /^[a-zA-Z0-9:._-]{1,100}$/.test(requestId) ? ` 请求 ID：${requestId}。` : ''
+      throw new GithubApiError(response.status, `GitHub ${label}请求失败（HTTP ${response.status}）。${requestInfo}`)
     }
-    return await response.json() as T
+    try { return await response.json() as T }
+    catch (error) {
+      if (error instanceof Error && error.name === 'TimeoutError') throw new Error(`GitHub ${label}请求超时（等待 ${timeoutMs / 1000} 秒）。请检查网络后重试。`)
+      throw new Error(`GitHub ${label}返回了无法解析的数据，请稍后重试。`)
+    }
   }
 
   private async pages<T>(endpoint: string, extract: (value: unknown) => T[]): Promise<T[]> {

@@ -987,7 +987,7 @@ declare global {
       cancelSiteRelease: (root: string) => Promise<SiteResult<void>>
       getSiteReleaseFile: (root: string, id: string, name: string) => Promise<SiteResult<{ text?: string; message?: string }>>
       commitSiteRelease: (root: string, id: string) => Promise<SiteResult<SiteRelease>>
-      recoverSiteRelease: (root: string) => Promise<SiteResult<SiteRelease>>
+      recoverSiteRelease: (root: string) => Promise<SiteResult<SiteRelease & { recovery: 'matched' | 'unchanged' | 'none' }>>
       listSitePages: (root: string) => Promise<SiteResult<{ accountId: string; projects: PagesProject[] }>>
       createSitePages: (root: string, name: string, nodeVersion: string) => Promise<SiteResult<SiteRelease>>
       clearPendingSitePages: (root: string) => Promise<SiteResult<SiteRelease>>

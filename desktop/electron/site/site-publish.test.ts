@@ -18,6 +18,7 @@ const { collectSiteSnapshot, buildSiteSnapshot } = await import('./site-publish-
 const { SitePublish, readRelease } = await import('./site-publish.ts')
 const { SiteDeployment } = await import('./site-deployment.ts')
 const { SiteSourceTracker } = await import('./site-source-tracker.ts')
+const { GithubRepositories } = await import('../github/github-repositories.ts')
 const gitHash = (bytes: Buffer) => createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
 const make = () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-release-test-'))
@@ -102,6 +103,8 @@ test('publishes the built frozen snapshot, prevents concurrent overwrite and rec
     assert.ok(!remote.some(file => file.path === 'new-after-preview.txt'))
     const recovered = await publisher.recover(root)
     assert.equal(recovered.commitSha, '2'.repeat(40)); assert.equal(recovered.pending, undefined)
+    assert.equal(recovered.recovery, 'matched')
+    assert.equal(Object.hasOwn(readRelease(root), 'recovery'), false)
     publisher.beginPages(root, recovered.commitSha!, 1, 'main', 'a'.repeat(32), 'site-pages')
     await assert.rejects(publisher.prepare(root, 1, 'main'), /项目创建结果待确认/)
     assert.throws(() => publisher.bindPages(root, recovered.commitSha!, 2, 'main', 'a'.repeat(32), 'site-pages'), /版本已变化/)
@@ -118,6 +121,52 @@ test('publishes the built frozen snapshot, prevents concurrent overwrite and rec
     head = '3'.repeat(40)
     await assert.rejects(publisher.commit(root, second.id), /分支已变化/)
     assert.equal(calls, 1)
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('reports when an uncertain submission has not changed the remote branch', async () => {
+  const { root } = make()
+  const base = '1'.repeat(40)
+  const target = { id: 1, owner: 'owner', name: 'site', fullName: 'owner/site', branch: 'main', private: true }
+  const pending = { target, base, files: [{ path: 'index.html', sha: '2'.repeat(40), mode: '100644' }] }
+  let head = '3'.repeat(40)
+  const publisher = new SitePublish({ async tree() { return { head, files: [] } } } as never, async () => null, () => root)
+  try {
+    fs.writeFileSync(path.join(root, '.ftcs/site-release.json'), JSON.stringify({ version: 1, createdRepositories: [], pending }))
+    await assert.rejects(publisher.recover(root), /远端分支已变化/)
+    assert.ok(readRelease(root).pending)
+    head = base
+    const recovered = await publisher.recover(root)
+    assert.equal(recovered.recovery, 'unchanged')
+    assert.equal(recovered.pending, undefined)
+    assert.equal(Object.hasOwn(readRelease(root), 'recovery'), false)
+    assert.equal((await publisher.recover(root)).recovery, 'none')
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('an HTTP 499 leaves the submission pending and recovery reports the unchanged branch', async (t) => {
+  const { root } = make()
+  const head = '1'.repeat(40), treeSha = '2'.repeat(40)
+  let commits = 0
+  t.mock.method(globalThis, 'fetch', async (input) => {
+    const url = new URL(String(input))
+    if (url.pathname === '/user/installations') return Response.json({ installations: [{ id: 1, permissions: { contents: 'write' } }] })
+    if (url.pathname === '/user/installations/1/repositories') return Response.json({ repositories: [{ id: 1, name: 'site', full_name: 'owner/site', owner: { login: 'owner' }, private: true, default_branch: 'main', permissions: { push: true } }] })
+    if (url.pathname === '/repos/owner/site/branches/main') return Response.json({ commit: { sha: head, commit: { tree: { sha: treeSha } } } })
+    if (url.pathname === `/repos/owner/site/git/trees/${treeSha}`) return Response.json({ tree: [], truncated: false })
+    if (url.pathname === '/graphql') { commits++; return new Response('', { status: 499 }) }
+    throw new Error(`unexpected URL: ${url.pathname}`)
+  })
+  const github = new GithubRepositories(async () => 'secret-token')
+  const publisher = new SitePublish(github, async () => ({ exe: process.execPath, source: 'test' }), () => root)
+  try {
+    const preview = await publisher.prepare(root, 1, 'main')
+    await assert.rejects(publisher.commit(root, preview.id), /提交源码.*HTTP 499/)
+    assert.ok(readRelease(root).pending)
+    const recovered = await publisher.recover(root)
+    assert.equal(recovered.recovery, 'unchanged')
+    assert.equal(recovered.pending, undefined)
+    assert.equal(commits, 1)
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })
 

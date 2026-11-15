@@ -8,6 +8,7 @@ import { buildSiteSnapshot, collectSiteSnapshot, type PublishSnapshot } from './
 type Target = { id: number; owner: string; name: string; fullName: string; branch: string; private: boolean }
 type RecordedFile = { path: string; sha: string; mode: string }
 export type ReleaseRecord = { version: 1; createdRepositories: string[]; target?: Target; commitSha?: string; snapshotHash?: string; outputDir?: string; pending?: { target: Target; base: string; files: RecordedFile[]; snapshotHash?: string; outputDir?: string }; pendingPages?: { accountId: string; project: string; commitSha: string }; pendingDeployment?: { accountId: string; project: string; commitSha: string; requestedAt: string; deploymentId?: string }; cloudflare?: { accountId: string; project: string }; history?: Array<{ target: Target; commitSha: string; at: string }>; lastOnline?: { target: Target; commitSha: string; accountId: string; project: string; deploymentId: string; url: string; confirmedAt: string } }
+export type ReleaseRecovery = ReleaseRecord & { recovery: 'matched' | 'unchanged' | 'none' }
 export type PublishPreview = { id: string; target: Target; head: string; hash: string; files: Array<{ path: string; size: number; change: '新增' | '修改' | '未变化' }>; deleted: string[]; log: string; noChanges: boolean }
 type Ready = { id: string; root: string; repository: GithubRepository; branch: string; head: string; output: string; snapshot: PublishSnapshot; additions: Array<{ path: string; contents: string }>; deletions: Array<{ path: string }> }
 
@@ -159,18 +160,18 @@ export class SitePublish {
       return record
     } finally { this.busy = false }
   }
-  async recover(root: string): Promise<ReleaseRecord> {
+  async recover(root: string): Promise<ReleaseRecovery> {
     if (this.busy) throw new Error('已有发布操作正在进行。')
     this.busy = true
     try {
       root = this.assertRoot(root)
       const record = readRelease(root)
-      if (!record.pending) return record
+      if (!record.pending) return { ...record, recovery: 'none' }
       const pending = record.pending
       const remote = await this.github.tree(pending.target.id, pending.target.branch)
       this.assertRoot(root)
-      if (sameFiles(remote.files, pending.files)) { if (record.target?.id !== pending.target.id || record.target.branch !== pending.target.branch) delete record.cloudflare; record.target = pending.target; record.commitSha = remote.head; record.snapshotHash = pending.snapshotHash; record.outputDir = pending.outputDir; addHistory(record, pending.target, remote.head); delete record.pending; saveRelease(root, record); return record }
-      if (remote.head === pending.base) { delete record.pending; saveRelease(root, record); return record }
+      if (sameFiles(remote.files, pending.files)) { if (record.target?.id !== pending.target.id || record.target.branch !== pending.target.branch) delete record.cloudflare; record.target = pending.target; record.commitSha = remote.head; record.snapshotHash = pending.snapshotHash; record.outputDir = pending.outputDir; addHistory(record, pending.target, remote.head); delete record.pending; saveRelease(root, record); return { ...record, recovery: 'matched' } }
+      if (remote.head === pending.base) { delete record.pending; saveRelease(root, record); return { ...record, recovery: 'unchanged' } }
       throw new Error('提交结果无法确认：远端分支已变化，请先在 GitHub 核对。')
     } finally { this.busy = false }
   }

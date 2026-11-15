@@ -89,6 +89,28 @@ test('commit uses the confirmed branch head as an atomic condition', async () =>
   await assert.rejects(service().commit(repository, 'main', head, [], []), /未确认提交/)
 })
 
+test('uses a longer upload deadline and reports 499 with a safe request ID without retrying the commit', async (t) => {
+  const delays: number[] = []
+  t.mock.method(AbortSignal, 'timeout', (ms: number) => { delays.push(ms); return new AbortController().signal })
+  let requests = 0
+  globalThis.fetch = async () => { requests++; return new Response('secret-token in upstream body', { status: 499, headers: { 'x-github-request-id': 'ABCD:1234:EFGH' } }) }
+  const repository = { id: 1, owner: 'owner', name: 'site-1', fullName: 'owner/site-1', private: true, defaultBranch: 'main', writeAccess: 'yes' as const, contentsAccess: 'write' as const }
+  await assert.rejects(service().commit(repository, 'main', '1'.repeat(40), [{ path: 'image.png', contents: 'AP8=' }], []), (error: Error) => {
+    assert.match(error.message, /提交源码.*HTTP 499/)
+    assert.match(error.message, /ABCD:1234:EFGH/)
+    assert.doesNotMatch(error.message, /secret-token/)
+    return true
+  })
+  assert.equal(requests, 1)
+  assert.deepEqual(delays, [120_000])
+})
+
+test('reports client timeout separately from HTTP status responses', async () => {
+  globalThis.fetch = async () => { const error = new Error('network details'); error.name = 'TimeoutError'; throw error }
+  const repository = { id: 1, owner: 'owner', name: 'site-1', fullName: 'owner/site-1', private: true, defaultBranch: 'main', writeAccess: 'yes' as const, contentsAccess: 'write' as const }
+  await assert.rejects(service().commit(repository, 'main', '1'.repeat(40), [], []), /提交源码请求超时（等待 120 秒）/)
+})
+
 test('reports missing Contents permission before querying branches', async () => {
   let branchRequested = false
   globalThis.fetch = async input => {
