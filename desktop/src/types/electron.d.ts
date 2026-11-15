@@ -1,3 +1,15 @@
+interface CloudflareState { connected: boolean; authorized?: boolean; pending?: boolean; accountId?: string; accountName?: string; accounts?: Array<{ id: string; name: string }>; message?: string }
+interface SiteSnapshot { status: 'not_created' | 'empty' | 'existing' | 'ready' | 'missing' | 'invalid' | 'error'; workspaceRoot: string; projectPath: string; message: string; dependencies: 'missing' | 'unknown' }
+interface SiteRun { id: string; state: 'idle' | 'starting' | 'running' | 'address_pending' | 'stopping' | 'succeeded' | 'failed' | 'cancelled'; message: string; log: string; url?: string; startedAt?: string; finishedAt?: string; node?: string; output?: string; sourceHash?: string }
+interface SiteRuntimeSnapshot { workspaceRoot: string; sequence: number; outputDir: string | null; dependencies: 'missing' | 'unknown' | 'not_required'; install: SiteRun; preview: SiteRun; build: SiteRun }
+interface SiteSourceSnapshot { workspaceRoot: string; sequence: number; state: 'not_ready' | 'unpublished' | 'clean' | 'changed' | 'unknown'; hash?: string; message: string; watching: boolean }
+interface SiteRelease { version: 1; createdRepositories: string[]; target?: { id: number; owner: string; name: string; fullName: string; branch: string; private: boolean }; commitSha?: string; snapshotHash?: string; pending?: { target: { id: number; fullName: string; branch: string }; base: string }; pendingPages?: { accountId: string; project: string; commitSha: string }; pendingDeployment?: { accountId: string; project: string; commitSha: string; deploymentId?: string; requestedAt: string }; buildNotice?: string; cloudflare?: { accountId: string; project: string }; history?: Array<{ target: { fullName: string; branch: string }; commitSha: string; at: string }>; lastOnline?: { commitSha: string; project: string; url: string; confirmedAt: string } }
+interface SitePublishPreview { id: string; target: { fullName: string; branch: string; private: boolean }; head: string; hash: string; files: Array<{ path: string; size: number; change: '新增' | '修改' | '未变化' }>; deleted: string[]; log: string; noChanges: boolean }
+interface PagesProject { name: string; subdomain: string; owner: string; repo: string; repoId: string; branch: string; buildCommand: string; output: string; rootDir: string; autoDeploy: boolean | null; type: string }
+interface PagesStatus { state: 'waiting' | 'building' | 'success' | 'failed' | 'skipped' | 'unknown'; message: string; deploymentId?: string; deploymentUrl?: string; productionUrl?: string; productionCurrent?: boolean }
+interface PagesDomain { name: string; status: string; validation?: { method?: string; status?: string; error?: string; txtName?: string; txtValue?: string }; verification?: { status?: string; error?: string } }
+interface SiteDomains { accountId: string; project: string; subdomain: string; domains: PagesDomain[]; pending?: { name: string; kind: 'root' | 'subdomain' } }
+type SiteResult<T> = { ok: true; value: T } | { ok: false; message: string }
 import type { AppStatus, OpenCodeActionResult } from './app'
 import type { AuthActionResult, AuthSessionSnapshot } from './auth'
 import type { LibraryMutationResult, LibrarySnapshot } from './library'
@@ -60,7 +72,11 @@ export type AwaitingUserReply = {
 export type PermissionAskView = {
   permission: string
   tool?: string
+  command?: string
+  directory?: string
 } | null
+
+export type ChatReferenceView = { id: string; kind: 'local' | 'library' | 'website' | 'profile'; label: string; detail: string }
 
 export type AgentEventPayload =
   | { type: 'session.created' }
@@ -922,6 +938,19 @@ declare global {
     ftcs?: {
       platform: NodeJS.Platform
       getAppStatus: () => Promise<AppStatus>
+      getSite: () => Promise<SiteSnapshot>
+      createSite: (workspaceRoot: string) => Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }>
+      adoptSite: (workspaceRoot: string) => Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }>
+      openSiteDirectory: (kind: 'project' | 'workspace', workspaceRoot: string) => Promise<{ ok: boolean; message?: string }>
+      getSiteRuntime: (root: string) => Promise<SiteRuntimeSnapshot>
+      onSiteRuntime: (callback: (snapshot: SiteRuntimeSnapshot) => void) => () => void
+      installSiteDependencies: (root: string, reinstall: boolean, thenPreview: boolean) => Promise<{ ok: boolean; message?: string }>
+      startSitePreview: (root: string) => Promise<{ ok: boolean; message?: string }>
+      setSitePreviewAddress: (root: string, id: string, url: string) => Promise<{ ok: boolean; message?: string }>
+      openSitePreview: (root: string, id: string) => Promise<{ ok: boolean; message?: string }>
+      buildSite: (root: string) => Promise<{ ok: boolean; message?: string }>
+      setSiteOutput: (root: string, output: string) => Promise<{ ok: boolean; message?: string }>
+      cancelSiteRun: (root: string, kind: 'install' | 'preview' | 'build', id: string) => Promise<{ ok: boolean; message?: string }>
       openExternal: (url: string) => Promise<{ ok: boolean; message: string }>
       checkAgentPreflight: (
         kind: AgentPreflightKind,
@@ -944,6 +973,42 @@ declare global {
       restartOpenCode: () => Promise<AppStatus>
       reconnectMcp: (name: string) => Promise<OpenCodeActionResult>
       getOpenCodeLogs: () => Promise<string[]>
+      getCloudflareState: () => Promise<CloudflareState>
+      connectCloudflare: () => Promise<CloudflareState & { ok: boolean; needsPageAuthorization?: boolean }>
+      cancelCloudflareAuth: () => Promise<void>
+      selectCloudflareAccount: (accountId: string) => Promise<CloudflareState & { ok: boolean }>
+      disconnectCloudflare: () => Promise<void>
+      getGithubState: () => Promise<{ connected: boolean; authorized?: boolean; login?: string; message?: string; installUrl?: string }>
+      getSiteSource: (root: string) => Promise<SiteSourceSnapshot>
+      onSiteSource: (callback: (snapshot: SiteSourceSnapshot) => void) => () => void
+      getSiteRelease: (root: string) => Promise<SiteResult<SiteRelease>>
+      listSiteDomains: (root: string) => Promise<SiteResult<SiteDomains>>
+      addSiteDomain: (root: string, name: string, kind: 'root' | 'subdomain') => Promise<SiteResult<{ domain: PagesDomain; subdomain: string }>>
+      checkSiteDomain: (root: string, name: string) => Promise<SiteResult<PagesDomain>>
+      clearPendingSiteDomain: (root: string) => Promise<SiteResult<void>>
+      deleteSiteDomain: (root: string, name: string) => Promise<SiteResult<{ name: string; message: string }>>
+      onSiteDomainsChanged: (callback: (value: { root: string }) => void) => () => void
+      getAgentSiteRelease: (root: string) => Promise<boolean>
+      onAgentSiteRelease: (callback: (value: { root: string; running: boolean }) => void) => () => void
+      prepareSiteRelease: (root: string, id: number, branch: string, acceptReadme: boolean) => Promise<SiteResult<SitePublishPreview>>
+      cancelSiteRelease: (root: string) => Promise<SiteResult<void>>
+      getSiteReleaseFile: (root: string, id: string, name: string) => Promise<SiteResult<{ text?: string; message?: string }>>
+      commitSiteRelease: (root: string, id: string) => Promise<SiteResult<SiteRelease>>
+      recoverSiteRelease: (root: string) => Promise<SiteResult<SiteRelease & { recovery: 'matched' | 'unchanged' | 'none' }>>
+      listSitePages: (root: string) => Promise<SiteResult<{ accountId: string; projects: PagesProject[] }>>
+      createSitePages: (root: string, name: string, nodeVersion: string) => Promise<SiteResult<SiteRelease>>
+      clearPendingSitePages: (root: string) => Promise<SiteResult<SiteRelease>>
+      bindSitePages: (root: string, name: string) => Promise<SiteResult<SiteRelease>>
+      getSitePagesStatus: (root: string) => Promise<SiteResult<PagesStatus>>
+      startSiteDeployment: (root: string) => Promise<SiteResult<SiteRelease>>
+      clearSitePendingDeployment: (root: string) => Promise<SiteResult<SiteRelease>>
+      listGithubRepositories: (root: string) => Promise<{ ok: boolean; repositories?: Array<{ id: number; owner: string; name: string; fullName: string; private: boolean; defaultBranch: string; writeAccess: 'yes' | 'no' | 'unknown'; contentsAccess: 'write' | 'read' | 'none' | 'unknown' }>; message?: string }>
+      listGithubBranches: (root: string, id: number) => Promise<{ ok: boolean; branches?: Array<{ name: string; protected: boolean }>; message?: string }>
+      createGithubRepository: (root: string, name: string, privateRepo: boolean) => Promise<{ ok: boolean; repository?: { fullName: string }; message?: string }>
+      startGithubAuth: () => Promise<{ ok: boolean; message?: string; userCode?: string; verificationUrl?: string; interval?: number }>
+      pollGithubAuth: () => Promise<{ status: 'pending' | 'connected' | 'failed'; interval?: number; message?: string; login?: string }>
+      cancelGithubAuth: () => Promise<void>
+      disconnectGithub: () => Promise<void>
       getAuthSession: () => Promise<AuthSessionSnapshot>
       loginWithOAuth: () => Promise<AuthActionResult>
       cancelOAuthLogin: () => Promise<AuthActionResult>
@@ -1116,7 +1181,10 @@ declare global {
       abortProfile: () => Promise<{ ok: boolean }>
       createAgentSession: () => Promise<{ ok: boolean; message: string }>
       currentAgentSession: () => Promise<string | null>
-      sendAgentMessage: (text: string, productId?: string) => Promise<{
+      pickAgentReferences: () => Promise<ChatReferenceView[]>
+      addAgentReference: (input: { kind: 'library' | 'website' | 'profile'; value: string }) => Promise<ChatReferenceView>
+      discardAgentReferences: (ids: string[]) => Promise<void>
+      sendAgentMessage: (text: string, productId?: string, referenceIds?: string[]) => Promise<{
         ok: boolean
         message: string
         accepted: boolean

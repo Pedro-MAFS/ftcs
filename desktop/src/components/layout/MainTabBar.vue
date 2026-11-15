@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Icon from '../shared/Icon.vue'
-import { useMainViewTabs } from '../../composables/useMainViewTabs'
+import { isPinnedPageTab, useMainViewTabs } from '../../composables/useMainViewTabs'
 import { useWorkspaceLayout } from '../../composables/useWorkspaceLayout'
 
 const { tabs, activeId, settingsCover, activateTab, closeTab, openPageTab } = useMainViewTabs()
@@ -19,7 +19,7 @@ function tabSelected(id: string): boolean {
         :key="tab.id"
         class="main-tab"
         role="tab"
-        :class="{ 'is-active': tabSelected(tab.id), 'is-pinned': tab.id === 'page:home' }"
+        :class="{ 'is-active': tabSelected(tab.id), 'is-pinned': isPinnedPageTab(tab.id) }"
         :aria-selected="tabSelected(tab.id)"
         tabindex="0"
         @click="activateTab(tab.id)"
@@ -27,7 +27,7 @@ function tabSelected(id: string): boolean {
       >
         <span class="main-tab__title">{{ tab.title }}</span>
         <button
-          v-if="tab.id !== 'page:home'"
+          v-if="!isPinnedPageTab(tab.id)"
           type="button"
           class="main-tab__close"
           :aria-label="`关闭${tab.title}`"

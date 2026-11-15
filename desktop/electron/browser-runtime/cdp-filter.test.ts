@@ -6,10 +6,26 @@ import {
   interpretClientMessage,
   relaxDebuggerPause,
   sessionNeedsDebuggerResume,
+  setVerifiedPreviewTarget,
+  clearVerifiedPreviewTargets,
 } from './cdp-filter.ts'
 
 const pageId = 'page-1'
 const token = 'http://127.0.0.1:43123/__ftcs_builtin_page__'
+
+test('a verified preview on 5173 is visible while the FTCS main target remains hidden', () => {
+  const pages = new Set(['preview'])
+  setVerifiedPreviewTarget('preview', 'http://127.0.0.1:5173/')
+  try {
+    const result = filterJsonList([
+      { id: 'main', type: 'page', url: 'http://127.0.0.1:5173/' },
+      { id: 'preview', type: 'page', url: 'http://127.0.0.1:5173/' },
+    ], pages, 43123)
+    assert.deepEqual(result.map(item => item.id), ['preview'])
+    clearVerifiedPreviewTargets()
+    assert.equal(filterJsonList([{ id: 'preview', type: 'page', url: 'http://127.0.0.1:5173/' }], pages, 43123).length, 0)
+  } finally { clearVerifiedPreviewTargets() }
+})
 
 test('T6 json list keeps only the token page', () => {
   const filtered = filterJsonList(

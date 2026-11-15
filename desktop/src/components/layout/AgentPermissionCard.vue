@@ -5,6 +5,8 @@ defineProps<{
   pending: {
     permission: string
     tool?: string
+    command?: string
+    directory?: string
   }
 }>()
 
@@ -31,6 +33,11 @@ async function choose(reply: 'once' | 'reject'): Promise<void> {
     <h3 class="perm-card__title">需要你的授权</h3>
     <p class="perm-card__line">操作：{{ pending.permission }}</p>
     <p v-if="pending.tool" class="perm-card__line">工具：{{ pending.tool }}</p>
+    <p v-if="pending.directory" class="perm-card__line">指定的工作目录：{{ pending.directory }}</p>
+    <p v-else-if="['bash', 'shell'].includes(pending.permission.toLowerCase())" class="perm-card__line">未获取工作目录，可能使用运行环境的默认目录。</p>
+    <pre v-if="pending.command" class="perm-card__line">{{ pending.command }}</pre>
+    <p v-else-if="['bash', 'shell'].includes(pending.permission.toLowerCase())" class="perm-card__line">未能获取命令内容，请在聊天中的工具调用里查看。</p>
+    <p v-if="['bash', 'shell'].includes(pending.permission.toLowerCase())" class="perm-card__hint">命令及其子进程以你的用户权限运行，可能访问文件和网络。</p>
     <p v-if="errorMessage" class="perm-card__alert" role="alert">{{ errorMessage }}</p>
     <div class="perm-card__actions">
       <button type="button" class="btn-secondary btn-sm" :disabled="submitting" @click="choose('reject')">

@@ -188,7 +188,7 @@ function scheduleSessionResume(upstream: WsSocket, sessionId: string): void {
 function retractListedShellPages(list: ListedTarget[]): void {
   for (const item of list) {
     if (item.type != null && item.type !== 'page') continue
-    if (!item.id || !isShellPageUrl(item.url)) continue
+    if (!item.id || !isShellPageUrl(item.url, item.id)) continue
     retractShellPage(item.id)
   }
 }
@@ -196,7 +196,7 @@ function retractListedShellPages(list: ListedTarget[]): void {
 async function isOpenBrowserTarget(targetId: string): Promise<boolean> {
   const list = await listInternalTargets()
   const hit = list.find((item) => item.id === targetId)
-  if (!hit || !isShellPageUrl(hit.url)) return true
+  if (!hit || !isShellPageUrl(hit.url, hit.id)) return true
   retractShellPage(targetId)
   return false
 }
@@ -206,7 +206,7 @@ function shellTargetId(message: unknown): string | null {
   const info = (
     message as { params?: { targetInfo?: { targetId?: unknown; type?: unknown; url?: unknown } } }
   ).params?.targetInfo
-  if (!info || info.type !== 'page' || typeof info.url !== 'string' || !isShellPageUrl(info.url)) return null
+  if (!info || info.type !== 'page' || typeof info.url !== 'string' || !isShellPageUrl(info.url, typeof info.targetId === 'string' ? info.targetId : undefined)) return null
   return typeof info.targetId === 'string' ? info.targetId : null
 }
 

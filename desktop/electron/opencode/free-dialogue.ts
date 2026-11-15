@@ -22,9 +22,10 @@ export function planFreeDialogue(input: {
   running: boolean
   clientReady: boolean
   hasSession: boolean
+  hasReferences?: boolean
 }): FreeDialoguePlan {
   const text = input.text.trim()
-  if (!text) return { action: 'ignore' }
+  if (!text && !input.hasReferences) return { action: 'ignore' }
   if (input.running) return { action: 'block', message: FREE_DIALOGUE_TASK_BUSY }
   if (!input.clientReady) return { action: 'block', message: FREE_DIALOGUE_NOT_READY }
   return { action: 'send', text, createSession: !input.hasSession }

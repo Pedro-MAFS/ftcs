@@ -22,8 +22,15 @@ export interface TargetInfo {
 
 export type PageSelector = string | ReadonlySet<string> | null
 
+const verifiedPreviewTargets = new Map<string, string>()
+export function setVerifiedPreviewTarget(targetId: string, url: string): void {
+  try { verifiedPreviewTargets.set(targetId, new URL(url).origin) } catch { /* invalid URL */ }
+}
+export function clearVerifiedPreviewTargets(): void { verifiedPreviewTargets.clear() }
+export function forgetVerifiedPreviewTarget(targetId: string): void { verifiedPreviewTargets.delete(targetId) }
+
 /** 主窗、标题条、蒙层不要收成浏览标签。 */
-export function isShellPageUrl(url: string | undefined): boolean {
+export function isShellPageUrl(url: string | undefined, targetId?: string): boolean {
   if (!url) return false
   const value = url.toLowerCase()
   if (value.startsWith('data:')) return true
@@ -32,7 +39,11 @@ export function isShellPageUrl(url: string | undefined): boolean {
   if (value.startsWith('chrome:')) return true
   if (value.startsWith('file:')) return true
   if (value.startsWith('app:')) return true
-  return /^https?:\/\/(127\.0\.0\.1|localhost):5173(\/|$)/i.test(url)
+  if (/^https?:\/\/(127\.0\.0\.1|localhost):5173(\/|$)/i.test(url)) {
+    try { if (targetId && verifiedPreviewTargets.get(targetId) === new URL(url).origin) return false } catch { /* shell */ }
+    return true
+  }
+  return false
 }
 
 /**
@@ -57,8 +68,8 @@ export function isBuiltinPage(
   target: { id?: string; targetId?: string; url?: string },
   pageId: PageSelector,
 ): boolean {
-  if (isShellPageUrl(target.url)) return false
   const id = target.id || target.targetId
+  if (isShellPageUrl(target.url, id)) return false
   if (typeof pageId === 'string') {
     if (pageId && id === pageId) return true
   } else if (pageId && id && pageId.has(id)) {
@@ -93,7 +104,7 @@ export function filterJsonList(
   return list
     .filter((item) => {
       if (item.type != null && item.type !== 'page') return false
-      if (isShellPageUrl(item.url)) {
+      if (isShellPageUrl(item.url, item.id)) {
         forgetShellPage(item.id, pageId)
         return false
       }
@@ -113,7 +124,7 @@ export function filterJsonList(
 export function filterTargetInfos(infos: TargetInfo[], pageId: PageSelector): TargetInfo[] {
   return infos.filter((info) => {
     if (info.type !== 'page') return true
-    if (isShellPageUrl(info.url)) {
+    if (isShellPageUrl(info.url, info.targetId)) {
       forgetShellPage(info.targetId, pageId)
       return false
     }
@@ -215,7 +226,7 @@ export function filterUpstreamMessage(
     const info = msg.params?.targetInfo
     if (info && info.type === 'page') {
       const id = typeof info.targetId === 'string' ? info.targetId : ''
-      if (isShellPageUrl(info.url)) {
+      if (isShellPageUrl(info.url, id)) {
         forgetShellPage(id, pageId, foreignPageIds, admission)
         return null
       }
@@ -274,7 +285,7 @@ export function shellAttachToRelease(message: unknown): { sessionId: string; tar
   if (msg.method !== 'Target.attachedToTarget') return null
   const info = msg.params?.targetInfo
   const sessionId = typeof msg.params?.sessionId === 'string' ? msg.params.sessionId : ''
-  if (!info || !sessionId || !isShellPageUrl(info.url)) return null
+  if (!info || !sessionId || !isShellPageUrl(info.url, typeof info.targetId === 'string' ? info.targetId : undefined)) return null
   return {
     sessionId,
     targetId: typeof info.targetId === 'string' ? info.targetId : '',

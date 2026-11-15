@@ -3,7 +3,7 @@ import { useRouter, type LocationQueryRaw, type Router } from 'vue-router'
 import type { BuiltinBrowserTabsPayload } from '../types/electron'
 import { showToast } from './useToast'
 
-export type PageKey = 'home' | 'input' | 'profile' | 'explore' | 'leads' | 'email'
+export type PageKey = 'home' | 'input' | 'profile' | 'explore' | 'leads' | 'email' | 'site'
 
 export const PAGE_TITLE: Record<PageKey, string> = {
   home: '首页',
@@ -12,6 +12,7 @@ export const PAGE_TITLE: Record<PageKey, string> = {
   explore: '获客探索',
   leads: '线索库',
   email: '邮件审核',
+  site: '独立站',
 }
 
 export const PAGE_COMPONENT: Record<PageKey, string> = {
@@ -21,11 +22,12 @@ export const PAGE_COMPONENT: Record<PageKey, string> = {
   explore: 'ExploreView',
   leads: 'LeadsView',
   email: 'EmailView',
+  site: 'SiteView',
 }
 
 const BUSINESS_PAGES = new Set<PageKey>(['input', 'profile', 'explore', 'leads', 'email'])
 
-export type BusinessPage = Exclude<PageKey, 'home'>
+export type BusinessPage = Exclude<PageKey, 'home' | 'site'>
 
 export interface PageTab {
   id: `page:${PageKey}`
@@ -54,6 +56,10 @@ export function isBusinessPage(page: PageKey): page is BusinessPage {
   return BUSINESS_PAGES.has(page)
 }
 
+export function isPinnedPageTab(id: string): boolean {
+  return id === 'page:home'
+}
+
 function pageId(page: PageKey): `page:${PageKey}` {
   return `page:${page}`
 }
@@ -72,8 +78,8 @@ function placeHomeFirst(list: MainTab[]): MainTab[] {
 }
 
 export function createMainViewTabs(router: Pick<Router, 'push'>) {
-  // 启动时展示全部业务入口，激活页仍由 useDefaultLanding 按流水线进度选择。
-  const tabs = ref<MainTab[]>([pageTab('home'), ...Array.from(BUSINESS_PAGES, pageTab)])
+  // 启动时展示全部入口，激活页仍由 useDefaultLanding 按流水线进度选择。
+  const tabs = ref<MainTab[]>([pageTab('home'), ...Array.from(BUSINESS_PAGES, pageTab), pageTab('site')])
   const activeId = ref<string | null>(null)
   const settingsCover = ref(false)
   let browserSeq = 0
@@ -222,7 +228,7 @@ export function createMainViewTabs(router: Pick<Router, 'push'>) {
   }
 
   function closeTab(id: string): Promise<unknown> | undefined {
-    if (id === 'page:home') return undefined
+    if (isPinnedPageTab(id)) return undefined
     const current = tabs.value.find((tab) => tab.id === id)
     if (current?.kind === 'browser' && browserHost()?.closeBuiltinBrowserTab) {
       void browserHost()?.closeBuiltinBrowserTab(current.browserKey)

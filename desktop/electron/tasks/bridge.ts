@@ -15,6 +15,9 @@ export interface TaskReceiver {
   done(session: string, request: Done): unknown
   recordWrite(context: ToolIdentity, result: Record<string, string>): void
   authorize(context: ToolIdentity, args: Record<string, unknown>): string | undefined
+  noteShellCall?(context: ToolIdentity, args: Record<string, unknown>): void
+  noteReadCall?(context: ToolIdentity, args: Record<string, unknown>): void
+  siteTool?(context: ToolIdentity, name: string, args: Record<string, unknown>): Promise<unknown>
 }
 
 /** Only the OpenCode host hook can mint a ticket. MCP consumes it exactly once. */
@@ -32,7 +35,7 @@ export async function openTaskBridge(receiver: () => TaskReceiver) {
       res.end(JSON.stringify(data))
     }
     const lifecycle = req.url === '/task_begin' || req.url === '/task_done'
-    if (req.method !== 'POST' || (!lifecycle && !['/before', '/execute', '/commit'].includes(req.url ?? '')))
+    if (req.method !== 'POST' || (!lifecycle && !['/before', '/execute', '/commit', '/site_execute'].includes(req.url ?? '')))
       return reply(404, {})
     if (req.headers.authorization !== `Bearer ${req.url === '/before' ? pluginKey : mcpKey}`)
       return reply(403, {})
@@ -57,6 +60,14 @@ export async function openTaskBridge(receiver: () => TaskReceiver) {
         if (![sessionID, callID, tool].every((v) => typeof v === 'string' && v.length > 0 && v.length < 256))
           throw new Error('无效调用上下文')
         const identity: ToolIdentity = { sessionID, callID, tool }
+        if (tool === 'bash' || tool === 'shell') {
+          receiver().noteShellCall?.(identity, body.args ?? {})
+          return reply(200, { ok: true })
+        }
+        if (tool === 'read') {
+          receiver().noteReadCall?.(identity, body.args ?? {})
+          return reply(200, { ok: true })
+        }
         identity.taskID = receiver().authorize(identity, body.args ?? {})
         if (!tool.startsWith('lead-store_')) return reply(200, { ok: true })
         for (const [key, value] of tickets) if (value.expires < Date.now()) tickets.delete(key)
@@ -70,9 +81,16 @@ export async function openTaskBridge(receiver: () => TaskReceiver) {
       if (
         !ticket ||
         ticket.expires < Date.now() ||
-        ticket.identity.tool !== `lead-store_${req.url === '/execute' ? request.name : req.url!.slice(1)}`
+        ticket.identity.tool !== `lead-store_${req.url === '/execute' || req.url === '/site_execute' ? request.name : req.url!.slice(1)}`
       )
         throw new Error('无效会话凭据')
+      if (req.url === '/site_execute') {
+        if (!['site_status', 'site_preview', 'site_open_preview', 'site_stop_preview', 'site_build', 'site_publish', 'site_domains_list', 'site_domain_check', 'site_domain_add', 'site_domain_delete'].includes(request.name) || !receiver().siteTool) throw new Error('未知站点操作')
+        if (request.domain_name !== ticket.args.domain_name || request.domain_kind !== ticket.args.domain_kind) throw new Error('站点工具参数与会话授权不匹配')
+        receiver().authorize(ticket.identity, ticket.args)
+        const value = await receiver().siteTool!(ticket.identity, request.name, ticket.args)
+        return reply(200, { ok: true, value })
+      }
       if (req.url === '/execute') {
         const current = receiver().authorize(ticket.identity, ticket.args)
         if (!current || current !== ticket.identity.taskID) throw new Error('任务已结束')

@@ -1,3 +1,19 @@
+import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount, getCloudflareCredentials } from './cloudflare/cloudflare-auth'
+import { CloudflarePages, normalizeDomain, verifyPagesProject, type PagesProject } from './cloudflare/cloudflare-pages'
+import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub, getGithubAccessToken } from './github/github-auth'
+import { GithubRepositories } from './github/github-repositories'
+import { adoptSite, createSite, getSiteOutput, getSiteSnapshot } from './site/site-project'
+import { SitePublish, readRelease, type ReleaseRecord } from './site/site-publish'
+import { SiteDeployment } from './site/site-deployment'
+import { SiteSourceTracker } from './site/site-source-tracker'
+import { SiteAgentActions } from './site/site-agent-actions'
+import { ChatReferenceRegistry } from './opencode/chat-references'
+import { readWebsiteBookmark } from './library/library-website'
+import { SiteRuntime, type RunKind } from './site/site-runtime'
+import { resolveConfiguredNode } from './runtime/node-paths'
+import { resolveBestNode } from './runtime/resolve-node'
+import { openSitePreviewTab } from './browser-runtime/builtin-browser-window'
+import { clearVerifiedPreviewTargets } from './browser-runtime/cdp-filter'
 import { markExplorationRunFailed } from './exploration/exploration-writer'
 import { TaskJournal } from './tasks/journal'
 import type { TaskSkill } from './tasks/lifecycle'
@@ -5,6 +21,7 @@ import { recipientKeyFromEmail as slotKeyForEmail } from './emails/emails-reader
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   nativeTheme,
   shell,
@@ -16,7 +33,7 @@ import { loadDesktopEnvFile } from './config/load-desktop-env'
 import { IPC } from './ipc/types'
 import type { AppStatus, SaveTextToDownloadsInput } from './ipc/types'
 import { saveTextToDownloads } from './session/save-text-to-downloads'
-import { getWorkspaceRoot } from './config/paths'
+import { getRepoRoot, getWorkspaceRoot } from './config/paths'
 import { OpenCodeRuntime } from './opencode/runtime'
 import {
   getSettingsSnapshot,
@@ -250,8 +267,40 @@ try {
 }
 
 let mainWindow: BrowserWindow | null = null
+const siteRuntime = new SiteRuntime(resolveConfiguredNode, getWorkspaceRoot, snapshot => {
+  if (snapshot.preview.state !== 'running') clearVerifiedPreviewTargets()
+  broadcastToWindows(IPC.SITE_RUNTIME_EVENT, snapshot)
+}, async () => (await resolveBestNode()).bestOk, root => siteSource.watchToken(root))
+const siteSource = new SiteSourceTracker(getWorkspaceRoot, snapshot => broadcastToWindows(IPC.SITE_SOURCE_EVENT, snapshot), root => siteRuntime.noteSourceChange(root))
+const githubRepositories = new GithubRepositories(getGithubAccessToken)
+const sitePublish = new SitePublish(githubRepositories, async () => resolveConfiguredNode() ?? (await resolveBestNode()).bestOk, getWorkspaceRoot)
+const pages = new CloudflarePages(getCloudflareCredentials)
+let pagesCreationInFlight = false
+let domainAction: ((name: string, root: string, args: Record<string, unknown>, stillActive: () => boolean) => Promise<unknown>) | undefined
+let sitePreviewTab: string | undefined
+async function openManagedSitePreview(root: string, id: string, stillActive: () => boolean = () => true): Promise<void> {
+  const url = siteRuntime.previewUrl(root, id)
+  const browser = await ensureBuiltinBrowser()
+  if (!browser.ok) throw new Error('内置浏览器暂不可用，请重试。')
+  if (!stillActive() || siteRuntime.previewUrl(root, id) !== url) throw new Error('预览状态或会话已变化，请重试。')
+  sitePreviewTab = await openSitePreviewTab(url, siteRuntime.snapshot(root).preview.state === 'running', sitePreviewTab)
+}
+const siteAgentActions = new SiteAgentActions({
+  snapshot: root => { siteSource.snapshot(root); return siteRuntime.snapshot(root) },
+  startPreview: root => siteRuntime.startPreview(root),
+  stopPreview: (root, id) => siteRuntime.cancel(root, 'preview', id),
+  build: root => siteRuntime.build(root),
+  openPreview: openManagedSitePreview,
+  release: readRelease,
+  connections: async () => { const [github, cloudflare] = await Promise.all([getGithubState(), getCloudflareState()]); return { github: github.connected, cloudflare: cloudflare.connected } },
+  prepare: (root, id, branch) => sitePublish.prepare(root, id, branch),
+  commit: (root, id) => sitePublish.commit(root, id),
+  notify: (root, running) => broadcastToWindows(IPC.SITE_AGENT_RELEASE_EVENT, { root, running }),
+  domains: (name, root, args, stillActive) => { if (!domainAction) throw new Error('域名管理不可用。'); return domainAction(name, root, args, stillActive) },
+})
 let runtime: OpenCodeRuntime | null = null
 let agentRunner: AgentRunController | null = null
+const chatReferences = new ChatReferenceRegistry()
 /** Electron 不会 await before-quit；需要 preventDefault + 二次 quit */
 let isCleaningUp = false
 /** 托盘「退出」或真正退出时为 true，此时允许窗口 close 销毁 */
@@ -270,6 +319,7 @@ function getAgentRunner(): AgentRunController {
       reloadRuntime: reloadOpenCodeRuntime,
       preflight: (kind, options) => runAgentPreflight(kind, { runtime, isAgentRunning: () => false }, options),
       refreshPlaces: () => runtime ? runtime.refreshPlacesMcp() : Promise.reject(new Error('服务未就绪')),
+      siteTool: (name, root, stillActive, args) => siteAgentActions.execute(name, root, stillActive, args),
       lifecycle: true,
     })
   }
@@ -648,6 +698,242 @@ function registerIpcHandlers(): void {
     await shell.openExternal(parsed.toString())
     return { ok: true, message: '已打开浏览器' }
   })
+  ipcMain.handle(IPC.SITE_GET, () => getSiteSnapshot(getWorkspaceRoot()))
+  const currentSiteWorkspace = (expected: unknown): string => {
+    const root = path.resolve(getWorkspaceRoot())
+    const comparable = (value: string) => process.platform === 'win32' ? value.toLowerCase() : value
+    if (typeof expected !== 'string' || comparable(path.resolve(expected)) !== comparable(root)) throw new Error('当前工作区已改变，请刷新后重试。')
+    return root
+  }
+  ipcMain.handle(IPC.SITE_SOURCE_GET, (_event, expected: unknown) => siteSource.snapshot(currentSiteWorkspace(expected)))
+  ipcMain.handle(IPC.SITE_CREATE, (_event, expected: unknown) => {
+    try {
+      const root = currentSiteWorkspace(expected)
+      const template = app.isPackaged ? path.join(process.resourcesPath, 'site-template') : path.join(getRepoRoot(), 'desktop', 'site-template')
+      return { ok: true, snapshot: createSite(root, template) }
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) } }
+  })
+  ipcMain.handle(IPC.SITE_ADOPT, (_event, expected: unknown) => {
+    try { return { ok: true, snapshot: adoptSite(currentSiteWorkspace(expected)) } }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) } }
+  })
+  ipcMain.handle(IPC.SITE_OPEN_DIRECTORY, async (_event, kind: unknown, expected: unknown) => {
+    if (kind !== 'workspace' && kind !== 'project') return { ok: false, message: '无效的目录类型。' }
+    try {
+      const state = getSiteSnapshot(currentSiteWorkspace(expected))
+      if (kind === 'project' && !['ready', 'existing', 'empty', 'invalid'].includes(state.status)) return { ok: false, message: '站点目录不可用，请先检查工作区。' }
+      const error = await shell.openPath(kind === 'workspace' ? state.workspaceRoot : state.projectPath)
+      return error ? { ok: false, message: `无法打开目录：${error}` } : { ok: true }
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) } }
+  })
+  const siteAction = async (fn: () => unknown | Promise<unknown>) => {
+    try { await fn(); return { ok: true } }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) } }
+  }
+  ipcMain.handle(IPC.SITE_RUNTIME_GET, (_event, root: string) => siteRuntime.snapshot(currentSiteWorkspace(root)))
+  ipcMain.handle(IPC.SITE_RUNTIME_INSTALL, (_event, root: string, reinstall: unknown, thenPreview: unknown) => siteAction(() => siteRuntime.install(currentSiteWorkspace(root), reinstall === true, thenPreview === true)))
+  ipcMain.handle(IPC.SITE_RUNTIME_PREVIEW, (_event, root: string) => siteAction(() => siteRuntime.startPreview(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_RUNTIME_ADDRESS, (_event, root: string, id: string, url: string) => siteAction(() => siteRuntime.setPreviewUrl(currentSiteWorkspace(root), String(id), String(url))))
+  ipcMain.handle(IPC.SITE_RUNTIME_BUILD, (_event, root: string) => siteAction(() => siteRuntime.build(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_RUNTIME_OUTPUT, (_event, root: string, output: string) => siteAction(() => siteRuntime.setOutput(currentSiteWorkspace(root), String(output))))
+  ipcMain.handle(IPC.SITE_RUNTIME_CANCEL, (_event, root: string, kind: RunKind, id: string) => siteAction(() => {
+    if (!['install', 'preview', 'build'].includes(kind)) throw new Error('无效的操作类型。')
+    return siteRuntime.cancel(currentSiteWorkspace(root), kind, String(id))
+  }))
+  ipcMain.handle(IPC.SITE_RUNTIME_OPEN, (_event, root: string, id: string) => siteAction(async () => {
+    await openManagedSitePreview(currentSiteWorkspace(root), String(id))
+  }))
+  ipcMain.handle(IPC.CLOUDFLARE_GET_STATE, () => getCloudflareState())
+  ipcMain.handle(IPC.CLOUDFLARE_CONNECT, () => connectCloudflare())
+  ipcMain.handle(IPC.CLOUDFLARE_CANCEL, () => cancelCloudflareAuth())
+  ipcMain.handle(IPC.CLOUDFLARE_SELECT_ACCOUNT, (_event, accountId: unknown) => selectCloudflareAccount(accountId))
+  ipcMain.handle(IPC.CLOUDFLARE_DISCONNECT, () => disconnectCloudflare())
+  ipcMain.handle(IPC.GITHUB_GET_STATE, () => getGithubState())
+  const releaseAction = async <T>(fn: () => T | Promise<T>): Promise<{ ok: true; value: T } | { ok: false; message: string }> => {
+    try { return { ok: true, value: await fn() } } catch (error) { return { ok: false, message: error instanceof Error ? error.message : '操作失败。' } }
+  }
+  const verifyPages = (record: ReleaseRecord, project: PagesProject, root: string) => {
+    const repo = record.target
+    if (!repo || !record.commitSha || record.pending) throw new Error('请先确认 GitHub 推送已完成。')
+    const output = getSiteOutput(root)
+    if (!output) throw new Error('请先设置静态产物目录。')
+    if (!record.outputDir || output !== record.outputDir) throw new Error('静态产物目录已变化，请重新检查并发布站点。')
+    verifyPagesProject(project, { ...repo, output })
+  }
+  const siteDeployment = new SiteDeployment(githubRepositories, pages, sitePublish, getWorkspaceRoot, verifyPages)
+  let domainCreationInFlight = false
+  const domainContext = async (root: unknown) => {
+    const workspace = currentSiteWorkspace(root)
+    const record = readRelease(workspace)
+    if (!record.cloudflare || !record.target || !record.commitSha) throw new Error('请先在发布记录中关联 Cloudflare Pages 项目。')
+    const credentials = await getCloudflareCredentials()
+    if (credentials.accountId !== record.cloudflare.accountId) throw new Error('当前 Cloudflare 账号与关联项目不一致，请切换账号。')
+    const binding = record.cloudflare
+    const ensure = async () => {
+      const latest = readRelease(currentSiteWorkspace(root))
+      if (latest.cloudflare?.accountId !== binding.accountId || latest.cloudflare.project !== binding.project) throw new Error('工作区或 Cloudflare 项目已变化，请刷新后重试。')
+      const currentCredentials = await getCloudflareCredentials()
+      if (currentCredentials.accountId !== binding.accountId) throw new Error('Cloudflare 账号已变化，请刷新后重试。')
+      const final = readRelease(currentSiteWorkspace(root))
+      if (final.cloudflare?.accountId !== binding.accountId || final.cloudflare.project !== binding.project) throw new Error('工作区或 Cloudflare 项目已变化，请刷新后重试。')
+    }
+    const { project } = await pages.project(binding.accountId, binding.project)
+    await ensure()
+    if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.pages\.dev$/i.test(project.subdomain)) throw new Error('无法确认 Pages 默认域名，请检查 Cloudflare 项目。')
+    return { workspace, binding, subdomain: project.subdomain, ensure }
+  }
+  const listDomains = async (root: unknown) => {
+    const ctx = await domainContext(root)
+    const domains = await pages.domains(ctx.binding.accountId, ctx.binding.project); await ctx.ensure()
+    let pending = readRelease(ctx.workspace).pendingDomain
+    if (pending && pending.accountId === ctx.binding.accountId && pending.project === ctx.binding.project && domains.some(item => item.name === pending!.name) && !domainCreationInFlight) {
+      sitePublish.setPendingDomain(ctx.workspace, undefined); pending = undefined
+    }
+    return { ...ctx.binding, subdomain: ctx.subdomain, domains, pending: pending?.accountId === ctx.binding.accountId && pending.project === ctx.binding.project ? pending : undefined }
+  }
+  const checkDomain = async (root: unknown, name: unknown) => {
+    const ctx = await domainContext(root)
+    const domain = await pages.domain(ctx.binding.accountId, ctx.binding.project, String(name)); await ctx.ensure()
+    return domain
+  }
+  const addDomain = async (root: unknown, name: unknown, kind: unknown, stillActive: () => boolean = () => true) => {
+    if (domainCreationInFlight) throw new Error('域名添加正在进行。')
+    domainCreationInFlight = true
+    try {
+      const ctx = await domainContext(root)
+      if (kind !== 'root' && kind !== 'subdomain') throw new Error('请选择根域名或子域名。')
+      if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。')
+      const normalized = normalizeDomain(name)
+      const record = readRelease(ctx.workspace)
+      if (record.pendingDomain) throw new Error(`上次在项目 ${record.pendingDomain.project} 添加 ${record.pendingDomain.name} 的结果待确认，请先切回对应账号和项目检查。`)
+      const existing = await pages.domains(ctx.binding.accountId, ctx.binding.project); await ctx.ensure()
+      const found = existing.find(item => item.name === normalized)
+      if (found) return { domain: found, subdomain: ctx.subdomain }
+      if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。')
+      sitePublish.setPendingDomain(ctx.workspace, { ...ctx.binding, name: normalized, kind })
+      try {
+        const domain = await pages.addDomain(ctx.binding.accountId, ctx.binding.project, normalized); await ctx.ensure()
+        sitePublish.setPendingDomain(ctx.workspace, undefined)
+        return { domain, subdomain: ctx.subdomain }
+      } catch (error) { throw new Error(`${error instanceof Error ? error.message : '添加失败。'} 添加结果待确认，请刷新域名列表。`) }
+    } finally { domainCreationInFlight = false; broadcastToWindows(IPC.SITE_DOMAINS_EVENT, { root }) }
+  }
+  const clearPendingDomain = async (root: unknown) => {
+    if (domainCreationInFlight) throw new Error('域名添加正在进行，请稍候。')
+    const ctx = await domainContext(root)
+    const pending = readRelease(ctx.workspace).pendingDomain
+    if (!pending || pending.accountId !== ctx.binding.accountId || pending.project !== ctx.binding.project) throw new Error('没有属于当前项目的待确认域名。')
+    const domains = await pages.domains(ctx.binding.accountId, ctx.binding.project); await ctx.ensure()
+    if (domains.some(item => item.name === pending.name)) throw new Error('域名已存在，请刷新列表查看。')
+    sitePublish.setPendingDomain(ctx.workspace, undefined)
+  }
+  const deleteDomain = async (root: unknown, name: unknown, stillActive: () => boolean = () => true) => {
+    if (domainCreationInFlight) throw new Error('域名操作正在进行，请稍候。')
+    domainCreationInFlight = true
+    try {
+      const ctx = await domainContext(root)
+      const normalized = normalizeDomain(name)
+      if (readRelease(ctx.workspace).pendingDomain) throw new Error('上次域名添加结果待确认，请先检查。')
+      const domains = await pages.domains(ctx.binding.accountId, ctx.binding.project); await ctx.ensure()
+      if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。')
+      if (!domains.some(item => item.name === normalized)) throw new Error('当前 Pages 项目没有该域名，请刷新列表。')
+      try { await pages.deleteDomain(ctx.binding.accountId, ctx.binding.project, normalized); await ctx.ensure() }
+      catch (error) { throw new Error(`${error instanceof Error ? error.message : '删除失败。'} 删除结果待确认，请刷新域名列表或前往 Cloudflare 检查，不要盲目重试。`) }
+      return { name: normalized, message: '已移除 Pages 域名关联；FTCS 未主动修改 DNS，请到 DNS 服务商检查并按需处理记录。' }
+    } finally { domainCreationInFlight = false; broadcastToWindows(IPC.SITE_DOMAINS_EVENT, { root }) }
+  }
+  domainAction = async (name, root, args, stillActive) => {
+    if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。')
+    if (name === 'site_domains_list' || name === 'site_domain_check') {
+      const result = name === 'site_domains_list' ? await listDomains(root) : await checkDomain(root, args.domain_name)
+      if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。')
+      return result
+    }
+    if (name === 'site_domain_delete') return deleteDomain(root, args.domain_name, stillActive)
+    if (name === 'site_domain_add') {
+      const result = await addDomain(root, args.domain_name, args.domain_kind, stillActive)
+      return { ...result, kind: args.domain_kind, message: args.domain_kind === 'root' ? '请将根域名接入当前 Cloudflare 账号的 DNS，具体状态以 Cloudflare 为准。' : '请在 DNS 服务商配置 CNAME，名称为域名，记录值为 subdomain；是否生效以 Cloudflare 状态为准。' }
+    }
+    throw new Error('未知域名操作。')
+  }
+  ipcMain.handle(IPC.SITE_DOMAINS_LIST, (_event, root: unknown) => releaseAction(() => listDomains(root)))
+  ipcMain.handle(IPC.SITE_DOMAINS_CHECK, (_event, root: unknown, name: unknown) => releaseAction(() => checkDomain(root, name)))
+  ipcMain.handle(IPC.SITE_DOMAINS_ADD, (_event, root: unknown, name: unknown, kind: unknown) => releaseAction(() => addDomain(root, name, kind)))
+  ipcMain.handle(IPC.SITE_DOMAINS_CLEAR_PENDING, (_event, root: unknown) => releaseAction(() => clearPendingDomain(root)))
+  ipcMain.handle(IPC.SITE_DOMAINS_DELETE, (_event, root: unknown, name: unknown) => releaseAction(() => deleteDomain(root, name)))
+  ipcMain.handle(IPC.SITE_RELEASE_GET, (_event, root: unknown) => releaseAction(() => readRelease(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_AGENT_RELEASE_GET, (_event, root: unknown) => siteAgentActions.isPublishing(currentSiteWorkspace(root)))
+  ipcMain.handle(IPC.SITE_RELEASE_PREPARE, (_event, root: unknown, id: unknown, branch: unknown, acceptReadme: unknown) => releaseAction(() => sitePublish.prepare(currentSiteWorkspace(root), id as number, branch as string, acceptReadme === true)))
+  ipcMain.handle(IPC.SITE_RELEASE_CANCEL, (_event, root: unknown) => releaseAction(() => sitePublish.cancelBuild(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_RELEASE_FILE, (_event, root: unknown, id: unknown, name: unknown) => releaseAction(() => sitePublish.previewFile(currentSiteWorkspace(root), String(id), String(name))))
+  ipcMain.handle(IPC.SITE_RELEASE_COMMIT, (_event, root: unknown, id: unknown) => releaseAction(() => sitePublish.commit(currentSiteWorkspace(root), String(id))))
+  ipcMain.handle(IPC.SITE_RELEASE_RECOVER, (_event, root: unknown) => releaseAction(() => sitePublish.recover(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_PAGES_LIST, (_event, root: unknown) => releaseAction(async () => { currentSiteWorkspace(root); const credentials = await getCloudflareCredentials(); const projects = await pages.list(credentials.accountId); currentSiteWorkspace(root); return { accountId: credentials.accountId, projects } }))
+  ipcMain.handle(IPC.SITE_PAGES_CREATE, (_event, root: unknown, name: unknown, nodeVersion: unknown) => releaseAction(async () => {
+    if (pagesCreationInFlight) throw new Error('项目创建正在进行，请稍候。')
+    pagesCreationInFlight = true
+    try {
+      const workspace = currentSiteWorkspace(root); const record = readRelease(workspace)
+      if (!record.target || !record.commitSha || record.pending || record.pendingPages) throw new Error('请先完成 GitHub 推送并确认之前的项目创建结果。')
+      if (typeof name !== 'string' || !/^[a-z0-9][a-z0-9-]{0,57}$/.test(name) || typeof nodeVersion !== 'string' || !/^(?:22|24|26)$/.test(nodeVersion)) throw new Error('请填写有效的 Pages 项目名和 Node 版本。')
+      const credentials = await getCloudflareCredentials()
+      const existing = await pages.list(credentials.accountId); currentSiteWorkspace(root)
+      if (existing.some(project => project.name === name)) throw new Error('项目名称已存在，请选择现有项目或使用其他名称。')
+      const output = getSiteOutput(workspace)
+      if (!output) throw new Error('请先设置静态产物目录。')
+      if (output !== record.outputDir) throw new Error('静态产物目录已变化，请重新检查并发布站点。')
+      sitePublish.beginPages(workspace, record.commitSha, record.target.id, record.target.branch, credentials.accountId, name)
+      const project = await pages.create(credentials.accountId, name, record.target, output, nodeVersion)
+      currentSiteWorkspace(root); verifyPages(record, project, workspace)
+      sitePublish.bindPages(workspace, record.commitSha, record.target.id, record.target.branch, credentials.accountId, project.name)
+      try { return await siteDeployment.start(workspace) }
+      catch (error) { return { ...readRelease(workspace), buildNotice: `项目已创建，但首次构建未确认：${error instanceof Error ? error.message : String(error)}` } }
+    } finally { pagesCreationInFlight = false }
+  }))
+  ipcMain.handle(IPC.SITE_PAGES_CLEAR_PENDING, (_event, root: unknown) => releaseAction(() => {
+    if (pagesCreationInFlight) throw new Error('项目创建正在进行，请稍候。')
+    return sitePublish.clearPendingPages(currentSiteWorkspace(root))
+  }))
+  ipcMain.handle(IPC.SITE_PAGES_BIND, (_event, root: unknown, name: unknown) => releaseAction(async () => {
+    if (pagesCreationInFlight) throw new Error('项目创建正在进行，请稍候。')
+    const workspace = currentSiteWorkspace(root); const record = readRelease(workspace); const credentials = await getCloudflareCredentials()
+    const result = await pages.project(credentials.accountId, String(name)); currentSiteWorkspace(root); verifyPages(record, result.project, workspace)
+    sitePublish.bindPages(workspace, record.commitSha!, record.target!.id, record.target!.branch, credentials.accountId, result.project.name)
+    try { return await siteDeployment.start(workspace) }
+    catch (error) { return { ...readRelease(workspace), buildNotice: `项目已关联，但首次构建未确认：${error instanceof Error ? error.message : String(error)}` } }
+  }))
+  ipcMain.handle(IPC.SITE_PAGES_STATUS, (_event, root: unknown) => releaseAction(async () => {
+    const workspace = currentSiteWorkspace(root); const record = readRelease(workspace)
+    if (!record.cloudflare || !record.target || !record.commitSha) throw new Error('尚未关联 Cloudflare Pages 项目。')
+    const project = await pages.project(record.cloudflare.accountId, record.cloudflare.project); currentSiteWorkspace(root); verifyPages(record, project.project, workspace)
+    const status = await pages.status(record.cloudflare.accountId, record.cloudflare.project, record.target.branch, record.commitSha); currentSiteWorkspace(root)
+    const latest = readRelease(workspace)
+    if (latest.commitSha !== record.commitSha || latest.target?.id !== record.target.id || latest.target?.branch !== record.target.branch || latest.cloudflare?.accountId !== record.cloudflare.accountId || latest.cloudflare?.project !== record.cloudflare.project) throw new Error('发布信息已变化，请重新刷新状态。')
+    if (status.deploymentId) sitePublish.confirmDeployment(workspace, record.commitSha, record.cloudflare.accountId, record.cloudflare.project, status.deploymentId, status.createdAt)
+    if (status.state === 'success' && status.productionCurrent === true && status.deploymentId && status.productionUrl) sitePublish.noteOnline(workspace, record.commitSha, record.cloudflare.accountId, record.cloudflare.project, status.deploymentId, status.productionUrl)
+    return status
+  }))
+  ipcMain.handle(IPC.SITE_PAGES_DEPLOY, (_event, root: unknown) => releaseAction(() => siteDeployment.start(currentSiteWorkspace(root))))
+  ipcMain.handle(IPC.SITE_PAGES_CLEAR_DEPLOYMENT, (_event, root: unknown) => releaseAction(() => {
+    if (siteDeployment.isActive() || pagesCreationInFlight) throw new Error('构建请求正在进行，请稍候。')
+    return sitePublish.clearPendingDeployment(currentSiteWorkspace(root))
+  }))
+  ipcMain.handle(IPC.GITHUB_REPOSITORIES, async (_event, root: unknown) => {
+    try { currentSiteWorkspace(root); const repositories = await githubRepositories.list(); currentSiteWorkspace(root); return { ok: true, repositories } }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : '无法读取仓库。' } }
+  })
+  ipcMain.handle(IPC.GITHUB_BRANCHES, async (_event, root: unknown, id: unknown) => {
+    try { currentSiteWorkspace(root); const branches = await githubRepositories.branches(id as number); currentSiteWorkspace(root); return { ok: true, branches } }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : '无法读取分支。' } }
+  })
+  ipcMain.handle(IPC.GITHUB_CREATE_REPOSITORY, async (_event, root: unknown, name: unknown, privateRepo: unknown) => {
+    try { const workspace = currentSiteWorkspace(root); if (getSiteSnapshot(workspace).status !== 'ready') throw new Error('请先创建或恢复本地站点。'); const repository = await githubRepositories.create(name as string, privateRepo as boolean); await sitePublish.markCreated(workspace, repository.fullName); return { ok: true, repository } }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : '无法创建仓库。' } }
+  })
+  ipcMain.handle(IPC.GITHUB_START_AUTH, () => startGithubAuth())
+  ipcMain.handle(IPC.GITHUB_POLL_AUTH, () => pollGithubAuth())
+  ipcMain.handle(IPC.GITHUB_CANCEL_AUTH, () => cancelGithubAuth())
+  ipcMain.handle(IPC.GITHUB_DISCONNECT, () => disconnectGithub())
   ipcMain.handle(IPC.AUTH_GET_SESSION, () => getAuthSession())
   ipcMain.handle(IPC.AUTH_LOGIN, async () => {
     const result = await startLogin()
@@ -980,7 +1266,30 @@ function registerIpcHandlers(): void {
     const dir = await pickWorkspaceDirectory()
     if (!dir) return { path: null, restarted: false }
 
+    if (siteRuntime.hasActive() || sitePublish.hasActive() || pagesCreationInFlight) {
+      const choice = await dialog.showMessageBox({
+        type: 'question',
+        title: '切换工作区',
+        message: '当前站点仍有预览、构建或发布操作正在运行。',
+        detail: '切换前需要停止本地操作；远端提交或项目创建需要等待结果。',
+        buttons: ['停止并切换', '取消'],
+        defaultId: 0,
+        cancelId: 1,
+      })
+      if (choice.response !== 0) return { path: null, restarted: false }
+      if (pagesCreationInFlight || !await sitePublish.shutdown()) {
+        await dialog.showMessageBox({ type: 'error', message: '发布操作尚未停止或远端结果未确认，请稍后再切换工作区。' })
+        return { path: null, restarted: false }
+      }
+      if (!await siteRuntime.shutdown()) {
+        await dialog.showMessageBox({ type: 'error', message: '站点进程停止未确认，请检查后再切换工作区。' })
+        return { path: null, restarted: false }
+      }
+    }
+
     const init = initializeWorkspace(dir, { forceManaged: true })
+    siteSource.close()
+    chatReferences.clear()
     writeUserPrefs({ workspaceRoot: dir })
     process.env.FTCS_WORKSPACE = dir
 
@@ -1782,13 +2091,54 @@ function registerIpcHandlers(): void {
     getAgentRunner().createChatSession(payload => emitAgentEvent(event.sender, payload)),
   )
   ipcMain.handle(IPC.AGENT_CURRENT_SESSION, () => getAgentRunner().currentChatSessionId())
-  ipcMain.handle(IPC.AGENT_SEND_MESSAGE, async (event, text: unknown, productId: unknown) => {
+  ipcMain.handle(IPC.AGENT_PICK_REFERENCES, async (event) => {
+    const root = getWorkspaceRoot()
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = { properties: ['openFile', 'multiSelections'] }
+    const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options)
+    if (root !== getWorkspaceRoot()) throw new Error('工作区已改变，请重新选择文件。')
+    if (result.canceled) return []
+    if (result.filePaths.length > 100) throw new Error('一次最多选择 100 个文件。')
+    return result.filePaths.map(filename => chatReferences.addFile(event.sender.id, root, filename, 'local'))
+  })
+  ipcMain.handle(IPC.AGENT_ADD_REFERENCE, (event, input: unknown) => {
+    if (!input || typeof input !== 'object') throw new Error('资料引用无效。')
+    const { kind, value } = input as { kind?: unknown; value?: unknown }
+    if (typeof value !== 'string') throw new Error('资料引用无效。')
+    const root = getWorkspaceRoot()
+    if (kind === 'profile') {
+      const profile = listProductSummaries(root).find(item => item.id === value)
+      if (!profile) throw new Error('产品画像不存在，请刷新后重试。')
+      return chatReferences.addProfile(event.sender.id, root, value, profile.productNames.join('、') || profile.companyName || value)
+    }
+    if (kind === 'library' || kind === 'website') {
+      const { tree } = listFilesTree(root)
+      const find = (nodes: typeof tree): (typeof tree)[number] | undefined => {
+        for (const node of nodes) { if (node.relativePath === value && node.kind === (kind === 'website' ? 'website' : 'file')) return node; const found = find(node.children); if (found) return found }
+      }
+      const node = find(tree)
+      if (!node) throw new Error('资料不存在，请刷新后重试。')
+      const url = kind === 'website' ? readWebsiteBookmark(path.join(root, 'data', 'library', 'files', value))?.url : undefined
+      if (kind === 'website' && !url) throw new Error('网站书签不可用。')
+      return chatReferences.addLibrary(event.sender.id, root, value, kind, url, node.name)
+    }
+    throw new Error('资料引用类型无效。')
+  })
+  ipcMain.handle(IPC.AGENT_DISCARD_REFERENCES, (event, ids: unknown) => {
+    if (Array.isArray(ids)) chatReferences.discard(event.sender.id, ids.filter((id): id is string => typeof id === 'string'))
+  })
+  ipcMain.handle(IPC.AGENT_SEND_MESSAGE, async (event, text: unknown, productId: unknown, ids: unknown = []) => {
     if (typeof productId === 'string') {
       getAgentRunner().noteActiveProduct(productId)
     }
     const message = typeof text === 'string' ? text : ''
     const sender = event.sender
-    return getAgentRunner().sendFreeDialogue(message, (payload) => emitAgentEvent(sender, payload))
+    try {
+      const references = chatReferences.resolve(sender.id, getWorkspaceRoot(), ids)
+      const result = await getAgentRunner().sendFreeDialogue(message, (payload) => emitAgentEvent(sender, payload), false, references)
+      if (result.accepted) chatReferences.discard(sender.id, references.map(ref => ref.id))
+      return result
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : '资料引用不可用。', accepted: false } }
   })
 
   ipcMain.handle(IPC.PROFILE_GENERATE, async (event, input: ProfileGenerateInput) => {
@@ -1898,6 +2248,9 @@ app.on('before-quit', (event) => {
 
   void (async () => {
     try {
+      siteSource.close()
+      await sitePublish.shutdown()
+      await siteRuntime.shutdown()
       await shutdownBuiltinBrowser()
       await runtime?.stop()
     } catch (err) {

@@ -20,6 +20,10 @@ describe('planFreeDialogue', () => {
     )
   })
 
+  it('allows an attachment-only message without changing plain empty messages', () => {
+    assert.deepEqual(planFreeDialogue({ text: '', running: false, clientReady: true, hasSession: true, hasReferences: true }), { action: 'send', text: '', createSession: false })
+  })
+
   it('blocks while a pipeline task is running and does not ask to create a session', () => {
     assert.deepEqual(
       planFreeDialogue({ text: '用三句话解释信用证', running: true, clientReady: true, hasSession: true }),

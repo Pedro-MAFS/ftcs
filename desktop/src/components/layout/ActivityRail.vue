@@ -7,7 +7,7 @@ const { activeTab, settingsCover, openPageTab, openSettings } = useMainViewTabs(
 
 const items: Array<{
   page: PageKey
-  icon: 'package' | 'file-text' | 'radar' | 'users' | 'mail'
+  icon: 'package' | 'file-text' | 'radar' | 'users' | 'mail' | 'globe'
   label: string
 }> = [
   { page: 'input', icon: 'package', label: '资料' },
@@ -15,6 +15,7 @@ const items: Array<{
   { page: 'explore', icon: 'radar', label: '探索' },
   { page: 'leads', icon: 'users', label: '线索' },
   { page: 'email', icon: 'mail', label: '邮件' },
+  { page: 'site', icon: 'globe', label: '独立站' },
 ]
 
 const highlighted = computed(() => {

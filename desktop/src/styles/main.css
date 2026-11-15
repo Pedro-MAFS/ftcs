@@ -564,8 +564,9 @@ button:focus-visible {
   padding-right: 12px;
 }
 
-.title-bar__left,
-.title-bar__right {
+.title-bar__right > .icon-btn,
+.title-bar__right > .runtime-popover,
+.title-bar__right > .auth-menu {
   -webkit-app-region: no-drag;
 }
 
@@ -3951,16 +3952,6 @@ textarea.text-input {
   background: var(--accent);
 }
 
-.agent-panel__skill {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-muted);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .agent-panel .btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -3982,54 +3973,6 @@ textarea.text-input {
 
 .agent-panel .btn-ghost:hover {
   color: var(--text);
-}
-
-.agent-panel__meta {
-  display: flex;
-  gap: 8px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.meta-card {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
-}
-
-.meta-card__label {
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.meta-card__value {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.meta-card__value.tone-success {
-  color: var(--success);
-}
-
-.meta-card__value.tone-warning {
-  color: var(--warning);
-}
-
-.meta-card__value.tone-accent {
-  color: var(--accent);
 }
 
 .agent-panel__timeline {
@@ -4340,6 +4283,7 @@ textarea.text-input {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
 /* —— Status bar —— */

@@ -1,6 +1,11 @@
 import { electronMockReady } from './register-electron-mock.ts'
 import assert from 'node:assert/strict'
 import { after, describe, it } from 'node:test'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+// @ts-expect-error The test runner loads TypeScript directly.
+import { ChatReferenceRegistry } from './chat-references.ts'
 import type { AgentEventPayload, AgentTimelineItem, AgentRunController } from './agent-runner.ts'
 import {
   FREE_DIALOGUE_NOT_READY,
@@ -95,6 +100,168 @@ after(() => {
 const describeSend = electronMockReady ? describe : describe.skip
 
 describeSend('sendFreeDialogue', () => {
+  it('does not set a total reply deadline and can still be stopped', async (t) => {
+    const stream = createEventStream(), emitted: AgentEventPayload[] = [], delays: number[] = [], aborts: string[] = []
+    let entered!: () => void
+    const waiting = new Promise<void>(resolve => { entered = resolve })
+    const client = {
+      session: { async create() { return { data: { id: 'ses_unlimited' } } }, async promptAsync() { return {} }, async abort(input: { sessionID: string }) { aborts.push(input.sessionID); return {} } },
+      event: { async subscribe() { return { stream: stream.stream } } },
+      v2: { session: { async wait(_input: unknown, opts: { signal: AbortSignal }) {
+        entered()
+        await new Promise<void>(resolve => { if (opts.signal.aborted) resolve(); else opts.signal.addEventListener('abort', () => resolve(), { once: true }) })
+        return { response: { status: 204 } }
+      } } },
+    }
+    const runner = new AgentRunController!(() => client as never, { lifecycle: true })
+    const original = globalThis.setTimeout
+    t.mock.method(globalThis, 'setTimeout', ((...args: Parameters<typeof setTimeout>) => { delays.push(Number(args[1])); return original(...args) }) as typeof setTimeout)
+    const task = runner.sendFreeDialogue('执行一个长任务', event => emitted.push(event))
+    try {
+      await waiting
+      assert.equal(delays.some(delay => delay >= 12 * 60_000), false)
+      await runner.abortCurrent()
+      assert.equal((await task).accepted, true)
+      assert.deepEqual(aborts, ['ses_unlimited'])
+      assert.ok(timelineItems(emitted).some(item => item.body === FREE_DIALOGUE_STOPPED))
+    } finally { runner.disconnect(); stream.close() }
+  })
+
+  it('keeps polling after the former deadline when official wait is unavailable', async (t) => {
+    let now = 1_000_000, checks = 0
+    t.mock.method(Date, 'now', () => now)
+    const controller = new AbortController()
+    const client = {
+      v2: { session: { async wait() { return { response: { status: 503 } } } } },
+      session: { async status() {
+        checks++
+        if (checks === 1) now += 166 * 60_000
+        else controller.abort()
+        return { data: { ses_long: { type: 'busy' } } }
+      } },
+    }
+    const runner = new AgentRunController!(() => client as never)
+    const wait = runner as unknown as { waitForSessionIdle: (client: unknown, sessionId: string, signal: AbortSignal, timeout: number | null) => Promise<string> }
+    try {
+      assert.equal(await wait.waitForSessionIdle(client, 'ses_long', controller.signal, null), 'abort')
+      assert.equal(checks, 2)
+    } finally { runner.disconnect() }
+  })
+
+  it('preserves explicit deadlines for business task waits', async () => {
+    const client = { v2: { session: { async wait(_input: unknown, opts: { signal: AbortSignal }) {
+      await new Promise<void>(resolve => { if (opts.signal.aborted) resolve(); else opts.signal.addEventListener('abort', () => resolve(), { once: true }) })
+      return { response: { status: 204 } }
+    } } } }
+    const runner = new AgentRunController!(() => client as never)
+    const wait = runner as unknown as { waitForSessionIdle: (client: unknown, sessionId: string, signal: AbortSignal, timeout: number | null) => Promise<string> }
+    try { assert.equal(await wait.waitForSessionIdle(client, 'ses_task', new AbortController().signal, 20), 'timeout') }
+    finally { runner.disconnect() }
+  })
+
+  it('sends attachment-only messages and permits reading only the chosen external file', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-reference-work-'))
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-reference-out-'))
+    const chosen = path.join(outside, '说明.txt'), other = path.join(outside, 'other.txt')
+    fs.writeFileSync(chosen, '参考内容'); fs.writeFileSync(other, 'other')
+    const previousRoot = process.env.FTCS_WORKSPACE; process.env.FTCS_WORKSPACE = root
+    const registry = new ChatReferenceRegistry(), ref = registry.addFile(1, root, chosen, 'local')
+    const stream = createEventStream(), emitted: AgentEventPayload[] = [], replies: Array<{ requestID: string; reply: string }> = [], prompts: Array<{ parts: Array<{ text: string }> }> = []
+    let finishWait!: (value: { response: { status: number } }) => void
+    const waiting = new Promise<{ response: { status: number } }>(resolve => { finishWait = resolve })
+    const client = {
+      session: { async create() { return { data: { id: 'ses_refs' } } }, async promptAsync(input: { parts: Array<{ text: string }> }) { prompts.push(input); return {} } },
+      event: { async subscribe() { return { stream: stream.stream } } },
+      permission: { async reply(call: { requestID: string; reply: string }) { replies.push(call); return { data: true } } },
+      v2: { session: { async wait() { return waiting } } },
+    }
+    const runner = new AgentRunController!(() => client as never)
+    const task = runner.sendFreeDialogue('', event => emitted.push(event), false, registry.resolve(1, root, [ref.id]))
+    const until = async (fn: () => boolean) => { const end = Date.now() + 3000; while (!fn() && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 10)); assert.ok(fn()) }
+    const ask = (id: string, callID: string, filename: string) => ({ type: 'permission.asked', properties: { id, sessionID: 'ses_refs', permission: 'external_directory', patterns: [outside], metadata: { filepath: filename }, tool: { messageID: 'msg', callID } } })
+    try {
+      await until(() => prompts.length > 0)
+      assert.match(prompts[0].parts[0].text, /说明\.txt/)
+      assert.ok(emitted.some(event => event.type === 'timeline' && event.items.some(item => item.kind === 'user' && item.body.includes('说明.txt'))))
+      runner.noteReadCall({ sessionID: 'ses_refs', callID: 'read-1', tool: 'read' }, { filePath: chosen })
+      stream.push(ask('selected', 'read-1', chosen))
+      await until(() => replies.some(item => item.requestID === 'selected'))
+      assert.equal(replies.find(item => item.requestID === 'selected')?.reply, 'once')
+      runner.noteReadCall({ sessionID: 'ses_refs', callID: 'read-2', tool: 'read' }, { filePath: other })
+      stream.push(ask('unselected', 'read-2', other))
+      await until(() => replies.some(item => item.requestID === 'unselected'))
+      assert.equal(replies.find(item => item.requestID === 'unselected')?.reply, 'reject')
+    } finally {
+      finishWait({ response: { status: 204 } }); await task; runner.disconnect(); stream.close()
+      if (previousRoot === undefined) delete process.env.FTCS_WORKSPACE; else process.env.FTCS_WORKSPACE = previousRoot
+      fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true })
+    }
+  })
+  it('authorizes site tools and matching edits without a skill, and asks for a shell command without workdir', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-dialogue-site-'))
+    const site = path.join(root, 'website'); fs.mkdirSync(site); fs.mkdirSync(path.join(root, '.ftcs'))
+    fs.writeFileSync(path.join(site, 'package.json'), JSON.stringify({ scripts: { dev: 'vite', build: 'vite build' } }))
+    fs.writeFileSync(path.join(root, '.ftcs/site.json'), JSON.stringify({ version: 1, projectDir: 'website', buildOutputDir: 'dist' }))
+    const previousRoot = process.env.FTCS_WORKSPACE
+    process.env.FTCS_WORKSPACE = root
+    const stream = createEventStream(), emitted: AgentEventPayload[] = [], replies: Array<{ requestID: string; reply: string }> = []
+    let finishWait!: (value: { response: { status: number } }) => void
+    const waiting = new Promise<{ response: { status: number } }>(resolve => { finishWait = resolve })
+    const client = {
+      session: { async create() { return { data: { id: 'ses_site' } } }, async promptAsync() { return {} } },
+      event: { async subscribe() { return { stream: stream.stream } } },
+      permission: { async reply(call: { requestID: string; reply: string }) { replies.push(call); return { data: true } } },
+      v2: { session: { async wait() { return waiting } } },
+    }
+    const runner = new AgentRunController!(() => client as never, { siteTool: async (name, actualRoot, stillActive) => ({ name, actualRoot, active: stillActive() }) })
+    const task = runner.sendFreeDialogue('修改网站', event => emitted.push(event))
+    const until = async (fn: () => boolean) => { const end = Date.now() + 3000; while (!fn() && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 10)); assert.ok(fn()) }
+    const part = (id: string, tool: string, state: Record<string, unknown>) => ({ type: 'message.part.updated', properties: { sessionID: 'ses_site', part: { id, messageID: 'msg', sessionID: 'ses_site', callID: id, type: 'tool', tool, state } } })
+    try {
+      await until(() => emitted.some(event => event.type === 'timeline'))
+      const siteCall = { sessionID: 'ses_site', callID: 'site-call', tool: 'lead-store_site_preview' }
+      assert.equal(runner.authorize(siteCall, {}), undefined)
+      assert.deepEqual(await runner.siteTool(siteCall, 'site_preview'), { name: 'site_preview', actualRoot: root, active: true })
+      const stopCall = { sessionID: 'ses_site', callID: 'site-stop', tool: 'lead-store_site_stop_preview' }
+      assert.equal(runner.authorize(stopCall, {}), undefined)
+      assert.deepEqual(await runner.siteTool(stopCall, 'site_stop_preview'), { name: 'site_stop_preview', actualRoot: root, active: true })
+      assert.throws(() => runner.authorize({ ...stopCall, sessionID: 'other' }, {}), /会话/)
+      const publishCall = { sessionID: 'ses_site', callID: 'site-publish', tool: 'lead-store_site_publish' }
+      assert.equal(runner.authorize(publishCall, {}), undefined)
+      assert.deepEqual(await runner.siteTool(publishCall, 'site_publish'), { name: 'site_publish', actualRoot: root, active: true })
+      const file = path.join(site, 'page.vue')
+      stream.push(part('edit-1', 'write', { status: 'running', input: { filePath: file, content: 'hello' }, time: { start: 3 } }))
+      stream.push({ type: 'permission.asked', properties: { id: 'edit-permission', sessionID: 'ses_site', permission: 'edit', patterns: ['website/page.vue'], metadata: { filepath: file }, tool: { messageID: 'msg', callID: 'edit-1' } } })
+      await until(() => replies.some(item => item.requestID === 'edit-permission'))
+      assert.equal(replies.find(item => item.requestID === 'edit-permission')?.reply, 'once')
+      assert.equal(runner.authorize(siteCall, {}), undefined)
+      assert.deepEqual(await runner.siteTool(siteCall, 'site_preview'), { name: 'site_preview', actualRoot: root, active: true })
+      assert.throws(() => runner.authorize({ ...siteCall, sessionID: 'other' }, {}), /会话/)
+      process.env.FTCS_WORKSPACE = path.join(root, 'other-workspace')
+      assert.throws(() => runner.authorize(siteCall, {}), /不可用/)
+      process.env.FTCS_WORKSPACE = root
+      runner.noteShellCall({ sessionID: 'ses_site', callID: 'shell-external', tool: 'bash' }, { command: 'pwd', workdir: root })
+      stream.push({ type: 'permission.asked', properties: { id: 'external-permission', sessionID: 'ses_site', permission: 'external_directory', patterns: [root], metadata: { filepath: root }, tool: { messageID: 'msg', callID: 'shell-external' } } })
+      await until(() => replies.some(item => item.requestID === 'external-permission'))
+      assert.equal(replies.find(item => item.requestID === 'external-permission')?.reply, 'once')
+      stream.push({ type: 'permission.asked', properties: { id: 'external-shell-permission', sessionID: 'ses_site', permission: 'bash', patterns: ['pwd'], metadata: { command: 'pwd' }, tool: { messageID: 'msg', callID: 'shell-external' } } })
+      await until(() => emitted.some(event => event.type === 'permission-ask' && event.pending?.command === 'pwd'))
+      assert.equal((await runner.replyToPendingPermission('once')).ok, true)
+      assert.equal(replies.find(item => item.requestID === 'external-shell-permission')?.reply, 'once')
+      fs.renameSync(site, path.join(root, 'site-removed'))
+      stream.push(part('shell-1', 'bash', { status: 'running', input: { command: 'npm run build' }, time: { start: 4 } }))
+      stream.push({ type: 'permission.asked', properties: { id: 'shell-permission', sessionID: 'ses_site', permission: 'bash', patterns: ['npm run build'], metadata: { command: 'npm run build' }, tool: { messageID: 'msg', callID: 'shell-1' } } })
+      await until(() => emitted.some(event => event.type === 'permission-ask' && event.pending?.command === 'npm run build'))
+      const shellCard = emitted.find((event): event is Extract<AgentEventPayload, { type: 'permission-ask' }> => event.type === 'permission-ask' && event.pending?.command === 'npm run build')
+      assert.equal(shellCard?.pending?.directory, undefined)
+      assert.equal((await runner.replyToPendingPermission('reject')).ok, true)
+      assert.equal(replies.find(item => item.requestID === 'shell-permission')?.reply, 'reject')
+    } finally {
+      finishWait({ response: { status: 204 } }); await task; runner.disconnect(); stream.close()
+      if (previousRoot === undefined) delete process.env.FTCS_WORKSPACE; else process.env.FTCS_WORKSPACE = previousRoot
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
   it('creates a clean session and sends the next message to it', async () => {
     const prompts: Array<{ sessionID: string }> = []
     const emitted: AgentEventPayload[] = []

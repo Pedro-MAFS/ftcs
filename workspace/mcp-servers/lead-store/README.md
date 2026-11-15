@@ -29,6 +29,17 @@
 | `email_draft_save` | 保存/更新邮件草稿（智能体润色后） |
 | `email_draft_save_zh` | 仅写入中文对照 `subject_zh`/`body_zh`（不改外文） |
 | `email_draft_list` | 列出邮件草稿 |
+| `site_status` | 查询桌面端管理的站点预览、构建状态和依赖状态 |
+| `site_preview` / `site_open_preview` | 启动预览服务 / 在内置浏览器打开已确认的预览 |
+| `site_stop_preview` | 停止预览服务；停止可能异步完成，可通过 `site_status` 查询，不会关闭浏览器标签 |
+| `site_build` | 发起站点构建检查；通过 `site_status` 查询实际结果 |
+| `site_publish` | 用户明确要求时，使用已确认的仓库和分支构建并推送；部署状态以独立站页面为准 |
+| `site_domains_list` | 查询当前 Pages 项目的域名列表、状态和默认域名 |
+| `site_domain_check` | 查询 `domain_name` 指定域名的 Cloudflare 状态 |
+| `site_domain_add` | 用户要求时添加 `domain_name`（完整域名）和 `domain_kind`（`root` 或 `subdomain`）；不会更改 DNS |
+| `site_domain_delete` | 用户要求时移除 `domain_name` 的 Pages 关联，不删除 DNS 记录 |
+
+站点工具不需要模型传入工作区路径；域名工具接收上述域名参数，`_ticket` 由桌面运行时注入，不应由模型填写。工具校验当前自由聊天会话、工作区和站点状态，不以 Skill 加载状态作为条件；运行中的业务任务不可使用。调用结果为 `ok` 和 `value`，失败时为 `ok: false`、`code` 和 `message`。预览、构建是异步操作，返回启动状态不代表已完成；发布工具完成后才表示推送结果已确认，Cloudflare 的上线状态仍需另行查看。首次发布须先在页面选择目标。
 
 ## 开发
 

@@ -1,6 +1,15 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
+import type { CloudflareState, CloudflareAction } from './cloudflare/cloudflare-auth'
+import type { GithubState, GithubStart, GithubPoll } from './github/github-auth'
+import type { GithubRepository, GithubBranch } from './github/github-repositories'
+import type { SiteSnapshot } from './site/site-project'
+import type { SiteSourceSnapshot } from './site/site-source-tracker'
+import type { ReleaseRecord, ReleaseRecovery, PublishPreview } from './site/site-publish'
+import type { PagesProject, PagesStatus } from './cloudflare/cloudflare-pages'
+import type { RunKind, SiteRuntimeSnapshot } from './site/site-runtime'
 import type { SendFreeDialogueResult } from './opencode/free-dialogue'
+import type { ChatReferenceView } from './opencode/chat-references'
 import type {
   AgentEventPayload,
   ReplyQuestionInput,
@@ -94,6 +103,58 @@ import type {
 const api = {
   platform: process.platform as NodeJS.Platform,
   getAppStatus: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.APP_GET_STATUS),
+  getSite: (): Promise<SiteSnapshot> => ipcRenderer.invoke(IPC.SITE_GET),
+  getSiteSource: (root: string): Promise<SiteSourceSnapshot> => ipcRenderer.invoke(IPC.SITE_SOURCE_GET, root),
+  onSiteSource: (callback: (snapshot: SiteSourceSnapshot) => void): (() => void) => {
+    const listener = (_event: unknown, snapshot: SiteSourceSnapshot) => callback(snapshot)
+    ipcRenderer.on(IPC.SITE_SOURCE_EVENT, listener)
+    return () => ipcRenderer.removeListener(IPC.SITE_SOURCE_EVENT, listener)
+  },
+  getSiteRelease: (root: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_GET, root),
+  listSiteDomains: (root: string) => ipcRenderer.invoke(IPC.SITE_DOMAINS_LIST, root),
+  addSiteDomain: (root: string, name: string, kind: 'root' | 'subdomain') => ipcRenderer.invoke(IPC.SITE_DOMAINS_ADD, root, name, kind),
+  checkSiteDomain: (root: string, name: string) => ipcRenderer.invoke(IPC.SITE_DOMAINS_CHECK, root, name),
+  clearPendingSiteDomain: (root: string) => ipcRenderer.invoke(IPC.SITE_DOMAINS_CLEAR_PENDING, root),
+  deleteSiteDomain: (root: string, name: string) => ipcRenderer.invoke(IPC.SITE_DOMAINS_DELETE, root, name),
+  onSiteDomainsChanged: (callback: (value: { root: string }) => void): (() => void) => {
+    const listener = (_event: unknown, value: { root: string }) => callback(value)
+    ipcRenderer.on(IPC.SITE_DOMAINS_EVENT, listener)
+    return () => ipcRenderer.removeListener(IPC.SITE_DOMAINS_EVENT, listener)
+  },
+  getAgentSiteRelease: (root: string): Promise<boolean> => ipcRenderer.invoke(IPC.SITE_AGENT_RELEASE_GET, root),
+  onAgentSiteRelease: (callback: (value: { root: string; running: boolean }) => void): (() => void) => {
+    const listener = (_event: unknown, value: { root: string; running: boolean }) => callback(value)
+    ipcRenderer.on(IPC.SITE_AGENT_RELEASE_EVENT, listener)
+    return () => ipcRenderer.removeListener(IPC.SITE_AGENT_RELEASE_EVENT, listener)
+  },
+  prepareSiteRelease: (root: string, id: number, branch: string, acceptReadme: boolean): Promise<{ ok: true; value: PublishPreview } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_PREPARE, root, id, branch, acceptReadme),
+  cancelSiteRelease: (root: string): Promise<{ ok: true; value: void } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_CANCEL, root),
+  getSiteReleaseFile: (root: string, id: string, name: string): Promise<{ ok: true; value: { text?: string; message?: string } } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_FILE, root, id, name),
+  commitSiteRelease: (root: string, id: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_COMMIT, root, id),
+  recoverSiteRelease: (root: string): Promise<{ ok: true; value: ReleaseRecovery } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_RECOVER, root),
+  listSitePages: (root: string): Promise<{ ok: true; value: { accountId: string; projects: PagesProject[] } } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_LIST, root),
+  createSitePages: (root: string, name: string, nodeVersion: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_CREATE, root, name, nodeVersion),
+  clearPendingSitePages: (root: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_CLEAR_PENDING, root),
+  bindSitePages: (root: string, name: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_BIND, root, name),
+  getSitePagesStatus: (root: string): Promise<{ ok: true; value: PagesStatus } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_STATUS, root),
+  startSiteDeployment: (root: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_DEPLOY, root),
+  clearSitePendingDeployment: (root: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_PAGES_CLEAR_DEPLOYMENT, root),
+  createSite: (workspaceRoot: string): Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }> => ipcRenderer.invoke(IPC.SITE_CREATE, workspaceRoot),
+  adoptSite: (workspaceRoot: string): Promise<{ ok: boolean; snapshot?: SiteSnapshot; message?: string }> => ipcRenderer.invoke(IPC.SITE_ADOPT, workspaceRoot),
+  openSiteDirectory: (kind: 'project' | 'workspace', workspaceRoot: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_OPEN_DIRECTORY, kind, workspaceRoot),
+  getSiteRuntime: (root: string): Promise<SiteRuntimeSnapshot> => ipcRenderer.invoke(IPC.SITE_RUNTIME_GET, root),
+  onSiteRuntime: (callback: (snapshot: SiteRuntimeSnapshot) => void): (() => void) => {
+    const listener = (_event: unknown, snapshot: SiteRuntimeSnapshot) => callback(snapshot)
+    ipcRenderer.on(IPC.SITE_RUNTIME_EVENT, listener)
+    return () => ipcRenderer.removeListener(IPC.SITE_RUNTIME_EVENT, listener)
+  },
+  installSiteDependencies: (root: string, reinstall: boolean, thenPreview: boolean): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_INSTALL, root, reinstall, thenPreview),
+  startSitePreview: (root: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_PREVIEW, root),
+  setSitePreviewAddress: (root: string, id: string, url: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_ADDRESS, root, id, url),
+  openSitePreview: (root: string, id: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_OPEN, root, id),
+  buildSite: (root: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_BUILD, root),
+  setSiteOutput: (root: string, output: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_OUTPUT, root, output),
+  cancelSiteRun: (root: string, kind: RunKind, id: string): Promise<{ ok: boolean; message?: string }> => ipcRenderer.invoke(IPC.SITE_RUNTIME_CANCEL, root, kind, id),
   openExternal: (url: string): Promise<{ ok: boolean; message: string }> =>
     ipcRenderer.invoke(IPC.APP_OPEN_EXTERNAL, url),
   checkAgentPreflight: (
@@ -137,6 +198,19 @@ const api = {
   reconnectMcp: (name: string): Promise<OpenCodeActionResult> =>
     ipcRenderer.invoke(IPC.OPENCODE_MCP_RECONNECT, name),
   getOpenCodeLogs: (): Promise<string[]> => ipcRenderer.invoke(IPC.OPENCODE_GET_LOGS),
+  getCloudflareState: (): Promise<CloudflareState> => ipcRenderer.invoke(IPC.CLOUDFLARE_GET_STATE),
+  connectCloudflare: (): Promise<CloudflareAction> => ipcRenderer.invoke(IPC.CLOUDFLARE_CONNECT),
+  cancelCloudflareAuth: (): Promise<void> => ipcRenderer.invoke(IPC.CLOUDFLARE_CANCEL),
+  selectCloudflareAccount: (accountId: string): Promise<CloudflareAction> => ipcRenderer.invoke(IPC.CLOUDFLARE_SELECT_ACCOUNT, accountId),
+  disconnectCloudflare: (): Promise<void> => ipcRenderer.invoke(IPC.CLOUDFLARE_DISCONNECT),
+  getGithubState: (): Promise<GithubState> => ipcRenderer.invoke(IPC.GITHUB_GET_STATE),
+  listGithubRepositories: (root: string): Promise<{ ok: boolean; repositories?: GithubRepository[]; message?: string }> => ipcRenderer.invoke(IPC.GITHUB_REPOSITORIES, root),
+  listGithubBranches: (root: string, id: number): Promise<{ ok: boolean; branches?: GithubBranch[]; message?: string }> => ipcRenderer.invoke(IPC.GITHUB_BRANCHES, root, id),
+  createGithubRepository: (root: string, name: string, privateRepo: boolean): Promise<{ ok: boolean; repository?: { fullName: string }; message?: string }> => ipcRenderer.invoke(IPC.GITHUB_CREATE_REPOSITORY, root, name, privateRepo),
+  startGithubAuth: (): Promise<GithubStart> => ipcRenderer.invoke(IPC.GITHUB_START_AUTH),
+  pollGithubAuth: (): Promise<GithubPoll> => ipcRenderer.invoke(IPC.GITHUB_POLL_AUTH),
+  cancelGithubAuth: (): Promise<void> => ipcRenderer.invoke(IPC.GITHUB_CANCEL_AUTH),
+  disconnectGithub: (): Promise<void> => ipcRenderer.invoke(IPC.GITHUB_DISCONNECT),
   getAuthSession: (): Promise<AuthSessionSnapshot> =>
     ipcRenderer.invoke(IPC.AUTH_GET_SESSION),
   loginWithOAuth: (): Promise<AuthActionResult> => ipcRenderer.invoke(IPC.AUTH_LOGIN),
@@ -397,8 +471,11 @@ const api = {
   abortProfile: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.PROFILE_ABORT),
   createAgentSession: (): Promise<{ ok: boolean; message: string }> => ipcRenderer.invoke(IPC.AGENT_CREATE_SESSION),
   currentAgentSession: (): Promise<string | null> => ipcRenderer.invoke(IPC.AGENT_CURRENT_SESSION),
-  sendAgentMessage: (text: string, productId?: string): Promise<SendFreeDialogueResult> =>
-    ipcRenderer.invoke(IPC.AGENT_SEND_MESSAGE, text, productId),
+  pickAgentReferences: (): Promise<ChatReferenceView[]> => ipcRenderer.invoke(IPC.AGENT_PICK_REFERENCES),
+  addAgentReference: (input: { kind: 'library' | 'website' | 'profile'; value: string }): Promise<ChatReferenceView> => ipcRenderer.invoke(IPC.AGENT_ADD_REFERENCE, input),
+  discardAgentReferences: (ids: string[]): Promise<void> => ipcRenderer.invoke(IPC.AGENT_DISCARD_REFERENCES, ids),
+  sendAgentMessage: (text: string, productId?: string, referenceIds: string[] = []): Promise<SendFreeDialogueResult> =>
+    ipcRenderer.invoke(IPC.AGENT_SEND_MESSAGE, text, productId, referenceIds),
   noteActiveProduct: (productId: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.AGENT_NOTE_PRODUCT, productId),
   replyQuestion: (input: ReplyQuestionInput): Promise<ReplyQuestionResult> =>

@@ -7,6 +7,7 @@ import ExploreView from '../views/ExploreView.vue'
 import LeadsView from '../views/LeadsView.vue'
 import EmailView from '../views/EmailView.vue'
 import SettingsView from '../views/SettingsView.vue'
+import SiteView from '../views/SiteView.vue'
 import BootLanding from '../views/BootLanding.vue'
 import EmptyView from '../views/EmptyView.vue'
 import BrowseView from '../views/BrowseView.vue'
@@ -27,6 +28,7 @@ const router = createRouter({
         { path: 'explore', name: 'explore', component: ExploreView },
         { path: 'leads', name: 'leads', component: LeadsView },
         { path: 'email', name: 'email', component: EmailView },
+        { path: 'site', name: 'site', component: SiteView },
         { path: 'settings', name: 'settings', component: SettingsView },
       ],
     },

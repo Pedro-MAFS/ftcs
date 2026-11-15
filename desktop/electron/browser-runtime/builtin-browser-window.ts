@@ -8,7 +8,7 @@ import {
 import { CAPTION_HEIGHT, THUMB, anchorExpanded, anchorTopRight } from './anchor'
 import { browserTabTitles } from './browser-tab-title'
 import { type MainWindowFollowController } from './follow-main-window'
-import { isAdoptableTabUrl } from './cdp-filter'
+import { forgetVerifiedPreviewTarget, isAdoptableTabUrl, setVerifiedPreviewTarget } from './cdp-filter'
 import {
   beginTabAdoption,
   endTabAdoption,
@@ -271,6 +271,24 @@ export function openUserBuiltinBrowserTab(): Promise<{ key: string }> {
   }))
 }
 
+/** Open a preview as a user tab; never overwrite a tab the user navigated elsewhere. */
+export async function openSitePreviewTab(url: string, verified: boolean, previousKey?: string): Promise<string> {
+  const previous = previousKey ? tabs.find(tab => tab.key === previousKey && tab.origin === 'user' && tab.url === url) : undefined
+  if (previous && !previous.view.webContents.isDestroyed()) {
+    if (verified && previous.targetId) { setVerifiedPreviewTarget(previous.targetId, url); registerBrowserPage(previous.targetId) }
+    focusKey = previous.key
+    publishMainTabs()
+    return previous.key
+  }
+  const opened = await openBrowserTab('about:blank', { focus: true, forceUser: true })
+  const tab = tabs.find(item => item.key === opened.key)
+  if (!tab || tab.view.webContents.isDestroyed()) throw new Error('预览标签不可用。')
+  if (verified && tab.targetId) setVerifiedPreviewTarget(tab.targetId, url)
+  try { await tab.view.webContents.loadURL(url) }
+  catch (error) { if (tab.targetId) forgetVerifiedPreviewTarget(tab.targetId); throw error }
+  return opened.key
+}
+
 async function openBrowserTabNow(
   requested: string,
   options: { focus: boolean; forceUser?: boolean },
@@ -406,7 +424,7 @@ function dropTab(tab: BrowserTab): void {
   if (index < 0) return
   const wasActive = activeTab === tab
   tabs.splice(index, 1)
-  if (tab.targetId) unregisterBrowserPage(tab.targetId)
+  if (tab.targetId) { forgetVerifiedPreviewTarget(tab.targetId); unregisterBrowserPage(tab.targetId) }
   const win = hostWindow
   if (win && !win.isDestroyed()) {
     try {
