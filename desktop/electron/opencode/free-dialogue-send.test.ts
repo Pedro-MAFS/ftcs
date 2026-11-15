@@ -4,6 +4,8 @@ import { after, describe, it } from 'node:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+// @ts-expect-error The test runner loads TypeScript directly.
+import { ChatReferenceRegistry } from './chat-references.ts'
 import type { AgentEventPayload, AgentTimelineItem, AgentRunController } from './agent-runner.ts'
 import {
   FREE_DIALOGUE_NOT_READY,
@@ -98,6 +100,44 @@ after(() => {
 const describeSend = electronMockReady ? describe : describe.skip
 
 describeSend('sendFreeDialogue', () => {
+  it('sends attachment-only messages and permits reading only the chosen external file', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-reference-work-'))
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-reference-out-'))
+    const chosen = path.join(outside, '说明.txt'), other = path.join(outside, 'other.txt')
+    fs.writeFileSync(chosen, '参考内容'); fs.writeFileSync(other, 'other')
+    const previousRoot = process.env.FTCS_WORKSPACE; process.env.FTCS_WORKSPACE = root
+    const registry = new ChatReferenceRegistry(), ref = registry.addFile(1, root, chosen, 'local')
+    const stream = createEventStream(), emitted: AgentEventPayload[] = [], replies: Array<{ requestID: string; reply: string }> = [], prompts: Array<{ parts: Array<{ text: string }> }> = []
+    let finishWait!: (value: { response: { status: number } }) => void
+    const waiting = new Promise<{ response: { status: number } }>(resolve => { finishWait = resolve })
+    const client = {
+      session: { async create() { return { data: { id: 'ses_refs' } } }, async promptAsync(input: { parts: Array<{ text: string }> }) { prompts.push(input); return {} } },
+      event: { async subscribe() { return { stream: stream.stream } } },
+      permission: { async reply(call: { requestID: string; reply: string }) { replies.push(call); return { data: true } } },
+      v2: { session: { async wait() { return waiting } } },
+    }
+    const runner = new AgentRunController!(() => client as never)
+    const task = runner.sendFreeDialogue('', event => emitted.push(event), false, registry.resolve(1, root, [ref.id]))
+    const until = async (fn: () => boolean) => { const end = Date.now() + 3000; while (!fn() && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 10)); assert.ok(fn()) }
+    const ask = (id: string, callID: string, filename: string) => ({ type: 'permission.asked', properties: { id, sessionID: 'ses_refs', permission: 'external_directory', patterns: [outside], metadata: { filepath: filename }, tool: { messageID: 'msg', callID } } })
+    try {
+      await until(() => prompts.length > 0)
+      assert.match(prompts[0].parts[0].text, /说明\.txt/)
+      assert.ok(emitted.some(event => event.type === 'timeline' && event.items.some(item => item.kind === 'user' && item.body.includes('说明.txt'))))
+      runner.noteReadCall({ sessionID: 'ses_refs', callID: 'read-1', tool: 'read' }, { filePath: chosen })
+      stream.push(ask('selected', 'read-1', chosen))
+      await until(() => replies.some(item => item.requestID === 'selected'))
+      assert.equal(replies.find(item => item.requestID === 'selected')?.reply, 'once')
+      runner.noteReadCall({ sessionID: 'ses_refs', callID: 'read-2', tool: 'read' }, { filePath: other })
+      stream.push(ask('unselected', 'read-2', other))
+      await until(() => replies.some(item => item.requestID === 'unselected'))
+      assert.equal(replies.find(item => item.requestID === 'unselected')?.reply, 'reject')
+    } finally {
+      finishWait({ response: { status: 204 } }); await task; runner.disconnect(); stream.close()
+      if (previousRoot === undefined) delete process.env.FTCS_WORKSPACE; else process.env.FTCS_WORKSPACE = previousRoot
+      fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(outside, { recursive: true, force: true })
+    }
+  })
   it('authorizes site tools and matching edits without a skill, and asks for a shell command without workdir', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-dialogue-site-'))
     const site = path.join(root, 'website'); fs.mkdirSync(site); fs.mkdirSync(path.join(root, '.ftcs'))
@@ -146,7 +186,8 @@ describeSend('sendFreeDialogue', () => {
       stream.push(part('shell-1', 'bash', { status: 'running', input: { command: 'npm run build' }, time: { start: 4 } }))
       stream.push({ type: 'permission.asked', properties: { id: 'shell-permission', sessionID: 'ses_site', permission: 'bash', patterns: ['npm run build'], metadata: { command: 'npm run build' }, tool: { messageID: 'msg', callID: 'shell-1' } } })
       await until(() => emitted.some(event => event.type === 'permission-ask' && event.pending?.command === 'npm run build'))
-      assert.equal(emitted.find(event => event.type === 'permission-ask' && event.pending?.command === 'npm run build')?.pending?.directory, undefined)
+      const shellCard = emitted.find((event): event is Extract<AgentEventPayload, { type: 'permission-ask' }> => event.type === 'permission-ask' && event.pending?.command === 'npm run build')
+      assert.equal(shellCard?.pending?.directory, undefined)
       assert.equal((await runner.replyToPendingPermission('reject')).ok, true)
       assert.equal(replies.find(item => item.requestID === 'shell-permission')?.reply, 'reject')
     } finally {

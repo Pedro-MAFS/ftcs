@@ -74,6 +74,8 @@ export type PermissionAskView = {
   directory?: string
 } | null
 
+export type ChatReferenceView = { id: string; kind: 'local' | 'library' | 'website' | 'profile'; label: string; detail: string }
+
 export type AgentEventPayload =
   | { type: 'session.created' }
   | { type: 'task.changed'; task: import('../../electron/tasks/lifecycle').TaskRecord }
@@ -1172,7 +1174,10 @@ declare global {
       abortProfile: () => Promise<{ ok: boolean }>
       createAgentSession: () => Promise<{ ok: boolean; message: string }>
       currentAgentSession: () => Promise<string | null>
-      sendAgentMessage: (text: string, productId?: string) => Promise<{
+      pickAgentReferences: () => Promise<ChatReferenceView[]>
+      addAgentReference: (input: { kind: 'library' | 'website' | 'profile'; value: string }) => Promise<ChatReferenceView>
+      discardAgentReferences: (ids: string[]) => Promise<void>
+      sendAgentMessage: (text: string, productId?: string, referenceIds?: string[]) => Promise<{
         ok: boolean
         message: string
         accepted: boolean

@@ -13,7 +13,7 @@ import {
 
 describe('free dialogue composer', () => {
   it('uses the open-dialogue placeholder and empty timeline copy', () => {
-    assert.equal(FREE_DIALOGUE_PLACEHOLDER, '发消息继续聊，或说明要启动的获客步骤')
+    assert.equal(FREE_DIALOGUE_PLACEHOLDER, '发消息继续聊，输入 @ 引用资料或画像')
     assert.equal(emptyTimelineLabel(false), FREE_DIALOGUE_EMPTY_TIMELINE)
     assert.equal(FREE_DIALOGUE_EMPTY_TIMELINE, '还没有对话。在下方输入即可。')
     assert.equal(emptyTimelineLabel(true), '任务启动中…')
@@ -57,7 +57,7 @@ describe('AgentPanel free-dialogue copy', () => {
     assert.equal(src.includes('abortProfile'), true)
     assert.equal(src.includes('PERMISSION_PENDING_SEND_HINT'), true)
     assert.equal(src.includes('pendingPermission.value'), true)
-    assert.equal(src.includes("send(text, activeProductId.value)"), true)
+    assert.equal(src.includes("send(text, activeProductId.value, attached.map"), true)
     assert.equal(src.includes('replyPermission'), false)
   })
 })

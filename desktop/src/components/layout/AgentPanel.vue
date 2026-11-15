@@ -15,6 +15,8 @@ import { RUNTIME_NOT_READY } from '../../config/user-facing'
 import { showToast } from '../../composables/useToast'
 import { useWorkspace } from '../../composables/useWorkspace'
 import { useWorkspaceLayout } from '../../composables/useWorkspaceLayout'
+import type { ChatReferenceView } from '../../types/electron'
+import { filterMentionCandidates, findMentionQuery, listMentionCandidates, replaceMentionQuery, type MentionCandidate, type MentionQuery } from './composer-references'
 import {
   createCopySessionController,
   kindLabel,
@@ -83,7 +85,79 @@ onMounted(() => window.addEventListener('ftcs:focus-agent-composer', focusCompos
 onUnmounted(() => window.removeEventListener('ftcs:focus-agent-composer', focusComposer))
 const composerHint = ref('')
 const creatingSession = ref(false)
+const references = ref<ChatReferenceView[]>([])
+const selectingReference = ref(false)
+const mentionQuery = ref<MentionQuery | null>(null)
+const mentionCandidates = ref<MentionCandidate[]>([])
+const mentionLoading = ref(false)
+const mentionTruncated = ref(false)
+const mentionIndex = ref(0)
+const visibleMentions = computed(() => filterMentionCandidates(mentionCandidates.value, mentionQuery.value?.query || ''))
+let mentionRequest = 0
 const pinToBottom = ref(true)
+
+async function pickReferences() {
+  if (selectingReference.value || !window.ftcs?.pickAgentReferences) return
+  selectingReference.value = true; composerHint.value = ''
+  try { references.value.push(...await window.ftcs.pickAgentReferences()) }
+  catch (error) { composerHint.value = error instanceof Error ? error.message : '无法选择文件，请重试。' }
+  finally { selectingReference.value = false; focusComposer() }
+}
+function removeReference(id: string) {
+  references.value = references.value.filter(item => item.id !== id)
+  void window.ftcs?.discardAgentReferences?.([id])
+}
+async function loadMentions() {
+  const request = ++mentionRequest
+  if (!window.ftcs?.listLibrary || !window.ftcs?.listProfiles) return
+  mentionCandidates.value = []
+  mentionTruncated.value = false
+  mentionLoading.value = true
+  try {
+    const [library, profiles] = await Promise.all([window.ftcs.listLibrary(), window.ftcs.listProfiles()])
+    if (request !== mentionRequest) return
+    mentionCandidates.value = listMentionCandidates(library.tree, profiles)
+    mentionTruncated.value = library.truncated
+  } catch { if (request === mentionRequest) composerHint.value = '无法读取资料库或产品画像，请重试。' }
+  finally { if (request === mentionRequest) mentionLoading.value = false }
+}
+function updateMention(event: Event) {
+  const input = event.target as HTMLTextAreaElement
+  const next = findMentionQuery(input.value, input.selectionStart)
+  if (next && !mentionQuery.value) void loadMentions()
+  mentionQuery.value = next
+  mentionIndex.value = 0
+}
+async function chooseMention(candidate: MentionCandidate) {
+  const query = mentionQuery.value
+  if (!query || selectingReference.value || !window.ftcs?.addAgentReference) return
+  selectingReference.value = true; composerHint.value = ''
+  try {
+    const selected = await window.ftcs.addAgentReference({ kind: candidate.kind, value: candidate.value })
+    references.value.push(selected)
+    agentPrompt.value = replaceMentionQuery(agentPrompt.value, query)
+    mentionQuery.value = null
+    await nextTick()
+    composerEl.value?.setSelectionRange(query.start, query.start)
+  } catch (error) { composerHint.value = error instanceof Error ? error.message : '无法添加资料，请重试。' }
+  finally { selectingReference.value = false; focusComposer() }
+}
+function onComposerKeydown(event: KeyboardEvent) {
+  if (event.isComposing || event.keyCode === 229) return
+  if (mentionQuery.value) {
+    if (event.key === 'Escape') { event.preventDefault(); mentionQuery.value = null; return }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      const count = visibleMentions.value.length
+      if (count) mentionIndex.value = (mentionIndex.value + (event.key === 'ArrowDown' ? 1 : -1) + count) % count
+      return
+    }
+    if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey && visibleMentions.value.length) {
+      event.preventDefault(); void chooseMention(visibleMentions.value[mentionIndex.value] || visibleMentions.value[0]); return
+    }
+  }
+  if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) { event.preventDefault(); void onSend() }
+}
 
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -104,7 +178,7 @@ function onCopySession(): void {
 }
 
 async function onCreateSession(): Promise<void> {
-  if (creatingSession.value || generating.value || dialogueBusy.value || awaitingUserReply.value || pendingPermission.value) return
+  if (creatingSession.value || selectingReference.value || generating.value || dialogueBusy.value || awaitingUserReply.value || pendingPermission.value) return
   const create = window.ftcs?.createAgentSession
   if (!create) {
     composerHint.value = RUNTIME_NOT_READY
@@ -113,6 +187,7 @@ async function onCreateSession(): Promise<void> {
   creatingSession.value = true
   try {
     const result = await create()
+    if (result.ok) { void window.ftcs?.discardAgentReferences?.(references.value.map(item => item.id)); references.value = []; mentionQuery.value = null }
     composerHint.value = result.ok ? '' : result.message
   } catch (error) {
     composerHint.value = error instanceof Error ? error.message : '创建会话失败，请重试'
@@ -149,7 +224,8 @@ async function onSend(): Promise<void> {
   }
   const draft = agentPrompt.value
   const text = draft.trim()
-  if (!text || creatingSession.value || composerInputLocked(generating.value, dialogueBusy.value)) return
+  if ((!text && !references.value.length) || creatingSession.value || selectingReference.value || composerInputLocked(generating.value, dialogueBusy.value)) return
+  if (references.value.length > 100) { composerHint.value = '一次最多发送 100 项参考资料，请移除一部分后重试。'; return }
   const send = window.ftcs?.sendAgentMessage
   if (!send) {
     composerHint.value = RUNTIME_NOT_READY
@@ -157,13 +233,17 @@ async function onSend(): Promise<void> {
   }
   composerHint.value = ''
   dialogueBusy.value = true
+  const attached = references.value
+  references.value = []
+  mentionQuery.value = null
   agentPrompt.value = ''
   try {
-    const result = await send(text, activeProductId.value)
-    if (!result.accepted && !agentPrompt.value) agentPrompt.value = draft
+    const result = await send(text, activeProductId.value, attached.map(item => item.id))
+    if (!result.accepted) { if (!agentPrompt.value) agentPrompt.value = draft; references.value = [...attached, ...references.value] }
     composerHint.value = result.ok ? '' : result.message
   } catch (err) {
     if (!agentPrompt.value) agentPrompt.value = draft
+    references.value = [...attached, ...references.value]
     composerHint.value = err instanceof Error && err.message ? err.message : RUNTIME_NOT_READY
   } finally {
     dialogueBusy.value = false
@@ -383,14 +463,30 @@ watch(
     <AgentPermissionCard v-if="pendingPermission" :pending="pendingPermission" />
 
     <div class="agent-panel__composer">
+      <div v-if="mentionQuery" class="mention-list" role="listbox" aria-label="引用资料">
+        <p v-if="mentionLoading" class="mention-message">正在读取资料…</p>
+        <p v-else-if="!visibleMentions.length" class="mention-message">没有找到匹配的资料。</p>
+        <button v-for="(item, index) in visibleMentions" :key="`${item.kind}:${item.value}`" class="mention-option" :class="{ 'is-active': index === mentionIndex }" type="button" role="option" :aria-selected="index === mentionIndex" :disabled="selectingReference" @mousedown.prevent @click="chooseMention(item)">
+          <span>{{ item.kind === 'profile' ? '画像' : item.kind === 'website' ? '网站' : '资料' }} · {{ item.label }}</span><small>{{ item.detail }}</small>
+        </button>
+        <p v-if="mentionTruncated" class="mention-message">资料库结果未完整显示，可通过附件选择文件。</p>
+      </div>
+      <div v-if="references.length" class="composer-references" aria-label="待发送的参考资料">
+        <span v-for="item in references" :key="item.id" class="composer-reference" :title="item.detail">
+          <span>{{ item.kind === 'local' ? '附件' : '@' }} {{ item.label }}</span>
+          <button type="button" :aria-label="`移除 ${item.label}`" @click="removeReference(item.id)">×</button>
+        </span>
+      </div>
       <textarea
         ref="composerEl"
         v-model="agentPrompt"
         class="composer-input"
         rows="2"
         :placeholder="FREE_DIALOGUE_PLACEHOLDER"
-        :disabled="creatingSession || composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
-        @keydown.enter.exact.prevent="onSend"
+        :disabled="creatingSession || selectingReference || composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
+        @input="updateMention"
+        @click="updateMention"
+        @keydown="onComposerKeydown"
       />
       <p v-if="composerHint" class="composer-hint" role="status">{{ composerHint }}</p>
       <div class="composer-actions">
@@ -400,6 +496,9 @@ watch(
           <template v-else-if="latestTask"> · {{ agentMeta[0]?.value }}</template>
         </span>
         <div class="composer-buttons">
+          <button type="button" class="btn-secondary btn-sm" title="选择本地文件作为参考" aria-label="选择本地文件" :disabled="creatingSession || selectingReference || composerInputLocked(generating, dialogueBusy, !!pendingPermission)" @click="pickReferences">
+            附件
+          </button>
           <button
             v-if="showDialogueStopButton(generating, dialogueBusy)"
             type="button"
@@ -419,7 +518,7 @@ watch(
           <button
             type="button"
             class="btn-primary btn-sm"
-            :disabled="creatingSession || composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
+            :disabled="creatingSession || selectingReference || composerInputLocked(generating, dialogueBusy, !!pendingPermission)"
             @click="onSend"
           >
             <Icon name="send" :size="12" />
@@ -431,3 +530,16 @@ watch(
     </template>
   </aside>
 </template>
+
+<style scoped>
+.agent-panel__composer { position: relative; }
+.composer-references { display: flex; flex-wrap: wrap; gap: 6px; max-height: 90px; overflow: auto; }
+.composer-reference { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg-elevated); color: var(--text); font-size: 11px; }
+.composer-reference span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer-reference button { border: 0; padding: 0 2px; color: var(--text-secondary); background: none; cursor: pointer; font-size: 15px; }
+.mention-list { position: absolute; left: 14px; right: 14px; bottom: calc(100% - 1px); z-index: 4; display: grid; gap: 2px; max-height: 240px; overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-panel); box-shadow: 0 6px 18px #0002; }
+.mention-option { display: grid; gap: 3px; width: 100%; padding: 7px 9px; border: 0; border-radius: 4px; text-align: left; background: none; color: var(--text); cursor: pointer; font-size: 12px; }
+.mention-option.is-active, .mention-option:hover { background: var(--bg-hover); }
+.mention-option small { overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary); }
+.mention-message { margin: 0; padding: 8px; color: var(--text-secondary); font-size: 11px; }
+</style>

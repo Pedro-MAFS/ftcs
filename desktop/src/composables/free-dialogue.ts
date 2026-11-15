@@ -1,6 +1,6 @@
 /** 自由对话输入区（US-FD-01）。generating 仍只表示流水线任务。 */
 
-export const FREE_DIALOGUE_PLACEHOLDER = '发消息继续聊，或说明要启动的获客步骤'
+export const FREE_DIALOGUE_PLACEHOLDER = '发消息继续聊，输入 @ 引用资料或画像'
 export const FREE_DIALOGUE_EMPTY_TIMELINE = '还没有对话。在下方输入即可。'
 export const TASK_STARTING_TIMELINE = '任务启动中…'
 export const PERMISSION_PENDING_SEND_HINT = '请先同意或拒绝上面的授权'

@@ -9,6 +9,7 @@ import type { ReleaseRecord, PublishPreview } from './site/site-publish'
 import type { PagesProject, PagesStatus } from './cloudflare/cloudflare-pages'
 import type { RunKind, SiteRuntimeSnapshot } from './site/site-runtime'
 import type { SendFreeDialogueResult } from './opencode/free-dialogue'
+import type { ChatReferenceView } from './opencode/chat-references'
 import type {
   AgentEventPayload,
   ReplyQuestionInput,
@@ -461,8 +462,11 @@ const api = {
   abortProfile: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC.PROFILE_ABORT),
   createAgentSession: (): Promise<{ ok: boolean; message: string }> => ipcRenderer.invoke(IPC.AGENT_CREATE_SESSION),
   currentAgentSession: (): Promise<string | null> => ipcRenderer.invoke(IPC.AGENT_CURRENT_SESSION),
-  sendAgentMessage: (text: string, productId?: string): Promise<SendFreeDialogueResult> =>
-    ipcRenderer.invoke(IPC.AGENT_SEND_MESSAGE, text, productId),
+  pickAgentReferences: (): Promise<ChatReferenceView[]> => ipcRenderer.invoke(IPC.AGENT_PICK_REFERENCES),
+  addAgentReference: (input: { kind: 'library' | 'website' | 'profile'; value: string }): Promise<ChatReferenceView> => ipcRenderer.invoke(IPC.AGENT_ADD_REFERENCE, input),
+  discardAgentReferences: (ids: string[]): Promise<void> => ipcRenderer.invoke(IPC.AGENT_DISCARD_REFERENCES, ids),
+  sendAgentMessage: (text: string, productId?: string, referenceIds: string[] = []): Promise<SendFreeDialogueResult> =>
+    ipcRenderer.invoke(IPC.AGENT_SEND_MESSAGE, text, productId, referenceIds),
   noteActiveProduct: (productId: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.AGENT_NOTE_PRODUCT, productId),
   replyQuestion: (input: ReplyQuestionInput): Promise<ReplyQuestionResult> =>

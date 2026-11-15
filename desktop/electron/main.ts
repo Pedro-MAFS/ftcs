@@ -7,6 +7,8 @@ import { SitePublish, readRelease, type ReleaseRecord } from './site/site-publis
 import { SiteDeployment } from './site/site-deployment'
 import { SiteSourceTracker } from './site/site-source-tracker'
 import { SiteAgentActions } from './site/site-agent-actions'
+import { ChatReferenceRegistry } from './opencode/chat-references'
+import { readWebsiteBookmark } from './library/library-website'
 import { SiteRuntime, type RunKind } from './site/site-runtime'
 import { resolveConfiguredNode } from './runtime/node-paths'
 import { resolveBestNode } from './runtime/resolve-node'
@@ -294,6 +296,7 @@ const siteAgentActions = new SiteAgentActions({
 })
 let runtime: OpenCodeRuntime | null = null
 let agentRunner: AgentRunController | null = null
+const chatReferences = new ChatReferenceRegistry()
 /** Electron 不会 await before-quit；需要 preventDefault + 二次 quit */
 let isCleaningUp = false
 /** 托盘「退出」或真正退出时为 true，此时允许窗口 close 销毁 */
@@ -1184,6 +1187,7 @@ function registerIpcHandlers(): void {
     const init = initializeWorkspace(dir, { forceManaged: true })
     siteSource.close()
     siteAgentActions.reset()
+    chatReferences.clear()
     writeUserPrefs({ workspaceRoot: dir })
     process.env.FTCS_WORKSPACE = dir
 
@@ -1985,13 +1989,54 @@ function registerIpcHandlers(): void {
     getAgentRunner().createChatSession(payload => emitAgentEvent(event.sender, payload)),
   )
   ipcMain.handle(IPC.AGENT_CURRENT_SESSION, () => getAgentRunner().currentChatSessionId())
-  ipcMain.handle(IPC.AGENT_SEND_MESSAGE, async (event, text: unknown, productId: unknown) => {
+  ipcMain.handle(IPC.AGENT_PICK_REFERENCES, async (event) => {
+    const root = getWorkspaceRoot()
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = { properties: ['openFile', 'multiSelections'] }
+    const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options)
+    if (root !== getWorkspaceRoot()) throw new Error('工作区已改变，请重新选择文件。')
+    if (result.canceled) return []
+    if (result.filePaths.length > 100) throw new Error('一次最多选择 100 个文件。')
+    return result.filePaths.map(filename => chatReferences.addFile(event.sender.id, root, filename, 'local'))
+  })
+  ipcMain.handle(IPC.AGENT_ADD_REFERENCE, (event, input: unknown) => {
+    if (!input || typeof input !== 'object') throw new Error('资料引用无效。')
+    const { kind, value } = input as { kind?: unknown; value?: unknown }
+    if (typeof value !== 'string') throw new Error('资料引用无效。')
+    const root = getWorkspaceRoot()
+    if (kind === 'profile') {
+      const profile = listProductSummaries(root).find(item => item.id === value)
+      if (!profile) throw new Error('产品画像不存在，请刷新后重试。')
+      return chatReferences.addProfile(event.sender.id, root, value, profile.productNames.join('、') || profile.companyName || value)
+    }
+    if (kind === 'library' || kind === 'website') {
+      const { tree } = listFilesTree(root)
+      const find = (nodes: typeof tree): (typeof tree)[number] | undefined => {
+        for (const node of nodes) { if (node.relativePath === value && node.kind === (kind === 'website' ? 'website' : 'file')) return node; const found = find(node.children); if (found) return found }
+      }
+      const node = find(tree)
+      if (!node) throw new Error('资料不存在，请刷新后重试。')
+      const url = kind === 'website' ? readWebsiteBookmark(path.join(root, 'data', 'library', 'files', value))?.url : undefined
+      if (kind === 'website' && !url) throw new Error('网站书签不可用。')
+      return chatReferences.addLibrary(event.sender.id, root, value, kind, url, node.name)
+    }
+    throw new Error('资料引用类型无效。')
+  })
+  ipcMain.handle(IPC.AGENT_DISCARD_REFERENCES, (event, ids: unknown) => {
+    if (Array.isArray(ids)) chatReferences.discard(event.sender.id, ids.filter((id): id is string => typeof id === 'string'))
+  })
+  ipcMain.handle(IPC.AGENT_SEND_MESSAGE, async (event, text: unknown, productId: unknown, ids: unknown = []) => {
     if (typeof productId === 'string') {
       getAgentRunner().noteActiveProduct(productId)
     }
     const message = typeof text === 'string' ? text : ''
     const sender = event.sender
-    return getAgentRunner().sendFreeDialogue(message, (payload) => emitAgentEvent(sender, payload))
+    try {
+      const references = chatReferences.resolve(sender.id, getWorkspaceRoot(), ids)
+      const result = await getAgentRunner().sendFreeDialogue(message, (payload) => emitAgentEvent(sender, payload), false, references)
+      if (result.accepted) chatReferences.discard(sender.id, references.map(ref => ref.id))
+      return result
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : '资料引用不可用。', accepted: false } }
   })
 
   ipcMain.handle(IPC.PROFILE_GENERATE, async (event, input: ProfileGenerateInput) => {

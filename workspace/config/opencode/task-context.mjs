@@ -26,14 +26,14 @@ const metered = new Set([
 ])
 export const TaskContext = async () => ({
   'tool.execute.before': async ({ sessionID, callID, tool }, { args }) => {
-    if (tool === 'bash' || tool === 'shell') {
+    if (tool === 'bash' || tool === 'shell' || tool === 'read') {
       // Give the desktop the exact call before OpenCode asks about an external
       // workdir. Failure must not prevent the normal per-command permission.
       try {
         await fetch(`${process.env.FTCS_TASK_URL}/before`, {
           method: 'POST',
           headers: { authorization: `Bearer ${process.env.FTCS_TASK_PLUGIN_KEY}`, 'content-type': 'application/json' },
-          body: JSON.stringify({ sessionID, callID, tool, args: { command: args.command, workdir: args.workdir } }),
+          body: JSON.stringify({ sessionID, callID, tool, args: tool === 'read' ? { filePath: args.filePath } : { command: args.command, workdir: args.workdir } }),
           signal: AbortSignal.timeout(2000),
         })
       } catch { /* permission event remains authoritative */ }
