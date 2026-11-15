@@ -1,6 +1,6 @@
 // The host supplies sessionID/callID. Never take identity from model arguments.
 const lifecycle = new Set(['lead-store_task_begin', 'lead-store_task_done'])
-const siteTools = new Set(['lead-store_site_status', 'lead-store_site_preview', 'lead-store_site_open_preview', 'lead-store_site_stop_preview', 'lead-store_site_build', 'lead-store_site_publish_prepare'])
+const siteTools = new Set(['lead-store_site_status', 'lead-store_site_preview', 'lead-store_site_open_preview', 'lead-store_site_stop_preview', 'lead-store_site_build', 'lead-store_site_publish'])
 const writes = new Set([
   'product_save',
   'inputs_ensure_dir',

@@ -22,8 +22,8 @@ description: 按用户要求开发、修改、预览、构建或准备发布当�
 - 用户要求预览时调用 `lead-store_site_preview` 启动 FTCS 管理的服务；用 `lead-store_site_status` 查询实际状态，已确认运行后可调用 `lead-store_site_open_preview` 打开内置浏览器。地址待确认、缺少依赖等情况请说明并引导用户到页面处理。
 - 用户要求停止或关闭预览服务时调用 `lead-store_site_stop_preview`；停止可能需要时间，根据返回状态或 `lead-store_site_status` 确认结果。此操作停止服务，不会自动关闭浏览器标签。
 - 用户要求构建时调用 `lead-store_site_build`，用 `lead-store_site_status` 查询结果；启动不代表成功。已在运行时不要重复启动。依赖安装仍由页面处理。
-- 用户要求发布时调用 `lead-store_site_publish_prepare`，使用已确认的仓库和分支准备快照与构建检查；告知用户到独立站页面核对源码、目标和构建结果，并由用户点击确认。首次发布、未连接账号或目标不可用时，引导用户在页面完成配置。工具不会推送或触发 Cloudflare；不要把准备完成当成发布成功。
-- 不主动推送代码或发布网站；不要输出凭据。不把独立站操作当成画像等业务任务，不调用其 task_begin/task_done。
+- 用户明确要求发布网站时调用 `lead-store_site_publish`，使用已确认的仓库和分支检查、构建并推送；首次发布、未连接账号或目标不可用时，引导用户在页面完成配置。告知用户 GitHub 推送结果；Cloudflare 部署状态以独立站页面为准，不要把推送成功当成网站已上线。提交结果待确认时引导用户检查发布记录，不要盲目重试。
+- 仅在用户明确要求时推送或发布；不要输出凭据。不把独立站操作当成画像等业务任务，不调用其 task_begin/task_done。
 
 ## 交付
 

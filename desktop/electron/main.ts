@@ -293,7 +293,8 @@ const siteAgentActions = new SiteAgentActions({
   release: readRelease,
   connections: async () => { const [github, cloudflare] = await Promise.all([getGithubState(), getCloudflareState()]); return { github: github.connected, cloudflare: cloudflare.connected } },
   prepare: (root, id, branch) => sitePublish.prepare(root, id, branch),
-  notify: (root, preview) => broadcastToWindows(IPC.SITE_AGENT_RELEASE_EVENT, { root, preview }),
+  commit: (root, id) => sitePublish.commit(root, id),
+  notify: (root, running) => broadcastToWindows(IPC.SITE_AGENT_RELEASE_EVENT, { root, running }),
 })
 let runtime: OpenCodeRuntime | null = null
 let agentRunner: AgentRunController | null = null
@@ -759,12 +760,11 @@ function registerIpcHandlers(): void {
   }
   const siteDeployment = new SiteDeployment(githubRepositories, pages, sitePublish, getWorkspaceRoot, verifyPages)
   ipcMain.handle(IPC.SITE_RELEASE_GET, (_event, root: unknown) => releaseAction(() => readRelease(currentSiteWorkspace(root))))
-  ipcMain.handle(IPC.SITE_AGENT_RELEASE_GET, (_event, root: unknown) => siteAgentActions.getPending(currentSiteWorkspace(root)))
-  ipcMain.handle(IPC.SITE_AGENT_RELEASE_CLEAR, (_event, root: unknown) => siteAgentActions.clear(currentSiteWorkspace(root)))
-  ipcMain.handle(IPC.SITE_RELEASE_PREPARE, (_event, root: unknown, id: unknown, branch: unknown, acceptReadme: unknown) => releaseAction(() => { const current = currentSiteWorkspace(root); siteAgentActions.clear(current); return sitePublish.prepare(current, id as number, branch as string, acceptReadme === true) }))
+  ipcMain.handle(IPC.SITE_AGENT_RELEASE_GET, (_event, root: unknown) => siteAgentActions.isPublishing(currentSiteWorkspace(root)))
+  ipcMain.handle(IPC.SITE_RELEASE_PREPARE, (_event, root: unknown, id: unknown, branch: unknown, acceptReadme: unknown) => releaseAction(() => sitePublish.prepare(currentSiteWorkspace(root), id as number, branch as string, acceptReadme === true)))
   ipcMain.handle(IPC.SITE_RELEASE_CANCEL, (_event, root: unknown) => releaseAction(() => sitePublish.cancelBuild(currentSiteWorkspace(root))))
   ipcMain.handle(IPC.SITE_RELEASE_FILE, (_event, root: unknown, id: unknown, name: unknown) => releaseAction(() => sitePublish.previewFile(currentSiteWorkspace(root), String(id), String(name))))
-  ipcMain.handle(IPC.SITE_RELEASE_COMMIT, (_event, root: unknown, id: unknown) => releaseAction(async () => { const current = currentSiteWorkspace(root); const result = await sitePublish.commit(current, String(id)); siteAgentActions.clear(current); return result }))
+  ipcMain.handle(IPC.SITE_RELEASE_COMMIT, (_event, root: unknown, id: unknown) => releaseAction(() => sitePublish.commit(currentSiteWorkspace(root), String(id))))
   ipcMain.handle(IPC.SITE_RELEASE_RECOVER, (_event, root: unknown) => releaseAction(() => sitePublish.recover(currentSiteWorkspace(root))))
   ipcMain.handle(IPC.SITE_PAGES_LIST, (_event, root: unknown) => releaseAction(async () => { currentSiteWorkspace(root); const credentials = await getCloudflareCredentials(); const projects = await pages.list(credentials.accountId); currentSiteWorkspace(root); return { accountId: credentials.accountId, projects } }))
   ipcMain.handle(IPC.SITE_PAGES_CREATE, (_event, root: unknown, name: unknown, nodeVersion: unknown) => releaseAction(async () => {
@@ -1187,7 +1187,6 @@ function registerIpcHandlers(): void {
 
     const init = initializeWorkspace(dir, { forceManaged: true })
     siteSource.close()
-    siteAgentActions.reset()
     chatReferences.clear()
     writeUserPrefs({ workspaceRoot: dir })
     process.env.FTCS_WORKSPACE = dir

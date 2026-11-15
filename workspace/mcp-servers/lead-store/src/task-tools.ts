@@ -37,7 +37,7 @@ export function registerTaskTools(server: McpServer) {
     ['site_open_preview', 'Open the verified running FTCS website preview in the built-in browser.'],
     ['site_stop_preview', 'Stop the FTCS-managed website preview service, or return its current state if already stopped.'],
     ['site_build', 'Start an FTCS-managed website build check, or return its current state.'],
-    ['site_publish_prepare', 'Build and prepare a frozen publication snapshot for the previously selected GitHub target. The user must review and confirm publication in FTCS.'],
+    ['site_publish', 'When explicitly requested by the user, build and publish the website to the previously confirmed GitHub repository and branch.'],
   ] as const) {
     server.tool(name, description, { _ticket: common._ticket }, (data) => call('site_execute', { ...data, name }))
   }

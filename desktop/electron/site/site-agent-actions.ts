@@ -10,7 +10,8 @@ type Dependencies = {
   release: (root: string) => ReleaseRecord
   connections: () => Promise<{ github: boolean; cloudflare: boolean }>
   prepare: (root: string, id: number, branch: string) => Promise<PublishPreview>
-  notify: (root: string, preview: PublishPreview) => void
+  commit: (root: string, id: string) => Promise<ReleaseRecord>
+  notify: (root: string, running: boolean) => void
 }
 const busy = (state: string) => ['starting', 'running', 'address_pending', 'stopping'].includes(state)
 const describe = (snapshot: SiteRuntimeSnapshot) => ({
@@ -20,14 +21,11 @@ const describe = (snapshot: SiteRuntimeSnapshot) => ({
   build: { ...snapshot.build, log: snapshot.build.log.slice(-4000) },
 })
 
-/** A model may prepare a release, but only the page can confirm and commit it. */
 export class SiteAgentActions {
-  private pending: { root: string; preview: PublishPreview } | null = null
+  private publishing: string | null = null
   private readonly deps: Dependencies
   constructor(deps: Dependencies) { this.deps = deps }
-  getPending(root: string): PublishPreview | null { return this.pending?.root === root ? this.pending.preview : null }
-  clear(root: string): void { if (this.pending?.root === root) this.pending = null }
-  reset(): void { this.pending = null }
+  isPublishing(root: string): boolean { return this.publishing === root }
   async execute(name: string, root: string, stillActive: () => boolean): Promise<unknown> {
     const check = () => { if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。') }
     check()
@@ -60,18 +58,30 @@ export class SiteAgentActions {
       if (!busy(state.build.state)) this.deps.build(root)
       return { ...describe(this.deps.snapshot(root)), message: '构建检查已请求启动；请查询实际状态，不要提前报告成功。' }
     }
-    if (name === 'site_publish_prepare') {
+    if (name === 'site_publish') {
       const connected = await this.deps.connections()
       check()
       if (!connected.github || !connected.cloudflare) throw new Error('发布前请先在独立站页面连接 GitHub 和 Cloudflare。')
       const record = this.deps.release(root)
       if (!record.target || !record.commitSha) throw new Error('尚无已确认的发布目标，请先在独立站页面选择仓库和分支。')
-      this.clear(root)
-      const preview = await this.deps.prepare(root, record.target.id, record.target.branch)
-      check()
-      this.pending = { root, preview }
-      this.deps.notify(root, preview)
-      return { message: '发布快照已准备，尚未推送。请在独立站页面核对并确认。', target: preview.target.fullName, branch: preview.target.branch, hash: preview.hash, files: preview.files.length, deleted: preview.deleted.length, noChanges: preview.noChanges }
+      if (this.publishing) throw new Error('已有智能体发布操作正在进行。')
+      this.publishing = root
+      this.deps.notify(root, true)
+      try {
+        const preview = await this.deps.prepare(root, record.target.id, record.target.branch)
+        check()
+        let result: ReleaseRecord
+        try { result = await this.deps.commit(root, preview.id) }
+        catch (error) {
+          const message = error instanceof Error ? error.message : '提交失败。'
+          throw new Error(`${message} 请先检查独立站页面发布记录中的提交状态。`)
+        }
+        const message = preview.noChanges ? '站点源码没有变化，已确认当前发布版本。' : '已推送到 GitHub。'
+        return { message: `${message}${result.cloudflare ? ' Cloudflare 部署结果请在独立站页面查看。' : ' 请在独立站页面关联 Cloudflare Pages。'}`, target: result.target?.fullName, branch: result.target?.branch, commitSha: result.commitSha, noChanges: preview.noChanges, cloudflareProject: result.cloudflare?.project, cloudflareLinked: !!result.cloudflare }
+      } finally {
+        this.publishing = null
+        this.deps.notify(root, false)
+      }
     }
     throw new Error('未知站点操作。')
   }

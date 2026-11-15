@@ -16,6 +16,7 @@ registerHooks({ resolve(specifier, context, next) {
 } })
 const { collectSiteSnapshot, buildSiteSnapshot } = await import('./site-publish-snapshot.ts')
 const { SitePublish, readRelease } = await import('./site-publish.ts')
+const { SiteAgentActions } = await import('./site-agent-actions.ts')
 const { SiteDeployment } = await import('./site-deployment.ts')
 const { SiteSourceTracker } = await import('./site-source-tracker.ts')
 const { GithubRepositories } = await import('../github/github-repositories.ts')
@@ -29,6 +30,40 @@ const make = () => {
   fs.writeFileSync(path.join(project, 'build.cjs'), "const fs=require('fs');fs.mkdirSync('dist',{recursive:true});fs.writeFileSync('dist/index.html','OK')")
   return { root, project }
 }
+
+test('agent publishes through the real snapshot and commit service', { timeout: 30000 }, async () => {
+  const { root } = make()
+  const repo = { id: 1, owner: 'owner', name: 'site', fullName: 'owner/site', private: true, defaultBranch: 'main', writeAccess: 'yes' as const }
+  const target = { id: 1, owner: 'owner', name: 'site', fullName: 'owner/site', branch: 'main', private: true }
+  const head = '1'.repeat(40), next = '2'.repeat(40), events: boolean[] = []
+  let commits = 0
+  const github = {
+    async tree() { return { repository: repo, head, files: [] } },
+    async commit(_repo: unknown, branch: string, base: string, additions: Array<{ path: string }>) {
+      commits++; assert.equal(branch, 'main'); assert.equal(base, head); assert.ok(additions.some(file => file.path === 'package.json'))
+      return next
+    },
+  }
+  const publisher = new SitePublish(github as never, async () => ({ exe: process.execPath, source: 'test' }), () => root)
+  const run = () => ({ id: '', state: 'idle' as const, message: '', log: '' })
+  const actions = new SiteAgentActions({
+    snapshot: () => ({ workspaceRoot: root, sequence: 1, outputDir: 'dist', dependencies: 'not_required', install: run(), preview: run(), build: run() }),
+    startPreview: () => '', stopPreview: async () => {}, build: () => '', openPreview: async () => {},
+    release: readRelease, connections: async () => ({ github: true, cloudflare: true }),
+    prepare: (workspace, id, branch) => publisher.prepare(workspace, id, branch),
+    commit: (workspace, id) => publisher.commit(workspace, id),
+    notify: (_workspace, running) => { events.push(running) },
+  })
+  try {
+    fs.writeFileSync(path.join(root, '.ftcs/site-release.json'), JSON.stringify({ version: 1, createdRepositories: [], target, commitSha: head }))
+    const result = await actions.execute('site_publish', root, () => true) as { commitSha: string; noChanges: boolean }
+    assert.equal(result.commitSha, next)
+    assert.equal(result.noChanges, false)
+    assert.equal(readRelease(root).commitSha, next)
+    assert.equal(commits, 1)
+    assert.deepEqual(events, [true, false])
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
 
 test('snapshot honors ignore rules, sensitive exclusions, nested exceptions and frozen binary bytes', () => {
   const { root, project } = make()

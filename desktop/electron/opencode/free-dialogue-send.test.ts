@@ -226,6 +226,9 @@ describeSend('sendFreeDialogue', () => {
       assert.equal(runner.authorize(stopCall, {}), undefined)
       assert.deepEqual(await runner.siteTool(stopCall, 'site_stop_preview'), { name: 'site_stop_preview', actualRoot: root, active: true })
       assert.throws(() => runner.authorize({ ...stopCall, sessionID: 'other' }, {}), /会话/)
+      const publishCall = { sessionID: 'ses_site', callID: 'site-publish', tool: 'lead-store_site_publish' }
+      assert.equal(runner.authorize(publishCall, {}), undefined)
+      assert.deepEqual(await runner.siteTool(publishCall, 'site_publish'), { name: 'site_publish', actualRoot: root, active: true })
       const file = path.join(site, 'page.vue')
       stream.push(part('edit-1', 'write', { status: 'running', input: { filePath: file, content: 'hello' }, time: { start: 3 } }))
       stream.push({ type: 'permission.asked', properties: { id: 'edit-permission', sessionID: 'ses_site', permission: 'edit', patterns: ['website/page.vue'], metadata: { filepath: file }, tool: { messageID: 'msg', callID: 'edit-1' } } })

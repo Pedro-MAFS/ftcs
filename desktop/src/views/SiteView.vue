@@ -286,34 +286,23 @@ const createRepoOpen = ref(false)
 const newRepoName = ref('')
 const newRepoPrivate = ref(true)
 const acceptInitialReadme = ref(false)
-const previewFileName = ref('')
-const previewFileText = ref('')
 type Release = Extract<Awaited<ReturnType<NonNullable<Window['ftcs']>['getSiteRelease']>>, { ok: true }>['value']
-type Preview = Extract<Awaited<ReturnType<NonNullable<Window['ftcs']>['prepareSiteRelease']>>, { ok: true }>['value']
 type Pages = Extract<Awaited<ReturnType<NonNullable<Window['ftcs']>['listSitePages']>>, { ok: true }>['value']['projects']
 type Deployment = Extract<Awaited<ReturnType<NonNullable<Window['ftcs']>['getSitePagesStatus']>>, { ok: true }>['value']
 const release = ref<Release | null>(null)
-const preview = ref<Preview | null>(null)
-const previewSize = computed(() => {
-  if (!preview.value) return null
-  const changed = preview.value.files.filter(file => file.change !== '未变化')
-  const format = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  return { total: format(preview.value.files.reduce((sum, file) => sum + file.size, 0)), changed: format(changed.reduce((sum, file) => sum + file.size, 0)), count: changed.length }
-})
-function applyAgentRelease(value: { root: string; preview: Preview }) {
-  if (value.root !== site.value?.workspaceRoot || publishBusy.value) return
-  preview.value = value.preview
-  publishOpen.value = true
-  publishError.value = ''
+const agentPublishing = ref(false)
+let agentReleaseSequence = 0
+function applyAgentRelease(value: { root: string; running: boolean }) {
+  if (value.root !== site.value?.workspaceRoot) return
+  agentReleaseSequence++
+  agentPublishing.value = value.running
+  if (!value.running) { void refreshRelease(); void refreshSource() }
 }
 async function refreshAgentRelease() {
   if (!site.value || !window.ftcs) return
   const root = site.value.workspaceRoot
-  try { const prepared = await window.ftcs.getAgentSiteRelease(root); if (prepared && site.value?.workspaceRoot === root) applyAgentRelease({ root, preview: prepared }) } catch { /* workspace changed */ }
-}
-async function dismissReleasePreview() {
-  preview.value = null
-  if (site.value && window.ftcs) { try { await window.ftcs.clearAgentSiteRelease(site.value.workspaceRoot) } catch { /* workspace changed */ } }
+  const sequence = agentReleaseSequence
+  try { const running = await window.ftcs.getAgentSiteRelease(root); if (site.value?.workspaceRoot === root && sequence === agentReleaseSequence) agentPublishing.value = running } catch { /* workspace changed */ }
 }
 const pageProjects = ref<Pages>([])
 const selectedPage = ref('')
@@ -333,7 +322,6 @@ const chosenRepository = computed(() => repositories.value.find(repo => repo.id 
 const chosenBranch = computed(() => branches.value.find(branch => branch.name === selectedBranch.value))
 async function loadRepositories() {
   if (!site.value || !window.ftcs || publishBusy.value) return
-  await dismissReleasePreview()
   const root = site.value.workspaceRoot
   const request = ++publishRequest
   publishBusy.value = true
@@ -341,7 +329,6 @@ async function loadRepositories() {
   selectedRepository.value = null
   selectedBranch.value = ''
   branches.value = []
-  preview.value = null
   try {
     const result = await window.ftcs.listGithubRepositories(root)
     if (request !== publishRequest || site.value?.workspaceRoot !== root) return
@@ -352,13 +339,11 @@ async function loadRepositories() {
 }
 async function chooseRepository(id: number) {
   if (!site.value || !window.ftcs || publishBusy.value) return
-  await dismissReleasePreview()
   selectedRepository.value = id
   acceptInitialReadme.value = false
   selectedBranch.value = ''
   branches.value = []
   publishError.value = ''
-  preview.value = null
   const repo = repositories.value.find(item => item.id === id)
   if (!repo) return
   const root = site.value.workspaceRoot
@@ -403,12 +388,11 @@ async function refreshDeployment() {
   finally { checkingDeployment = false }
 }
 async function publishTarget(repositoryId: number, branch: string, acceptReadme = false) {
-  if (!site.value || !window.ftcs || publishBusy.value) return
+  if (!site.value || !window.ftcs || publishBusy.value || agentPublishing.value) return
   const root = site.value.workspaceRoot
   const request = ++publishRequest
-  publishBusy.value = true; preparingRelease.value = true; publishError.value = ''; publishStatus.value = '正在检查源码并构建…'; preview.value = null
+  publishBusy.value = true; preparingRelease.value = true; publishError.value = ''; publishStatus.value = '正在检查源码并构建…'
   try {
-    await dismissReleasePreview()
     const result = await runSiteRelease({
       prepare: () => window.ftcs!.prepareSiteRelease(root, repositoryId, branch, acceptReadme),
       commit: id => window.ftcs!.commitSiteRelease(root, id),
@@ -435,30 +419,6 @@ async function cancelReleaseBuild() {
   cancellingRelease.value = true
   try { const result = await window.ftcs.cancelSiteRelease(site.value.workspaceRoot); if (!result.ok) { publishError.value = result.message; cancellingRelease.value = false } }
   catch { publishError.value = '无法取消构建检查，请重试。'; cancellingRelease.value = false }
-}
-async function showPreviewFile(name: string) {
-  if (!site.value || !window.ftcs || !preview.value) return
-  const root = site.value.workspaceRoot, id = preview.value.id
-  try {
-    const result = await window.ftcs.getSiteReleaseFile(root, id, name)
-    if (site.value?.workspaceRoot !== root || preview.value?.id !== id) return
-    previewFileName.value = name
-    previewFileText.value = result.ok ? result.value.text ?? result.value.message ?? '' : result.message
-  } catch { previewFileName.value = name; previewFileText.value = '无法读取快照文件。' }
-}
-async function commitRelease() {
-  if (!site.value || !window.ftcs || !preview.value || publishBusy.value) return
-  const root = site.value.workspaceRoot
-  const request = ++publishRequest
-  publishBusy.value = true; publishError.value = ''
-  try {
-    const result = await window.ftcs.commitSiteRelease(root, preview.value.id)
-    if (request !== publishRequest || site.value?.workspaceRoot !== root) return
-    preview.value = null
-    if (result.ok) { release.value = result.value; deployment.value = null; deploymentError.value = ''; publishOpen.value = false; await refreshSource(); await refreshDeployment() }
-    else { publishError.value = `${result.message} 请先检查发布记录中的提交状态。`; await refreshRelease() }
-  } catch { if (request === publishRequest) { publishError.value = '提交结果未知，请先检查发布记录。'; await refreshRelease() } }
-  finally { if (request === publishRequest) publishBusy.value = false }
 }
 async function recoverRelease() {
   if (!site.value || !window.ftcs || publishBusy.value) return
@@ -558,7 +518,7 @@ async function createRepository() {
   finally { if (request === publishRequest) publishBusy.value = false }
 }
 async function publish(changeTarget = false) {
-  if (publishStarting.value || publishBusy.value) return
+  if (publishStarting.value || publishBusy.value || agentPublishing.value) return
   message.value = ''; publishError.value = ''
   publishStarting.value = true
   try {
@@ -597,7 +557,7 @@ watch(() => site.value?.workspaceRoot, (next, previous) => {
     publishError.value = ''
     publishStatus.value = ''
     release.value = null
-    preview.value = null
+    agentPublishing.value = false
     deployment.value = null
     pageProjects.value = []
     showPages.value = false
@@ -610,7 +570,7 @@ onUnmounted(() => { removeRuntimeListener?.(); removeSourceListener?.(); removeA
 
 <template>
   <div class="site-page">
-    <header class="page-header"><div><h1>独立站</h1><p>创建、预览并发布属于你的品牌网站</p></div><div class="header-actions"><button class="btn secondary" type="button" @click="refreshAll"><Icon name="refresh-cw" /> 刷新</button><button v-if="release?.target && release?.commitSha" class="btn secondary" type="button" :disabled="publishStarting || publishBusy" @click="publish(true)">更换发布目标</button><button class="btn primary" type="button" :disabled="publishStarting || publishBusy" @click="publish()">{{ publishBusy ? '正在发布…' : publishStarting ? '正在检查…' : '发布网站' }}</button></div></header>
+    <header class="page-header"><div><h1>独立站</h1><p>创建、预览并发布属于你的品牌网站</p></div><div class="header-actions"><button class="btn secondary" type="button" @click="refreshAll"><Icon name="refresh-cw" /> 刷新</button><button v-if="release?.target && release?.commitSha" class="btn secondary" type="button" :disabled="publishStarting || publishBusy || agentPublishing" @click="publish(true)">更换发布目标</button><button class="btn primary" type="button" :disabled="publishStarting || publishBusy || agentPublishing" @click="publish()">{{ publishBusy || agentPublishing ? '正在发布…' : publishStarting ? '正在检查…' : '发布网站' }}</button></div></header>
     <div class="connections" aria-label="账号连接">
       <div class="connection"><button v-if="!connected && !authorized" class="btn secondary" type="button" :disabled="busy" @click="connect"><Icon name="plus" /> {{ busy ? '正在连接 GitHub' : '连接 GitHub' }}</button><template v-else><span class="connection-status"><span class="dot" /> GitHub · {{ login }} · {{ connected ? '已连接' : '待完成安装' }}</span><button v-if="installUrl" class="text-button" type="button" @click="openInstall">安装 GitHub App</button><button class="text-button" type="button" @click="disconnect">断开</button></template></div>
       <div class="connection"><button v-if="!cfConnected" class="btn secondary" type="button" :disabled="cfBusy" @click="connectCloudflare"><Icon name="plus" /> {{ cfBusy ? '正在连接 Cloudflare' : '连接 Cloudflare' }}</button><span v-else class="connection-status" :title="cfAccountId"><span class="dot" /> Cloudflare · {{ cfAccountName }} · 已连接</span><button v-if="cfConnected && cfAccounts.length > 1" class="text-button" type="button" @click="cfChoose = !cfChoose">切换账号</button><button v-if="cfAuthorized" class="text-button" type="button" @click="disconnectCloudflare">断开</button></div>
@@ -622,18 +582,18 @@ onUnmounted(() => { removeRuntimeListener?.(); removeSourceListener?.(); removeA
     <p v-if="cfMessage" class="notice" role="status">{{ cfMessage }}</p>
     <p v-if="message" class="notice" role="status">{{ message }}</p>
     <p v-if="siteMessage" class="notice" role="status">{{ siteMessage }}</p>
+    <p v-if="agentPublishing" class="notice" role="status">智能体正在检查、构建并发布网站…</p>
     <p v-if="!publishOpen && publishError" class="notice" role="alert">{{ publishError }}</p>
     <p v-if="!publishOpen && publishStatus" class="notice" role="status">{{ publishStatus }} <button v-if="preparingRelease" class="text-button" type="button" :disabled="cancellingRelease" @click="cancelReleaseBuild">{{ cancellingRelease ? '正在取消…' : '取消构建检查' }}</button></p>
     <section v-if="publishOpen" class="publish-panel" aria-label="发布准备">
-      <div class="section-header"><div><h2>发布准备 · 选择 GitHub 仓库</h2><p>选择网站源码的目标仓库和生产分支。当前步骤不会上传站点或发布网站。</p></div><button class="text-button" type="button" :disabled="publishBusy" @click="publishOpen = false; dismissReleasePreview()">关闭</button></div>
+      <div class="section-header"><div><h2>发布准备 · 选择 GitHub 仓库</h2><p>选择网站源码的目标仓库和生产分支。当前步骤不会上传站点或发布网站。</p></div><button class="text-button" type="button" :disabled="publishBusy" @click="publishOpen = false">关闭</button></div>
       <p v-if="publishError" class="notice" role="alert">{{ publishError }}</p>
       <div class="site-actions"><input v-model="repoSearch" class="local-input" placeholder="搜索已授权的仓库" aria-label="搜索仓库" /><button class="btn secondary" type="button" :disabled="publishBusy" @click="loadRepositories">刷新仓库</button><button class="btn secondary" type="button" :disabled="publishBusy" @click="createRepoOpen = !createRepoOpen">创建个人仓库</button><button class="text-button" type="button" @click="openGithubNewRepository">在 GitHub 创建</button><button class="text-button" type="button" @click="openGithubInstallations">管理仓库授权</button></div>
       <div v-if="createRepoOpen" class="inline-box"><strong>创建 {{ login }} 的个人仓库</strong><p>将在 GitHub 创建仓库并用 README 初始化分支；不会上传站点。即使仓库为私有，网站发布后仍可能公开访问。</p><div class="site-actions"><input v-model="newRepoName" class="local-input" placeholder="仓库名称" aria-label="新仓库名称" /><label><input v-model="newRepoPrivate" type="checkbox" /> 私有仓库</label><button class="btn primary" type="button" :disabled="publishBusy || !newRepoName.trim()" @click="createRepository">确认创建</button><button class="btn secondary" type="button" :disabled="publishBusy" @click="createRepoOpen = false">取消</button></div></div>
       <p v-if="publishBusy">{{ publishStatus || '正在处理，请稍候…' }} <button v-if="preparingRelease" class="text-button" type="button" :disabled="cancellingRelease" @click="cancelReleaseBuild">{{ cancellingRelease ? '正在取消…' : '取消构建检查' }}</button></p>
       <p v-else-if="!filteredRepositories.length">没有找到已授权的仓库。请在 GitHub 创建仓库，或调整 FTCS GitHub App 的仓库授权后刷新。</p>
       <div v-if="filteredRepositories.length" class="repo-list"><button v-for="repo in filteredRepositories" :key="repo.id" type="button" class="repo-item" :class="{ selected: selectedRepository === repo.id }" :disabled="publishBusy" @click="chooseRepository(repo.id)"><span>{{ repo.fullName }} · {{ repo.private ? '私有' : '公开' }}</span><span>{{ repo.writeAccess === 'yes' ? '安装权限允许写入，令牌待验证' : repo.writeAccess === 'no' ? '无写入权限' : '写入权限待确认' }}</span></button></div>
-      <div v-if="chosenRepository" class="inline-box"><strong>{{ chosenRepository.fullName }}</strong><p v-if="chosenRepository.writeAccess !== 'yes'">当前无法确认仓库可写。请检查 GitHub 用户权限以及 FTCS App 的 Contents 写入权限和仓库授权。</p><div v-if="branches.length" class="site-actions"><label for="site-branch">生产分支</label><select id="site-branch" v-model="selectedBranch" class="local-input" :disabled="publishBusy" @change="preview = null"><option value="" disabled>请选择分支</option><option v-for="branch in branches" :key="branch.name" :value="branch.name">{{ branch.name }}{{ branch.protected ? '（受保护）' : '' }}</option></select></div><p v-if="chosenBranch?.protected">该分支受保护，提交可能需要额外权限或通过 GitHub 审核。</p><p v-if="!branches.length && !publishBusy">没有可选分支时，请先在 GitHub 初始化仓库。</p><p><label><input v-model="acceptInitialReadme" type="checkbox" :disabled="publishBusy" @change="preview = null" /> 如果仓库只包含 README.md，同意用站点文件替换或删除该文件</label></p><p>开始发布后，将复制站点源码并使用 FTCS 的 Node 联网安装依赖、运行构建脚本；检查通过后自动推送到该仓库，Cloudflare 可能立即部署。</p><div class="site-actions"><button class="btn primary" type="button" :disabled="publishBusy || !selectedBranch || chosenRepository.writeAccess !== 'yes' || !!release?.pending" @click="prepareRelease">开始发布</button></div></div>
-      <div v-if="preview" class="inline-box"><strong>确认发布 {{ preview.target.fullName }} · {{ preview.target.branch }}</strong><p>{{ preview.target.private ? '私有仓库' : '公开仓库' }}；下列源码会被推送，网站仍可能公开访问。推送后 Cloudflare 可能立即自动部署。</p><p>源码快照 {{ preview.hash.slice(0, 12) }} · 构建通过<span v-if="preview.noChanges"> · 源码没有变化，不创建新提交</span></p><p v-if="previewSize">源码快照 {{ previewSize.total }}；本次新增或修改 {{ previewSize.count }} 个文件，共 {{ previewSize.changed }}。实际请求还包含编码开销。</p><details><summary>查看 {{ preview.files.length }} 个源码文件和 {{ preview.deleted.length }} 个删除项</summary><div class="file-list"><div v-for="item in preview.files" :key="item.path"><button class="text-button" type="button" @click="showPreviewFile(item.path)">{{ item.change }} · {{ item.path }} · {{ item.size }} B</button></div><div v-for="item in preview.deleted" :key="item">删除 · {{ item }}</div></div><div v-if="previewFileName"><strong>{{ previewFileName }}</strong><pre>{{ previewFileText }}</pre></div></details><details><summary>构建日志</summary><pre>{{ preview.log }}</pre></details><div class="site-actions"><button class="btn primary" type="button" :disabled="publishBusy" @click="commitRelease">{{ preview.noChanges ? '确认使用此版本' : '确认推送到 GitHub' }}</button><button class="btn secondary" type="button" :disabled="publishBusy" @click="dismissReleasePreview">取消</button></div></div>
+      <div v-if="chosenRepository" class="inline-box"><strong>{{ chosenRepository.fullName }}</strong><p v-if="chosenRepository.writeAccess !== 'yes'">当前无法确认仓库可写。请检查 GitHub 用户权限以及 FTCS App 的 Contents 写入权限和仓库授权。</p><div v-if="branches.length" class="site-actions"><label for="site-branch">生产分支</label><select id="site-branch" v-model="selectedBranch" class="local-input" :disabled="publishBusy"><option value="" disabled>请选择分支</option><option v-for="branch in branches" :key="branch.name" :value="branch.name">{{ branch.name }}{{ branch.protected ? '（受保护）' : '' }}</option></select></div><p v-if="chosenBranch?.protected">该分支受保护，提交可能需要额外权限或通过 GitHub 审核。</p><p v-if="!branches.length && !publishBusy">没有可选分支时，请先在 GitHub 初始化仓库。</p><p><label><input v-model="acceptInitialReadme" type="checkbox" :disabled="publishBusy" /> 如果仓库只包含 README.md，同意用站点文件替换或删除该文件</label></p><p>开始发布后，将复制站点源码并使用 FTCS 的 Node 联网安装依赖、运行构建脚本；检查通过后自动推送到该仓库，Cloudflare 可能立即部署。</p><div class="site-actions"><button class="btn primary" type="button" :disabled="publishBusy || agentPublishing || !selectedBranch || chosenRepository.writeAccess !== 'yes' || !!release?.pending" @click="prepareRelease">开始发布</button></div></div>
     </section>
     <section class="site-card">
       <div class="site-card-title"><div class="site-icon"><Icon name="globe" :size="20" /></div><div><h2>工作区独立站</h2><p>一个工作区对应一个全局站点</p></div><span class="badge">{{ siteLabel }}</span></div>

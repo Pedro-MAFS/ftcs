@@ -85,7 +85,7 @@ export async function openTaskBridge(receiver: () => TaskReceiver) {
       )
         throw new Error('无效会话凭据')
       if (req.url === '/site_execute') {
-        if (!['site_status', 'site_preview', 'site_open_preview', 'site_stop_preview', 'site_build', 'site_publish_prepare'].includes(request.name) || !receiver().siteTool) throw new Error('未知站点操作')
+        if (!['site_status', 'site_preview', 'site_open_preview', 'site_stop_preview', 'site_build', 'site_publish'].includes(request.name) || !receiver().siteTool) throw new Error('未知站点操作')
         receiver().authorize(ticket.identity, ticket.args)
         const value = await receiver().siteTool!(ticket.identity, request.name)
         return reply(200, { ok: true, value })
