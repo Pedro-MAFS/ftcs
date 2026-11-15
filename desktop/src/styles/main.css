@@ -564,8 +564,9 @@ button:focus-visible {
   padding-right: 12px;
 }
 
-.title-bar__left,
-.title-bar__right {
+.title-bar__right > .icon-btn,
+.title-bar__right > .runtime-popover,
+.title-bar__right > .auth-menu {
   -webkit-app-region: no-drag;
 }
 
