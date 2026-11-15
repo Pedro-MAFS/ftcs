@@ -1,5 +1,5 @@
 import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount, getCloudflareCredentials } from './cloudflare/cloudflare-auth'
-import { CloudflarePages, verifyPagesProject, type PagesProject } from './cloudflare/cloudflare-pages'
+import { CloudflarePages, normalizeDomain, verifyPagesProject, type PagesProject } from './cloudflare/cloudflare-pages'
 import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub, getGithubAccessToken } from './github/github-auth'
 import { GithubRepositories } from './github/github-repositories'
 import { adoptSite, createSite, getSiteOutput, getSiteSnapshot } from './site/site-project'
@@ -759,6 +759,70 @@ function registerIpcHandlers(): void {
     verifyPagesProject(project, { ...repo, output })
   }
   const siteDeployment = new SiteDeployment(githubRepositories, pages, sitePublish, getWorkspaceRoot, verifyPages)
+  let domainCreationInFlight = false
+  const domainContext = async (root: unknown) => {
+    const workspace = currentSiteWorkspace(root)
+    const record = readRelease(workspace)
+    if (!record.cloudflare || !record.target || !record.commitSha) throw new Error('请先在发布记录中关联 Cloudflare Pages 项目。')
+    const credentials = await getCloudflareCredentials()
+    if (credentials.accountId !== record.cloudflare.accountId) throw new Error('当前 Cloudflare 账号与关联项目不一致，请切换账号。')
+    const binding = record.cloudflare
+    const ensure = async () => {
+      const latest = readRelease(currentSiteWorkspace(root))
+      if (latest.cloudflare?.accountId !== binding.accountId || latest.cloudflare.project !== binding.project) throw new Error('工作区或 Cloudflare 项目已变化，请刷新后重试。')
+      const currentCredentials = await getCloudflareCredentials()
+      if (currentCredentials.accountId !== binding.accountId) throw new Error('Cloudflare 账号已变化，请刷新后重试。')
+      const final = readRelease(currentSiteWorkspace(root))
+      if (final.cloudflare?.accountId !== binding.accountId || final.cloudflare.project !== binding.project) throw new Error('工作区或 Cloudflare 项目已变化，请刷新后重试。')
+    }
+    const { project } = await pages.project(binding.accountId, binding.project)
+    await ensure()
+    if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.pages\.dev$/i.test(project.subdomain)) throw new Error('无法确认 Pages 默认域名，请检查 Cloudflare 项目。')
+    return { workspace, binding, subdomain: project.subdomain, ensure }
+  }
+  ipcMain.handle(IPC.SITE_DOMAINS_LIST, (_event, root: unknown) => releaseAction(async () => {
+    const ctx = await domainContext(root)
+    const domains = await pages.domains(ctx.binding.accountId, ctx.binding.project); await ctx.ensure()
+    let pending = readRelease(ctx.workspace).pendingDomain
+    if (pending && pending.accountId === ctx.binding.accountId && pending.project === ctx.binding.project && domains.some(item => item.name === pending!.name) && !domainCreationInFlight) {
+      sitePublish.setPendingDomain(ctx.workspace, undefined); pending = undefined
+    }
+    return { ...ctx.binding, subdomain: ctx.subdomain, domains, pending: pending?.accountId === ctx.binding.accountId && pending.project === ctx.binding.project ? pending : undefined }
+  }))
+  ipcMain.handle(IPC.SITE_DOMAINS_CHECK, (_event, root: unknown, name: unknown) => releaseAction(async () => {
+    const ctx = await domainContext(root)
+    const domain = await pages.domain(ctx.binding.accountId, ctx.binding.project, String(name)); await ctx.ensure()
+    return domain
+  }))
+  ipcMain.handle(IPC.SITE_DOMAINS_ADD, (_event, root: unknown, name: unknown, kind: unknown) => releaseAction(async () => {
+    if (domainCreationInFlight) throw new Error('域名添加正在进行。')
+    domainCreationInFlight = true
+    try {
+      const ctx = await domainContext(root)
+      if (kind !== 'root' && kind !== 'subdomain') throw new Error('请选择根域名或子域名。')
+      const normalized = normalizeDomain(name)
+      const record = readRelease(ctx.workspace)
+      if (record.pendingDomain) throw new Error(`上次在项目 ${record.pendingDomain.project} 添加 ${record.pendingDomain.name} 的结果待确认，请先切回对应账号和项目检查。`)
+      const existing = await pages.domains(ctx.binding.accountId, ctx.binding.project); await ctx.ensure()
+      const found = existing.find(item => item.name === normalized)
+      if (found) return { domain: found, subdomain: ctx.subdomain }
+      sitePublish.setPendingDomain(ctx.workspace, { ...ctx.binding, name: normalized, kind })
+      try {
+        const domain = await pages.addDomain(ctx.binding.accountId, ctx.binding.project, normalized); await ctx.ensure()
+        sitePublish.setPendingDomain(ctx.workspace, undefined)
+        return { domain, subdomain: ctx.subdomain }
+      } catch (error) { throw new Error(`${error instanceof Error ? error.message : '添加失败。'} 添加结果待确认，请刷新域名列表。`) }
+    } finally { domainCreationInFlight = false }
+  }))
+  ipcMain.handle(IPC.SITE_DOMAINS_CLEAR_PENDING, (_event, root: unknown) => releaseAction(async () => {
+    if (domainCreationInFlight) throw new Error('域名添加正在进行，请稍候。')
+    const ctx = await domainContext(root)
+    const pending = readRelease(ctx.workspace).pendingDomain
+    if (!pending || pending.accountId !== ctx.binding.accountId || pending.project !== ctx.binding.project) throw new Error('没有属于当前项目的待确认域名。')
+    const domains = await pages.domains(ctx.binding.accountId, ctx.binding.project); await ctx.ensure()
+    if (domains.some(item => item.name === pending.name)) throw new Error('域名已存在，请刷新列表查看。')
+    sitePublish.setPendingDomain(ctx.workspace, undefined)
+  }))
   ipcMain.handle(IPC.SITE_RELEASE_GET, (_event, root: unknown) => releaseAction(() => readRelease(currentSiteWorkspace(root))))
   ipcMain.handle(IPC.SITE_AGENT_RELEASE_GET, (_event, root: unknown) => siteAgentActions.isPublishing(currentSiteWorkspace(root)))
   ipcMain.handle(IPC.SITE_RELEASE_PREPARE, (_event, root: unknown, id: unknown, branch: unknown, acceptReadme: unknown) => releaseAction(() => sitePublish.prepare(currentSiteWorkspace(root), id as number, branch as string, acceptReadme === true)))

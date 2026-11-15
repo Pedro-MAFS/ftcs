@@ -111,6 +111,10 @@ const api = {
     return () => ipcRenderer.removeListener(IPC.SITE_SOURCE_EVENT, listener)
   },
   getSiteRelease: (root: string): Promise<{ ok: true; value: ReleaseRecord } | { ok: false; message: string }> => ipcRenderer.invoke(IPC.SITE_RELEASE_GET, root),
+  listSiteDomains: (root: string) => ipcRenderer.invoke(IPC.SITE_DOMAINS_LIST, root),
+  addSiteDomain: (root: string, name: string, kind: 'root' | 'subdomain') => ipcRenderer.invoke(IPC.SITE_DOMAINS_ADD, root, name, kind),
+  checkSiteDomain: (root: string, name: string) => ipcRenderer.invoke(IPC.SITE_DOMAINS_CHECK, root, name),
+  clearPendingSiteDomain: (root: string) => ipcRenderer.invoke(IPC.SITE_DOMAINS_CLEAR_PENDING, root),
   getAgentSiteRelease: (root: string): Promise<boolean> => ipcRenderer.invoke(IPC.SITE_AGENT_RELEASE_GET, root),
   onAgentSiteRelease: (callback: (value: { root: string; running: boolean }) => void): (() => void) => {
     const listener = (_event: unknown, value: { root: string; running: boolean }) => callback(value)

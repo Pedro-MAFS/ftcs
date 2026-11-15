@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { CloudflarePages, verifyPagesProject } from './cloudflare-pages.ts'
+import { CloudflarePages, normalizeDomain, verifyPagesProject } from './cloudflare-pages.ts'
 
 const previous = globalThis.fetch
 const project = { name: 'my-site', subdomain: 'my-site.pages.dev', production_branch: 'main', source: { type: 'github', config: { owner: 'owner', repo_name: 'site', repo_id: '1', production_deployments_enabled: true } }, build_config: { build_command: 'npm run build', destination_dir: 'dist' }, canonical_deployment: { id: 'current' } }
@@ -8,6 +8,45 @@ const api = () => new CloudflarePages(async () => ({ accessToken: 'secret', acco
 const account = 'a'.repeat(32)
 const sha = 'f'.repeat(40)
 const deployment = (id: string, commit: string, env = 'production') => ({ id, environment: env, url: 'https://example.pages.dev', latest_stage: { name: 'deploy', status: 'success' }, deployment_trigger: { metadata: { commit_hash: commit, branch: 'main' } } })
+
+test('validates and normalizes custom domain names', () => {
+  assert.equal(normalizeDomain(' WWW.Example.com '), 'www.example.com')
+  assert.equal(normalizeDomain('例子.com'), 'xn--fsqu00a.com')
+  for (const bad of ['http://example.com', 'example.com:443', '*.example.com', '127.0.0.1', 'localhost', 'a..com', '-bad.com', 'example.com/path']) assert.throws(() => normalizeDomain(bad))
+})
+
+test('lists, adds and checks Pages domains with validation data', async () => {
+  const calls: Array<{ url: string; method: string; body: unknown }> = []
+  const raw = { name: 'www.example.com', status: 'pending', validation_data: { method: 'txt', status: 'pending', txt_name: '_acme.example.com', txt_value: 'challenge' }, verification_data: { status: 'pending' } }
+  globalThis.fetch = async (input, init) => {
+    const url = String(input), method = init?.method || 'GET'
+    calls.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+    return Response.json({ success: true, result: url.includes('?') ? [raw] : raw, result_info: { total_pages: 1 } })
+  }
+  try {
+    const client = api()
+    const list = await client.domains(account, 'my-site')
+    assert.equal(list[0]?.validation?.txtValue, 'challenge')
+    assert.equal((await client.addDomain(account, 'my-site', 'WWW.Example.com')).name, 'www.example.com')
+    assert.equal((await client.domain(account, 'my-site', 'www.example.com')).status, 'pending')
+    assert.deepEqual(calls[1]?.body, { name: 'www.example.com' })
+    assert.match(calls[2]!.url, /\/domains\/www\.example\.com$/)
+  } finally { globalThis.fetch = previous }
+})
+
+test('reads all domain pages and rejects an unauthorized account', async () => {
+  const urls: string[] = []
+  globalThis.fetch = async input => {
+    const url = new URL(String(input)); urls.push(url.href)
+    const page = Number(url.searchParams.get('page') || '1')
+    return Response.json({ success: true, result: [{ name: page === 1 ? 'www.example.com' : 'shop.example.com', status: 'active' }], result_info: { total_pages: 2 } })
+  }
+  try {
+    assert.deepEqual((await api().domains(account, 'my-site')).map(item => item.name), ['www.example.com', 'shop.example.com'])
+    assert.equal(urls.length, 2)
+    await assert.rejects(api().domains('b'.repeat(32), 'my-site'), /账号已变化/)
+  } finally { globalThis.fetch = previous }
+})
 
 test('requires matching GitHub repository, branch and build settings', async () => {
   globalThis.fetch = async () => Response.json({ success: true, result: project })

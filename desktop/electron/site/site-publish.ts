@@ -7,7 +7,7 @@ import { buildSiteSnapshot, collectSiteSnapshot, type PublishSnapshot } from './
 
 type Target = { id: number; owner: string; name: string; fullName: string; branch: string; private: boolean }
 type RecordedFile = { path: string; sha: string; mode: string }
-export type ReleaseRecord = { version: 1; createdRepositories: string[]; target?: Target; commitSha?: string; snapshotHash?: string; outputDir?: string; pending?: { target: Target; base: string; files: RecordedFile[]; snapshotHash?: string; outputDir?: string }; pendingPages?: { accountId: string; project: string; commitSha: string }; pendingDeployment?: { accountId: string; project: string; commitSha: string; requestedAt: string; deploymentId?: string }; cloudflare?: { accountId: string; project: string }; history?: Array<{ target: Target; commitSha: string; at: string }>; lastOnline?: { target: Target; commitSha: string; accountId: string; project: string; deploymentId: string; url: string; confirmedAt: string } }
+export type ReleaseRecord = { version: 1; createdRepositories: string[]; target?: Target; commitSha?: string; snapshotHash?: string; outputDir?: string; pending?: { target: Target; base: string; files: RecordedFile[]; snapshotHash?: string; outputDir?: string }; pendingPages?: { accountId: string; project: string; commitSha: string }; pendingDomain?: { accountId: string; project: string; name: string; kind: 'root' | 'subdomain' }; pendingDeployment?: { accountId: string; project: string; commitSha: string; requestedAt: string; deploymentId?: string }; cloudflare?: { accountId: string; project: string }; history?: Array<{ target: Target; commitSha: string; at: string }>; lastOnline?: { target: Target; commitSha: string; accountId: string; project: string; deploymentId: string; url: string; confirmedAt: string } }
 export type ReleaseRecovery = ReleaseRecord & { recovery: 'matched' | 'unchanged' | 'none' }
 export type PublishPreview = { id: string; target: Target; head: string; hash: string; files: Array<{ path: string; size: number; change: '新增' | '修改' | '未变化' }>; deleted: string[]; log: string; noChanges: boolean }
 type Ready = { id: string; root: string; repository: GithubRepository; branch: string; head: string; output: string; snapshot: PublishSnapshot; additions: Array<{ path: string; contents: string }>; deletions: Array<{ path: string }> }
@@ -65,6 +65,15 @@ export class SitePublish {
     root = this.assertRoot(root)
     const record = readRelease(root)
     if (!record.createdRepositories.includes(fullName)) record.createdRepositories.push(fullName)
+    saveRelease(root, record)
+  }
+  setPendingDomain(root: string, pending: ReleaseRecord['pendingDomain']): void {
+    if (this.busy) throw new Error('已有发布操作正在进行，请稍候。')
+    root = this.assertRoot(root)
+    const record = readRelease(root)
+    if (pending && (record.pendingDomain || record.cloudflare?.accountId !== pending.accountId || record.cloudflare?.project !== pending.project)) throw new Error('域名添加状态或项目已变化，请刷新后重试。')
+    if (pending) record.pendingDomain = pending
+    else delete record.pendingDomain
     saveRelease(root, record)
   }
   async prepare(root: string, repositoryId: number, branch: string, acceptInitialReadme = false): Promise<PublishPreview> {

@@ -1,3 +1,6 @@
+import { domainToASCII } from 'node:url'
+import { isIP } from 'node:net'
+
 type Credentials = { accessToken: string; accountId: string }
 type PageInfo = { total_pages?: number; per_page?: number }
 type CloudflareResponse<T> = { success?: boolean; result?: T; result_info?: PageInfo; errors?: Array<{ code?: unknown; message?: unknown }> }
@@ -18,6 +21,21 @@ type Deployment = { id?: string; environment?: string; url?: string; created_on?
 type Project = { name?: string; subdomain?: string; production_branch?: string; source?: { type?: string; config?: { owner?: string; repo_name?: string; repo_id?: string | number; production_branch?: string; production_deployments_enabled?: boolean } }; build_config?: { build_command?: string; destination_dir?: string; root_dir?: string }; canonical_deployment?: Deployment }
 export type PagesProject = { name: string; subdomain: string; owner: string; repo: string; repoId: string; branch: string; buildCommand: string; output: string; rootDir: string; autoDeploy: boolean | null; type: string }
 export type PagesStatus = { state: 'waiting' | 'building' | 'success' | 'failed' | 'skipped' | 'unknown'; message: string; deploymentId?: string; deploymentUrl?: string; productionUrl?: string; productionCurrent?: boolean; createdAt?: string }
+export type PagesDomain = { name: string; status: string; validation?: { method?: string; status?: string; error?: string; txtName?: string; txtValue?: string }; verification?: { status?: string; error?: string } }
+type RawDomain = { name?: unknown; status?: unknown; validation_data?: { method?: unknown; status?: unknown; error_message?: unknown; txt_name?: unknown; txt_value?: unknown }; verification_data?: { status?: unknown; error_message?: unknown } }
+export function normalizeDomain(input: unknown): string {
+  if (typeof input !== 'string' || !input.trim() || /[\s/:?#@*\\]/.test(input.trim())) throw new Error('请输入完整域名，不要包含协议、路径、端口或通配符。')
+  const value = domainToASCII(input.trim().toLowerCase())
+  const labels = value.split('.')
+  if (!value || value.length > 253 || labels.length < 2 || isIP(value) || labels.some(label => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) || /^\d+$/.test(labels.at(-1)!)) throw new Error('请输入有效的公开域名。')
+  return value
+}
+function parseDomain(raw: RawDomain): PagesDomain {
+  const str = (x: unknown) => typeof x === 'string' ? x.slice(0, 1000) : undefined
+  const name = normalizeDomain(raw.name)
+  const v = raw.validation_data, w = raw.verification_data
+  return { name, status: str(raw.status) || 'unknown', validation: v ? { method: str(v.method), status: str(v.status), error: str(v.error_message), txtName: str(v.txt_name), txtValue: str(v.txt_value) } : undefined, verification: w ? { status: str(w.status), error: str(w.error_message) } : undefined }
+}
 
 export function verifyPagesProject(project: PagesProject, expected: { id: number; owner: string; name: string; branch: string; output: string }): void {
   if (project.type !== 'github' || project.owner.toLowerCase() !== expected.owner.toLowerCase() || project.repo.toLowerCase() !== expected.name.toLowerCase() || project.repoId && project.repoId !== String(expected.id)) throw new Error('Cloudflare 项目关联的 GitHub 仓库不匹配，请在控制台调整或选择其他项目。')
@@ -67,6 +85,27 @@ export class CloudflarePages {
     if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new Error('Cloudflare 项目名称无效。')
     const data = await this.request<Project>(accountId, `/projects/${encodeURIComponent(name)}`)
     return { project: this.parse(data.result), raw: data.result }
+  }
+  async domains(accountId: string, project: string): Promise<PagesDomain[]> {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(project)) throw new Error('Cloudflare 项目名称无效。')
+    const result: PagesDomain[] = []
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const data = await this.request<RawDomain[]>(accountId, `/projects/${encodeURIComponent(project)}/domains?${pageQuery(page)}`)
+      if (!Array.isArray(data.result)) throw new Error('Cloudflare 域名列表无效。')
+      result.push(...data.result.map(parseDomain))
+      if (lastPage(data.result_info, page, data.result.length)) return result
+    }
+    throw new Error('Cloudflare 域名过多，无法完整读取。')
+  }
+  async domain(accountId: string, project: string, name: string): Promise<PagesDomain> {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(project)) throw new Error('Cloudflare 项目名称无效。')
+    const data = await this.request<RawDomain>(accountId, `/projects/${encodeURIComponent(project)}/domains/${encodeURIComponent(normalizeDomain(name))}`)
+    return parseDomain(data.result)
+  }
+  async addDomain(accountId: string, project: string, name: string): Promise<PagesDomain> {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(project)) throw new Error('Cloudflare 项目名称无效。')
+    const data = await this.request<RawDomain>(accountId, `/projects/${encodeURIComponent(project)}/domains`, { method: 'POST', body: JSON.stringify({ name: normalizeDomain(name) }) })
+    return parseDomain(data.result)
   }
   async create(accountId: string, name: string, repo: { id: number; owner: string; name: string; branch: string }, output: string, nodeVersion: string): Promise<PagesProject> {
     if (!/^[a-z0-9][a-z0-9-]{0,57}$/.test(name) || !/^(?:22|24|26)$/.test(nodeVersion)) throw new Error('项目名只能包含小写字母、数字和横线；Node 版本请选择 22、24 或 26。')

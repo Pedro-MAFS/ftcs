@@ -7,6 +7,8 @@ interface SiteRelease { version: 1; createdRepositories: string[]; target?: { id
 interface SitePublishPreview { id: string; target: { fullName: string; branch: string; private: boolean }; head: string; hash: string; files: Array<{ path: string; size: number; change: '新增' | '修改' | '未变化' }>; deleted: string[]; log: string; noChanges: boolean }
 interface PagesProject { name: string; subdomain: string; owner: string; repo: string; repoId: string; branch: string; buildCommand: string; output: string; rootDir: string; autoDeploy: boolean | null; type: string }
 interface PagesStatus { state: 'waiting' | 'building' | 'success' | 'failed' | 'skipped' | 'unknown'; message: string; deploymentId?: string; deploymentUrl?: string; productionUrl?: string; productionCurrent?: boolean }
+interface PagesDomain { name: string; status: string; validation?: { method?: string; status?: string; error?: string; txtName?: string; txtValue?: string }; verification?: { status?: string; error?: string } }
+interface SiteDomains { accountId: string; project: string; subdomain: string; domains: PagesDomain[]; pending?: { name: string; kind: 'root' | 'subdomain' } }
 type SiteResult<T> = { ok: true; value: T } | { ok: false; message: string }
 import type { AppStatus, OpenCodeActionResult } from './app'
 import type { AuthActionResult, AuthSessionSnapshot } from './auth'
@@ -980,6 +982,10 @@ declare global {
       getSiteSource: (root: string) => Promise<SiteSourceSnapshot>
       onSiteSource: (callback: (snapshot: SiteSourceSnapshot) => void) => () => void
       getSiteRelease: (root: string) => Promise<SiteResult<SiteRelease>>
+      listSiteDomains: (root: string) => Promise<SiteResult<SiteDomains>>
+      addSiteDomain: (root: string, name: string, kind: 'root' | 'subdomain') => Promise<SiteResult<{ domain: PagesDomain; subdomain: string }>>
+      checkSiteDomain: (root: string, name: string) => Promise<SiteResult<PagesDomain>>
+      clearPendingSiteDomain: (root: string) => Promise<SiteResult<void>>
       getAgentSiteRelease: (root: string) => Promise<boolean>
       onAgentSiteRelease: (callback: (value: { root: string; running: boolean }) => void) => () => void
       prepareSiteRelease: (root: string, id: number, branch: string, acceptReadme: boolean) => Promise<SiteResult<SitePublishPreview>>

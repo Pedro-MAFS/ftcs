@@ -31,6 +31,21 @@ const make = () => {
   return { root, project }
 }
 
+test('persists uncertain domain creation and requires the bound project', () => {
+  const { root } = make()
+  const accountId = 'a'.repeat(32)
+  const publisher = new SitePublish({} as never, async () => null, () => root)
+  try {
+    fs.writeFileSync(path.join(root, '.ftcs/site-release.json'), JSON.stringify({ version: 1, createdRepositories: [], cloudflare: { accountId, project: 'site' } }))
+    assert.throws(() => publisher.setPendingDomain(root, { accountId, project: 'other', name: 'www.example.com', kind: 'subdomain' }), /项目已变化/)
+    publisher.setPendingDomain(root, { accountId, project: 'site', name: 'www.example.com', kind: 'subdomain' })
+    assert.equal(readRelease(root).pendingDomain?.name, 'www.example.com')
+    assert.throws(() => publisher.setPendingDomain(root, { accountId, project: 'site', name: 'shop.example.com', kind: 'subdomain' }), /状态或项目已变化/)
+    publisher.setPendingDomain(root, undefined)
+    assert.equal(readRelease(root).pendingDomain, undefined)
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
 test('agent publishes through the real snapshot and commit service', { timeout: 30000 }, async () => {
   const { root } = make()
   const repo = { id: 1, owner: 'owner', name: 'site', fullName: 'owner/site', private: true, defaultBranch: 'main', writeAccess: 'yes' as const }
