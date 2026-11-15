@@ -28,15 +28,18 @@ describe('useMainViewTabs', () => {
     assert.equal(pushes.length, 0)
   })
 
-  it('keeps the site tab pinned and reuses it when opened again', async () => {
-    const { tabs, pushes } = harness()
+  it('allows the default site tab to close and be reopened', async () => {
+    const { tabs } = harness()
     await tabs.openPageTab('site')
     await tabs.openPageTab('site')
-    const pushesBeforeClose = pushes.length
+    assert.equal(tabs.tabs.value.filter((tab) => tab.id === 'page:site').length, 1)
     await tabs.closeTab('page:site')
+    assert.equal(tabs.tabs.value.some((tab) => tab.id === 'page:site'), false)
+    assert.equal(tabs.activeId.value, 'page:email')
+    await tabs.openPageTab('site')
     assert.equal(tabs.tabs.value.filter((tab) => tab.id === 'page:site').length, 1)
     assert.equal(tabs.activeId.value, 'page:site')
-    assert.equal(pushes.length, pushesBeforeClose)
+    assert.ok(harness().tabs.tabs.value.some((tab) => tab.id === 'page:site'))
   })
 
   it('activates the pipeline landing page while keeping all default tabs open', async () => {

@@ -57,7 +57,7 @@ export function isBusinessPage(page: PageKey): page is BusinessPage {
 }
 
 export function isPinnedPageTab(id: string): boolean {
-  return id === 'page:home' || id === 'page:site'
+  return id === 'page:home'
 }
 
 function pageId(page: PageKey): `page:${PageKey}` {
