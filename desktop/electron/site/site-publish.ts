@@ -97,8 +97,8 @@ export class SitePublish {
       if (controller.signal.aborted) throw new Error('构建检查已取消。')
       const record = readRelease(root)
       if (record.pending) throw new Error('上一次提交结果待确认，请先检查发布记录。')
-      if (record.pendingPages) throw new Error('Cloudflare 项目创建结果待确认，请先检查发布记录。')
-      if (record.pendingDeployment) throw new Error('Cloudflare 构建请求结果待确认，请先检查发布记录。')
+      if (record.pendingPages) throw new Error('Cloudflare 项目创建结果待确认，请先检查工作区独立站。')
+      if (record.pendingDeployment) throw new Error('Cloudflare 构建请求结果待确认，请先检查工作区独立站。')
       const bound = record.target?.id === repositoryId && record.target.branch === branch && !!record.commitSha
       if (bound && record.commitSha !== remote.head) throw new Error('GitHub 分支已被其他操作修改，请先协调远端内容。')
       const initialReadme = createHash('sha1').update(`blob ${Buffer.byteLength(`# ${remote.repository.name}\n`)}\0# ${remote.repository.name}\n`).digest('hex')
@@ -149,8 +149,8 @@ export class SitePublish {
       if (remote.head !== ready.head || remote.repository.fullName !== ready.repository.fullName) throw new Error('仓库或分支已变化，请重新检查。')
       const record = readRelease(root)
       if (record.pending) throw new Error('上一次提交结果待确认，请先检查发布记录。')
-      if (record.pendingPages) throw new Error('Cloudflare 项目创建结果待确认，请先检查发布记录。')
-      if (record.pendingDeployment) throw new Error('Cloudflare 构建请求结果待确认，请先检查发布记录。')
+      if (record.pendingPages) throw new Error('Cloudflare 项目创建结果待确认，请先检查工作区独立站。')
+      if (record.pendingDeployment) throw new Error('Cloudflare 构建请求结果待确认，请先检查工作区独立站。')
       const nextTarget = target(remote.repository, ready.branch)
       if (!ready.additions.length && !ready.deletions.length) {
         if (record.target?.id !== nextTarget.id || record.target.branch !== nextTarget.branch) delete record.cloudflare

@@ -104,7 +104,7 @@ watch(() => [props.root, props.accountId, props.project], () => { sequence++; da
       <p v-else><label>选择域名类型以查看指引： <select v-model="kind" class="local-input"><option value="" disabled>选择域名类型</option><option value="subdomain">子域名</option><option value="root">根域名</option></select></label></p>
       <p v-if="error" role="alert">{{ error }}</p><p v-if="note" role="status">{{ note }}</p>
       <template v-if="kind === 'root'"><p>根域名需要先接入当前 Cloudflare 账号的 DNS。请在 Cloudflare 添加域名、核对已有 DNS 记录，再到注册商按 Cloudflare 提供的地址修改 nameserver。域名可继续在原注册商续费。</p><p>返回后，如添加未成功，请重新添加；已添加的域名可在列表检查状态。</p><button class="btn primary" @click="connectDns">去连接域名</button></template>
-      <template v-else-if="selected"><p>请在当前 DNS 服务商添加以下记录（部分服务商只需填写主机记录部分）：</p><p>类型：CNAME</p><p>名称：{{ selected.name }} <button class="text-button" @click="copy(selected.name)">复制</button></p><p>记录值：{{ data?.subdomain || '请刷新列表确认' }} <button v-if="data?.subdomain" class="text-button" @click="copy(data.subdomain)">复制</button></p><p>同名记录存在时请先核对现有业务，FTCS 不会修改 DNS。</p></template>
+      <template v-else-if="kind === 'subdomain' && selected"><p>请在当前 DNS 服务商添加以下记录（部分服务商只需填写主机记录部分）：</p><p>类型：CNAME</p><p>名称：{{ selected.name }} <button class="text-button" @click="copy(selected.name)">复制</button></p><p>记录值：{{ data?.subdomain || '请刷新列表确认' }} <button v-if="data?.subdomain" class="text-button" @click="copy(data.subdomain)">复制</button></p><p>同名记录存在时请先核对现有业务，FTCS 不会修改 DNS。</p></template>
       <template v-if="selected"><p>Cloudflare 状态：{{ label(selected.status) }}</p><p v-if="selected.validation?.status">验证状态：{{ selected.validation.status }} {{ selected.validation.error }}</p><p v-if="selected.verification?.status">所有权状态：{{ selected.verification.status }} {{ selected.verification.error }}</p><template v-if="selected.validation?.method === 'txt' && selected.validation.txtName && selected.validation.txtValue"><p>TXT 名称：{{ selected.validation.txtName }} <button class="text-button" @click="copy(selected.validation.txtName!)">复制</button></p><p>TXT 值：{{ selected.validation.txtValue }} <button class="text-button" @click="copy(selected.validation.txtValue!)">复制</button></p></template><p v-if="selected.status === 'active'">Cloudflare 已激活；各地 DNS 生效情况可能不同。默认模板如需 sitemap，请设置 SITE_URL 并重新构建。</p><button v-if="kind === 'subdomain'" class="btn secondary" :disabled="busy" @click="check">检查配置</button></template>
       <button class="btn secondary" :disabled="busy" @click="open = false">关闭</button>
     </div></div></Teleport>
@@ -113,5 +113,16 @@ watch(() => [props.root, props.accountId, props.project], () => { sequence++; da
 
 <style scoped>
 .domain-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0, 0, 0, .45); }
-.domain-dialog { width: min(620px, 100%); max-height: 90vh; overflow-y: auto; border-radius: 12px; padding: 24px; background: var(--surface, #fff); color: var(--text, #242424); box-shadow: 0 16px 48px rgba(0, 0, 0, .22); }
+.domain-dialog { width: min(620px, 100%); max-height: 90vh; overflow-y: auto; border-radius: 12px; padding: 24px; background: var(--bg-panel); color: var(--text); box-shadow: 0 16px 48px rgba(0, 0, 0, .22); }
+.inline-box { margin-top: 12px; padding: 14px; border-radius: 6px; background: var(--bg-hover); }
+.section-header,.local-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.local-row { padding: 12px 0; border-top: 1px solid var(--border); }
+.site-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+p { margin: 6px 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+.btn { display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.secondary { color: var(--text); background: var(--bg-elevated); border: 1px solid var(--border); }
+.primary { color: white; background: var(--accent); border: 1px solid var(--accent); }
+.text-button { color: var(--accent); background: none; border: 0; cursor: pointer; font-size: 12px; }
+.local-input { min-width: 180px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elevated); color: var(--text); padding: 8px; }
 </style>
