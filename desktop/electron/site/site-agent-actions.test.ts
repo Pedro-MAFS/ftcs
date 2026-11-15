@@ -94,6 +94,26 @@ test('ended sessions cannot start operations or commit after preparing', async (
   assert.equal(f.counts().commits, 0)
 })
 
+test('passes domain parameters and session validity to the shared domain service', async () => {
+  const run = () => ({ id: '', state: 'idle' as const, message: '', log: '' })
+  const state: SiteRuntimeSnapshot = { workspaceRoot: '/work', sequence: 1, outputDir: 'dist', dependencies: 'unknown', install: run(), build: run(), preview: run() }
+  const calls: unknown[] = []
+  const actions = new SiteAgentActions({
+    snapshot: () => state, startPreview: () => '', stopPreview: async () => {}, build: () => '', openPreview: async () => {},
+    release: () => ({ version: 1, createdRepositories: [] }), connections: async () => ({ github: false, cloudflare: false }),
+    prepare: async () => { throw new Error('unused') }, commit: async () => { throw new Error('unused') }, notify: () => {},
+    domains: async (name, root, args, active) => { calls.push({ name, root, args, active: active() }); return { ok: true } },
+  })
+  await actions.execute('site_domain_add', '/work', () => true, { domain_name: 'www.example.com', domain_kind: 'subdomain' })
+  await actions.execute('site_domain_delete', '/work', () => true, { domain_name: 'www.example.com' })
+  assert.deepEqual(calls, [
+    { name: 'site_domain_add', root: '/work', args: { domain_name: 'www.example.com', domain_kind: 'subdomain' }, active: true },
+    { name: 'site_domain_delete', root: '/work', args: { domain_name: 'www.example.com' }, active: true },
+  ])
+  await assert.rejects(actions.execute('site_domain_delete', '/work', () => false, { domain_name: 'www.example.com' }), /会话已结束/)
+  assert.equal(calls.length, 2)
+})
+
 test('does not commit a failed build and reports uncertain commits for recovery', async () => {
   for (const stage of ['prepare', 'commit'] as const) {
     const run = () => ({ id: '', state: 'idle' as const, message: '', log: '' })

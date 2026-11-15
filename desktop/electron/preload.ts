@@ -115,6 +115,12 @@ const api = {
   addSiteDomain: (root: string, name: string, kind: 'root' | 'subdomain') => ipcRenderer.invoke(IPC.SITE_DOMAINS_ADD, root, name, kind),
   checkSiteDomain: (root: string, name: string) => ipcRenderer.invoke(IPC.SITE_DOMAINS_CHECK, root, name),
   clearPendingSiteDomain: (root: string) => ipcRenderer.invoke(IPC.SITE_DOMAINS_CLEAR_PENDING, root),
+  deleteSiteDomain: (root: string, name: string) => ipcRenderer.invoke(IPC.SITE_DOMAINS_DELETE, root, name),
+  onSiteDomainsChanged: (callback: (value: { root: string }) => void): (() => void) => {
+    const listener = (_event: unknown, value: { root: string }) => callback(value)
+    ipcRenderer.on(IPC.SITE_DOMAINS_EVENT, listener)
+    return () => ipcRenderer.removeListener(IPC.SITE_DOMAINS_EVENT, listener)
+  },
   getAgentSiteRelease: (root: string): Promise<boolean> => ipcRenderer.invoke(IPC.SITE_AGENT_RELEASE_GET, root),
   onAgentSiteRelease: (callback: (value: { root: string; running: boolean }) => void): (() => void) => {
     const listener = (_event: unknown, value: { root: string; running: boolean }) => callback(value)

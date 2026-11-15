@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{ root: string; accountId: string; project: string }>()
 type Data = Extract<Awaited<ReturnType<NonNullable<Window['ftcs']>['listSiteDomains']>>, { ok: true }>['value']
@@ -14,6 +14,9 @@ const kind = ref<'root' | 'subdomain' | ''>('')
 const selected = ref<Domain | null>(null)
 const checkedAt = ref('')
 const showRetry = ref(false)
+const deleting = ref<Domain | null>(null)
+let removeListener: (() => void) | undefined
+let refreshQueued = false
 let sequence = 0
 const current = () => `${props.root}\0${props.accountId}\0${props.project}`
 function label(status: string): string {
@@ -80,6 +83,23 @@ async function retryPending() {
     if (retryError && context === current()) error.value = retryError
   }
 }
+async function removeDomain() {
+  if (!window.ftcs || !deleting.value || busy.value) return
+  const context = current(), request = ++sequence, domainName = deleting.value.name
+  busy.value = true; error.value = ''; note.value = ''
+  try {
+    const result = await window.ftcs.deleteSiteDomain(props.root, domainName)
+    if (request !== sequence || context !== current()) return
+    if (result.ok) { note.value = result.value.message; deleting.value = null; open.value = false }
+    else error.value = result.message
+  } catch { if (request === sequence) error.value = '删除结果待确认，请刷新域名列表或前往 Cloudflare 检查。' }
+  finally { if (request === sequence) busy.value = false }
+  if (request === sequence && context === current()) {
+    const removalError = error.value
+    await refresh()
+    if (removalError && context === current()) error.value = removalError
+  }
+}
 function showDomain(domain: Domain) { selected.value = domain; name.value = domain.name; kind.value = ''; open.value = true; error.value = ''; note.value = '' }
 async function openDomain(domain: Domain) { if (domain.status === 'active' && /^[a-z0-9.-]+$/.test(domain.name)) await window.ftcs?.openExternal(`https://${domain.name}`) }
 async function connectDns() {
@@ -88,15 +108,19 @@ async function connectDns() {
   await window.ftcs.openExternal(`https://dash.cloudflare.com${account}`)
 }
 async function copy(value: string) { try { await navigator.clipboard.writeText(value); note.value = '已复制。' } catch { note.value = '无法复制，请手动复制。' } }
-watch(() => [props.root, props.accountId, props.project], () => { sequence++; data.value = null; busy.value = false; selected.value = null; open.value = false; error.value = ''; note.value = ''; checkedAt.value = ''; showRetry.value = false; void refresh() }, { immediate: true })
+watch(() => [props.root, props.accountId, props.project], () => { sequence++; data.value = null; busy.value = false; selected.value = null; deleting.value = null; open.value = false; error.value = ''; note.value = ''; checkedAt.value = ''; showRetry.value = false; void refresh() }, { immediate: true })
+watch(busy, value => { if (!value && refreshQueued) { refreshQueued = false; void refresh() } })
+onMounted(() => { removeListener = window.ftcs?.onSiteDomainsChanged(value => { if (value.root !== props.root) return; if (busy.value) refreshQueued = true; else void refresh() }) })
+onUnmounted(() => { sequence++; removeListener?.() })
 </script>
 
 <template>
   <div class="inline-box">
     <div class="section-header"><div><strong>自有域名</strong><p>Cloudflare Pages · {{ project }}<span v-if="data?.subdomain"> · {{ data.subdomain }}</span></p></div><div class="site-actions"><button class="btn secondary" :disabled="busy" @click="refresh">刷新列表</button><button class="btn primary" :disabled="busy" @click="open = true; selected = null; name = ''; kind = ''; error = ''; note = ''">添加域名</button></div></div>
-    <p v-if="error" role="alert">{{ error }}</p><p v-if="checkedAt">最近检查：{{ checkedAt }}</p>
+    <p v-if="error" role="alert">{{ error }}</p><p v-if="note" role="status">{{ note }}</p><p v-if="checkedAt">最近检查：{{ checkedAt }}</p>
     <p v-if="data && !data.domains.length">尚未添加自有域名。</p>
-    <div v-for="domain in data?.domains" :key="domain.name" class="local-row"><div><strong>{{ domain.name }}</strong><p>{{ label(domain.status) }}<span v-if="domain.validation?.error"> · {{ domain.validation.error }}</span><span v-if="domain.verification?.error"> · {{ domain.verification.error }}</span></p></div><div class="site-actions"><button class="btn secondary" @click="showDomain(domain)">查看配置</button><button class="btn secondary" :disabled="busy" @click="showDomain(domain); check()">检查配置</button><button v-if="domain.status === 'active'" class="btn secondary" @click="openDomain(domain)">打开网站</button></div></div>
+    <div v-for="domain in data?.domains" :key="domain.name" class="local-row"><div><strong>{{ domain.name }}</strong><p>{{ label(domain.status) }}<span v-if="domain.validation?.error"> · {{ domain.validation.error }}</span><span v-if="domain.verification?.error"> · {{ domain.verification.error }}</span></p></div><div class="site-actions"><button class="btn secondary" @click="showDomain(domain)">查看配置</button><button class="btn secondary" :disabled="busy" @click="showDomain(domain); check()">检查配置</button><button v-if="domain.status === 'active'" class="btn secondary" @click="openDomain(domain)">打开网站</button><button class="btn secondary" :disabled="busy" @click="deleting = domain; error = ''">删除</button></div></div>
+    <div v-if="deleting" class="inline-box"><strong>移除 {{ deleting.name }}？</strong><p>将从 Cloudflare Pages 移除域名关联，网站可能无法通过该域名访问；FTCS 不会主动修改 DNS，请自行检查相关记录。</p><div class="site-actions"><button class="btn primary" :disabled="busy" @click="removeDomain">确认移除</button><button class="btn secondary" :disabled="busy" @click="deleting = null">取消</button></div></div>
     <div v-if="data?.pending" class="inline-box"><strong>域名 {{ data.pending.name }} 的添加结果待确认</strong><p>请先刷新列表或到 Cloudflare 控制台检查；确认不存在后可重新添加。</p><button v-if="showRetry" class="btn secondary" :disabled="busy" @click="retryPending">我已检查，允许重新添加</button></div>
     <Teleport to="body"><div v-if="open" class="domain-overlay" @keydown.esc="!busy && (open = false)"><div class="domain-dialog" role="dialog" aria-modal="true" aria-label="自有域名配置">
       <strong>{{ selected ? '域名配置' : '添加自有域名' }}</strong>

@@ -41,6 +41,10 @@ export function registerTaskTools(server: McpServer) {
   ] as const) {
     server.tool(name, description, { _ticket: common._ticket }, (data) => call('site_execute', { ...data, name }))
   }
+  server.tool('site_domains_list', 'List custom domains and their Cloudflare status for the current website.', { _ticket: common._ticket }, (data) => call('site_execute', { ...data, name: 'site_domains_list' }))
+  server.tool('site_domain_check', 'Check a custom domain on the current website.', { domain_name: z.string().min(1).max(253), _ticket: common._ticket }, (data) => call('site_execute', { ...data, name: 'site_domain_check' }))
+  server.tool('site_domain_add', 'When explicitly requested by the user, add a root domain or subdomain to the current Cloudflare Pages project. This does not change DNS.', { domain_name: z.string().min(1).max(253), domain_kind: z.enum(['root', 'subdomain']), _ticket: common._ticket }, (data) => call('site_execute', { ...data, name: 'site_domain_add' }))
+  server.tool('site_domain_delete', 'When explicitly requested by the user, remove the specified custom domain from the current Cloudflare Pages project. This does not delete DNS records.', { domain_name: z.string().min(1).max(253), _ticket: common._ticket }, (data) => call('site_execute', { ...data, name: 'site_domain_delete' }))
   server.tool(
     'task_begin',
     'Start a desktop task after required inputs are selected. Reuse request_id when retrying. Use returned task_id and prepared inputs.',

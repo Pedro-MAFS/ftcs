@@ -12,7 +12,7 @@ test('site bridge requires a single-use host ticket for the matching session and
     authorize(identity) { if (!active || identity.sessionID !== 's1') throw new Error('会话无效'); return undefined },
     noteShellCall(identity, args) { shellCalls.push({ sessionID: identity.sessionID, command: args.command, workdir: args.workdir }) },
     noteReadCall(identity, args) { readCalls.push({ sessionID: identity.sessionID, filePath: args.filePath }) },
-    async siteTool(_identity, name) { executions++; return { name } },
+    async siteTool(_identity, name, args) { executions++; return { name, args } },
   }))
   const post = async (endpoint: string, key: string, body: unknown) => {
     const response = await fetch(`${bridge.url}/${endpoint}`, { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify(body) })
@@ -52,6 +52,15 @@ test('site bridge requires a single-use host ticket for the matching session and
       assert.equal((await post('site_execute', bridge.mcpKey, { _ticket: publishArgs._ticket, name: 'site_publish' })).status, 200)
       assert.equal((await post('site_execute', bridge.mcpKey, { _ticket: publishArgs._ticket, name: 'site_publish' })).status, 400)
       assert.equal(executions, 4)
+      const addArgs: Record<string, unknown> = { domain_name: 'www.example.com', domain_kind: 'subdomain' }
+      await hook['tool.execute.before']({ sessionID: 's1', callID: 'domain-add', tool: 'lead-store_site_domain_add' }, { args: addArgs })
+      assert.equal((await post('site_execute', bridge.mcpKey, { _ticket: addArgs._ticket, name: 'site_domain_add', domain_name: 'other.example.com', domain_kind: 'subdomain' })).status, 400)
+      const deleteArgs: Record<string, unknown> = { domain_name: 'www.example.com' }
+      await hook['tool.execute.before']({ sessionID: 's1', callID: 'domain-delete', tool: 'lead-store_site_domain_delete' }, { args: deleteArgs })
+      const deleted = await post('site_execute', bridge.mcpKey, { _ticket: deleteArgs._ticket, name: 'site_domain_delete', domain_name: 'www.example.com' })
+      assert.equal(deleted.status, 200)
+      assert.equal((deleted.body.value as { args: { domain_name: string } }).args.domain_name, 'www.example.com')
+      assert.equal(executions, 5)
       await hook['tool.execute.before']({ sessionID: 's1', callID: 'c5', tool: 'bash' }, { args: { command: 'pwd' } })
       assert.deepEqual(shellCalls, [{ sessionID: 's1', command: 'pwd', workdir: undefined }])
       await hook['tool.execute.before']({ sessionID: 's1', callID: 'c6', tool: 'read' }, { args: { filePath: '/tmp/selected file.png' } })

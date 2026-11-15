@@ -48,6 +48,17 @@ test('reads all domain pages and rejects an unauthorized account', async () => {
   } finally { globalThis.fetch = previous }
 })
 
+test('deletes only the specified Pages domain and accepts a null result', async () => {
+  let method = '', url = ''
+  globalThis.fetch = async (input, init) => { url = String(input); method = init?.method || ''; return Response.json({ success: true, result: null }) }
+  try {
+    await api().deleteDomain(account, 'my-site', 'WWW.Example.com')
+    assert.equal(method, 'DELETE')
+    assert.match(url, /\/projects\/my-site\/domains\/www\.example\.com$/)
+    await assert.rejects(api().deleteDomain(account, 'my-site', 'http://example.com'), /域名/)
+  } finally { globalThis.fetch = previous }
+})
+
 test('requires matching GitHub repository, branch and build settings', async () => {
   globalThis.fetch = async () => Response.json({ success: true, result: project })
   const current = (await api().project(account, 'my-site')).project

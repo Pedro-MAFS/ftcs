@@ -23,6 +23,8 @@ description: 按用户要求开发、修改、预览、构建或准备发布当�
 - 用户要求停止或关闭预览服务时调用 `lead-store_site_stop_preview`；停止可能需要时间，根据返回状态或 `lead-store_site_status` 确认结果。此操作停止服务，不会自动关闭浏览器标签。
 - 用户要求构建时调用 `lead-store_site_build`，用 `lead-store_site_status` 查询结果；启动不代表成功。已在运行时不要重复启动。依赖安装仍由页面处理。
 - 用户明确要求发布网站时调用 `lead-store_site_publish`，使用已确认的仓库和分支检查、构建并推送；首次发布、未连接账号或目标不可用时，引导用户在页面完成配置。告知用户 GitHub 推送结果；Cloudflare 部署状态以独立站页面为准，不要把推送成功当成网站已上线。提交结果待确认时引导用户检查发布记录，不要盲目重试。
+- 用户明确要求添加域名时调用 `lead-store_site_domain_add`，提供完整域名和用户确认的根域名或子域名类型；缺少信息时先提问，不从点号数量推断。子域名返回 CNAME 记录，告知用户自行配置；根域名引导用户将 DNS 接入当前 Cloudflare 账号。调用 `lead-store_site_domains_list` 或 `lead-store_site_domain_check` 查询实际状态，不把添加成功当作已激活。
+- 用户明确要求移除指定域名时调用 `lead-store_site_domain_delete`；不自行删除或修改 DNS，告知用户需自行核对 DNS 记录。结果不明时先查询域名列表，不盲目重试；域名不明确时先提问。
 - 仅在用户明确要求时推送或发布；不要输出凭据。不把独立站操作当成画像等业务任务，不调用其 task_begin/task_done。
 
 ## 交付

@@ -1,6 +1,6 @@
 // The host supplies sessionID/callID. Never take identity from model arguments.
 const lifecycle = new Set(['lead-store_task_begin', 'lead-store_task_done'])
-const siteTools = new Set(['lead-store_site_status', 'lead-store_site_preview', 'lead-store_site_open_preview', 'lead-store_site_stop_preview', 'lead-store_site_build', 'lead-store_site_publish'])
+const siteTools = new Set(['lead-store_site_status', 'lead-store_site_preview', 'lead-store_site_open_preview', 'lead-store_site_stop_preview', 'lead-store_site_build', 'lead-store_site_publish', 'lead-store_site_domains_list', 'lead-store_site_domain_check', 'lead-store_site_domain_add', 'lead-store_site_domain_delete'])
 const writes = new Set([
   'product_save',
   'inputs_ensure_dir',
@@ -59,7 +59,7 @@ export const TaskContext = async () => ({
         sessionID,
         callID,
         tool,
-        args: { product_id, lead_id, recipient_key, run_id, rounds, round },
+        args: { product_id, lead_id, recipient_key, run_id, rounds, round, ...(siteTools.has(tool) ? { domain_name: args.domain_name, domain_kind: args.domain_kind } : {}) },
       }),
     })
     const result = await response.json()

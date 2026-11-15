@@ -122,6 +122,8 @@ export const IPC = {
   SITE_DOMAINS_ADD: 'site:domains-add',
   SITE_DOMAINS_CHECK: 'site:domains-check',
   SITE_DOMAINS_CLEAR_PENDING: 'site:domains-clear-pending',
+  SITE_DOMAINS_DELETE: 'site:domains-delete',
+  SITE_DOMAINS_EVENT: 'site:domains-event',
   SITE_CREATE: 'site:create',
   SITE_ADOPT: 'site:adopt',
   SITE_OPEN_DIRECTORY: 'site:open-directory',

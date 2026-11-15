@@ -276,6 +276,7 @@ const githubRepositories = new GithubRepositories(getGithubAccessToken)
 const sitePublish = new SitePublish(githubRepositories, async () => resolveConfiguredNode() ?? (await resolveBestNode()).bestOk, getWorkspaceRoot)
 const pages = new CloudflarePages(getCloudflareCredentials)
 let pagesCreationInFlight = false
+let domainAction: ((name: string, root: string, args: Record<string, unknown>, stillActive: () => boolean) => Promise<unknown>) | undefined
 let sitePreviewTab: string | undefined
 async function openManagedSitePreview(root: string, id: string, stillActive: () => boolean = () => true): Promise<void> {
   const url = siteRuntime.previewUrl(root, id)
@@ -295,6 +296,7 @@ const siteAgentActions = new SiteAgentActions({
   prepare: (root, id, branch) => sitePublish.prepare(root, id, branch),
   commit: (root, id) => sitePublish.commit(root, id),
   notify: (root, running) => broadcastToWindows(IPC.SITE_AGENT_RELEASE_EVENT, { root, running }),
+  domains: (name, root, args, stillActive) => { if (!domainAction) throw new Error('域名管理不可用。'); return domainAction(name, root, args, stillActive) },
 })
 let runtime: OpenCodeRuntime | null = null
 let agentRunner: AgentRunController | null = null
@@ -317,7 +319,7 @@ function getAgentRunner(): AgentRunController {
       reloadRuntime: reloadOpenCodeRuntime,
       preflight: (kind, options) => runAgentPreflight(kind, { runtime, isAgentRunning: () => false }, options),
       refreshPlaces: () => runtime ? runtime.refreshPlacesMcp() : Promise.reject(new Error('服务未就绪')),
-      siteTool: (name, root, stillActive) => siteAgentActions.execute(name, root, stillActive),
+      siteTool: (name, root, stillActive, args) => siteAgentActions.execute(name, root, stillActive, args),
       lifecycle: true,
     })
   }
@@ -780,7 +782,7 @@ function registerIpcHandlers(): void {
     if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.pages\.dev$/i.test(project.subdomain)) throw new Error('无法确认 Pages 默认域名，请检查 Cloudflare 项目。')
     return { workspace, binding, subdomain: project.subdomain, ensure }
   }
-  ipcMain.handle(IPC.SITE_DOMAINS_LIST, (_event, root: unknown) => releaseAction(async () => {
+  const listDomains = async (root: unknown) => {
     const ctx = await domainContext(root)
     const domains = await pages.domains(ctx.binding.accountId, ctx.binding.project); await ctx.ensure()
     let pending = readRelease(ctx.workspace).pendingDomain
@@ -788,33 +790,35 @@ function registerIpcHandlers(): void {
       sitePublish.setPendingDomain(ctx.workspace, undefined); pending = undefined
     }
     return { ...ctx.binding, subdomain: ctx.subdomain, domains, pending: pending?.accountId === ctx.binding.accountId && pending.project === ctx.binding.project ? pending : undefined }
-  }))
-  ipcMain.handle(IPC.SITE_DOMAINS_CHECK, (_event, root: unknown, name: unknown) => releaseAction(async () => {
+  }
+  const checkDomain = async (root: unknown, name: unknown) => {
     const ctx = await domainContext(root)
     const domain = await pages.domain(ctx.binding.accountId, ctx.binding.project, String(name)); await ctx.ensure()
     return domain
-  }))
-  ipcMain.handle(IPC.SITE_DOMAINS_ADD, (_event, root: unknown, name: unknown, kind: unknown) => releaseAction(async () => {
+  }
+  const addDomain = async (root: unknown, name: unknown, kind: unknown, stillActive: () => boolean = () => true) => {
     if (domainCreationInFlight) throw new Error('域名添加正在进行。')
     domainCreationInFlight = true
     try {
       const ctx = await domainContext(root)
       if (kind !== 'root' && kind !== 'subdomain') throw new Error('请选择根域名或子域名。')
+      if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。')
       const normalized = normalizeDomain(name)
       const record = readRelease(ctx.workspace)
       if (record.pendingDomain) throw new Error(`上次在项目 ${record.pendingDomain.project} 添加 ${record.pendingDomain.name} 的结果待确认，请先切回对应账号和项目检查。`)
       const existing = await pages.domains(ctx.binding.accountId, ctx.binding.project); await ctx.ensure()
       const found = existing.find(item => item.name === normalized)
       if (found) return { domain: found, subdomain: ctx.subdomain }
+      if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。')
       sitePublish.setPendingDomain(ctx.workspace, { ...ctx.binding, name: normalized, kind })
       try {
         const domain = await pages.addDomain(ctx.binding.accountId, ctx.binding.project, normalized); await ctx.ensure()
         sitePublish.setPendingDomain(ctx.workspace, undefined)
         return { domain, subdomain: ctx.subdomain }
       } catch (error) { throw new Error(`${error instanceof Error ? error.message : '添加失败。'} 添加结果待确认，请刷新域名列表。`) }
-    } finally { domainCreationInFlight = false }
-  }))
-  ipcMain.handle(IPC.SITE_DOMAINS_CLEAR_PENDING, (_event, root: unknown) => releaseAction(async () => {
+    } finally { domainCreationInFlight = false; broadcastToWindows(IPC.SITE_DOMAINS_EVENT, { root }) }
+  }
+  const clearPendingDomain = async (root: unknown) => {
     if (domainCreationInFlight) throw new Error('域名添加正在进行，请稍候。')
     const ctx = await domainContext(root)
     const pending = readRelease(ctx.workspace).pendingDomain
@@ -822,7 +826,41 @@ function registerIpcHandlers(): void {
     const domains = await pages.domains(ctx.binding.accountId, ctx.binding.project); await ctx.ensure()
     if (domains.some(item => item.name === pending.name)) throw new Error('域名已存在，请刷新列表查看。')
     sitePublish.setPendingDomain(ctx.workspace, undefined)
-  }))
+  }
+  const deleteDomain = async (root: unknown, name: unknown, stillActive: () => boolean = () => true) => {
+    if (domainCreationInFlight) throw new Error('域名操作正在进行，请稍候。')
+    domainCreationInFlight = true
+    try {
+      const ctx = await domainContext(root)
+      const normalized = normalizeDomain(name)
+      if (readRelease(ctx.workspace).pendingDomain) throw new Error('上次域名添加结果待确认，请先检查。')
+      const domains = await pages.domains(ctx.binding.accountId, ctx.binding.project); await ctx.ensure()
+      if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。')
+      if (!domains.some(item => item.name === normalized)) throw new Error('当前 Pages 项目没有该域名，请刷新列表。')
+      try { await pages.deleteDomain(ctx.binding.accountId, ctx.binding.project, normalized); await ctx.ensure() }
+      catch (error) { throw new Error(`${error instanceof Error ? error.message : '删除失败。'} 删除结果待确认，请刷新域名列表或前往 Cloudflare 检查，不要盲目重试。`) }
+      return { name: normalized, message: '已移除 Pages 域名关联；FTCS 未主动修改 DNS，请到 DNS 服务商检查并按需处理记录。' }
+    } finally { domainCreationInFlight = false; broadcastToWindows(IPC.SITE_DOMAINS_EVENT, { root }) }
+  }
+  domainAction = async (name, root, args, stillActive) => {
+    if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。')
+    if (name === 'site_domains_list' || name === 'site_domain_check') {
+      const result = name === 'site_domains_list' ? await listDomains(root) : await checkDomain(root, args.domain_name)
+      if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。')
+      return result
+    }
+    if (name === 'site_domain_delete') return deleteDomain(root, args.domain_name, stillActive)
+    if (name === 'site_domain_add') {
+      const result = await addDomain(root, args.domain_name, args.domain_kind, stillActive)
+      return { ...result, kind: args.domain_kind, message: args.domain_kind === 'root' ? '请将根域名接入当前 Cloudflare 账号的 DNS，具体状态以 Cloudflare 为准。' : '请在 DNS 服务商配置 CNAME，名称为域名，记录值为 subdomain；是否生效以 Cloudflare 状态为准。' }
+    }
+    throw new Error('未知域名操作。')
+  }
+  ipcMain.handle(IPC.SITE_DOMAINS_LIST, (_event, root: unknown) => releaseAction(() => listDomains(root)))
+  ipcMain.handle(IPC.SITE_DOMAINS_CHECK, (_event, root: unknown, name: unknown) => releaseAction(() => checkDomain(root, name)))
+  ipcMain.handle(IPC.SITE_DOMAINS_ADD, (_event, root: unknown, name: unknown, kind: unknown) => releaseAction(() => addDomain(root, name, kind)))
+  ipcMain.handle(IPC.SITE_DOMAINS_CLEAR_PENDING, (_event, root: unknown) => releaseAction(() => clearPendingDomain(root)))
+  ipcMain.handle(IPC.SITE_DOMAINS_DELETE, (_event, root: unknown, name: unknown) => releaseAction(() => deleteDomain(root, name)))
   ipcMain.handle(IPC.SITE_RELEASE_GET, (_event, root: unknown) => releaseAction(() => readRelease(currentSiteWorkspace(root))))
   ipcMain.handle(IPC.SITE_AGENT_RELEASE_GET, (_event, root: unknown) => siteAgentActions.isPublishing(currentSiteWorkspace(root)))
   ipcMain.handle(IPC.SITE_RELEASE_PREPARE, (_event, root: unknown, id: unknown, branch: unknown, acceptReadme: unknown) => releaseAction(() => sitePublish.prepare(currentSiteWorkspace(root), id as number, branch as string, acceptReadme === true)))

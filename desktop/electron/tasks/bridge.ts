@@ -17,7 +17,7 @@ export interface TaskReceiver {
   authorize(context: ToolIdentity, args: Record<string, unknown>): string | undefined
   noteShellCall?(context: ToolIdentity, args: Record<string, unknown>): void
   noteReadCall?(context: ToolIdentity, args: Record<string, unknown>): void
-  siteTool?(context: ToolIdentity, name: string): Promise<unknown>
+  siteTool?(context: ToolIdentity, name: string, args: Record<string, unknown>): Promise<unknown>
 }
 
 /** Only the OpenCode host hook can mint a ticket. MCP consumes it exactly once. */
@@ -85,9 +85,10 @@ export async function openTaskBridge(receiver: () => TaskReceiver) {
       )
         throw new Error('无效会话凭据')
       if (req.url === '/site_execute') {
-        if (!['site_status', 'site_preview', 'site_open_preview', 'site_stop_preview', 'site_build', 'site_publish'].includes(request.name) || !receiver().siteTool) throw new Error('未知站点操作')
+        if (!['site_status', 'site_preview', 'site_open_preview', 'site_stop_preview', 'site_build', 'site_publish', 'site_domains_list', 'site_domain_check', 'site_domain_add', 'site_domain_delete'].includes(request.name) || !receiver().siteTool) throw new Error('未知站点操作')
+        if (request.domain_name !== ticket.args.domain_name || request.domain_kind !== ticket.args.domain_kind) throw new Error('站点工具参数与会话授权不匹配')
         receiver().authorize(ticket.identity, ticket.args)
-        const value = await receiver().siteTool!(ticket.identity, request.name)
+        const value = await receiver().siteTool!(ticket.identity, request.name, ticket.args)
         return reply(200, { ok: true, value })
       }
       if (req.url === '/execute') {

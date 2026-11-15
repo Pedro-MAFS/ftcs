@@ -860,7 +860,7 @@ export interface AgentRunHooks {
   lifecycle?: boolean
   refreshPlaces?: () => Promise<void>
   reloadRuntime?: () => Promise<void>
-  siteTool?: (name: string, root: string, stillActive: () => boolean) => Promise<unknown>
+  siteTool?: (name: string, root: string, stillActive: () => boolean, args: Record<string, unknown>) => Promise<unknown>
   /** 与按钮入口相同的 preflight。聊天启动在 session.create 之前调用。 */
   preflight?: (kind: ChatPreflightKind | 'enrich-lead-contacts', options?: { requireBuiltinBrowser?: boolean }) => Promise<{ ok: boolean; message: string }>
 }
@@ -1131,7 +1131,7 @@ export class AgentRunController {
     if (context.sessionID !== this.sessionId || !this.dialogueActive || this.abort?.signal.aborted)
       throw new Error('工具调用不属于当前任务会话')
     const name = context.tool.slice('lead-store_'.length)
-    if (['site_status', 'site_preview', 'site_open_preview', 'site_stop_preview', 'site_build', 'site_publish'].includes(name) && context.tool === `lead-store_${name}`) {
+    if (['site_status', 'site_preview', 'site_open_preview', 'site_stop_preview', 'site_build', 'site_publish', 'site_domains_list', 'site_domain_check', 'site_domain_add', 'site_domain_delete'].includes(name) && context.tool === `lead-store_${name}`) {
       if (!this.siteContextActive(context)) throw new Error('当前会话或独立站不可用。')
       return
     }
@@ -1222,10 +1222,10 @@ export class AgentRunController {
     return !!this.dialogueRoot && this.dialogueActive && !this.running && !this.lifecycle.current && !this.abort?.signal.aborted && context.sessionID === this.sessionId && same(this.dialogueRoot) === same(getWorkspaceRoot()) && getSiteSnapshot(this.dialogueRoot).status === 'ready'
   }
 
-  async siteTool(context: ToolIdentity, name: string): Promise<unknown> {
+  async siteTool(context: ToolIdentity, name: string, args: Record<string, unknown> = {}): Promise<unknown> {
     if (!this.siteContextActive(context) || !this.hooks.siteTool) throw new Error('独立站会话或工具不可用。')
     const root = this.dialogueRoot, token = this.dialogueToken
-    return this.hooks.siteTool(name, root, () => this.dialogueToken === token && this.siteContextActive(context))
+    return this.hooks.siteTool(name, root, () => this.dialogueToken === token && this.siteContextActive(context), args)
   }
 
   recordWrite(

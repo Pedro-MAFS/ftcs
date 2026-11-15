@@ -63,8 +63,8 @@ export class CloudflarePages {
       const summary = response.status === 401 || response.status === 403 ? 'Cloudflare 授权无效或缺少所需权限' : 'Cloudflare 请求失败'
       throw new Error(`${summary}（HTTP ${response.status}）${details ? `：${details}` : '。'}`)
     }
-    if (!data?.success || !data.result) throw new Error('Cloudflare 返回的数据不完整。')
-    return { result: data.result, result_info: data.result_info }
+    if (!data?.success || (!data.result && init?.method !== 'DELETE')) throw new Error('Cloudflare 返回的数据不完整。')
+    return { result: data.result as T, result_info: data.result_info }
   }
   private parse(project: Project): PagesProject {
     const config = project.source?.config
@@ -106,6 +106,10 @@ export class CloudflarePages {
     if (!/^[a-z0-9][a-z0-9-]*$/.test(project)) throw new Error('Cloudflare 项目名称无效。')
     const data = await this.request<RawDomain>(accountId, `/projects/${encodeURIComponent(project)}/domains`, { method: 'POST', body: JSON.stringify({ name: normalizeDomain(name) }) })
     return parseDomain(data.result)
+  }
+  async deleteDomain(accountId: string, project: string, name: string): Promise<void> {
+    if (!/^[a-z0-9][a-z0-9-]*$/.test(project)) throw new Error('Cloudflare 项目名称无效。')
+    await this.request<unknown>(accountId, `/projects/${encodeURIComponent(project)}/domains/${encodeURIComponent(normalizeDomain(name))}`, { method: 'DELETE' })
   }
   async create(accountId: string, name: string, repo: { id: number; owner: string; name: string; branch: string }, output: string, nodeVersion: string): Promise<PagesProject> {
     if (!/^[a-z0-9][a-z0-9-]{0,57}$/.test(name) || !/^(?:22|24|26)$/.test(nodeVersion)) throw new Error('项目名只能包含小写字母、数字和横线；Node 版本请选择 22、24 或 26。')

@@ -12,6 +12,7 @@ type Dependencies = {
   prepare: (root: string, id: number, branch: string) => Promise<PublishPreview>
   commit: (root: string, id: string) => Promise<ReleaseRecord>
   notify: (root: string, running: boolean) => void
+  domains?: (name: string, root: string, args: Record<string, unknown>, stillActive: () => boolean) => Promise<unknown>
 }
 const busy = (state: string) => ['starting', 'running', 'address_pending', 'stopping'].includes(state)
 const describe = (snapshot: SiteRuntimeSnapshot) => ({
@@ -26,9 +27,13 @@ export class SiteAgentActions {
   private readonly deps: Dependencies
   constructor(deps: Dependencies) { this.deps = deps }
   isPublishing(root: string): boolean { return this.publishing === root }
-  async execute(name: string, root: string, stillActive: () => boolean): Promise<unknown> {
+  async execute(name: string, root: string, stillActive: () => boolean, args: Record<string, unknown> = {}): Promise<unknown> {
     const check = () => { if (!stillActive()) throw new Error('当前站点会话已结束或工作区已变化。') }
     check()
+    if (['site_domains_list', 'site_domain_check', 'site_domain_add', 'site_domain_delete'].includes(name)) {
+      if (!this.deps.domains) throw new Error('域名管理不可用。')
+      return this.deps.domains(name, root, args, stillActive)
+    }
     const state = this.deps.snapshot(root)
     if (name === 'site_status') {
       const release = this.deps.release(root)

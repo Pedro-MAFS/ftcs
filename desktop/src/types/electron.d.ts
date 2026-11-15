@@ -986,6 +986,8 @@ declare global {
       addSiteDomain: (root: string, name: string, kind: 'root' | 'subdomain') => Promise<SiteResult<{ domain: PagesDomain; subdomain: string }>>
       checkSiteDomain: (root: string, name: string) => Promise<SiteResult<PagesDomain>>
       clearPendingSiteDomain: (root: string) => Promise<SiteResult<void>>
+      deleteSiteDomain: (root: string, name: string) => Promise<SiteResult<{ name: string; message: string }>>
+      onSiteDomainsChanged: (callback: (value: { root: string }) => void) => () => void
       getAgentSiteRelease: (root: string) => Promise<boolean>
       onAgentSiteRelease: (callback: (value: { root: string; running: boolean }) => void) => () => void
       prepareSiteRelease: (root: string, id: number, branch: string, acceptReadme: boolean) => Promise<SiteResult<SitePublishPreview>>
