@@ -31,6 +31,7 @@
 | `email_draft_list` | 列出邮件草稿 |
 | `site_status` | 查询桌面端管理的站点预览、构建状态和依赖状态 |
 | `site_preview` / `site_open_preview` | 启动预览服务 / 在内置浏览器打开已确认的预览 |
+| `site_stop_preview` | 停止预览服务；停止可能异步完成，可通过 `site_status` 查询，不会关闭浏览器标签 |
 | `site_build` | 发起站点构建检查；通过 `site_status` 查询实际结果 |
 | `site_publish_prepare` | 为已确认的仓库和分支生成待审核发布快照，不直接推送 |
 

@@ -11,17 +11,18 @@ function fixture() {
   const target = { id: 1, owner: 'me', name: 'site', fullName: 'me/site', branch: 'main', private: false }
   const release: ReleaseRecord = { version: 1, createdRepositories: [], target, commitSha: 'abc' }
   const preview: PublishPreview = { id: 'p1', target, head: 'abc', hash: 'hash', files: [], deleted: [], log: '', noChanges: true }
-  let starts = 0, builds = 0, notifications = 0, opens = 0
+  let starts = 0, builds = 0, notifications = 0, opens = 0, stops = 0
   const actions = new SiteAgentActions({
     snapshot: () => state,
     startPreview: () => { starts++; state.preview = { ...state.preview, id: 'preview', state: 'starting' }; return 'preview' },
+    stopPreview: async (_root, id) => { assert.equal(id, state.preview.id); stops++; state.preview = { ...state.preview, state: 'stopping' } },
     build: () => { builds++; state.build = { ...state.build, id: 'build', state: 'running' }; return 'build' },
     openPreview: async () => { opens++ }, release: () => release,
     connections: async () => ({ github: true, cloudflare: true }),
     prepare: async () => preview,
     notify: () => { notifications++ },
   })
-  return { actions, state, release, preview, counts: () => ({ starts, builds, notifications, opens }) }
+  return { actions, state, release, preview, counts: () => ({ starts, builds, notifications, opens, stops }) }
 }
 
 test('agent actions use shared asynchronous runs and open only verified preview', async () => {
@@ -33,8 +34,37 @@ test('agent actions use shared asynchronous runs and open only verified preview'
   await assert.rejects(f.actions.execute('site_open_preview', '/work', active), /尚未确认/)
   f.state.preview = { ...f.state.preview, state: 'running', url: 'http://127.0.0.1:3000/' }
   await f.actions.execute('site_open_preview', '/work', active)
-  assert.deepEqual(f.counts(), { starts: 1, builds: 1, notifications: 0, opens: 1 })
+  assert.deepEqual(f.counts(), { starts: 1, builds: 1, notifications: 0, opens: 1, stops: 0 })
   assert.equal((await f.actions.execute('site_status', '/work', active) as { build: { state: string } }).build.state, 'running')
+})
+
+test('stops the active preview and reports its real state without stopping it twice', async () => {
+  for (const initial of ['starting', 'running', 'address_pending'] as const) {
+    const f = fixture()
+    f.state.preview = { ...f.state.preview, id: 'preview', state: initial }
+    const result = await f.actions.execute('site_stop_preview', '/work', () => true) as { message: string; preview: { state: string } }
+    assert.equal(result.preview.state, 'stopping')
+    assert.match(result.message, /正在停止/)
+    await f.actions.execute('site_stop_preview', '/work', () => true)
+    assert.equal(f.counts().stops, 1)
+    f.state.preview = { ...f.state.preview, state: 'cancelled' }
+    const stopped = await f.actions.execute('site_stop_preview', '/work', () => true) as { message: string }
+    assert.match(stopped.message, /未运行/)
+    assert.equal(f.counts().stops, 1)
+  }
+})
+
+test('reports when a requested stop has not been confirmed', async () => {
+  const run = () => ({ id: '', state: 'idle' as const, message: '', log: '' })
+  const state: SiteRuntimeSnapshot = { workspaceRoot: '/work', sequence: 1, outputDir: 'dist', dependencies: 'unknown', install: run(), build: run(), preview: { ...run(), id: 'preview', state: 'running' } }
+  const actions = new SiteAgentActions({
+    snapshot: () => state, startPreview: () => '', stopPreview: async () => {}, build: () => '', openPreview: async () => {},
+    release: () => ({ version: 1, createdRepositories: [] }), connections: async () => ({ github: false, cloudflare: false }),
+    prepare: async () => { throw new Error('unused') }, notify: () => {},
+  })
+  const result = await actions.execute('site_stop_preview', '/work', () => true) as { message: string; preview: { state: string } }
+  assert.equal(result.preview.state, 'running')
+  assert.match(result.message, /停止未确认/)
 })
 
 test('release preparation remains a reviewable page snapshot and requires an existing target', async () => {
@@ -53,6 +83,7 @@ test('release preparation remains a reviewable page snapshot and requires an exi
 test('ended sessions cannot start operations or expose a prepared release', async () => {
   const f = fixture()
   await assert.rejects(f.actions.execute('site_preview', '/work', () => false), /会话已结束/)
+  await assert.rejects(f.actions.execute('site_stop_preview', '/work', () => false), /会话已结束/)
   let checks = 0
   await assert.rejects(f.actions.execute('site_publish_prepare', '/work', () => ++checks < 3), /会话已结束/)
   assert.equal(f.actions.getPending('/work'), null)

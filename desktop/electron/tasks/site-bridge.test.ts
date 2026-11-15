@@ -42,6 +42,11 @@ test('site bridge requires a single-use host ticket for the matching session and
       assert.equal(typeof args._ticket, 'string')
       assert.equal((await post('site_execute', bridge.mcpKey, { _ticket: args._ticket, name: 'site_build' })).status, 200)
       assert.equal(executions, 2)
+      const stopArgs: Record<string, unknown> = {}
+      await hook['tool.execute.before']({ sessionID: 's1', callID: 'stop', tool: 'lead-store_site_stop_preview' }, { args: stopArgs })
+      assert.equal((await post('site_execute', bridge.mcpKey, { _ticket: stopArgs._ticket, name: 'site_stop_preview' })).status, 200)
+      assert.equal((await post('site_execute', bridge.mcpKey, { _ticket: stopArgs._ticket, name: 'site_stop_preview' })).status, 400)
+      assert.equal(executions, 3)
       await hook['tool.execute.before']({ sessionID: 's1', callID: 'c5', tool: 'bash' }, { args: { command: 'pwd' } })
       assert.deepEqual(shellCalls, [{ sessionID: 's1', command: 'pwd', workdir: undefined }])
       await hook['tool.execute.before']({ sessionID: 's1', callID: 'c6', tool: 'read' }, { args: { filePath: '/tmp/selected file.png' } })

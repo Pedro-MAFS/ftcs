@@ -287,6 +287,7 @@ async function openManagedSitePreview(root: string, id: string, stillActive: () 
 const siteAgentActions = new SiteAgentActions({
   snapshot: root => { siteSource.snapshot(root); return siteRuntime.snapshot(root) },
   startPreview: root => siteRuntime.startPreview(root),
+  stopPreview: (root, id) => siteRuntime.cancel(root, 'preview', id),
   build: root => siteRuntime.build(root),
   openPreview: openManagedSitePreview,
   release: readRelease,

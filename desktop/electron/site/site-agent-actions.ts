@@ -4,6 +4,7 @@ import type { PublishPreview, ReleaseRecord } from './site-publish'
 type Dependencies = {
   snapshot: (root: string) => SiteRuntimeSnapshot
   startPreview: (root: string) => string
+  stopPreview: (root: string, id: string) => Promise<void>
   build: (root: string) => string
   openPreview: (root: string, id: string, stillActive: () => boolean) => Promise<void>
   release: (root: string) => ReleaseRecord
@@ -43,6 +44,17 @@ export class SiteAgentActions {
       if (state.preview.state !== 'running' || !state.preview.url) throw new Error('预览尚未确认运行，请先启动并查询状态；地址待核对时请在独立站页面处理。')
       await this.deps.openPreview(root, state.preview.id, stillActive)
       return { message: '已在 FTCS 内置浏览器打开预览。', url: state.preview.url }
+    }
+    if (name === 'site_stop_preview') {
+      if (['starting', 'running', 'address_pending'].includes(state.preview.state)) {
+        await this.deps.stopPreview(root, state.preview.id)
+        check()
+      }
+      const current = this.deps.snapshot(root)
+      const message = current.preview.state === 'stopping' ? '正在停止预览服务；请查询实际状态。'
+        : busy(current.preview.state) ? '预览服务仍在运行或停止未确认；请检查状态后重试。'
+          : '预览服务未运行。'
+      return { ...describe(current), message }
     }
     if (name === 'site_build') {
       if (!busy(state.build.state)) this.deps.build(root)

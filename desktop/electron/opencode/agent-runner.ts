@@ -1131,7 +1131,7 @@ export class AgentRunController {
     if (context.sessionID !== this.sessionId || !this.dialogueActive || this.abort?.signal.aborted)
       throw new Error('工具调用不属于当前任务会话')
     const name = context.tool.slice('lead-store_'.length)
-    if (['site_status', 'site_preview', 'site_open_preview', 'site_build', 'site_publish_prepare'].includes(name) && context.tool === `lead-store_${name}`) {
+    if (['site_status', 'site_preview', 'site_open_preview', 'site_stop_preview', 'site_build', 'site_publish_prepare'].includes(name) && context.tool === `lead-store_${name}`) {
       if (!this.siteContextActive(context)) throw new Error('当前会话或独立站不可用。')
       return
     }
