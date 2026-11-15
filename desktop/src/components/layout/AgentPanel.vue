@@ -20,7 +20,6 @@ import { filterMentionCandidates, findMentionQuery, listMentionCandidates, repla
 import {
   createCopySessionController,
   kindLabel,
-  skillDisplayName,
   subagentCurrent,
   subagentStatus,
   writeClipboardText,
@@ -31,7 +30,6 @@ const {
   activeProductId,
   agentSkill,
   agentMeta,
-  latestTask,
   agentTimeline,
   agentPrompt,
   agentStatus,
@@ -46,7 +44,6 @@ const { fill, widths, agentCollapsed, toggleAgentCollapsed, enterFill, exitFill 
 const collapsedStrip = computed(() => fill.value === 'none' && agentCollapsed.value)
 const agentFilled = computed(() => fill.value === 'agent')
 
-const skillLabel = computed(() => skillDisplayName(agentSkill.value))
 const copySession = createCopySessionController({
   async readAppVersion() {
     const read = window.ftcs?.getAppVersion
@@ -312,7 +309,6 @@ watch(
         <span>智能体</span>
       </div>
       <div class="agent-panel__actions">
-        <span class="agent-panel__skill">{{ skillLabel }}</span>
         <button
           type="button"
           class="btn-ghost"
@@ -361,19 +357,6 @@ watch(
             <Icon name="maximize-2" :size="14" />
           </button>
         </template>
-      </div>
-    </div>
-
-    <div class="agent-panel__meta">
-      <div v-for="item in agentMeta" :key="item.label" class="meta-card">
-        <span class="meta-card__label">{{ item.label }}</span>
-        <span
-          class="meta-card__value"
-          :class="item.tone ? `tone-${item.tone}` : undefined"
-          :title="item.value || undefined"
-        >
-          {{ item.value }}
-        </span>
       </div>
     </div>
 
@@ -490,11 +473,7 @@ watch(
       />
       <p v-if="composerHint" class="composer-hint" role="status">{{ composerHint }}</p>
       <div class="composer-actions">
-        <span class="composer-skill">
-          {{ skillLabel }}
-          <template v-if="awaitingUserReply"> · 任务在等你回复</template>
-          <template v-else-if="latestTask"> · {{ agentMeta[0]?.value }}</template>
-        </span>
+        <span v-if="awaitingUserReply" class="composer-skill">任务在等你回复</span>
         <div class="composer-buttons">
           <button type="button" class="btn-secondary btn-sm" title="选择本地文件作为参考" aria-label="选择本地文件" :disabled="creatingSession || selectingReference || composerInputLocked(generating, dialogueBusy, !!pendingPermission)" @click="pickReferences">
             附件
