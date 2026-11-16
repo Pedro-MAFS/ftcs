@@ -111,6 +111,14 @@ export async function verifyPersonEmail(
   if (!leadId) return { ok: false, message: '缺少 leadId' }
   if (!personId) return { ok: false, message: '缺少 personId' }
 
+  // 官方不进入 Key 循环，也不直连。抽屉代调验邮是 US-HC-03。
+  if ((process.env.FTCS_CHANNEL_MODE || '').trim() === 'official') {
+    return {
+      ok: false,
+      message: '官方通道不使用自备 Hunter Key 验证邮箱，本次不会直连 Hunter。',
+    }
+  }
+
   const env = readEnvFile(path.join(workspaceRoot, '.env'))
   const keys = readHunterKeysFromEnv(env)
   if (keys.length === 0) {

@@ -119,7 +119,8 @@ export const ACCOUNT_RESPONSE = {
   data: {
     plan_name: "Free",
     plan_level: 0,
-    reset_date: "2026-10-14",
+    // 须晚于测试运行日。过期后 Key 会被立刻复位，429 failover 测试会空转。
+    reset_date: "2099-01-01",
     requests: {
       credits: { used: 5, available: 50, remaining: 45 },
       searches: { used: 5, available: 50, remaining: 45 },

@@ -29,6 +29,10 @@ import {
   readOpenCodeConfig,
 } from './resolver'
 import {
+  buildHunterMcpEnvironment,
+  mergeHunterMcpEnvironment,
+} from './hunter-mcp-env'
+import {
   buildPlacesMcpEnvironment,
   getPlacesMcpInjection,
   markPlacesMcpInjectionApplied,
@@ -496,7 +500,7 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
   if (!mcp || typeof mcp !== 'object') return config
 
   const channelMode = (process.env.FTCS_CHANNEL_MODE || 'official').trim()
-  const officialSearch = channelMode === 'official'
+  const officialChannel = channelMode === 'official'
   const gatewayBase = (
     process.env.FTCS_TOKEN_GATEWAY_BASE_URL ||
     'https://token.ai-utills.com/v1'
@@ -504,7 +508,7 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
 
   // 官方：强制 gateway + sk；不注入用户 Tavily Key 作为上游
   // 自定义：直连 Tavily BYOK
-  const searchEnv = officialSearch
+  const searchEnv = officialChannel
     ? {
         FTCS_WORKSPACE: workspaceRoot,
         SEARCH_PROVIDER: 'gateway',
@@ -537,15 +541,14 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
     ...buildGoogleProxyEnvVars(process.env[GOOGLE_PROXY_RESOLVED_ENV]),
   }
 
-  const hunterEnv = {
-    FTCS_WORKSPACE: workspaceRoot,
-    ...(process.env.HUNTER_API_KEYS
-      ? { HUNTER_API_KEYS: process.env.HUNTER_API_KEYS }
-      : {}),
-    ...(process.env.HUNTER_API_KEY
-      ? { HUNTER_API_KEY: process.env.HUNTER_API_KEY }
-      : {}),
-  }
+  const hunterEnv = buildHunterMcpEnvironment({
+    workspaceRoot,
+    channelMode,
+    gatewayBaseUrl: gatewayBase,
+    gatewayApiKey: process.env.FTCS_GATEWAY_API_KEY,
+    hunterApiKeys: process.env.HUNTER_API_KEYS,
+    hunterApiKey: process.env.HUNTER_API_KEY,
+  })
 
   const nextMcp: Record<string, unknown> = {}
   for (const [name, server] of Object.entries(mcp)) {
@@ -561,12 +564,16 @@ function rewriteMcpWorkspaceEnv(config: Config, workspaceRoot: string): Config {
           : name === 'hunter-api'
             ? hunterEnv
             : { FTCS_WORKSPACE: workspaceRoot }
+    const environment =
+      name === 'hunter-api'
+        ? mergeHunterMcpEnvironment(server.environment, hunterEnv, officialChannel)
+        : {
+            ...(server.environment ?? {}),
+            ...extra,
+          }
     nextMcp[name] = {
       ...server,
-      environment: {
-        ...(server.environment ?? {}),
-        ...extra,
-      },
+      environment,
     }
   }
 
