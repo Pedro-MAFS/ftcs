@@ -70,6 +70,7 @@ website → domain → domain_search → 映射+排序 → leads_patch_scored
 - **禁止**按邮箱 pattern 猜邮或编造地址；邮箱只能来自 Hunter 返回。
 - **禁止**在 `verify_emails=false`（或缺省）时调用 `email_verifier`。
 - **禁止**在配额/鉴权错误后重试烧额度。
+- **禁止**在官方验邮失败、超时或「验证尚未完成」后再打同一封。按工具中文转述，不要改写成配置 Hunter API Key 或到 Hunter 充值。
 - **禁止**覆盖已有 form/phone；`contacts` 仅按规则 **追加** email。
 
 ## 执行步骤
@@ -127,13 +128,20 @@ website → domain → domain_search → 映射+排序 → leads_patch_scored
 
 ### Step 6：可选验邮
 
-仅当 `verify_emails === true`：
+仅当 `verify_emails === true`。关闭或缺省时不要调用 `email_verifier`。
 
-1. 对 **people 中每一条** 调用 `hunter-api.email_verifier({ email })`。
-   - `pending: true` → 将该人写为 `hunter_unknown`，继续下一条
-   - `HUNTER_CLAIMED_EMAIL` → 标 `hunter_invalid` 或跳过
-   - 配额类错误 → **停止**剩余验证与后续线索；已有结果仍 patch
-2. 再次 `leads_patch_scored`，且 **`sync_valid_to_contacts: true`**（工具会把 `hunter_valid` + personal + confidence≥70 的邮箱追加进 `contacts`）。
+1. 对 **people 中每一条** 只调用一次 `hunter-api.email_verifier({ email })`。失败后不要再打同一封。
+   - 成功且 `pending` 不是 `true`：按 `status` 写 `email_status`，与 `mapHunterVerifierStatus` 一致。
+     - `valid` → `hunter_valid`
+     - `accept_all` → `hunter_accept_all`
+     - `invalid` / `disposable` / `webmail` → `hunter_invalid`
+     - `unknown` → `hunter_unknown`（终态，不是未完成）
+     - 其他非空状态 → `hunter_unknown`
+   - `pending: true` 只出现在自定义通道约 24 秒轮询用尽时：将该人写成 `hunter_unknown`，继续下一条。官方通道不会返回 `pending: true`。
+   - 工具 `isError`，包括「验证尚未完成，请稍后再次验证」和「验证暂时失败，请稍后重试」：**不要**改这个人的 `email_status`，**不要**写成 `hunter_unknown`，**不要**再请求这一封。按工具中文转述。
+   - `HUNTER_CLAIMED_EMAIL` / `OFFICIAL_CLAIMED_EMAIL` → 停止该邮箱，不自动重试；可标 `hunter_invalid` 或跳过。
+   - 自定义配额类错误（`HUNTER_QUOTA_EXCEEDED` / `HUNTER_ALL_KEYS_EXHAUSTED`）→ **停止**剩余验证与后续线索；已有结果仍 patch。不要把这两句用于官方代调。
+2. 再次 `leads_patch_scored`，且 **`sync_valid_to_contacts: true`**（工具会把 `hunter_valid` + personal + confidence≥70 的邮箱追加进 `contacts`）。504/502 没有新状态的人保持 Step 5 已经写入的 `email_status`。
 
 ### Step 7：汇报
 

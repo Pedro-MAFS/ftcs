@@ -8,11 +8,14 @@ import {
   OFFICIAL_PAGINATION_MESSAGE,
   OFFICIAL_RATE_LIMIT_MESSAGE,
   OFFICIAL_UNAVAILABLE_MESSAGE,
+  OFFICIAL_VERIFY_FAILED_MESSAGE,
   OFFICIAL_VERIFY_PENDING_MESSAGE,
+  OFFICIAL_VERIFIER_TIMEOUT_MS,
   buildOfficialDomainSearchBody,
   mapOfficialHunterFailure,
   normalizeHunterGatewayBase,
   postOfficialDomainSearch,
+  postOfficialEmailVerifier,
 } from "./gateway.js";
 
 describe("official hunter gateway", () => {
@@ -134,5 +137,50 @@ describe("official hunter gateway", () => {
       (error: unknown) => error instanceof HunterError && error.message === OFFICIAL_GENERIC_MESSAGE
     );
     assert.equal(calls, 1);
+  });
+
+  it("验邮 502 与 504 文案不同，查找 502 仍是补全失败句", () => {
+    const verifyDown = mapOfficialHunterFailure(
+      502,
+      { error: { code: "hunter_upstream_error", message: "hunter_upstream_error" } },
+      "email-verifier"
+    );
+    const verifyPending = mapOfficialHunterFailure(
+      504,
+      { error: { code: "hunter_verification_pending", message: "hunter_verification_pending" } },
+      "email-verifier"
+    );
+    const searchDown = mapOfficialHunterFailure(502, {
+      error: { code: "hunter_upstream_error", message: "hunter_upstream_error" },
+    });
+    assert.equal(verifyDown.message, OFFICIAL_VERIFY_FAILED_MESSAGE);
+    assert.equal(verifyPending.message, OFFICIAL_VERIFY_PENDING_MESSAGE);
+    assert.notEqual(verifyDown.message, verifyPending.message);
+    assert.equal(searchDown.message, OFFICIAL_GENERIC_MESSAGE);
+  });
+
+  it("验邮默认超时 90 秒，断线只请求一次", async () => {
+    assert.equal(OFFICIAL_VERIFIER_TIMEOUT_MS, 90_000);
+    let calls = 0;
+    let sawSignal = false;
+    await assert.rejects(
+      () =>
+        postOfficialEmailVerifier({
+          email: "slow@example.com",
+          gatewayApiKey: "sk-official",
+          gatewayBaseUrl: "https://gw.example/v1/",
+          fetchImpl: async (_url, init) => {
+            calls += 1;
+            assert.equal(init?.method, "POST");
+            assert.deepEqual(JSON.parse(init?.body ?? "{}"), { email: "slow@example.com" });
+            assert.equal(init?.headers?.Authorization, "Bearer sk-official");
+            sawSignal = init?.signal instanceof AbortSignal && init.signal.aborted === false;
+            throw new Error("TimeoutError");
+          },
+        }),
+      (error: unknown) => error instanceof HunterError && error.message === OFFICIAL_VERIFY_FAILED_MESSAGE
+    );
+    assert.equal(calls, 1);
+    assert.equal(sawSignal, true);
   });
 });

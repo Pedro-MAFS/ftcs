@@ -2,9 +2,10 @@ import { readDomainSearchCache, writeDomainSearchCache, type DomainSearchCacheKe
 import { HunterError } from "./errors.js";
 import {
   OFFICIAL_GENERIC_MESSAGE,
+  OFFICIAL_VERIFY_FAILED_MESSAGE,
   officialAccountDisabledError,
-  officialVerifyRemovedError,
   postOfficialDomainSearch,
+  postOfficialEmailVerifier,
   type HunterFetchLike,
 } from "./gateway.js";
 import {
@@ -54,6 +55,41 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function readOfficialVerifier(
+  body: unknown,
+  fallbackEmail: string
+): HunterVerifierData & { pending: false } {
+  const data =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as { data?: unknown }).data
+      : undefined;
+  const record =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : undefined;
+  const status = typeof record?.status === "string" ? record.status.trim() : "";
+  if (!status) {
+    throw new HunterError("OFFICIAL_UPSTREAM_ERROR", OFFICIAL_VERIFY_FAILED_MESSAGE, 200);
+  }
+  const score = record?.score;
+  const email = record?.email;
+  return {
+    status,
+    score: typeof score === "number" && Number.isFinite(score) ? score : null,
+    email: typeof email === "string" && email.trim() ? email : fallbackEmail,
+    regexp: null,
+    gibberish: null,
+    disposable: null,
+    webmail: null,
+    mx_records: null,
+    smtp_server: null,
+    smtp_check: null,
+    accept_all: null,
+    block: null,
+    pending: false,
+  };
+}
+
 function parseErrorDetails(body: unknown): string {
   const parsed = HunterErrorBodySchema.safeParse(body);
   if (parsed.success && parsed.data.errors.length > 0) {
@@ -90,6 +126,7 @@ export class HunterClient {
           method: init?.method,
           headers: init?.headers,
           body: init?.body,
+          signal: init?.signal,
         }) as never);
     this.sleep = options.sleep ?? defaultSleep;
     this.now = options.now ?? (() => new Date());
@@ -381,11 +418,11 @@ export class HunterClient {
   /**
    * Email Verifier。
    * 自定义：202 时按同一 URL 轮询（固定发起 Key），总预算 24s。
-   * 官方直连已删除。网关验邮是 US-HC-02，这里不发 HTTP、不读用户 Key。
+   * 官方：一次网关 POST，不读用户 Key，不轮询，失败不重试。
    */
   async verifyEmail(email: string): Promise<HunterVerifierData & { pending: boolean }> {
     if (this.isOfficial()) {
-      throw officialVerifyRemovedError();
+      return this.verifyEmailOfficial(email);
     }
     const startedAt = this.now().getTime();
     let apiKey = pickAvailableKey(this.root, this.keys, this.now());
@@ -453,6 +490,19 @@ export class HunterClient {
 
       throw this.mapHttpError(status, body);
     }
+  }
+
+  /** 官方验邮。200 的 unknown 仍是终态，pending 固定 false。504/502 抛错，不返回 pending。 */
+  private async verifyEmailOfficial(
+    email: string
+  ): Promise<HunterVerifierData & { pending: false }> {
+    const body = await postOfficialEmailVerifier({
+      email,
+      gatewayApiKey: this.resolveGatewayApiKey(),
+      gatewayBaseUrl: this.resolveGatewayBaseUrl(),
+      fetchImpl: this.fetchImpl,
+    });
+    return readOfficialVerifier(body, email);
   }
 
   /**
