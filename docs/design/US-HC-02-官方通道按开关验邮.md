@@ -1,10 +1,10 @@
 # US-HC-02 详细设计：官方通道按开关验证邮箱
 
 > **需求**：[../42-需求-官方通道网关代调Hunter-客户端.md](../42-需求-官方通道网关代调Hunter-客户端.md) · **US-HC-02** · Related [#156](https://github.com/Pedro-MAFS/ftcs/issues/156)  
-> **状态**：**不可联调、不可实现。** 验邮代调契约属于 O1。不关 #156。  
+> **状态**：**可按联调草案实现。** 验邮是单次 `POST {base}/hunter/email-verifier`，见 [契约附录](US-HC-网关代调契约草案.md) §3。不关 #156。  
 > **范围**：同一次「补全联系人」里，官方通道按「补全联系人时验证邮箱」决定是否代调验邮。  
 > **依赖**：[US-HC-01](US-HC-01-官方通道免配Key查找联系人.md) 的代调查找。开关在设置里仍可见，归 [US-HC-06](US-HC-06-设置引导与预检随通道切换.md)。  
-> **不做**：抽屉上再点「验证」（[US-HC-03](US-HC-03-抽屉单条验证跟随通道.md)）；修改验邮状态枚举；改自定义通道的直连验邮。  
+> **不做**：抽屉上再点「验证」（[US-HC-03](US-HC-03-抽屉单条验证跟随通道.md)）；修改验邮状态枚举；改自定义通道的直连验邮；在客户端轮询 202。
 > **索引**：[US-HC-官方通道网关代调Hunter.md](US-HC-官方通道网关代调Hunter.md)
 
 ---
@@ -17,7 +17,7 @@
 
 勾选仍是 `SettingsView.vue` 的 `form.hunterVerifyEmails`，文案仍是「补全联系人时验证邮箱」。官方通道下这个勾选保留。
 
-线索页现有提示「补全联系人并验证邮箱（约 0.5 credit/封）」在官方通道改为「补全联系人并验证邮箱，费用从官方通道余额扣除」。与 US-HC-01 的查找提示同一处 `enrichTitle`，随 O2 等确认。自定义通道可保留 credit 提示，因为费用仍在用户自己的 Hunter 额度上。
+线索页现有提示「补全联系人并验证邮箱（约 0.5 credit/封）」在官方通道改为已确认的「补全联系人并验证邮箱，费用从官方通道余额扣除」。与 US-HC-01 的查找提示同一处 `enrichTitle`。自定义通道可保留 credit 提示，因为费用仍在用户自己的 Hunter 额度上。
 
 抽屉「验证」不看这个开关。用户点了就是再验一条，归 US-HC-03。
 
@@ -28,7 +28,7 @@
 | 存储 | `.env` 的 `HUNTER_VERIFY_EMAILS`。保存仍走 `settings-service.ts` 里现有分支，与通道无关 |
 | 生效点 | `main.ts` 的 `LEADS_ENRICH_CONTACTS` 用 `getSettingsSnapshot().hunterVerifyEmails`，忽略渲染进程传来的 `verifyEmails`。编排同样在启动参数里写入 `verify_emails` |
 | 技能 | `verify_emails === true` 才对每人调用 `email_verifier`，然后再 `leads_patch_scored` 且 `sync_valid_to_contacts: true`。`false` 或缺省时技能硬禁令禁止调用 |
-| 状态枚举 | 技能对照表不变：`valid` → `hunter_valid`，`accept_all` → `hunter_accept_all`，`invalid` / `disposable` → `hunter_invalid`，空 → `hunter_unverified`，其他 → `hunter_unknown`。`pending: true` 仍写成 `hunter_unknown` |
+| 状态枚举 | 不新增枚举。官方 200 的 `data.status` 交给 `mapHunterVerifierStatus`：`unknown` → `hunter_unknown`（终态），`webmail` → `hunter_invalid`。技能官方结果与这个函数对齐。`pending: true` 只留在自定义 24 秒轮询用尽的返回里 |
 | 同步联系人 | 仍是 `hunter_valid` + personal + confidence ≥ 70。阈值在技能的 `SYNC_CONFIDENCE_MIN` 与 lead-store 现逻辑 |
 
 验邮现网没有缓存文件。本故事不给 `verifyEmail` 加缓存。O3 只讨论查找缓存。
@@ -39,18 +39,20 @@
 
 `HunterClient.verifyEmail` 在官方通道：
 
-- 不调用 `pickAvailableKey`，不读用户 Key。
-- 不请求 `https://api.hunter.io/v2/email-verifier`。
-- 代调函数的 HTTP 等 O1。返回值仍要能被现有技能消费：`pending` 与现有 `HunterVerifierData` 字段（`status`、`score`、`email` 等）。网关若用另一套字段，映射写在这个函数里，等分册给出后再填。本文不假定 HTTP 202，也不把现网 24 秒轮询（`VERIFIER_POLL_INTERVAL_MS` / `VERIFIER_POLL_BUDGET_MS`）写成官方规则。自定义通道的轮询留下，归 US-HC-04。
+- 不调用 `pickAvailableKey`，不读用户 Key，不进入 401/429 换 Key 循环。
+- 一次 `POST ${base}/hunter/email-verifier`，正文只有 `{ "email" }`。不请求 `api.hunter.io`，也不在客户端对 202 轮询。自定义的 2 秒 / 24 秒轮询留在自定义分支（US-HC-04）。
+- 这次 `fetch` 超时 90 秒。`opencode.json` 的 `hunter-api` 要有不小于 90 秒的 `timeout`。`createOpencode` 的 60 秒只用于拉起进程，不能当成这封邮件的超时。
+- 200：解析 `data.status` / `score` / `email`。`status === "unknown"` 时 `pending: false`，技能写成 `hunter_unknown`。草案把这次终态计为一次验证；网关内部轮询不再另计。
+- 504 `hunter_verification_pending`：`isError`，中文「验证尚未完成，请稍后再次验证」。不要返回 `pending: true`，也不要把这个人 patch 成 `hunter_unknown`。502 `hunter_upstream_error` 用另一句「验证暂时失败，请稍后重试」。同一次补全不自动再打这一封。
 
-官方代调失败时不切到下一把用户 Key。`verifyEmail` 里现有的 401/429 换 Key 循环只留在自定义分支。
-
-`buildEnrichLeadContactsPrompt` 在官方通道仍传入 `verify_emails：true/false`。配额错误那两句（`HUNTER_QUOTA_EXCEEDED` / `HUNTER_ALL_KEYS_EXHAUSTED`）是自定义 Key 池的说法；官方改为转述工具返回的中文，具体句子归 US-HC-07。
+`buildEnrichLeadContactsPrompt` 仍传入 `verify_emails`。官方失败按工具中文转述，不要改写成 Hunter Key 或 Hunter 充值。自定义的 `HUNTER_QUOTA_EXCEEDED` / `HUNTER_ALL_KEYS_EXHAUSTED` 两句留下。
 
 ## 5. 验收与回归
 
 - [ ] 官方通道设置里开关仍在，默认与现网一致，能保存。
-- [ ] 开关开启：同一次补全会验邮，`email_status` 仍是现有枚举；未命中任何「验邮缓存」（因为没有这层缓存）；出站不带用户 Hunter Key，host 不是 `api.hunter.io`。
+- [ ] 开关开启：每人一次 POST，URL 是 `{base}/hunter/email-verifier`，没有第二段 `/v1`，没有用户 Hunter Key。没有验邮缓存文件。
+- [ ] 200 且 `status=unknown`：`email_status` 为 `hunter_unknown`，不当成未完成。按草案计一次验证。
+- [ ] 504：该人状态不变，提示尚未完成。502 的提示与 504 不同。两次都不会自动再请求。
 - [ ] 开关关闭：同一次补全的工具调用里没有 `email_verifier`。
 - [ ] 自定义通道开关仍是直连验邮，本故事不改 `requestOnce("/email-verifier")` 的自定义路径。
 - [ ] 不改徽章文案（`LeadDetailDrawer.vue` 的 `emailStatusLabel`）。
@@ -59,10 +61,10 @@
 
 | 项 | 说明 |
 |----|------|
-| US-HC-01 | 查找代调未落地时，没有「同一次补全」可挂验邮 |
-| O1 验邮契约 | 未锁定。包括处理中时客户端是否轮询 |
-| 用量 | 需求要求计入官方通道。单价与「按封还是按次」在网关分册，桌面不展示 |
-| O2 | 按钮提示原句待确认 |
+| US-HC-01 | 查找分支未落地时，没有同一次补全可挂验邮 |
+| 超时 | 10 封都接近 60 秒时，15 分钟的 `taskTimeout` 可能先中止。中止后的那一次是否已计费未知，不自动重放 |
+| 用量 | 终态按一次验证计。单价仍不在桌面展示。价目未配置时是 503，不是余额不足 |
+| 生产 | 真实验邮联调未完成 |
 
 ---
 
@@ -71,3 +73,4 @@
 | 日期 | 说明 |
 |------|------|
 | 2026-11-16 | 初稿。开关与写回沿用现网，官方验邮 HTTP 留空。Related #156。 |
+| 2026-11-16 | 写入单次 POST、90 秒超时、`unknown` 终态与 504。O2 文案改为已确认。 |
