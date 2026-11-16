@@ -21,6 +21,7 @@ import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { showToast } from '../composables/useToast'
 import { useUiTheme } from '../composables/useUiTheme'
 import type { UiThemeMode } from '../utils/ui-theme'
+import { hunterApiKeysSaveField } from '../domain/hunter-keys-save'
 
 const {
   mode: uiThemeMode,
@@ -634,7 +635,10 @@ async function onSave(): Promise<void> {
       searchProvider: form.searchProvider,
       tavilyApiKey: form.tavilyApiKey,
       ...(form.channelMode === 'custom' ? { placesApiKey: form.placesApiKey } : {}),
-      hunterApiKeys: hunterKeySlots.value.map((key) => String(key)),
+      ...hunterApiKeysSaveField(
+        form.channelMode,
+        hunterKeySlots.value.map((key) => String(key)),
+      ),
       hunterVerifyEmails: form.hunterVerifyEmails,
       googleProxyMode: form.googleProxyMode,
       googleProxyManualUrl: form.googleProxyManualUrl,

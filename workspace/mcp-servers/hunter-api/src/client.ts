@@ -1,4 +1,12 @@
 import { readDomainSearchCache, writeDomainSearchCache, type DomainSearchCacheKey } from "./cache.js";
+import { HunterError } from "./errors.js";
+import {
+  OFFICIAL_GENERIC_MESSAGE,
+  officialAccountDisabledError,
+  officialVerifyRemovedError,
+  postOfficialDomainSearch,
+  type HunterFetchLike,
+} from "./gateway.js";
 import {
   describeKeyPool,
   keyTail,
@@ -17,6 +25,8 @@ import {
   type TrimmedDomainSearch,
 } from "./types.js";
 
+export { HunterError } from "./errors.js";
+
 /**
  * Hunter REST 客户端（US-C-02 详设 §3/§6）：
  * - X-API-Key Header 认证（Key 不进 URL / 日志）
@@ -28,29 +38,16 @@ const BASE_URL = "https://api.hunter.io/v2";
 const VERIFIER_POLL_INTERVAL_MS = 2000;
 const VERIFIER_POLL_BUDGET_MS = 24000;
 
-export class HunterError extends Error {
-  readonly code: string;
-  readonly httpStatus?: number;
-
-  constructor(code: string, message: string, httpStatus?: number) {
-    super(message);
-    this.name = "HunterError";
-    this.code = code;
-    this.httpStatus = httpStatus;
-  }
-}
-
-type FetchLike = (url: string, init?: { headers?: Record<string, string> }) => Promise<{
-  status: number;
-  json: () => Promise<unknown>;
-}>;
-
 export interface HunterClientOptions {
   keys: string[];
   root: string;
-  fetchImpl?: FetchLike;
+  fetchImpl?: HunterFetchLike;
   sleep?: (ms: number) => Promise<void>;
   now?: () => Date;
+  /** 显式通道。缺省读 FTCS_CHANNEL_MODE，仅 official 走代调。 */
+  channelMode?: "official" | "custom";
+  gatewayApiKey?: string;
+  gatewayBaseUrl?: string;
 }
 
 function defaultSleep(ms: number): Promise<void> {
@@ -76,18 +73,43 @@ function firstErrorId(body: unknown): string {
 export class HunterClient {
   private readonly keys: string[];
   private readonly root: string;
-  private readonly fetchImpl: FetchLike;
+  private readonly fetchImpl: HunterFetchLike;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly now: () => Date;
+  private readonly channelMode?: "official" | "custom";
+  private readonly gatewayApiKey?: string;
+  private readonly gatewayBaseUrl?: string;
 
   constructor(options: HunterClientOptions) {
     this.keys = options.keys;
     this.root = options.root;
     this.fetchImpl =
       options.fetchImpl ??
-      ((url, init) => fetch(url, { headers: init?.headers }) as never);
+      ((url, init) =>
+        fetch(url, {
+          method: init?.method,
+          headers: init?.headers,
+          body: init?.body,
+        }) as never);
     this.sleep = options.sleep ?? defaultSleep;
     this.now = options.now ?? (() => new Date());
+    this.channelMode = options.channelMode;
+    this.gatewayApiKey = options.gatewayApiKey;
+    this.gatewayBaseUrl = options.gatewayBaseUrl;
+  }
+
+  /** 只认通道标记。禁止按「有没有用户 Key」决定直连还是代调。 */
+  private isOfficial(): boolean {
+    if (this.channelMode) return this.channelMode === "official";
+    return (process.env.FTCS_CHANNEL_MODE ?? "").trim() === "official";
+  }
+
+  private resolveGatewayApiKey(): string {
+    return (this.gatewayApiKey ?? process.env.FTCS_GATEWAY_API_KEY ?? "").trim();
+  }
+
+  private resolveGatewayBaseUrl(): string {
+    return (this.gatewayBaseUrl ?? process.env.FTCS_TOKEN_GATEWAY_BASE_URL ?? "").trim();
   }
 
   /** 账户配额（免费）。429 时用它学 reset_date；account_info 工具用 per-key 版本。 */
@@ -293,6 +315,54 @@ export class HunterClient {
       return { ...cached, cached: true };
     }
 
+    if (this.isOfficial()) {
+      return this.domainSearchOfficial(params, cacheKey);
+    }
+    return this.domainSearchDirect(params, cacheKey);
+  }
+
+  /** 官方：单次 POST {base}/hunter/domain-search。失败即结束，不换 Key、不重试、不直连。 */
+  private async domainSearchOfficial(
+    params: {
+      domain: string;
+      limit?: number;
+      type?: string;
+      department?: string;
+      seniority?: string;
+    },
+    cacheKey: DomainSearchCacheKey
+  ): Promise<TrimmedDomainSearch & { cached: boolean }> {
+    const body = await postOfficialDomainSearch({
+      params,
+      gatewayApiKey: this.resolveGatewayApiKey(),
+      gatewayBaseUrl: this.resolveGatewayBaseUrl(),
+      fetchImpl: this.fetchImpl,
+    });
+    let parsed;
+    try {
+      parsed = HunterDomainSearchResponseSchema.parse(body);
+    } catch {
+      throw new HunterError("OFFICIAL_UPSTREAM_ERROR", OFFICIAL_GENERIC_MESSAGE, 200);
+    }
+    const trimmed = trimDomainSearch(
+      parsed.data,
+      parsed.meta?.results ?? parsed.data.emails.length
+    );
+    writeDomainSearchCache(this.root, cacheKey, trimmed);
+    return { ...trimmed, cached: false };
+  }
+
+  /** 自定义：直连 api.hunter.io，保留多 Key failover。 */
+  private async domainSearchDirect(
+    params: {
+      domain: string;
+      limit?: number;
+      type?: string;
+      department?: string;
+      seniority?: string;
+    },
+    cacheKey: DomainSearchCacheKey
+  ): Promise<TrimmedDomainSearch & { cached: boolean }> {
     const query: Record<string, string> = {
       domain: params.domain,
       limit: String(params.limit ?? 10),
@@ -308,8 +378,15 @@ export class HunterClient {
     return { ...trimmed, cached: false };
   }
 
-  /** Email Verifier：202 时按同一 URL 轮询（固定发起 Key），总预算 24s。 */
+  /**
+   * Email Verifier。
+   * 自定义：202 时按同一 URL 轮询（固定发起 Key），总预算 24s。
+   * 官方直连已删除。网关验邮是 US-HC-02，这里不发 HTTP、不读用户 Key。
+   */
   async verifyEmail(email: string): Promise<HunterVerifierData & { pending: boolean }> {
+    if (this.isOfficial()) {
+      throw officialVerifyRemovedError();
+    }
     const startedAt = this.now().getTime();
     let apiKey = pickAvailableKey(this.root, this.keys, this.now());
     if (!apiKey) {
@@ -386,6 +463,9 @@ export class HunterClient {
     | (HunterAccountData & { key_tail: string; pool_status: string })
     | { keys: Array<{ tail: string; status: string; plan_name?: string | null; reset_date?: string | null; remaining?: number | null }>; total_remaining: number }
   > {
+    if (this.isOfficial()) {
+      throw officialAccountDisabledError();
+    }
     if (this.keys.length === 0) {
       throw new HunterError(
         "HUNTER_NO_KEY",

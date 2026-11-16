@@ -19,7 +19,10 @@ function keyTail(apiKey: string): string {
   return apiKey.slice(-4)
 }
 
-async function fetchAccount(apiKey: string): Promise<{
+async function fetchAccount(
+  apiKey: string,
+  fetchImpl: typeof fetch,
+): Promise<{
   ok: boolean
   message: string
   remaining?: number | null
@@ -28,7 +31,7 @@ async function fetchAccount(apiKey: string): Promise<{
   httpStatus?: number
 }> {
   try {
-    const res = await fetch('https://api.hunter.io/v2/account', {
+    const res = await fetchImpl('https://api.hunter.io/v2/account', {
       headers: { 'X-API-Key': apiKey },
     })
     if (res.status === 401) {
@@ -77,13 +80,26 @@ async function fetchAccount(apiKey: string): Promise<{
 }
 
 /**
- * 设置页「测试连接」：直调 /account，不启 MCP。
- * 使用已保存到 process.env 的 Key（与 Places 测试一致）。
+ * 设置页「测试连接」。
+ * 官方通道直接返回且不发 HTTP。自定义直调 /account，不启 MCP。
  */
-export async function testHunterConnectivity(): Promise<HunterTestResult> {
+export async function testHunterConnectivity(overrides?: {
+  env?: Record<string, string | undefined>
+  fetchImpl?: typeof fetch
+}): Promise<HunterTestResult> {
+  const env = overrides?.env ?? process.env
+  if ((env.FTCS_CHANNEL_MODE || '').trim() === 'official') {
+    return {
+      ok: false,
+      message: '官方通道不使用自备 Hunter Key',
+      keys: [],
+    }
+  }
+
+  const fetchImpl = overrides?.fetchImpl ?? fetch
   const keys = readHunterKeysFromEnv({
-    HUNTER_API_KEYS: process.env.HUNTER_API_KEYS || '',
-    HUNTER_API_KEY: process.env.HUNTER_API_KEY || '',
+    HUNTER_API_KEYS: env.HUNTER_API_KEYS || '',
+    HUNTER_API_KEY: env.HUNTER_API_KEY || '',
   })
   if (keys.length === 0) {
     return {
@@ -95,7 +111,7 @@ export async function testHunterConnectivity(): Promise<HunterTestResult> {
 
   const items: HunterKeyTestItem[] = []
   for (const key of keys) {
-    const result = await fetchAccount(key)
+    const result = await fetchAccount(key, fetchImpl)
     items.push({
       tail: keyTail(key),
       ok: result.ok,

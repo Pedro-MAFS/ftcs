@@ -42,7 +42,7 @@ function createClient(): HunterClient {
 
 server.tool(
   "domain_search",
-  "Hunter Domain Search: find published email contacts for a lead's domain (1 credit per call, result cached 24h). Requires HUNTER_API_KEYS.",
+  "Hunter Domain Search: find published email contacts for a lead's domain (result cached 24h). Official channel uses the token gateway; custom channel uses HUNTER_API_KEYS.",
   {
     domain: z
       .string()

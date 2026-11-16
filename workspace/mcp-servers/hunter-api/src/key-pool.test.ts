@@ -89,11 +89,11 @@ describe("key-pool", () => {
   it("describeKeyPool 汇总状态与重置日", () => {
     const isolated = mkdtempSync(join(tmpdir(), "ftcs-key-pool-desc-"));
     try {
-      markKeyExhausted(isolated, K1, "2026-10-14");
+      markKeyExhausted(isolated, K1, "2099-01-01");
       markKeyInvalid(isolated, K2);
       const pool = describeKeyPool(isolated, [K1, K2]);
       assert.deepEqual(pool, [
-        { tail: "1111", status: "exhausted", exhausted_until: "2026-10-14" },
+        { tail: "1111", status: "exhausted", exhausted_until: "2099-01-01" },
         { tail: "2222", status: "invalid", exhausted_until: null },
       ]);
     } finally {
