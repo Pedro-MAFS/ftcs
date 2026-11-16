@@ -1,7 +1,7 @@
 # US-HC-04 详细设计：自定义通道仍自备 Key 直连
 
 > **需求**：[../42-需求-官方通道网关代调Hunter-客户端.md](../42-需求-官方通道网关代调Hunter-客户端.md) · **US-HC-04** · Related [#156](https://github.com/Pedro-MAFS/ftcs/issues/156)  
-> **状态**：**回归守门，不单独立项改代码。** 现网已经是 BYOK 直连。没有新的网关接口。通道分叉落地时用本页验收，避免把自定义通道改成代调。不关 #156。  
+> **状态**：**回归守门。** 自定义协议不改，不走 [契约附录](US-HC-网关代调契约草案.md)。通道分叉落地时用本页验收。不关 #156。  
 > **范围**：`FTCS_CHANNEL_MODE=custom` 时的 Key、测试、查找、按开关验邮、抽屉单条验证。  
 > **依赖**：现网 [US-C-03](US-C-03-Skill与桌面.md)、[US-C-04](US-C-04-抽屉people与手工维护.md)。官方删除分支是 [US-HC-05](US-HC-05-去掉官方通道自备Key直连.md)。  
 > **不做**：删除自定义 Key；把自定义通道改成代调；扣官方余额。  
@@ -49,7 +49,9 @@
 | 抽屉验邮 | `callEmailVerifier` | 同上。401 换 Key，402 停止并提示 Hunter 充值。202 不轮询 |
 | 测试 | `testHunterConnectivity` → `fetchAccount` | `https://api.hunter.io/v2/account` |
 
-`rewriteMcpWorkspaceEnv` 在自定义时的 `hunterEnv` 继续只放 `FTCS_WORKSPACE` 和用户 Key。不把 `FTCS_GATEWAY_API_KEY` 注入 `hunter-api`，避免自定义进程拿官方 sk 去当 Hunter Key 或去打网关。
+`rewriteMcpWorkspaceEnv` 在自定义时的 `hunterEnv` 继续只放 `FTCS_WORKSPACE` 和用户 Key。不把 `FTCS_GATEWAY_API_KEY` 注入 `hunter-api`。
+
+自定义直连上的 HTTP 401/429/402 仍是 Hunter 自己的 Key 与额度，映射保持 `mapHttpError` / 抽屉现有句子。不要改成附录里的 `reason=insufficient_quota` 或官方凭证文案。官方 429 只出现在代调响应里。
 
 技能错误句保留：`HUNTER_NO_KEY` / `HUNTER_UNAUTHORIZED` 提示配置 Key；`HUNTER_QUOTA_EXCEEDED` / `HUNTER_ALL_KEYS_EXHAUSTED` 提示 Hunter 额度。`buildEnrichLeadContactsPrompt` 里这两句在自定义通道保留。
 
@@ -59,15 +61,13 @@
 
 - [ ] 自定义、多 Key：可编辑、可测试。测试请求发往 `api.hunter.io/v2/account`，不发往网关。
 - [ ] 自定义、未配置 Key：补全按钮与抽屉「验证」不可用，引导是设置 → 集成。探索、评分、开发信仍可启动。
-- [ ] 自定义查找、开关打开时的验邮、抽屉验证：host 为 `api.hunter.io`，头为用户 Hunter Key。请求里不出现 `FTCS_GATEWAY_API_KEY`，host 也不是网关 base。Hunter 代调用哪种头，等 O1，本条只守住自定义直连。
+- [ ] 自定义查找、开关打开时的验邮、抽屉验证：host 为 `api.hunter.io`，头为用户 Hunter Key。请求里不出现 `FTCS_GATEWAY_API_KEY`，host 也不是 `{base}/hunter/`。
 - [ ] 官方余额（`refreshOfficialUsage` / `usage/me`）不因这些调用变化。桌面没有 Hunter 官方扣费账本可看；验收时以「请求未到网关」为准，不要求本故事去对网关账单。
 - [ ] 从官方切回自定义后，切走之前保存的 Key 仍在，测试与直连可用。
 
 ## 6. 依赖与未决
 
-没有待锁的网关字段。本故事不因此可以单独开实现 PR。
-
-分叉代码若把自定义也改成读 `FTCS_CHANNEL_MODE` 后走代调，或官方失败后调用本节这些函数，就算本故事失败。回归与 US-HC-05 同一次验收。
+没有新的网关字段要写。分叉代码若把自定义也改成代调，或官方失败后调用本节这些函数，就算本故事失败。回归与 US-HC-05 同一次验收。
 
 ---
 
@@ -76,3 +76,4 @@
 | 日期 | 说明 |
 |------|------|
 | 2026-11-16 | 初稿。列出现网直连符号，作为分叉时的回归清单。Related #156。 |
+| 2026-11-16 | 标明自定义的 401/429/402 不改成官方 `reason` 表。 |

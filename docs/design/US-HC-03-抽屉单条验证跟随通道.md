@@ -1,7 +1,7 @@
 # US-HC-03 详细设计：抽屉单条验证跟随通道
 
 > **需求**：[../42-需求-官方通道网关代调Hunter-客户端.md](../42-需求-官方通道网关代调Hunter-客户端.md) · **US-HC-03** · Related [#156](https://github.com/Pedro-MAFS/ftcs/issues/156)  
-> **状态**：**不可联调、不可实现。** 依赖 US-HC-05，且验邮代调契约未锁定。不关 #156。  
+> **状态**：**可按联调草案实现。** 与 US-HC-02 共用 [契约附录](US-HC-网关代调契约草案.md) §3。依赖 US-HC-05 同时去掉官方直连。不关 #156。
 > **范围**：线索抽屉里对一条已有邮箱再点「验证」。  
 > **依赖**：[US-HC-05](US-HC-05-去掉官方通道自备Key直连.md)；现网这条路径不另起补全任务。  
 > **不做**：新的批量验邮；改徽章文案规则；让这一下受「补全联系人时验证邮箱」开关控制。  
@@ -34,7 +34,7 @@
 - `confidence` 用返回分数，否则保留原值
 - 符合 `shouldAppendContactC7` 时追加 `contacts[]`（personal、`hunter_valid`、confidence ≥ 70）
 
-不改这些函数。官方成功结果要先变成 `mapHunterVerifierStatus` 已经认识的状态字符串（`valid` / `accept_all` / `invalid` / `disposable` / 空）。网关用哪一个字段承载这个状态，等 O1。
+不改这些函数。官方 200 把 `data.status` 交给 `mapHunterVerifierStatus`。`unknown` 写成 `hunter_unknown` 并落盘，这是终态。504 不调用这个函数，也不改 `scored.json`。
 
 这条路径不写 `people[].sources`，也不调用 `leads_patch_scored`。保持现状。
 
@@ -53,17 +53,18 @@ LeadDetailDrawer.onVerifyPerson
 
 | 通道 | 行为 |
 |------|------|
-| `official` | 不读 Key 文件来决定成败。凭证不可用时返回 US-HC-06 的开通提示，不发 HTTP。凭证可用时走代调。失败不进入下面的 Key 循环 |
+| `official` | 不读 Key 来决定成败。未开通时返回 US-HC-06 的开通提示，不发 HTTP。已开通则一次 `POST ${base}/hunter/email-verifier`，超时 90 秒。失败不进入 Key 循环，不自动重试 |
 | `custom` | 保持现有 Key 循环、`callEmailVerifier`、401 换下一把、402 停止。文案保持「Key 无效」「Hunter 额度不足，请到 Hunter 账户充值」「验证仍在处理中，请稍后重试」 |
 
-官方代调与 MCP `verifyEmail` 的官方分支使用同一份网关分册，禁止抽屉单独假设另一条路径。两条进程可以各写一个函数，但路径与字段必须同源，且在 O1 锁定前函数体不填 HTTP。
+抽屉与 MCP 使用附录里的同一条路径和同一张错误表，各自实现。官方抽屉不要调用 `VERIFIER_POLL_*`，也不要把 MCP 的 24 秒轮询搬进来。网关负责上游 202。
 
-现网抽屉对 HTTP 202 不轮询，直接告诉用户稍后重试。官方是否还有「处理中」、要不要轮询，等验邮契约。不要把 MCP 里 24 秒轮询搬进抽屉作为已确认行为。
+200 且 `status=unknown`：写回 `hunter_unknown`。504：`saveMessage` 为「验证尚未完成，请稍后再次验证」，文件不改。451：停止，不自动再打。断线或 90 秒超时：提示稍后再试，不假定未计费，不自动重放。
 
 ## 5. 验收与回归
 
 - [ ] 官方、已开通、无 Hunter Key：未验证或未知的那一条可以点「验证」。完成后状态仍经 `mapHunterVerifierStatus` 写回。任务列表不出现 `enrich-lead-contacts`。
-- [ ] 该次请求的 host 不是 `api.hunter.io`，头里没有用户 Hunter Key。
+- [ ] 该次请求是一次 `POST {base}/hunter/email-verifier`，不含 `/v1/v1/`，头里没有用户 Hunter Key，host 不是 `api.hunter.io`。
+- [ ] 200 `unknown` 会写入 `hunter_unknown`。504 不写文件，提示与 502 不同。451 不会在这次点击里再请求一次。
 - [ ] 官方未开通：按钮不可用，提示去登录或开通，不出现 Hunter 注册。
 - [ ] 自定义、已配置 Key：仍直连，402 仍提示 Hunter 账户充值。
 - [ ] 自定义、未配置 Key：提示仍是「请先在设置 → 集成配置 Hunter API Key」。
@@ -73,9 +74,9 @@ LeadDetailDrawer.onVerifyPerson
 
 | 项 | 说明 |
 |----|------|
-| US-HC-05 | 官方直连分支还在时，抽屉会继续用本机 Key。本故事不能先于删除落地 |
-| O1 | 验邮代调未锁定，`verifyPersonEmail` 的官方分支不能写请求 |
-| US-HC-07 | 官方余额不足 / 凭证不可用的句子接到这次 `saveMessage`，不新做账本 |
+| US-HC-05 | 官方直连分支还在时，抽屉会继续用本机 Key。与删除同一次落地 |
+| US-HC-07 | 401/403/429 的句子显示到 `saveMessage` |
+| 超时 | 抽屉今天的 `fetch` 没有超时。官方必须单独设 90 秒，避免默认或代理 60 秒先断开 |
 | 徽章 | `emailStatusLabel` 不改 |
 
 ---
@@ -85,3 +86,4 @@ LeadDetailDrawer.onVerifyPerson
 | 日期 | 说明 |
 |------|------|
 | 2026-11-16 | 初稿。抽屉仍走主进程单条验邮，官方分支等待同一份验邮契约。Related #156。 |
+| 2026-11-16 | 官方抽屉改为单次 POST 与 90 秒超时。504 不落盘。 |

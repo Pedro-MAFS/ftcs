@@ -1,10 +1,10 @@
 # US-HC-01 详细设计：官方通道免配 Key 查找联系人
 
 > **需求**：[../42-需求-官方通道网关代调Hunter-客户端.md](../42-需求-官方通道网关代调Hunter-客户端.md) · **US-HC-01** · Related [#156](https://github.com/Pedro-MAFS/ftcs/issues/156)  
-> **状态**：**不可联调、不可实现。** 查找的方法、路径、字段属于 O1，本仓没有这份契约。本文只写客户端内部怎么接到现有补全链。不关 #156。  
+> **状态**：**可按联调草案实现查找。** 路径与字段见 [契约附录](US-HC-网关代调契约草案.md) §1、§2。真实上游与结算未联调，示例不是实测。不关 #156。  
 > **范围**：官方通道、验邮开关关闭时的查找与 `people[]` 写回。  
-> **依赖**：已开通官方通道（`officialProvisioned`）；现网补全写回；网关分册把查找契约写到可联调。预检与文案归 [US-HC-06](US-HC-06-设置引导与预检随通道切换.md)。  
-> **不做**：打开验邮（[US-HC-02](US-HC-02-官方通道按开关验邮.md)）；抽屉单条（[US-HC-03](US-HC-03-抽屉单条验证跟随通道.md)）；自定义通道（[US-HC-04](US-HC-04-自定义通道仍自备Key直连.md)）；写死网关路径。  
+> **依赖**：已开通官方通道（`officialProvisioned`）；现网补全写回。预检与文案归 [US-HC-06](US-HC-06-设置引导与预检随通道切换.md)。失败文案归 [US-HC-07](US-HC-07-官方通道失败可理解提示.md)。  
+> **不做**：打开验邮（[US-HC-02](US-HC-02-官方通道按开关验邮.md)）；抽屉单条（[US-HC-03](US-HC-03-抽屉单条验证跟随通道.md)）；自定义通道（[US-HC-04](US-HC-04-自定义通道仍自备Key直连.md)）；给工具加 `offset` 或自动翻页。  
 > **索引**：[US-HC-官方通道网关代调Hunter.md](US-HC-官方通道网关代调Hunter.md)
 
 ---
@@ -17,7 +17,7 @@
 
 本故事不新做页面。按钮仍在 `desktop/src/views/LeadsView.vue`：行内补全、`onBatchEnrichClick`、编排节点 `enrich-lead-contacts`。
 
-官方且凭证可用时，按钮不再因为 `hunterKeySet === false` 而禁用。业务条件留下：`lead.phase === 'scored'`，并且 `parseCompanyDomain(lead.company.website || lead.domain)` 有域名。官方按钮提示改为「补全联系人，费用从官方通道余额扣除」，去掉现句里的「约 1 credit」。这句随 O2 一起等马丰顺确认；确认前不改 Vue。
+官方且凭证可用时，按钮不再因为 `hunterKeySet === false` 而禁用。业务条件留下：`lead.phase === 'scored'`，并且 `parseCompanyDomain(lead.company.website || lead.domain)` 有域名。官方按钮提示用已确认的「补全联系人，费用从官方通道余额扣除」，去掉现句里的「约 1 credit」。
 
 未开通时的禁用文案在 US-HC-06。
 
@@ -29,7 +29,7 @@
 | 写回 | 技能 Step 4～5：排序后 `leads_patch_scored`，`sync_valid_to_contacts: false` | 不改 `people[]` 字段、排序、`provider: "hunter"` |
 | 结构 | `workspace/mcp-servers/lead-store/src/person-types.ts` 的 `EmailStatusSchema` / `PersonProviderSchema` | 不改 |
 | 验邮开关 | `HUNTER_VERIFY_EMAILS`，缺省 true（`parseHunterVerifyEmails`） | 本故事验收时开关为关。关则技能禁止调用 `email_verifier` |
-| 缓存 | `data/cache/hunter/domain-search/*.json`，TTL 24h，键不含 Key | 见 §4 的 O3 推荐 |
+| 缓存 | `data/cache/hunter/domain-search/*.json`，TTL 24h，键不含 Key、不含通道 | O3 已确认：命中不出站，网关不收费 |
 
 无邮箱时技能已要求如实说明、不编造。官方通道沿用这句。
 
@@ -50,10 +50,11 @@ LeadsView / 编排
 
 官方分支接在 `HunterClient.domainSearch`：
 
-1. 先 `readDomainSearchCache`。命中则返回，`cached: true`。这是 O3 的客户端推荐，官方命中同样不出站。
-2. 未命中且 `FTCS_CHANNEL_MODE=official`：调用单独的代调函数。凭证用子进程里的 `FTCS_GATEWAY_API_KEY` 与 `FTCS_TOKEN_GATEWAY_BASE_URL`（桌面在 `rewriteMcpWorkspaceEnv` 注入，解析对齐 `getTokenGatewayBaseUrl`）。
-3. 代调成功后，仍走现有 `trimDomainSearch` + `writeDomainSearchCache`，再把现有裁剪结构交回技能。网关响应怎样映射到 `HunterDomainSearchResponseSchema`，等 O1，本文不填字段。
-4. 代调失败：把错误交给 US-HC-07 的两类用户结果。此处禁止再调用 `requestWithFailover`，禁止读 `getHunterApiKeys()`。
+1. 先 `readDomainSearchCache`。命中则返回 `cached: true`，不发 HTTP。草案规定这次网关不收费。
+2. 未命中且 `FTCS_CHANNEL_MODE=official`：`POST ${base}/hunter/domain-search`。`base` 用 `getGatewayBaseUrl()` 的规则（已含 `/v1`，只去尾部斜杠）。头是 `Authorization: Bearer <FTCS_GATEWAY_API_KEY>`、`Content-Type` 与 `Accept` 均为 JSON。不要拼第二段 `/v1`，不要带 Hunter Key 或 `api_key`。
+3. 正文只含 `domain`、`limit`（技能仍为 10），以及调用方真正传入的 `type` / `department` / `seniority`。省略的字段不要传 `null`。不传 `offset`（网关默认 0），也不要按 `meta.results` 再请求下一页。
+4. 200 用现有 `HunterDomainSearchResponseSchema` 校验（容忍额外字段）。`meta.results` 缺失时仍用 `parsed.meta?.results ?? parsed.data.emails.length`。然后 `trimDomainSearch` + `writeDomainSearchCache`。`emails: []` 是成功空页。上游 `emails` 非空即按草案计一次，即使裁剪后 `dropped_no_sources` 把本页清空。
+5. 失败交给 US-HC-07。不调用 `requestWithFailover`，不读 `getHunterApiKeys()`，不自动重试。超时或断线时不假定未收费。
 
 `runtime.ts` 今日的 `hunterEnv` 无论通道都注入 `HUNTER_API_KEYS` / `HUNTER_API_KEY`。官方改为不注入这两项，改注入网关 sk、base 和 `FTCS_CHANNEL_MODE`。与搜索官方分支并列，不复用 `SEARCH_PROVIDER`。
 
@@ -63,23 +64,24 @@ LeadsView / 编排
 
 ## 5. 验收与回归
 
-契约锁定前，下面只是将来的验收，不是本 PR 已测项。
+本详设 PR 不跑这些场景。实现时用桩或联调环境，不要把附录里的示例 JSON 当成已经打过的样本。
 
-- [ ] 官方、未配置 Hunter Key、验邮关闭、线索已评分且有可解析域名：「补全联系人」能跑完，`people[]` 写回与现网查找一致；无结果时不编造邮箱。
-- [ ] 该次未命中缓存的出站 host 是 `getTokenGatewayBaseUrl` 的 host。请求不带用户 Hunter Key，不出现 `api.hunter.io`。
-- [ ] 缓存命中时出站次数为 0（按 O3 推荐）。单测不写死尚未锁定的路径字符串。
+- [ ] 官方、未配置 Hunter Key、验邮关闭、线索已评分且有可解析域名：补全能写回；无邮箱时不编造。
+- [ ] 未命中缓存时只有一次 `POST {base}/hunter/domain-search`。URL 不含 `/v1/v1/`。头是官方 sk，没有用户 Hunter Key，host 不是 `api.hunter.io`。
+- [ ] 200 且本页 `emails` 为空：空态，按草案不收费。200 且上游 `emails` 非空：只计这一页，不自动请求 `offset=10`。
+- [ ] 缓存命中：出站 0 次。
+- [ ] `pagination_error` 的提示不是余额不足。失败不自动重试。
 - [ ] 界面提示不含单价，也不写「记在 Hunter 账单」。
-- [ ] 不做补全时，画像、探索、评分、开发信的预检与按钮仍可用。
-- [ ] 自定义通道查找仍直连，归 US-HC-04，本故事不改它。
+- [ ] 不做补全时，画像、探索、评分、开发信仍可用。自定义查找仍直连，归 US-HC-04。
 
 ## 6. 依赖与未决
 
 | 项 | 说明 |
 |----|------|
-| O1 查找契约 | 未锁定。没有方法、路径、字段就不能联调，也不能写代调函数体 |
-| O3 | 客户端推荐「命中不出站」。这不代表网关已同意免费。跨通道共享同一缓存文件。待马丰顺确认 |
-| 失败文案 | 归 US-HC-07。未区分余额与凭证前，不发明状态码 |
-| 预检改口 | 归 US-HC-06。只改传输、预检仍要求 Key 时，官方无 Key 用户仍会被挡住 |
+| 草案 | 可实现。部署、`HUNTER_ENABLED`、查找价目未就绪时，联调会得到 503，不是客户端路径写错 |
+| 生产 | 真实 Hunter 与结算未完成。地址和单价不在本仓 |
+| 计费差 | 裁剪掉无 sources 的邮箱后，本页仍可能已经计费 |
+| 预检 | 归 US-HC-06。只改传输而预检仍要求 Key 时，无 Key 的官方用户仍会被挡住 |
 
 ---
 
@@ -88,3 +90,4 @@ LeadsView / 编排
 | 日期 | 说明 |
 |------|------|
 | 2026-11-16 | 初稿。只接现有补全链与缓存短路。代调 HTTP 留空。Related #156。 |
+| 2026-11-16 | 写入草案路径、单页正文和计费口径。O3 改为已确认。 |
