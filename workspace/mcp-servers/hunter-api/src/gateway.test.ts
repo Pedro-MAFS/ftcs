@@ -11,6 +11,7 @@ import {
   OFFICIAL_VERIFY_FAILED_MESSAGE,
   OFFICIAL_VERIFY_PENDING_MESSAGE,
   OFFICIAL_VERIFIER_TIMEOUT_MS,
+  buildDirectDomainSearchQuery,
   buildOfficialDomainSearchBody,
   mapOfficialHunterFailure,
   normalizeHunterGatewayBase,
@@ -28,21 +29,46 @@ describe("official hunter gateway", () => {
     );
   });
 
-  it("正文省略空字段，不带 api_key 或 offset", () => {
-    assert.deepEqual(buildOfficialDomainSearchBody({ domain: "acme.com" }), {
-      domain: "acme.com",
-      limit: 10,
-    });
+  it("省略的可选字段不出现，传入的 limit 与 offset 原样带上", () => {
+    const omitted = buildOfficialDomainSearchBody({ domain: "acme.com" });
+    assert.deepEqual(omitted, { domain: "acme.com" });
+    assert.equal("limit" in omitted, false);
+    assert.equal("offset" in omitted, false);
+    assert.equal(JSON.stringify(omitted).includes("null"), false);
     assert.deepEqual(
       buildOfficialDomainSearchBody({
         domain: "acme.com",
-        limit: 10,
+        limit: 25,
+        offset: 0,
         type: "personal",
         department: " ",
         seniority: "executive",
       }),
-      { domain: "acme.com", limit: 10, type: "personal", seniority: "executive" }
+      { domain: "acme.com", limit: 25, offset: 0, type: "personal", seniority: "executive" }
     );
+    const page = buildOfficialDomainSearchBody({
+      domain: "acme.com",
+      limit: 100,
+      offset: 10,
+      type: "generic",
+      department: "sales,it",
+      seniority: "senior",
+    });
+    assert.deepEqual(page, {
+      domain: "acme.com",
+      limit: 100,
+      offset: 10,
+      type: "generic",
+      department: "sales,it",
+      seniority: "senior",
+    });
+    assert.equal("job_titles" in page, false);
+    assert.equal("api_key" in page, false);
+    assert.deepEqual(
+      buildDirectDomainSearchQuery({ domain: "acme.com", limit: 40, offset: 20, type: "generic" }),
+      { domain: "acme.com", limit: "40", offset: "20", type: "generic" }
+    );
+    assert.equal("limit" in buildDirectDomainSearchQuery({ domain: "acme.com" }), false);
   });
 
   it("429 insufficient_quota 是余额，503 上游不可用不是余额", () => {

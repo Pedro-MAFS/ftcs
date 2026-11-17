@@ -58,6 +58,28 @@ export interface OfficialDomainSearchParams {
   type?: string;
   department?: string;
   seniority?: string;
+  offset?: number;
+}
+
+/** 只保留调用方真正传入的有限数字和已填写筛选。不代填 limit，不把空串写成 null。 */
+export function normalizeDomainSearchParams(
+  params: OfficialDomainSearchParams
+): OfficialDomainSearchParams {
+  const normalized: OfficialDomainSearchParams = { domain: params.domain };
+  if (typeof params.limit === "number" && Number.isFinite(params.limit)) {
+    normalized.limit = params.limit;
+  }
+  if (params.type === "personal" || params.type === "generic") {
+    normalized.type = params.type;
+  }
+  const department = params.department?.trim();
+  if (department) normalized.department = department;
+  const seniority = params.seniority?.trim();
+  if (seniority) normalized.seniority = seniority;
+  if (typeof params.offset === "number" && Number.isFinite(params.offset)) {
+    normalized.offset = params.offset;
+  }
+  return normalized;
 }
 
 /** 与搜索侧 getGatewayBaseUrl 相同：已含 /v1，只去掉末尾斜杠。 */
@@ -69,18 +91,26 @@ export function normalizeHunterGatewayBase(raw: string | undefined): string {
 export function buildOfficialDomainSearchBody(
   params: OfficialDomainSearchParams
 ): Record<string, string | number> {
-  const body: Record<string, string | number> = {
-    domain: params.domain,
-    limit: params.limit ?? 10,
-  };
-  if (params.type === "personal" || params.type === "generic") {
-    body.type = params.type;
-  }
-  const department = params.department?.trim();
-  if (department) body.department = department;
-  const seniority = params.seniority?.trim();
-  if (seniority) body.seniority = seniority;
+  const normalized = normalizeDomainSearchParams(params);
+  const body: Record<string, string | number> = { domain: normalized.domain };
+  if (normalized.limit !== undefined) body.limit = normalized.limit;
+  if (normalized.offset !== undefined) body.offset = normalized.offset;
+  if (normalized.type) body.type = normalized.type;
+  if (normalized.department) body.department = normalized.department;
+  if (normalized.seniority) body.seniority = normalized.seniority;
   return body;
+}
+
+/** 自定义直连查询串与官方正文同一组可选字段。省略的字段不出现。 */
+export function buildDirectDomainSearchQuery(
+  params: OfficialDomainSearchParams
+): Record<string, string> {
+  const body = buildOfficialDomainSearchBody(params);
+  const query: Record<string, string> = {};
+  for (const [name, value] of Object.entries(body)) {
+    query[name] = String(value);
+  }
+  return query;
 }
 
 interface OfficialErrorFields {

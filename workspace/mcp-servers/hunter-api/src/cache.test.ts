@@ -1,9 +1,11 @@
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readDomainSearchCache, writeDomainSearchCache } from "./cache.js";
+import { domainSearchCacheRaw, readDomainSearchCache, writeDomainSearchCache } from "./cache.js";
+import { getHunterCacheDir } from "./paths.js";
 import type { TrimmedDomainSearch } from "./types.js";
 
 const PAYLOAD: TrimmedDomainSearch = {
@@ -45,12 +47,59 @@ describe("domain_search cache", () => {
     assert.equal(readDomainSearchCache(root, key, now + 25 * 3600 * 1000), null);
   });
 
-  it("参数不同（limit/type/department）缓存键不同", () => {
+  it("参数不同（limit/type/department/offset）缓存键不同", () => {
     const base = { domain: "params.com", limit: 10 };
     writeDomainSearchCache(root, base, PAYLOAD);
     assert.equal(readDomainSearchCache(root, { domain: "params.com", limit: 20 }), null);
     assert.equal(readDomainSearchCache(root, { domain: "params.com", limit: 10, type: "personal" }), null);
+    assert.equal(readDomainSearchCache(root, { domain: "params.com", limit: 10, offset: 10 }), null);
     assert.ok(readDomainSearchCache(root, base));
+  });
+
+  it("六段键区分缺省 limit、offset 0 与下一页，且不含 Key 或通道", () => {
+    assert.equal(domainSearchCacheRaw({ domain: "Ex.COM" }), "ex.com|||||0");
+    assert.equal(domainSearchCacheRaw({ domain: "ex.com", offset: 0 }), "ex.com|||||0");
+    assert.equal(domainSearchCacheRaw({ domain: "ex.com", limit: 10 }), "ex.com|10||||0");
+    assert.equal(domainSearchCacheRaw({ domain: "ex.com", limit: 10, offset: 10 }), "ex.com|10||||10");
+    assert.equal(
+      domainSearchCacheRaw({
+        domain: "ex.com",
+        limit: 40,
+        type: "generic",
+        department: "sales,it",
+        seniority: "senior",
+        offset: 20,
+      }),
+      "ex.com|40|generic|sales,it|senior|20"
+    );
+    const raw = domainSearchCacheRaw({ domain: "ex.com", limit: 10, offset: 10 });
+    assert.equal(raw.includes("hunter-key"), false);
+    assert.equal(raw.includes("official"), false);
+    assert.equal(raw.includes("custom"), false);
+
+    writeDomainSearchCache(root, { domain: "pages.example" }, PAYLOAD);
+    assert.ok(readDomainSearchCache(root, { domain: "pages.example", offset: 0 }));
+    assert.equal(readDomainSearchCache(root, { domain: "pages.example", limit: 10 }), null);
+    assert.equal(readDomainSearchCache(root, { domain: "pages.example", offset: 10 }), null);
+  });
+
+  it("未命中时不读取旧的五段键", () => {
+    const domain = "legacy.example";
+    const oldRaw = `${domain}|10|||`;
+    const oldHash = createHash("sha256").update(oldRaw).digest("hex").slice(0, 16);
+    const dir = join(getHunterCacheDir(root), "domain-search");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, `${oldHash}.json`),
+      `${JSON.stringify({
+        cached_at: new Date().toISOString(),
+        payload: { ...PAYLOAD, organization: "old-five" },
+      })}\n`,
+      "utf8"
+    );
+    assert.notEqual(domainSearchCacheRaw({ domain, limit: 10 }), oldRaw);
+    assert.equal(readDomainSearchCache(root, { domain, limit: 10 }), null);
+    assert.equal(readDomainSearchCache(root, { domain, limit: 10, offset: 0 }), null);
   });
 
   it("缓存键与 API Key 无关（多 Key 共享）", () => {

@@ -14,10 +14,27 @@ const TTL_MS = 24 * 60 * 60 * 1000;
 
 export interface DomainSearchCacheKey {
   domain: string;
-  limit: number;
+  /** 未传是缺省，哈希段用空串，不要写成 10。 */
+  limit?: number;
   type?: string;
   department?: string;
   seniority?: string;
+  /** 未传与 0 都是第一页，哈希段写成 0。 */
+  offset?: number;
+}
+
+/** 固定六段：domain|limit或空|type或空|department或空|seniority或空|offset。不含 Key、不含通道。 */
+export function domainSearchCacheRaw(key: DomainSearchCacheKey): string {
+  const limit = key.limit === undefined ? "" : String(key.limit);
+  const offset = key.offset === undefined || key.offset === 0 ? "0" : String(key.offset);
+  return [
+    key.domain.toLowerCase(),
+    limit,
+    key.type ?? "",
+    key.department ?? "",
+    key.seniority ?? "",
+    offset,
+  ].join("|");
 }
 
 interface CacheEntry {
@@ -26,14 +43,7 @@ interface CacheEntry {
 }
 
 function cacheFilePath(root: string, key: DomainSearchCacheKey): string {
-  const raw = [
-    key.domain.toLowerCase(),
-    String(key.limit),
-    key.type ?? "",
-    key.department ?? "",
-    key.seniority ?? "",
-  ].join("|");
-  const hash = createHash("sha256").update(raw).digest("hex").slice(0, 16);
+  const hash = createHash("sha256").update(domainSearchCacheRaw(key)).digest("hex").slice(0, 16);
   return join(getHunterCacheDir(root), "domain-search", `${hash}.json`);
 }
 
