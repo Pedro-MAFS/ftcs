@@ -101,7 +101,7 @@ opencode --version
    - **自定义**：填写自备模型 Key，并配置 Tavily 搜索 Key  
 3. 工作区默认在用户数据目录下的 `workspace`；可在设置中更改  
 4. **可选**：若计划使用 **地图发现**，官方通道在设置 → 探索申请官方 Places Key（受理后预计下一自然日内开通，由本机直接访问 Google）；自定义通道填写自备 [Google Places API Key](/docs/places-api-key)。需要能访问 Google 的网络  
-5. **可选**：若计划 **补全联系人**，在设置 → 集成填写 [Hunter API Key](/docs/hunter-api-key)
+5. **可选**：若计划 **补全联系人**，官方通道无需自备 Key，由官方代调，费用计入官方通道；自定义通道在设置 → 集成填写 [Hunter API Key](/docs/hunter-api-key)，直连，费用在你自己的 Hunter 账号。主路径不依赖补全
 
 模板会同步 skills、MCP 预打包产物与配置；你的 `data/` 与 `.env` 不会被模板覆盖。
 
