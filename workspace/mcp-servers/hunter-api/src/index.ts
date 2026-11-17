@@ -74,7 +74,7 @@ server.tool(
 
 server.tool(
   "email_verifier",
-  "Hunter Email Verifier: check deliverability of one email (0.5 credit). Polls 202 up to ~24s. Only call when the user opted in to verification.",
+  "Hunter Email Verifier. Call only when verify_emails is true, once per email. Official channel is a single gateway request: pending is false, and unknown is finished. Custom channel may poll HTTP 202 for about 24s. Do not call again for the same email after an error.",
   {
     email: z.string().email().describe("Email address to verify"),
   },

@@ -9,7 +9,9 @@ import {
   OFFICIAL_GENERIC_MESSAGE,
   OFFICIAL_PAGINATION_MESSAGE,
   OFFICIAL_UNAVAILABLE_MESSAGE,
-  OFFICIAL_VERIFY_REMOVED_MESSAGE,
+  OFFICIAL_VERIFY_FAILED_MESSAGE,
+  OFFICIAL_VERIFY_PENDING_MESSAGE,
+  OFFICIAL_VERIFIER_TIMEOUT_MS,
   OFFICIAL_ACCOUNT_MESSAGE,
   OFFICIAL_CREDENTIAL_MESSAGE,
 } from "./gateway.js";
@@ -689,16 +691,9 @@ describe("hunter-api client", () => {
     }
   });
 
-  it("官方验邮与 account_info 不发 HTTP，即使本地有 Key", async () => {
+  it("官方 account_info 仍不发 HTTP", async () => {
     const { fetchImpl, calls } = makeFetch(() => ({ status: 200, body: okAccount.body }));
     const client = officialClient(fetchImpl, freshRoot());
-    await assert.rejects(
-      () => client.verifyEmail("a@b.com"),
-      (error: unknown) =>
-        error instanceof HunterError &&
-        error.code === "OFFICIAL_VERIFY_DIRECT_REMOVED" &&
-        error.message === OFFICIAL_VERIFY_REMOVED_MESSAGE
-    );
     await assert.rejects(
       () => client.accountInfo(),
       (error: unknown) =>
@@ -707,5 +702,145 @@ describe("hunter-api client", () => {
         error.message === OFFICIAL_ACCOUNT_MESSAGE
     );
     assert.equal(calls.length, 0);
+  });
+
+  function assertOfficialVerifierPost(call: FetchCall, email: string) {
+    const url = new URL(call.url);
+    assert.equal(url.origin + url.pathname, "https://gw.example/v1/hunter/email-verifier");
+    assert.equal(url.pathname.includes("/v1/v1/"), false);
+    assert.notEqual(url.hostname, "api.hunter.io");
+    assert.equal(call.method, "POST");
+    assert.equal(call.authorization, `Bearer ${OFFICIAL_SK}`);
+    assert.equal(call.key, undefined);
+    assert.equal(call.headers?.["Content-Type"], "application/json");
+    assert.equal(call.headers?.Accept, "application/json");
+    assert.ok(call.headers?.["X-Request-Id"]);
+    const payload = JSON.parse(call.body ?? "{}") as Record<string, unknown>;
+    assert.deepEqual(payload, { email });
+    assert.equal(JSON.stringify(payload).includes(USER_HUNTER_KEY), false);
+    assert.equal(JSON.stringify(call.headers).includes(USER_HUNTER_KEY), false);
+    assert.equal(JSON.stringify(call.headers).includes("api_key"), false);
+    return payload;
+  }
+
+  it("官方验邮只 POST 一次，正文只有 email，unknown 是终态", async () => {
+    const root = freshRoot();
+    const { fetchImpl, calls } = makeFetch(() => ({
+      status: 200,
+      body: { data: { status: "unknown", score: 10, email: "a@b.com" }, extra: true },
+    }));
+    const client = officialClient(fetchImpl, root);
+    const result = await client.verifyEmail("a@b.com");
+    assert.equal(calls.length, 1);
+    assertOfficialVerifierPost(calls[0]!, "a@b.com");
+    assert.equal(result.status, "unknown");
+    assert.equal(result.pending, false);
+    assert.equal(result.score, 10);
+    const { existsSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    assert.equal(existsSync(join(root, "data", "cache", "hunter")), false);
+  });
+
+  it("官方验邮 webmail 原样返回且 pending 为 false", async () => {
+    const { fetchImpl, calls } = makeFetch(() => ({
+      status: 200,
+      body: { data: { status: "webmail", score: null, email: "a@gmail.com" } },
+    }));
+    const client = officialClient(fetchImpl, freshRoot());
+    const result = await client.verifyEmail("a@gmail.com");
+    assert.equal(calls.length, 1);
+    assert.equal(result.status, "webmail");
+    assert.equal(result.pending, false);
+  });
+
+  it("官方验邮 504 与 502 各只请求一次，提示不同，且不返回 pending", async () => {
+    const { fetchImpl, calls } = makeFetch((call) => {
+      const email = JSON.parse(call.body ?? "{}").email;
+      if (email === "pending@example.com") {
+        return {
+          status: 504,
+          body: { error: { code: "hunter_verification_pending", message: "hunter_verification_pending" } },
+        };
+      }
+      return {
+        status: 502,
+        body: { error: { code: "hunter_upstream_error", message: "hunter_upstream_error" } },
+      };
+    });
+    const client = officialClient(fetchImpl, freshRoot());
+    await assert.rejects(
+      () => client.verifyEmail("pending@example.com"),
+      (error: unknown) =>
+        error instanceof HunterError &&
+        error.code === "OFFICIAL_VERIFY_PENDING" &&
+        error.message === OFFICIAL_VERIFY_PENDING_MESSAGE
+    );
+    await assert.rejects(
+      () => client.verifyEmail("down@example.com"),
+      (error: unknown) =>
+        error instanceof HunterError &&
+        error.code === "OFFICIAL_UPSTREAM_ERROR" &&
+        error.message === OFFICIAL_VERIFY_FAILED_MESSAGE
+    );
+    assert.equal(calls.length, 2);
+    assert.equal(calls.every((call) => !call.url.includes("api.hunter.io")), true);
+    assert.notEqual(calls[0]!.headers?.["X-Request-Id"], calls[1]!.headers?.["X-Request-Id"]);
+  });
+
+  it("官方验邮超时只出站一次，不当成尚未完成", async () => {
+    assert.equal(OFFICIAL_VERIFIER_TIMEOUT_MS, 90_000);
+    let calls = 0;
+    const fetchImpl = async (
+      _url: string,
+      init?: { signal?: AbortSignal; body?: string; headers?: Record<string, string> }
+    ) => {
+      calls += 1;
+      assert.ok(init?.signal);
+      assert.equal(init.signal.aborted, false);
+      throw new Error("TimeoutError");
+    };
+    const client = new HunterClient({
+      keys: [USER_HUNTER_KEY],
+      root: freshRoot(),
+      fetchImpl,
+      channelMode: "official",
+      gatewayApiKey: OFFICIAL_SK,
+      gatewayBaseUrl: "https://gw.example/v1/",
+    });
+    await assert.rejects(
+      () => client.verifyEmail("slow@example.com"),
+      (error: unknown) =>
+        error instanceof HunterError &&
+        error.code === "OFFICIAL_UPSTREAM_ERROR" &&
+        error.message === OFFICIAL_VERIFY_FAILED_MESSAGE
+    );
+    assert.equal(calls, 1);
+  });
+
+  it("自定义验邮仍直连并轮询，不带官方 sk", async () => {
+    let n = 0;
+    const { fetchImpl, calls } = makeFetch(() => {
+      n += 1;
+      return n < 2
+        ? { status: 202, body: { data: {} } }
+        : { status: 200, body: VERIFIER_VALID_RESPONSE };
+    });
+    const client = new HunterClient({
+      keys: [K1],
+      root: freshRoot(),
+      fetchImpl,
+      channelMode: "custom",
+      gatewayApiKey: OFFICIAL_SK,
+      gatewayBaseUrl: "https://gw.example/v1",
+      sleep: async () => {},
+    });
+    const result = await client.verifyEmail("steve@pantron.com");
+    assert.equal(result.pending, false);
+    assert.equal(result.status, "valid");
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every((call) => call.url.startsWith("https://api.hunter.io/v2/email-verifier")));
+    assert.ok(calls.every((call) => call.key === K1));
+    assert.equal(JSON.stringify(calls).includes(OFFICIAL_SK), false);
+    assert.equal(JSON.stringify(calls).includes("/hunter/email-verifier"), false);
   });
 });

@@ -398,9 +398,9 @@ function buildEnrichLeadContactsPrompt(
       '1. 对 lead_ids 中每一条依次处理；某条无域名/无结果则记录后继续下一条；配额耗尽则停止剩余。',
       '2. 每条：leads_get_scored 定位 → 解析域名 → hunter-api.domain_search（limit=10）→ 排序后 leads_patch_scored 全量写入 people（sync_valid_to_contacts=false）。禁止猜邮。',
       verifyEmails
-        ? '3. verify_emails=true：对当前 lead 的 people 每条调用 hunter-api.email_verifier，再 patch，且 sync_valid_to_contacts=true。'
+        ? '3. verify_emails=true：对当前 lead 的 people 每条只调用一次 hunter-api.email_verifier。成功且 pending 不是 true 时，unknown 写成 hunter_unknown（终态），webmail 写成 hunter_invalid，再 patch，且 sync_valid_to_contacts=true。pending true 只属于自定义轮询用尽。工具报错（验证尚未完成 / 验证暂时失败）不要改成 hunter_unknown，不要再打同一封，按工具中文转述，不要改成配置 Hunter Key 或 Hunter 充值。'
         : '3. verify_emails=false：禁止调用 email_verifier。',
-      '4. 配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。',
+      '4. 自定义配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。官方失败同样禁止再打同一封。',
       '5. 用简短中文汇报：处理条数、成功/跳过、代表邮箱摘要；若有配额错误一并说明。',
       '',
       `输出：data/leads/${productId}/scored.json 中目标 lead 的 people[]`,
@@ -418,9 +418,9 @@ function buildEnrichLeadContactsPrompt(
     '2. 调用 hunter-api.domain_search（limit=10）；禁止猜邮或编造邮箱。',
     '3. 按邮箱质量排序后，用 lead-store.leads_patch_scored 写入全部 people（sync_valid_to_contacts=false）。',
     verifyEmails
-      ? '4. verify_emails=true：对 people 中每一条调用 hunter-api.email_verifier，再 patch 更新 email_status，且 sync_valid_to_contacts=true。'
+      ? '4. verify_emails=true：对 people 中每一条只调用一次 hunter-api.email_verifier。成功且 pending 不是 true 时，unknown 写成 hunter_unknown（终态），webmail 写成 hunter_invalid，再 patch 更新 email_status，且 sync_valid_to_contacts=true。pending true 只属于自定义轮询用尽。工具报错（验证尚未完成 / 验证暂时失败）不要改成 hunter_unknown，不要再打同一封，按工具中文转述，不要改成配置 Hunter Key 或 Hunter 充值。'
       : '4. verify_emails=false：禁止调用 email_verifier。',
-    '5. 配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。',
+    '5. 自定义配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。官方失败同样禁止再打同一封。',
     '6. 用简短中文汇报：域名、people 条数、是否验证、关键邮箱摘要。',
     '',
     `输出：data/leads/${productId}/scored.json 中该 lead 的 people[]`,

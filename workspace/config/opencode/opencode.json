@@ -62,6 +62,7 @@
       "type": "local",
       "command": ["node", "mcp-servers/hunter-api/dist/mcp.js"],
       "enabled": true,
+      "timeout": 120000,
       "environment": {
         "FTCS_WORKSPACE": "."
       }
