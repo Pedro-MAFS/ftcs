@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { OFFICIAL_ENRICH_BLOCKED } from './hunter-channel-copy.ts'
 import {
+  CUSTOM_HUNTER_BANNER,
+  CUSTOM_HUNTER_BATCH_TITLE,
+  CUSTOM_HUNTER_KEY_TITLE,
   OFFICIAL_ENRICH_TITLE,
   OFFICIAL_ENRICH_VERIFY_TITLE,
   canEnrichLeadGate,
+  enrichBannerText,
+  enrichBlockedTitle,
   enrichCredentialReady,
   enrichLeadTitle,
+  enrichNotReadyMessage,
 } from './enrich-lead-gate.ts'
 
 const scored = {
@@ -48,6 +55,35 @@ describe('enrich lead gate', () => {
     assert.equal(enrichLeadTitle({ ...base, phase: 'raw', hasDomain: true }), '仅已评分线索可补全联系人')
   })
 
+  it('官方未开通不可补全，文案指向模型通道且不提 Hunter Key', () => {
+    const input = {
+      ...scored,
+      channelMode: 'official',
+      officialProvisioned: false,
+      hunterKeySet: true,
+      verifyEmails: false,
+    }
+    assert.equal(enrichCredentialReady(input), false)
+    assert.equal(canEnrichLeadGate(input), false)
+    assert.equal(enrichLeadTitle(input), OFFICIAL_ENRICH_BLOCKED)
+    assert.equal(enrichBannerText(input), OFFICIAL_ENRICH_BLOCKED)
+    assert.equal(enrichBlockedTitle(input), OFFICIAL_ENRICH_BLOCKED)
+    assert.equal(enrichNotReadyMessage(input), OFFICIAL_ENRICH_BLOCKED)
+    assert.equal(OFFICIAL_ENRICH_BLOCKED.includes('Hunter'), false)
+    assert.match(OFFICIAL_ENRICH_BLOCKED, /设置 → 模型通道/)
+  })
+
+  it('官方已开通不显示需 Key 横幅', () => {
+    assert.equal(
+      enrichBannerText({
+        channelMode: 'official',
+        officialProvisioned: true,
+        hunterKeySet: false,
+      }),
+      '',
+    )
+  })
+
   it('自定义无 Key 仍不可补全，有 Key 时保留 credit 提示', () => {
     const missing = {
       ...scored,
@@ -58,7 +94,10 @@ describe('enrich lead gate', () => {
     }
     assert.equal(enrichCredentialReady(missing), false)
     assert.equal(canEnrichLeadGate(missing), false)
-    assert.match(enrichLeadTitle(missing), /设置 → 集成/)
+    assert.equal(enrichLeadTitle(missing), CUSTOM_HUNTER_KEY_TITLE)
+    assert.equal(enrichBannerText(missing), CUSTOM_HUNTER_BANNER)
+    assert.equal(enrichBlockedTitle(missing), CUSTOM_HUNTER_BATCH_TITLE)
+    assert.equal(enrichNotReadyMessage(missing), CUSTOM_HUNTER_KEY_TITLE)
 
     const ready = { ...missing, hunterKeySet: true }
     assert.equal(canEnrichLeadGate(ready), true)

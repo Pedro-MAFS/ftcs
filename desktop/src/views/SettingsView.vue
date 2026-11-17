@@ -22,6 +22,7 @@ import { showToast } from '../composables/useToast'
 import { useUiTheme } from '../composables/useUiTheme'
 import type { UiThemeMode } from '../utils/ui-theme'
 import { hunterApiKeysSaveField } from '../domain/hunter-keys-save'
+import { OFFICIAL_HUNTER_SETTINGS_COPY } from '../domain/hunter-channel-copy'
 
 const {
   mode: uiThemeMode,
@@ -1543,6 +1544,17 @@ async function onCheckUpdate(): Promise<void> {
           </div>
           <div class="settings-block__sub">
             <h4>Hunter · 补全联系人</h4>
+            <template v-if="isOfficial">
+              <p class="hint-line">
+                <Icon name="info" :size="12" />
+                {{ OFFICIAL_HUNTER_SETTINGS_COPY }}
+              </p>
+              <label class="settings-checkbox">
+                <input v-model="form.hunterVerifyEmails" type="checkbox" />
+                <span>补全联系人时验证邮箱</span>
+              </label>
+            </template>
+            <template v-else>
             <p class="hint-line">
               <Icon name="info" :size="12" />
               可填多个 Key，自动轮换；费用由 Hunter 收取。
@@ -1637,6 +1649,7 @@ async function onCheckUpdate(): Promise<void> {
             >
               {{ hunterTestMessage }}
             </p>
+            </template>
           </div>
         </section>
 

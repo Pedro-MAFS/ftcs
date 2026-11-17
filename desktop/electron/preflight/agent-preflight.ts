@@ -10,7 +10,7 @@ import {
   type PlacesStartProvider,
   type PlacesStartResolution,
 } from './places-start'
-import { resolveHunterStart } from './hunter-start'
+import { hunterPreflightLabel, resolveHunterStart } from './hunter-start'
 
 export type { PlacesStartProvider, PlacesStartResolution }
 export { isPlacesGatewayReady, resolvePlacesStart }
@@ -233,7 +233,7 @@ export async function runAgentPreflight(
     const hunter = resolveHunterStart(settings)
     checks.push({
       id: 'hunter',
-      label: 'Hunter API Key',
+      label: hunterPreflightLabel(settings.channelMode),
       ok: hunter.ok,
       detail: hunter.detail,
     })
