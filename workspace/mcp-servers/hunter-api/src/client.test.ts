@@ -1,9 +1,12 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { HunterClient, HunterError } from "./client.js";
+import { domainSearchCacheRaw } from "./cache.js";
+import { getHunterCacheDir } from "./paths.js";
 import {
   OFFICIAL_BALANCE_MESSAGE,
   OFFICIAL_GENERIC_MESSAGE,
@@ -273,7 +276,11 @@ describe("hunter-api client", () => {
       (error: unknown) =>
         error instanceof HunterError &&
         error.code === "HUNTER_PAGINATION_ERROR" &&
-        error.message.includes("limit+offset")
+        error.message === OFFICIAL_PAGINATION_MESSAGE &&
+        !error.message.includes("免费计划") &&
+        !error.message.includes("limit+offset") &&
+        !error.message.includes("充值") &&
+        !error.message.includes("余额")
     );
   });
 
@@ -459,7 +466,12 @@ describe("hunter-api client", () => {
     const payload = JSON.parse(call.body ?? "{}") as Record<string, unknown>;
     assert.equal(payload.domain, domain);
     assert.equal(payload.api_key, undefined);
-    assert.equal(payload.offset, undefined);
+    assert.equal(payload.job_titles, undefined);
+    assert.equal(payload.company, undefined);
+    for (const value of Object.values(payload)) {
+      assert.notEqual(value, null);
+    }
+    assert.equal(JSON.stringify(payload).includes("null"), false);
     assert.equal(JSON.stringify(payload).includes(USER_HUNTER_KEY), false);
     assert.equal(JSON.stringify(call.headers).includes(USER_HUNTER_KEY), false);
     return payload;
@@ -472,30 +484,41 @@ describe("hunter-api client", () => {
     assert.equal(calls.length, 1);
     const payload = assertOfficialPost(calls[0]!, "pantron.com");
     assert.equal(payload.limit, 10);
+    assert.equal("offset" in payload, false);
     assert.equal("type" in payload, false);
     assert.equal(result.cached, false);
     assert.equal(result.emails.length, 3);
     assert.equal(result.emails.some((email) => email.value === "steve@pantron.com"), true);
   });
 
-  it("官方可选字段只在有值时出现，不传 null 或 offset", async () => {
+  it("官方省略的可选字段不出现，传入的筛选和 offset 原样带上", async () => {
+    const omittedFetch = makeFetch(() => ({ status: 200, body: emptyPage("omit.example") }));
+    const omittedClient = officialClient(omittedFetch.fetchImpl, freshRoot());
+    await omittedClient.domainSearch({ domain: "omit.example" });
+    const omitted = assertOfficialPost(omittedFetch.calls[0]!, "omit.example");
+    assert.deepEqual(omitted, { domain: "omit.example" });
+
     const { fetchImpl, calls } = makeFetch(() => ({ status: 200, body: emptyPage("filters.example") }));
     const client = officialClient(fetchImpl, freshRoot());
     await client.domainSearch({
       domain: "filters.example",
-      limit: 10,
-      type: "personal",
-      department: "sales",
-      seniority: "executive",
+      limit: 40,
+      offset: 20,
+      type: "generic",
+      department: "sales,it",
+      seniority: "senior",
     });
     const payload = assertOfficialPost(calls[0]!, "filters.example");
     assert.deepEqual(payload, {
       domain: "filters.example",
-      limit: 10,
-      type: "personal",
-      department: "sales",
-      seniority: "executive",
+      limit: 40,
+      offset: 20,
+      type: "generic",
+      department: "sales,it",
+      seniority: "senior",
     });
+    assert.equal(calls[0]!.url.includes("/v1/v1/"), false);
+    assert.equal(calls[0]!.authorization, `Bearer ${OFFICIAL_SK}`);
   });
 
   it("官方 200 且 emails 为空：成功空页，不编造联系人", async () => {
@@ -534,6 +557,146 @@ describe("hunter-api client", () => {
     assert.equal(result.dropped_no_sources, 1);
     assert.equal(result.meta.results, 25);
     assert.equal(JSON.parse(calls[0]!.body ?? "{}").offset, undefined);
+    assert.equal(calls[0]!.url.includes("api.hunter.io"), false);
+  });
+
+  it("一次 domainSearch 只出站一次，更大的 offset 才请求下一页", async () => {
+    const body = structuredClone(PANTRON_DOMAIN_SEARCH_RESPONSE);
+    body.meta.results = 500;
+    const { fetchImpl, calls } = makeFetch(() => ({ status: 200, body }));
+    const client = officialClient(fetchImpl, freshRoot());
+    const first = await client.domainSearch({ domain: "pantron.com", limit: 10, offset: 0 });
+    assert.equal(calls.length, 1);
+    assert.equal(first.cached, false);
+    assert.equal(first.emails.length, 3);
+    assert.equal(JSON.parse(calls[0]!.body ?? "{}").offset, 0);
+    assert.equal(JSON.parse(calls[0]!.body ?? "{}").limit, 10);
+
+    const second = await client.domainSearch({ domain: "pantron.com", limit: 10, offset: 10 });
+    assert.equal(second.cached, false);
+    assert.equal(calls.length, 2);
+    assert.equal(JSON.parse(calls[1]!.body ?? "{}").offset, 10);
+
+    const again = await client.domainSearch({ domain: "pantron.com", limit: 10 });
+    assert.equal(again.cached, true);
+    assert.equal(calls.length, 2);
+  });
+
+  it("未传 limit 与 limit=10 不是同一缓存；缺省 offset 与 0 命中且不再出站", async () => {
+    const root = freshRoot();
+    const { fetchImpl, calls } = makeFetch(() => ({ status: 200, body: PANTRON_DOMAIN_SEARCH_RESPONSE }));
+    const client = new HunterClient({
+      keys: [K1],
+      root,
+      fetchImpl,
+      channelMode: "custom",
+    });
+    await client.domainSearch({ domain: "page.example", limit: 10 });
+    assert.equal(calls.length, 1);
+    const omitted = await client.domainSearch({ domain: "page.example" });
+    assert.equal(omitted.cached, false);
+    assert.equal(calls.length, 2);
+    assert.equal(new URL(calls[1]!.url).searchParams.has("limit"), false);
+    assert.equal(new URL(calls[1]!.url).searchParams.has("offset"), false);
+    const zero = await client.domainSearch({ domain: "page.example", offset: 0 });
+    assert.equal(zero.cached, true);
+    assert.equal(calls.length, 2);
+    const next = await client.domainSearch({ domain: "page.example", offset: 10 });
+    assert.equal(next.cached, false);
+    assert.equal(calls.length, 3);
+    assert.equal(new URL(calls[2]!.url).searchParams.get("offset"), "10");
+    assert.equal(calls.every((call) => call.url.includes("api.hunter.io")), true);
+  });
+
+  it("旧五段缓存未命中时直接出站，不回读旧键", async () => {
+    const root = freshRoot();
+    const domain = "legacy.example";
+    const oldRaw = `${domain}|10|||`;
+    const oldHash = createHash("sha256").update(oldRaw).digest("hex").slice(0, 16);
+    const dir = join(getHunterCacheDir(root), "domain-search");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, `${oldHash}.json`),
+      `${JSON.stringify({
+        cached_at: new Date().toISOString(),
+        payload: {
+          domain,
+          organization: "old-five",
+          pattern: null,
+          accept_all: null,
+          disposable: null,
+          webmail: null,
+          emails: [],
+          dropped_no_sources: 0,
+          meta: { results: 1 },
+        },
+      })}\n`,
+      "utf8"
+    );
+    assert.notEqual(domainSearchCacheRaw({ domain, limit: 10 }), oldRaw);
+    const { fetchImpl, calls } = makeFetch(() => ({ status: 200, body: PANTRON_DOMAIN_SEARCH_RESPONSE }));
+    const client = officialClient(fetchImpl, root);
+    const result = await client.domainSearch({ domain, limit: 10 });
+    assert.equal(calls.length, 1);
+    assert.equal(result.cached, false);
+    assert.notEqual(result.organization, "old-five");
+  });
+
+  it("超过 10 条的本页结果全量返回，不截成 10", async () => {
+    const seed = PANTRON_DOMAIN_SEARCH_RESPONSE.data.emails[0]!;
+    const body = {
+      data: {
+        ...PANTRON_DOMAIN_SEARCH_RESPONSE.data,
+        emails: Array.from({ length: 12 }, (_, index) => ({
+          ...seed,
+          value: `person${index}@pantron.com`,
+          sources: seed.sources.map((source) => ({ ...source })),
+        })),
+      },
+      meta: { results: 40 },
+    };
+    const { fetchImpl, calls } = makeFetch(() => ({ status: 200, body }));
+    const client = officialClient(fetchImpl, freshRoot());
+    const result = await client.domainSearch({ domain: "pantron.com", limit: 12 });
+    assert.equal(calls.length, 1);
+    assert.equal(result.emails.length, 12);
+    assert.equal(result.meta.results, 40);
+  });
+
+  it("自定义查询串带上同一组可选字段，不走网关", async () => {
+    const { fetchImpl, calls } = makeFetch(() => ({ status: 200, body: PANTRON_DOMAIN_SEARCH_RESPONSE }));
+    const client = new HunterClient({
+      keys: [K1],
+      root: freshRoot(),
+      fetchImpl,
+      channelMode: "custom",
+      gatewayApiKey: OFFICIAL_SK,
+      gatewayBaseUrl: "https://gw.example/v1",
+    });
+    await client.domainSearch({
+      domain: "custom.example",
+      limit: 40,
+      type: "generic",
+      department: "sales,it",
+      seniority: "senior",
+      offset: 20,
+    });
+    assert.equal(calls.length, 1);
+    const url = new URL(calls[0]!.url);
+    assert.equal(url.hostname, "api.hunter.io");
+    assert.equal(url.pathname, "/v2/domain-search");
+    assert.equal(url.searchParams.get("domain"), "custom.example");
+    assert.equal(url.searchParams.get("limit"), "40");
+    assert.equal(url.searchParams.get("type"), "generic");
+    assert.equal(url.searchParams.get("department"), "sales,it");
+    assert.equal(url.searchParams.get("seniority"), "senior");
+    assert.equal(url.searchParams.get("offset"), "20");
+    assert.equal(url.searchParams.get("api_key"), null);
+    assert.equal(url.searchParams.get("job_titles"), null);
+    assert.equal(calls[0]!.key, K1);
+    assert.equal(calls[0]!.authorization, undefined);
+    assert.equal(JSON.stringify(calls).includes(OFFICIAL_SK), false);
+    assert.equal(JSON.stringify(calls).includes("gw.example"), false);
   });
 
   it("官方 meta.results 缺失时用 emails.length", async () => {

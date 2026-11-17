@@ -1,6 +1,6 @@
 ---
 name: enrich-lead-contacts
-description: 对一条或多条已评分线索用 Hunter Domain Search 补全联系人并写入 people[]；可选验邮。用户说补全联系人、找决策人邮箱、enrich-lead-contacts 时使用。
+description: 对一条或多条已评分线索用 Hunter Domain Search 补全联系人并写入 people[]；开关开启时可选对关键人验邮。用户说补全联系人、找决策人邮箱、enrich-lead-contacts 时使用。
 phase: 2
 inputs:
   - name: product_id
@@ -23,11 +23,11 @@ outputs:
 # enrich-lead-contacts
 
 对 **一条或多条** 已评分线索做 Hunter Domain Search → 按邮箱质量排序 → 全量写入 `people[]`。  
-**可选**对全部候选调用 Email Verifier，并把符合条件的个人邮箱同步到 `contacts[]`。
+**可选**对选中的关键联系人调用 Email Verifier，并把符合条件的个人邮箱同步到 `contacts[]`。
 
 ```text
-website → domain → domain_search → 映射+排序 → leads_patch_scored
-                         └─(verify_emails)→ email_verifier×每人 → patch + sync_valid_to_contacts
+website → domain → domain_search（当次选定参数，一次一页）→ 映射+排序 → leads_patch_scored
+                         └─(verify_emails 为 true)→ 对选中的关键人 email_verifier → patch + sync_valid_to_contacts
 ```
 
 批量时：对 `lead_ids` **逐条**执行上述流程；单条失败（无域名/无结果）记录后继续；配额耗尽则停止剩余。
@@ -56,19 +56,19 @@ website → domain → domain_search → 映射+排序 → leads_patch_scored
 | `product_id` | 必填 | 产品 ID |
 | `lead_id` | 与 lead_ids 二选一 | 单条 scored 线索 ID |
 | `lead_ids` | 与 lead_id 二选一 | 多条；桌面批量会传入；建议 ≤50 |
-| `verify_emails` | `false` | 是否对全部候选人验邮；未说明则按 `false` |
+| `verify_emails` | `false` | 是否允许对关键人验邮。未说明、缺省或未注入按未开启，硬禁止 `email_verifier` |
 
 ## 冻结常量
 
 | 常量 | 值 | 说明 |
 |------|-----|------|
-| `DOMAIN_SEARCH_LIMIT` | **10** | `domain_search.limit`；禁止更大 |
 | `SYNC_CONFIDENCE_MIN` | **70** | 验邮后同步 `contacts` 的 confidence 下限 |
 
 ## 硬禁令
 
 - **禁止**按邮箱 pattern 猜邮或编造地址；邮箱只能来自 Hunter 返回。
-- **禁止**在 `verify_emails=false`（或缺省）时调用 `email_verifier`。
+- **禁止**在 `verify_emails` 不为 true 时调用 `email_verifier`。`verify_emails=false`、缺省或未注入都算未开启。
+- **禁止**写死 `limit`、`type`、`department`、`seniority`、`offset`，也禁止把一家公司的邮箱从头翻到尾。
 - **禁止**在配额/鉴权错误后重试烧额度。
 - **禁止**在官方查找或验邮失败、超时或断线后再请求。按工具中文原样转述，不要改写成配置 Hunter API Key 或到 Hunter 充值，不要改打 `api.hunter.io`。
 - **禁止**覆盖已有 form/phone；`contacts` 仅按规则 **追加** email。
@@ -88,7 +88,14 @@ website → domain → domain_search → 映射+排序 → leads_patch_scored
 
 ### Step 3：Domain Search
 
-调用 `hunter-api.domain_search({ domain, limit: 10 })`。
+用 `hunter-api.domain_search` 找关键联系人。`domain` 必填，传域名，不传 URL 或邮箱。`limit`、`type`、`department`、`seniority`、`offset` 传哪些、如何组合，由当次判断决定。
+
+- 不写死 `type=personal`，不写死 `limit` 为 10、25、30 或 50。未传的字段不要补上，也不要传 `null`。
+- `department`（可选，逗号分隔，Hunter API v2 Domain Search 官方名单，以后可能增加）：`executive, it, finance, management, sales, legal, support, hr, marketing, communication, education, design, health, operations, product, research, consulting, administrative, procurement`。只用这些英文 slug，不要用中文部门名或自造值。
+- `seniority`（可选，逗号分隔）：`junior, senior, executive`。只用这些英文 slug，不要用中文或自造值。多个值仍用英文逗号分隔。
+- 需要下一页时，再次调用工具并传入新的 `offset`。禁止把一家公司可能多达数千的邮箱从头翻到尾。
+- 不设最多翻几页。官方通道非空查找页按次计费，翻页会增加官方通道费用。不写单价，不写账本明细。
+- 一次调用只取一页。不要因为 `meta.results` 在同一次调用里继续请求下一页。
 
 工具错误处理：
 
@@ -139,9 +146,15 @@ website → domain → domain_search → 映射+排序 → leads_patch_scored
 
 ### Step 6：可选验邮
 
-仅当 `verify_emails === true`。关闭或缺省时不要调用 `email_verifier`。
+仅当 `verify_emails === true`。不为 true（关闭、缺省或未注入）时硬禁止调用 `email_verifier`，到 Step 5 为止。查找结果已经在 Step 5 全量写入，含未验的人。
 
-1. 对 **people 中每一条** 只调用一次 `hunter-api.email_verifier({ email })`。失败后不要再打同一封。
+当 `verify_emails === true`：
+
+1. 允许对关键联系人验邮。由你决定验谁、验几封。不设每家硬顶，不写死 3 或 5。
+2. 注意节省用量。官方通道每封实际发起的验邮计入官方通道费用。不写单价，不写账本。
+3. 可以少验 `info@` 和 generic。这只是节省建议，不是必须。代码和工具都不要因此拒绝这些地址。
+4. 未验的人留在 `people[]`，状态保持 Step 5 已写入的值。
+5. 对挑中的邮箱调用 `hunter-api.email_verifier({ email })`。工具本身不循环 `people[]`。失败后不要再打同一封。
    - 成功且 `pending` 不是 `true`：按 `status` 写 `email_status`，与 `mapHunterVerifierStatus` 一致。
      - `valid` → `hunter_valid`
      - `accept_all` → `hunter_accept_all`
@@ -152,7 +165,7 @@ website → domain → domain_search → 映射+排序 → leads_patch_scored
    - 工具 `isError`，包括「验证尚未完成，请稍后再次验证。」和「验证暂时失败，请稍后重试。」：两句不是同一种失败，原样转述。**停止**剩余验证；已写入的人保持原状态，**不要**写成 `hunter_unknown` 或 `hunter_valid`，**不要**再请求。不要改写成配置 Hunter API Key 或到 Hunter 充值。
    - `HUNTER_CLAIMED_EMAIL` / `OFFICIAL_CLAIMED_EMAIL` → 停止该邮箱，不自动重试；可标 `hunter_invalid` 或跳过。
    - 自定义配额类错误（`HUNTER_QUOTA_EXCEEDED` / `HUNTER_ALL_KEYS_EXHAUSTED`）→ **停止**剩余验证与后续线索；已有结果仍 patch。不要把这两句用于官方代调。
-2. 再次 `leads_patch_scored`，且 **`sync_valid_to_contacts: true`**（工具会把 `hunter_valid` + personal + confidence≥70 的邮箱追加进 `contacts`）。504/502 没有新状态的人保持 Step 5 已经写入的 `email_status`。
+6. 再次 `leads_patch_scored`，且 **`sync_valid_to_contacts: true`**（工具会把 `hunter_valid` + personal + confidence≥70 的邮箱追加进 `contacts`）。504/502 没有新状态的人保持 Step 5 已经写入的 `email_status`。
 
 ### Step 7：汇报
 

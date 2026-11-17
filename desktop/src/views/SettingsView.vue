@@ -1551,8 +1551,9 @@ async function onCheckUpdate(): Promise<void> {
               </p>
               <label class="settings-checkbox">
                 <input v-model="form.hunterVerifyEmails" type="checkbox" />
-                <span>补全联系人时验证邮箱</span>
+                <span>允许对关键人验证邮箱</span>
               </label>
+              <p class="hint-line">由智能体决定验谁、验几封，请注意节省用量。</p>
             </template>
             <template v-else>
             <p class="hint-line">
@@ -1617,10 +1618,9 @@ async function onCheckUpdate(): Promise<void> {
             </div>
             <label class="settings-checkbox">
               <input v-model="form.hunterVerifyEmails" type="checkbox" />
-              <span>
-                补全联系人时验证邮箱
-              </span>
+              <span>允许对关键人验证邮箱</span>
             </label>
+            <p class="hint-line">由智能体决定验谁、验几封，请注意节省用量。</p>
             <p class="hint-line muted">
               保存后重启应用生效。
               尚未注册？

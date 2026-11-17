@@ -2,11 +2,15 @@ import { readDomainSearchCache, writeDomainSearchCache, type DomainSearchCacheKe
 import { HunterError } from "./errors.js";
 import {
   OFFICIAL_GENERIC_MESSAGE,
+  OFFICIAL_PAGINATION_MESSAGE,
   OFFICIAL_VERIFY_FAILED_MESSAGE,
+  buildDirectDomainSearchQuery,
+  normalizeDomainSearchParams,
   officialAccountDisabledError,
   postOfficialDomainSearch,
   postOfficialEmailVerifier,
   type HunterFetchLike,
+  type OfficialDomainSearchParams,
 } from "./gateway.js";
 import {
   describeKeyPool,
@@ -284,11 +288,7 @@ export class HunterClient {
 
     if (status === 400) {
       if (errorId === "pagination_error") {
-        return new HunterError(
-          "HUNTER_PAGINATION_ERROR",
-          `Hunter 分页参数超出当前计划限制（免费计划 limit+offset ≤ 10）：${details}`,
-          400
-        );
+        return new HunterError("HUNTER_PAGINATION_ERROR", OFFICIAL_PAGINATION_MESSAGE, 400);
       }
       return new HunterError(
         "HUNTER_INVALID_PARAMS",
@@ -331,20 +331,18 @@ export class HunterClient {
     );
   }
 
-  /** Domain Search：缓存 24h；成功响应裁剪后写缓存。 */
-  async domainSearch(params: {
-    domain: string;
-    limit?: number;
-    type?: string;
-    department?: string;
-    seniority?: string;
-  }): Promise<TrimmedDomainSearch & { cached: boolean }> {
+  /** Domain Search：缓存 24h；成功响应裁剪后写缓存。一次调用最多出站一次。 */
+  async domainSearch(
+    params: OfficialDomainSearchParams
+  ): Promise<TrimmedDomainSearch & { cached: boolean }> {
+    const normalized = normalizeDomainSearchParams(params);
     const cacheKey: DomainSearchCacheKey = {
-      domain: params.domain,
-      limit: params.limit ?? 10,
-      ...(params.type ? { type: params.type } : {}),
-      ...(params.department ? { department: params.department } : {}),
-      ...(params.seniority ? { seniority: params.seniority } : {}),
+      domain: normalized.domain,
+      ...(normalized.limit !== undefined ? { limit: normalized.limit } : {}),
+      ...(normalized.type ? { type: normalized.type } : {}),
+      ...(normalized.department ? { department: normalized.department } : {}),
+      ...(normalized.seniority ? { seniority: normalized.seniority } : {}),
+      ...(normalized.offset !== undefined ? { offset: normalized.offset } : {}),
     };
 
     const cached = readDomainSearchCache(this.root, cacheKey, this.now().getTime());
@@ -353,20 +351,14 @@ export class HunterClient {
     }
 
     if (this.isOfficial()) {
-      return this.domainSearchOfficial(params, cacheKey);
+      return this.domainSearchOfficial(normalized, cacheKey);
     }
-    return this.domainSearchDirect(params, cacheKey);
+    return this.domainSearchDirect(normalized, cacheKey);
   }
 
   /** 官方：单次 POST {base}/hunter/domain-search。失败即结束，不换 Key、不重试、不直连。 */
   private async domainSearchOfficial(
-    params: {
-      domain: string;
-      limit?: number;
-      type?: string;
-      department?: string;
-      seniority?: string;
-    },
+    params: OfficialDomainSearchParams,
     cacheKey: DomainSearchCacheKey
   ): Promise<TrimmedDomainSearch & { cached: boolean }> {
     const body = await postOfficialDomainSearch({
@@ -389,24 +381,12 @@ export class HunterClient {
     return { ...trimmed, cached: false };
   }
 
-  /** 自定义：直连 api.hunter.io，保留多 Key failover。 */
+  /** 自定义：直连 api.hunter.io，保留多 Key failover。不代翻页。 */
   private async domainSearchDirect(
-    params: {
-      domain: string;
-      limit?: number;
-      type?: string;
-      department?: string;
-      seniority?: string;
-    },
+    params: OfficialDomainSearchParams,
     cacheKey: DomainSearchCacheKey
   ): Promise<TrimmedDomainSearch & { cached: boolean }> {
-    const query: Record<string, string> = {
-      domain: params.domain,
-      limit: String(params.limit ?? 10),
-    };
-    if (params.type) query.type = params.type;
-    if (params.department) query.department = params.department;
-    if (params.seniority) query.seniority = params.seniority;
+    const query = buildDirectDomainSearchQuery(params);
 
     const { body } = await this.requestWithFailover("/domain-search", query);
     const parsed = HunterDomainSearchResponseSchema.parse(body);
