@@ -379,6 +379,12 @@ function buildTranslateOutreachPrompt(input: {
   ].join('\n')
 }
 
+const OFFICIAL_HUNTER_FAILURE_RULE =
+  '官方通道失败：停止并原样转述工具中文，不要改写成「配置 Hunter API Key」或「到 Hunter 充值」，不要再请求，不要改打 api.hunter.io。余额不足用「官方通道余额不足。请到设置 → 模型通道查看余额并充值。」凭证不可用用「官方通道凭证不可用。请到设置 → 模型通道登录、开通或检查官方通道。」「补全联系人暂时不可用，请稍后再试。」不要引导充值或换 Hunter Key。「请求过于频繁，请稍后重试。」和「当前查找范围超出限制。」都不是余额不足。「验证尚未完成，请稍后再次验证。」与「验证暂时失败，请稍后重试。」不同，都不要把该人写成 hunter_unknown。超时或断线不假定未计费，不要自动再请求。'
+
+const CUSTOM_HUNTER_FAILURE_RULE =
+  '自定义通道：仅 HUNTER_NO_KEY / HUNTER_UNAUTHORIZED 提示配置 Hunter API Key；仅 HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED 说明用户自己的 Hunter 额度并立即停止，禁止重试。不要把这两句用于官方通道。'
+
 function buildEnrichLeadContactsPrompt(
   productId: string,
   leadIds: string[],
@@ -401,6 +407,8 @@ function buildEnrichLeadContactsPrompt(
         ? '3. verify_emails=true：对当前 lead 的 people 每条只调用一次 hunter-api.email_verifier。成功且 pending 不是 true 时，unknown 写成 hunter_unknown（终态），webmail 写成 hunter_invalid，再 patch，且 sync_valid_to_contacts=true。pending true 只属于自定义轮询用尽。工具报错（验证尚未完成 / 验证暂时失败）不要改成 hunter_unknown，不要再打同一封，按工具中文转述，不要改成配置 Hunter Key 或 Hunter 充值。'
         : '3. verify_emails=false：禁止调用 email_verifier。',
       '4. 自定义配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。官方失败同样禁止再打同一封。',
+      OFFICIAL_HUNTER_FAILURE_RULE,
+      CUSTOM_HUNTER_FAILURE_RULE,
       '5. 用简短中文汇报：处理条数、成功/跳过、代表邮箱摘要；若有配额错误一并说明。',
       '',
       `输出：data/leads/${productId}/scored.json 中目标 lead 的 people[]`,
@@ -421,6 +429,8 @@ function buildEnrichLeadContactsPrompt(
       ? '4. verify_emails=true：对 people 中每一条只调用一次 hunter-api.email_verifier。成功且 pending 不是 true 时，unknown 写成 hunter_unknown（终态），webmail 写成 hunter_invalid，再 patch 更新 email_status，且 sync_valid_to_contacts=true。pending true 只属于自定义轮询用尽。工具报错（验证尚未完成 / 验证暂时失败）不要改成 hunter_unknown，不要再打同一封，按工具中文转述，不要改成配置 Hunter Key 或 Hunter 充值。'
       : '4. verify_emails=false：禁止调用 email_verifier。',
     '5. 自定义配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。官方失败同样禁止再打同一封。',
+    OFFICIAL_HUNTER_FAILURE_RULE,
+    CUSTOM_HUNTER_FAILURE_RULE,
     '6. 用简短中文汇报：域名、people 条数、是否验证、关键邮箱摘要。',
     '',
     `输出：data/leads/${productId}/scored.json 中该 lead 的 people[]`,
