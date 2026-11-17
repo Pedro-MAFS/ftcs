@@ -9,6 +9,10 @@ import type {
 } from '../../types/electron'
 import Icon from './Icon.vue'
 import { showToast } from '../../composables/useToast'
+import {
+  drawerVerifyBlockedMessage,
+  drawerVerifyReady,
+} from '../../domain/drawer-verify-gate'
 
 const props = defineProps<{
   open: boolean
@@ -18,6 +22,8 @@ const props = defineProps<{
   canEnrich?: boolean
   enrichTitle?: string
   hunterKeySet?: boolean
+  channelMode?: string
+  officialProvisioned?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -111,7 +117,13 @@ const draft = reactive<EditDraft>({
 const title = computed(() => props.lead?.companyName || '线索详情')
 const canEdit = computed(() => props.lead?.phase === 'raw')
 const canEditPeople = computed(() => props.lead?.phase === 'scored')
-const hasHunterKey = computed(() => Boolean(props.hunterKeySet))
+const verifyGate = computed(() => ({
+  channelMode: props.channelMode || '',
+  officialProvisioned: Boolean(props.officialProvisioned),
+  hunterKeySet: Boolean(props.hunterKeySet),
+}))
+const canVerifyChannel = computed(() => drawerVerifyReady(verifyGate.value))
+const verifyBlockedMessage = computed(() => drawerVerifyBlockedMessage(verifyGate.value))
 
 const phaseLabel = computed(() => {
   const phase = props.lead?.phase
@@ -494,8 +506,8 @@ async function savePeopleEdit(): Promise<void> {
 
 async function onVerifyPerson(p: LeadPersonDto): Promise<void> {
   if (!props.lead || !window.ftcs?.verifyPersonEmail || !p.id) return
-  if (!hasHunterKey.value) {
-    saveMessage.value = '请先在设置 → 集成配置 Hunter API Key'
+  if (!canVerifyChannel.value) {
+    saveMessage.value = verifyBlockedMessage.value
     saveError.value = true
     return
   }
@@ -1105,14 +1117,14 @@ onUnmounted(() => {
                       type="button"
                       class="btn-secondary btn-sm"
                       :disabled="
-                        !hasHunterKey ||
+                        !canVerifyChannel ||
                         verifyingPersonId === p.id ||
                         !!verifyingPersonId
                       "
                       :title="
-                        hasHunterKey
+                        canVerifyChannel
                           ? '调用 Hunter 验证该邮箱'
-                          : '请先在设置 → 集成配置 Hunter API Key'
+                          : verifyBlockedMessage
                       "
                       @click="onVerifyPerson(p)"
                     >
