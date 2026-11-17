@@ -13,6 +13,19 @@ export const CHANGELOG_STARTED_AT = '0.5.0'
  */
 export const changelogReleases: ChangelogRelease[] = [
   {
+    version: '0.6.3',
+    releasedAt: '2026-11-17',
+    title: 'FTCS Desktop 0.6.3',
+    notes: [
+      "官方通道的补全联系人（查找，以及按开关发起的验邮）改为经 Token 网关代调。无需自备 Hunter API Key，用量计入官方通道计费",
+      "自定义通道仍使用自己的 Hunter API Key，直连 api.hunter.io，不扣官方余额",
+      "已去掉官方通道里自备 Key、直连 Hunter 的路径；自定义通道的自备 Key 与直连保留",
+      "设置页、补全预检和线索页的说明随当前通道切换。官方通道失败时按官方余额和凭证提示，不再引导去 Hunter 充值",
+      "补全联系人可按次指定查找条数 limit（1–100）、类型 type、部门 department 与职级 seniority，也可用 offset 翻页。客户端不会自动把所有页翻完",
+      "验邮开关改为「允许对关键人验证邮箱」：由智能体决定验谁、验几封，不设每家硬顶，并提醒节省用量",
+    ],
+  },
+  {
     version: '0.6.2',
     releasedAt: '2026-11-15',
     title: 'FTCS Desktop 0.6.2',

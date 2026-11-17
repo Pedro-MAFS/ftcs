@@ -21,6 +21,8 @@ import { useUpdateCheck } from '../composables/useUpdateCheck'
 import { showToast } from '../composables/useToast'
 import { useUiTheme } from '../composables/useUiTheme'
 import type { UiThemeMode } from '../utils/ui-theme'
+import { hunterApiKeysSaveField } from '../domain/hunter-keys-save'
+import { OFFICIAL_HUNTER_SETTINGS_COPY } from '../domain/hunter-channel-copy'
 
 const {
   mode: uiThemeMode,
@@ -634,7 +636,10 @@ async function onSave(): Promise<void> {
       searchProvider: form.searchProvider,
       tavilyApiKey: form.tavilyApiKey,
       ...(form.channelMode === 'custom' ? { placesApiKey: form.placesApiKey } : {}),
-      hunterApiKeys: hunterKeySlots.value.map((key) => String(key)),
+      ...hunterApiKeysSaveField(
+        form.channelMode,
+        hunterKeySlots.value.map((key) => String(key)),
+      ),
       hunterVerifyEmails: form.hunterVerifyEmails,
       googleProxyMode: form.googleProxyMode,
       googleProxyManualUrl: form.googleProxyManualUrl,
@@ -1539,6 +1544,18 @@ async function onCheckUpdate(): Promise<void> {
           </div>
           <div class="settings-block__sub">
             <h4>Hunter · 补全联系人</h4>
+            <template v-if="isOfficial">
+              <p class="hint-line">
+                <Icon name="info" :size="12" />
+                {{ OFFICIAL_HUNTER_SETTINGS_COPY }}
+              </p>
+              <label class="settings-checkbox">
+                <input v-model="form.hunterVerifyEmails" type="checkbox" />
+                <span>允许对关键人验证邮箱</span>
+              </label>
+              <p class="hint-line">由智能体决定验谁、验几封，请注意节省用量。</p>
+            </template>
+            <template v-else>
             <p class="hint-line">
               <Icon name="info" :size="12" />
               可填多个 Key，自动轮换；费用由 Hunter 收取。
@@ -1601,10 +1618,9 @@ async function onCheckUpdate(): Promise<void> {
             </div>
             <label class="settings-checkbox">
               <input v-model="form.hunterVerifyEmails" type="checkbox" />
-              <span>
-                补全联系人时验证邮箱
-              </span>
+              <span>允许对关键人验证邮箱</span>
             </label>
+            <p class="hint-line">由智能体决定验谁、验几封，请注意节省用量。</p>
             <p class="hint-line muted">
               保存后重启应用生效。
               尚未注册？
@@ -1633,6 +1649,7 @@ async function onCheckUpdate(): Promise<void> {
             >
               {{ hunterTestMessage }}
             </p>
+            </template>
           </div>
         </section>
 

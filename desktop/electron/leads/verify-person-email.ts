@@ -11,6 +11,8 @@ import {
   mapHunterVerifierStatus,
   shouldAppendContactC7,
 } from './person-helpers'
+import { OFFICIAL_DRAWER_BLOCKED } from '../../src/domain/drawer-verify-gate'
+import { verifyEmailViaOfficialGateway } from './official-person-verifier'
 
 export interface VerifyPersonEmailInput {
   productId: string
@@ -111,13 +113,10 @@ export async function verifyPersonEmail(
   if (!leadId) return { ok: false, message: '缺少 leadId' }
   if (!personId) return { ok: false, message: '缺少 personId' }
 
-  const env = readEnvFile(path.join(workspaceRoot, '.env'))
-  const keys = readHunterKeysFromEnv(env)
-  if (keys.length === 0) {
-    return {
-      ok: false,
-      message: '请先在设置 → 集成配置 Hunter API Key',
-    }
+  const official = (process.env.FTCS_CHANNEL_MODE || '').trim() === 'official'
+  const gatewayKey = (process.env.FTCS_GATEWAY_API_KEY || '').trim()
+  if (official && !gatewayKey) {
+    return { ok: false, message: OFFICIAL_DRAWER_BLOCKED }
   }
 
   const scoredPath = getScoredPath(productId, workspaceRoot)
@@ -160,42 +159,65 @@ export async function verifyPersonEmail(
     return { ok: false, message: '该联系人没有邮箱' }
   }
 
-  let lastMessage = '验证失败'
-  let verified: Awaited<ReturnType<typeof callEmailVerifier>> | null = null
-  for (const key of keys) {
-    const result = await callEmailVerifier(key, email)
-    if (result.httpStatus === 401) {
-      lastMessage = result.message
-      continue
+  let verifiedStatus: string | null = null
+  let verifiedScore: number | null = null
+  if (official) {
+    const result = await verifyEmailViaOfficialGateway({
+      email,
+      apiKey: gatewayKey,
+    })
+    if (!result.ok) return { ok: false, message: result.message }
+    verifiedStatus = result.status
+    verifiedScore = result.score
+  } else {
+    const env = readEnvFile(path.join(workspaceRoot, '.env'))
+    const keys = readHunterKeysFromEnv(env)
+    if (keys.length === 0) {
+      return {
+        ok: false,
+        message: '请先在设置 → 集成配置 Hunter API Key',
+      }
     }
-    if (result.httpStatus === 402) {
-      return { ok: false, message: result.message }
+
+    let lastMessage = '验证失败'
+    let verified: Awaited<ReturnType<typeof callEmailVerifier>> | null = null
+    for (const key of keys) {
+      const result = await callEmailVerifier(key, email)
+      if (result.httpStatus === 401) {
+        lastMessage = result.message
+        continue
+      }
+      if (result.httpStatus === 402) {
+        return { ok: false, message: result.message }
+      }
+      if (!result.ok) {
+        return { ok: false, message: result.message }
+      }
+      verified = result
+      break
     }
-    if (!result.ok) {
-      return { ok: false, message: result.message }
+
+    if (!verified) {
+      return {
+        ok: false,
+        message:
+          lastMessage === 'Key 无效'
+            ? 'Key 无效，请检查设置'
+            : lastMessage,
+      }
     }
-    verified = result
-    break
+    verifiedStatus = verified.status ?? null
+    verifiedScore = verified.score ?? null
   }
 
-  if (!verified) {
-    return {
-      ok: false,
-      message:
-        lastMessage === 'Key 无效'
-          ? 'Key 无效，请检查设置'
-          : lastMessage,
-    }
-  }
-
-  const emailStatus = mapHunterVerifierStatus(verified.status)
+  const emailStatus = mapHunterVerifierStatus(verifiedStatus)
   const prevConfidence =
     typeof person.confidence === 'number' && Number.isFinite(person.confidence)
       ? person.confidence
       : 0
   const confidence =
-    verified.score != null
-      ? Math.max(0, Math.min(100, verified.score))
+    verifiedScore != null
+      ? Math.max(0, Math.min(100, verifiedScore))
       : prevConfidence
 
   const updatedPerson = {

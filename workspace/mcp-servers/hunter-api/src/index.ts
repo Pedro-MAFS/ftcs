@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { HunterClient, HunterError } from "./client.js";
+import { DOMAIN_SEARCH_TOOL_DESCRIPTION, domainSearchToolShape } from "./domain-search-params.js";
 import { findProjectRoot } from "./paths.js";
 import { getHunterApiKeys } from "./provider.js";
 
@@ -42,26 +43,18 @@ function createClient(): HunterClient {
 
 server.tool(
   "domain_search",
-  "Hunter Domain Search: find published email contacts for a lead's domain (1 credit per call, result cached 24h). Requires HUNTER_API_KEYS.",
-  {
-    domain: z
-      .string()
-      .regex(/^([a-z0-9-]+\.)+[a-z]{2,}$/i)
-      .describe("Lead company eTLD+1 domain, e.g. pantron.com"),
-    limit: z.number().int().min(1).max(100).default(10).describe("Max emails (free plan caps at 10)"),
-    type: z.enum(["personal", "generic"]).optional().describe("Filter by email type"),
-    department: z.string().optional().describe("Comma-separated departments, e.g. sales,marketing"),
-    seniority: z.string().optional().describe("Comma-separated seniority: junior,senior,executive"),
-  },
-  async ({ domain, limit, type, department, seniority }) => {
+  DOMAIN_SEARCH_TOOL_DESCRIPTION,
+  domainSearchToolShape,
+  async ({ domain, limit, type, department, seniority, offset }) => {
     try {
       const client = createClient();
       const result = await client.domainSearch({
         domain: domain.toLowerCase(),
-        limit,
+        ...(limit !== undefined ? { limit } : {}),
         ...(type ? { type } : {}),
         ...(department ? { department } : {}),
         ...(seniority ? { seniority } : {}),
+        ...(offset !== undefined ? { offset } : {}),
       });
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -74,7 +67,7 @@ server.tool(
 
 server.tool(
   "email_verifier",
-  "Hunter Email Verifier: check deliverability of one email (0.5 credit). Polls 202 up to ~24s. Only call when the user opted in to verification.",
+  "Hunter Email Verifier. Call only when the verify toggle allows it and this address was selected. The tool does not loop people[]. Do not retry the same address after a failure. Official channel is a single gateway request: pending is false, and unknown is finished. Custom channel may poll HTTP 202 for about 24s.",
   {
     email: z.string().email().describe("Email address to verify"),
   },

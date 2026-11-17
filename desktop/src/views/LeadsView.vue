@@ -20,6 +20,14 @@ import LeadDetailDrawer from '../components/shared/LeadDetailDrawer.vue'
 import type { LeadRowDto, LeadsSnapshotDto, WorkflowPlan } from '../types/electron'
 import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonScreen } from '../utils/leads-export'
 import { parseCompanyDomain } from '../utils/parse-company-domain'
+import {
+  canEnrichLeadGate,
+  enrichBannerText,
+  enrichBlockedTitle,
+  enrichCredentialReady,
+  enrichLeadTitle,
+  enrichNotReadyMessage,
+} from '../domain/enrich-lead-gate'
 
 defineOptions({ name: 'LeadsView' })
 const meta = SECTION_META.leads
@@ -54,6 +62,8 @@ let launchedDraftTask: string | undefined
 const enriching = ref(false)
 const hunterVerifyEmails = ref(true)
 const hunterKeySet = ref(false)
+const channelMode = ref('')
+const officialProvisioned = ref(false)
 const pendingHighIds = ref<string[]>([])
 const actionMessage = ref('')
 
@@ -431,10 +441,26 @@ const pendingEnrichIds = computed(() => {
     .map((row) => row.id)
 })
 
+const hunterEnrichReady = computed(() =>
+  enrichCredentialReady({
+    channelMode: channelMode.value,
+    officialProvisioned: officialProvisioned.value,
+    hunterKeySet: hunterKeySet.value,
+  }),
+)
+
+const enrichHint = computed(() =>
+  enrichBannerText({
+    channelMode: channelMode.value,
+    officialProvisioned: officialProvisioned.value,
+    hunterKeySet: hunterKeySet.value,
+  }),
+)
+
 const canBatchEnrich = computed(() => {
   return (
     !!activeProductId.value &&
-    hunterKeySet.value &&
+    hunterEnrichReady.value &&
     !isScoring.value &&
     !isDrafting.value &&
     !isEnriching.value &&
@@ -604,28 +630,26 @@ function onDraftLead(lead: LeadRowDto): void {
   void startDraftEmails([lead.id])
 }
 
+function enrichGateInput(lead: LeadRowDto) {
+  return {
+    channelMode: channelMode.value,
+    officialProvisioned: officialProvisioned.value,
+    hunterKeySet: hunterKeySet.value,
+    phase: lead.phase,
+    hasDomain: Boolean(parseCompanyDomain(lead.company.website || lead.domain)),
+  }
+}
+
 function enrichTitle(lead: LeadRowDto): string {
-  if (isDrafting.value || isEnriching.value || generating.value) {
-    return '已有任务在运行'
-  }
-  if (lead.phase !== 'scored') return '仅已评分线索可补全联系人'
-  if (!parseCompanyDomain(lead.company.website || lead.domain)) {
-    return '请先填写有效官网域名'
-  }
-  if (!hunterKeySet.value) {
-    return '请先在设置 → 集成中配置 Hunter API Key'
-  }
-  return hunterVerifyEmails.value
-    ? '补全联系人并验证邮箱（约 0.5 credit/封）'
-    : '补全联系人（Domain Search，约 1 credit）'
+  return enrichLeadTitle({
+    ...enrichGateInput(lead),
+    busy: isDrafting.value || isEnriching.value || generating.value,
+    verifyEmails: hunterVerifyEmails.value,
+  })
 }
 
 function canEnrichLead(lead: LeadRowDto): boolean {
-  return (
-    lead.phase === 'scored' &&
-    Boolean(parseCompanyDomain(lead.company.website || lead.domain)) &&
-    hunterKeySet.value
-  )
+  return canEnrichLeadGate(enrichGateInput(lead))
 }
 
 async function startEnrichContacts(leadIds: string[]): Promise<void> {
@@ -643,8 +667,12 @@ async function startEnrichContacts(leadIds: string[]): Promise<void> {
     actionMessage.value = `一次最多补全 50 条，当前 ${targets.length} 条，请缩小范围`
     return
   }
-  if (!hunterKeySet.value) {
-    actionMessage.value = '请先在设置 → 集成中配置 Hunter API Key'
+  if (!hunterEnrichReady.value) {
+    actionMessage.value = enrichNotReadyMessage({
+      channelMode: channelMode.value,
+      officialProvisioned: officialProvisioned.value,
+      hunterKeySet: hunterKeySet.value,
+    })
     return
   }
 
@@ -794,6 +822,8 @@ onMounted(() => {
   void window.ftcs?.getSettings?.().then((s) => {
     hunterKeySet.value = Boolean(s.hunterApiKeySet)
     hunterVerifyEmails.value = s.hunterVerifyEmails !== false
+    channelMode.value = s.channelMode === 'custom' ? 'custom' : 'official'
+    officialProvisioned.value = Boolean(s.officialProvisioned)
   })
 })
 
@@ -831,8 +861,12 @@ onMounted(() => {
           :title="
             (generating || isScoring || isDrafting || isEnriching || isWorkflowRunning)
               ? '已有任务在运行'
-              : !hunterKeySet
-                ? '请先在设置 → 集成配置 Hunter API Key'
+              : !hunterEnrichReady
+                ? enrichBlockedTitle({
+                    channelMode,
+                    officialProvisioned,
+                    hunterKeySet,
+                  })
                 : pendingEnrichIds.length > 0
                   ? `为 ${pendingEnrichIds.length} 条尚无 people 的已评分线索批量补全`
                   : '暂无待补全线索（需已评分、有官网域名、且尚未有关键联系人）'
@@ -902,8 +936,8 @@ onMounted(() => {
       </div>
     </header>
 
-    <p v-if="!hunterKeySet" class="leads-banner leads-banner--hint">
-      <span class="muted">补全联系人需 Hunter Key（设置 → 集成）</span>
+    <p v-if="enrichHint" class="leads-banner leads-banner--hint">
+      <span class="muted">{{ enrichHint }}</span>
     </p>
 
     <WorkflowPlanEditorDialog
@@ -1150,6 +1184,8 @@ onMounted(() => {
       :can-enrich="detailLead ? canEnrichLead(detailLead) : false"
       :enrich-title="detailLead ? enrichTitle(detailLead) : ''"
       :hunter-key-set="hunterKeySet"
+      :channel-mode="channelMode"
+      :official-provisioned="officialProvisioned"
       @close="closeDrawer"
       @saved="onLeadSaved"
       @draft="onDraftLead"

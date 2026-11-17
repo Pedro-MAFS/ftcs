@@ -1,4 +1,17 @@
 import { readDomainSearchCache, writeDomainSearchCache, type DomainSearchCacheKey } from "./cache.js";
+import { HunterError } from "./errors.js";
+import {
+  OFFICIAL_GENERIC_MESSAGE,
+  OFFICIAL_PAGINATION_MESSAGE,
+  OFFICIAL_VERIFY_FAILED_MESSAGE,
+  buildDirectDomainSearchQuery,
+  normalizeDomainSearchParams,
+  officialAccountDisabledError,
+  postOfficialDomainSearch,
+  postOfficialEmailVerifier,
+  type HunterFetchLike,
+  type OfficialDomainSearchParams,
+} from "./gateway.js";
 import {
   describeKeyPool,
   keyTail,
@@ -17,6 +30,8 @@ import {
   type TrimmedDomainSearch,
 } from "./types.js";
 
+export { HunterError } from "./errors.js";
+
 /**
  * Hunter REST 客户端（US-C-02 详设 §3/§6）：
  * - X-API-Key Header 认证（Key 不进 URL / 日志）
@@ -28,33 +43,55 @@ const BASE_URL = "https://api.hunter.io/v2";
 const VERIFIER_POLL_INTERVAL_MS = 2000;
 const VERIFIER_POLL_BUDGET_MS = 24000;
 
-export class HunterError extends Error {
-  readonly code: string;
-  readonly httpStatus?: number;
-
-  constructor(code: string, message: string, httpStatus?: number) {
-    super(message);
-    this.name = "HunterError";
-    this.code = code;
-    this.httpStatus = httpStatus;
-  }
-}
-
-type FetchLike = (url: string, init?: { headers?: Record<string, string> }) => Promise<{
-  status: number;
-  json: () => Promise<unknown>;
-}>;
-
 export interface HunterClientOptions {
   keys: string[];
   root: string;
-  fetchImpl?: FetchLike;
+  fetchImpl?: HunterFetchLike;
   sleep?: (ms: number) => Promise<void>;
   now?: () => Date;
+  /** 显式通道。缺省读 FTCS_CHANNEL_MODE，仅 official 走代调。 */
+  channelMode?: "official" | "custom";
+  gatewayApiKey?: string;
+  gatewayBaseUrl?: string;
 }
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readOfficialVerifier(
+  body: unknown,
+  fallbackEmail: string
+): HunterVerifierData & { pending: false } {
+  const data =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as { data?: unknown }).data
+      : undefined;
+  const record =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : undefined;
+  const status = typeof record?.status === "string" ? record.status.trim() : "";
+  if (!status) {
+    throw new HunterError("OFFICIAL_UPSTREAM_ERROR", OFFICIAL_VERIFY_FAILED_MESSAGE, 200);
+  }
+  const score = record?.score;
+  const email = record?.email;
+  return {
+    status,
+    score: typeof score === "number" && Number.isFinite(score) ? score : null,
+    email: typeof email === "string" && email.trim() ? email : fallbackEmail,
+    regexp: null,
+    gibberish: null,
+    disposable: null,
+    webmail: null,
+    mx_records: null,
+    smtp_server: null,
+    smtp_check: null,
+    accept_all: null,
+    block: null,
+    pending: false,
+  };
 }
 
 function parseErrorDetails(body: unknown): string {
@@ -76,18 +113,44 @@ function firstErrorId(body: unknown): string {
 export class HunterClient {
   private readonly keys: string[];
   private readonly root: string;
-  private readonly fetchImpl: FetchLike;
+  private readonly fetchImpl: HunterFetchLike;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly now: () => Date;
+  private readonly channelMode?: "official" | "custom";
+  private readonly gatewayApiKey?: string;
+  private readonly gatewayBaseUrl?: string;
 
   constructor(options: HunterClientOptions) {
     this.keys = options.keys;
     this.root = options.root;
     this.fetchImpl =
       options.fetchImpl ??
-      ((url, init) => fetch(url, { headers: init?.headers }) as never);
+      ((url, init) =>
+        fetch(url, {
+          method: init?.method,
+          headers: init?.headers,
+          body: init?.body,
+          signal: init?.signal,
+        }) as never);
     this.sleep = options.sleep ?? defaultSleep;
     this.now = options.now ?? (() => new Date());
+    this.channelMode = options.channelMode;
+    this.gatewayApiKey = options.gatewayApiKey;
+    this.gatewayBaseUrl = options.gatewayBaseUrl;
+  }
+
+  /** 只认通道标记。禁止按「有没有用户 Key」决定直连还是代调。 */
+  private isOfficial(): boolean {
+    if (this.channelMode) return this.channelMode === "official";
+    return (process.env.FTCS_CHANNEL_MODE ?? "").trim() === "official";
+  }
+
+  private resolveGatewayApiKey(): string {
+    return (this.gatewayApiKey ?? process.env.FTCS_GATEWAY_API_KEY ?? "").trim();
+  }
+
+  private resolveGatewayBaseUrl(): string {
+    return (this.gatewayBaseUrl ?? process.env.FTCS_TOKEN_GATEWAY_BASE_URL ?? "").trim();
   }
 
   /** 账户配额（免费）。429 时用它学 reset_date；account_info 工具用 per-key 版本。 */
@@ -225,11 +288,7 @@ export class HunterClient {
 
     if (status === 400) {
       if (errorId === "pagination_error") {
-        return new HunterError(
-          "HUNTER_PAGINATION_ERROR",
-          `Hunter 分页参数超出当前计划限制（免费计划 limit+offset ≤ 10）：${details}`,
-          400
-        );
+        return new HunterError("HUNTER_PAGINATION_ERROR", OFFICIAL_PAGINATION_MESSAGE, 400);
       }
       return new HunterError(
         "HUNTER_INVALID_PARAMS",
@@ -272,20 +331,18 @@ export class HunterClient {
     );
   }
 
-  /** Domain Search：缓存 24h；成功响应裁剪后写缓存。 */
-  async domainSearch(params: {
-    domain: string;
-    limit?: number;
-    type?: string;
-    department?: string;
-    seniority?: string;
-  }): Promise<TrimmedDomainSearch & { cached: boolean }> {
+  /** Domain Search：缓存 24h；成功响应裁剪后写缓存。一次调用最多出站一次。 */
+  async domainSearch(
+    params: OfficialDomainSearchParams
+  ): Promise<TrimmedDomainSearch & { cached: boolean }> {
+    const normalized = normalizeDomainSearchParams(params);
     const cacheKey: DomainSearchCacheKey = {
-      domain: params.domain,
-      limit: params.limit ?? 10,
-      ...(params.type ? { type: params.type } : {}),
-      ...(params.department ? { department: params.department } : {}),
-      ...(params.seniority ? { seniority: params.seniority } : {}),
+      domain: normalized.domain,
+      ...(normalized.limit !== undefined ? { limit: normalized.limit } : {}),
+      ...(normalized.type ? { type: normalized.type } : {}),
+      ...(normalized.department ? { department: normalized.department } : {}),
+      ...(normalized.seniority ? { seniority: normalized.seniority } : {}),
+      ...(normalized.offset !== undefined ? { offset: normalized.offset } : {}),
     };
 
     const cached = readDomainSearchCache(this.root, cacheKey, this.now().getTime());
@@ -293,13 +350,43 @@ export class HunterClient {
       return { ...cached, cached: true };
     }
 
-    const query: Record<string, string> = {
-      domain: params.domain,
-      limit: String(params.limit ?? 10),
-    };
-    if (params.type) query.type = params.type;
-    if (params.department) query.department = params.department;
-    if (params.seniority) query.seniority = params.seniority;
+    if (this.isOfficial()) {
+      return this.domainSearchOfficial(normalized, cacheKey);
+    }
+    return this.domainSearchDirect(normalized, cacheKey);
+  }
+
+  /** 官方：单次 POST {base}/hunter/domain-search。失败即结束，不换 Key、不重试、不直连。 */
+  private async domainSearchOfficial(
+    params: OfficialDomainSearchParams,
+    cacheKey: DomainSearchCacheKey
+  ): Promise<TrimmedDomainSearch & { cached: boolean }> {
+    const body = await postOfficialDomainSearch({
+      params,
+      gatewayApiKey: this.resolveGatewayApiKey(),
+      gatewayBaseUrl: this.resolveGatewayBaseUrl(),
+      fetchImpl: this.fetchImpl,
+    });
+    let parsed;
+    try {
+      parsed = HunterDomainSearchResponseSchema.parse(body);
+    } catch {
+      throw new HunterError("OFFICIAL_UPSTREAM_ERROR", OFFICIAL_GENERIC_MESSAGE, 200);
+    }
+    const trimmed = trimDomainSearch(
+      parsed.data,
+      parsed.meta?.results ?? parsed.data.emails.length
+    );
+    writeDomainSearchCache(this.root, cacheKey, trimmed);
+    return { ...trimmed, cached: false };
+  }
+
+  /** 自定义：直连 api.hunter.io，保留多 Key failover。不代翻页。 */
+  private async domainSearchDirect(
+    params: OfficialDomainSearchParams,
+    cacheKey: DomainSearchCacheKey
+  ): Promise<TrimmedDomainSearch & { cached: boolean }> {
+    const query = buildDirectDomainSearchQuery(params);
 
     const { body } = await this.requestWithFailover("/domain-search", query);
     const parsed = HunterDomainSearchResponseSchema.parse(body);
@@ -308,8 +395,15 @@ export class HunterClient {
     return { ...trimmed, cached: false };
   }
 
-  /** Email Verifier：202 时按同一 URL 轮询（固定发起 Key），总预算 24s。 */
+  /**
+   * Email Verifier。
+   * 自定义：202 时按同一 URL 轮询（固定发起 Key），总预算 24s。
+   * 官方：一次网关 POST，不读用户 Key，不轮询，失败不重试。
+   */
   async verifyEmail(email: string): Promise<HunterVerifierData & { pending: boolean }> {
+    if (this.isOfficial()) {
+      return this.verifyEmailOfficial(email);
+    }
     const startedAt = this.now().getTime();
     let apiKey = pickAvailableKey(this.root, this.keys, this.now());
     if (!apiKey) {
@@ -378,6 +472,19 @@ export class HunterClient {
     }
   }
 
+  /** 官方验邮。200 的 unknown 仍是终态，pending 固定 false。504/502 抛错，不返回 pending。 */
+  private async verifyEmailOfficial(
+    email: string
+  ): Promise<HunterVerifierData & { pending: false }> {
+    const body = await postOfficialEmailVerifier({
+      email,
+      gatewayApiKey: this.resolveGatewayApiKey(),
+      gatewayBaseUrl: this.resolveGatewayBaseUrl(),
+      fetchImpl: this.fetchImpl,
+    });
+    return readOfficialVerifier(body, email);
+  }
+
   /**
    * 账户配额（免费，不耗 credit）。
    * 单 Key：直接返回 data 字段（向后兼容）；多 Key：返回 keys[] 逐条报告 + total_remaining。
@@ -386,6 +493,9 @@ export class HunterClient {
     | (HunterAccountData & { key_tail: string; pool_status: string })
     | { keys: Array<{ tail: string; status: string; plan_name?: string | null; reset_date?: string | null; remaining?: number | null }>; total_remaining: number }
   > {
+    if (this.isOfficial()) {
+      throw officialAccountDisabledError();
+    }
     if (this.keys.length === 0) {
       throw new HunterError(
         "HUNTER_NO_KEY",

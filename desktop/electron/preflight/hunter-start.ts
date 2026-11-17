@@ -1,20 +1,39 @@
 import type { SettingsSnapshot } from '../settings/settings-service'
+import {
+  CUSTOM_HUNTER_MISSING,
+  CUSTOM_HUNTER_PREFLIGHT_LABEL,
+  CUSTOM_HUNTER_READY,
+  OFFICIAL_ENRICH_BLOCKED,
+  OFFICIAL_HUNTER_PREFLIGHT_LABEL,
+  OFFICIAL_HUNTER_PREFLIGHT_READY,
+} from '../../src/domain/hunter-channel-copy'
 
 export interface HunterStartResolution {
   ok: boolean
   detail: string
 }
 
-/** enrich-lead-contacts 启动前 Hunter 通道判定（US-C-03）。无官方代调分支。 */
+export function hunterPreflightLabel(channelMode: string | undefined): string {
+  return channelMode === 'official'
+    ? OFFICIAL_HUNTER_PREFLIGHT_LABEL
+    : CUSTOM_HUNTER_PREFLIGHT_LABEL
+}
+
+/** enrich-lead-contacts 启动前：官方看凭证，自定义看自备 Key。 */
 export function resolveHunterStart(
-  settings: Pick<SettingsSnapshot, 'hunterApiKeySet'>,
+  settings: Pick<SettingsSnapshot, 'hunterApiKeySet'> & {
+    channelMode?: SettingsSnapshot['channelMode']
+    officialProvisioned?: boolean
+  },
 ): HunterStartResolution {
+  if (settings.channelMode === 'official') {
+    if (settings.officialProvisioned) {
+      return { ok: true, detail: OFFICIAL_HUNTER_PREFLIGHT_READY }
+    }
+    return { ok: false, detail: OFFICIAL_ENRICH_BLOCKED }
+  }
   if (settings.hunterApiKeySet) {
-    return { ok: true, detail: 'Hunter API Key 已配置（BYOK）' }
+    return { ok: true, detail: CUSTOM_HUNTER_READY }
   }
-  return {
-    ok: false,
-    detail:
-      '请先在设置 → 集成中配置 Hunter API Key（补全联系人需要；不影响探索/开发信）',
-  }
+  return { ok: false, detail: CUSTOM_HUNTER_MISSING }
 }

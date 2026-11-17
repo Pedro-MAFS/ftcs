@@ -46,6 +46,6 @@ export const docsIndex: DocMeta[] = [
     title: '申请 Hunter API Key',
     seoTitle: 'Hunter API Key 申请 | 补全联系人与验邮',
     description:
-      '在 Hunter 创建 API Key 并配置到 FTCS 桌面端，用于线索页补全联系人与邮箱验证；可选扩展，不影响主路径。',
+      '官方通道补全联系人由官方代调，无需自备 Key；自定义通道在 Hunter 创建 API Key 并配置到 FTCS。可选扩展，不影响主路径。',
   },
 ]

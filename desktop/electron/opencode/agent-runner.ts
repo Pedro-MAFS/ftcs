@@ -379,6 +379,20 @@ function buildTranslateOutreachPrompt(input: {
   ].join('\n')
 }
 
+const OFFICIAL_HUNTER_FAILURE_RULE =
+  '官方通道失败：停止并原样转述工具中文，不要改写成「配置 Hunter API Key」或「到 Hunter 充值」，不要再请求，不要改打 api.hunter.io。余额不足用「官方通道余额不足。请到设置 → 模型通道查看余额并充值。」凭证不可用用「官方通道凭证不可用。请到设置 → 模型通道登录、开通或检查官方通道。」「补全联系人暂时不可用，请稍后再试。」不要引导充值或换 Hunter Key。「请求过于频繁，请稍后重试。」和「当前查找范围超出限制。」都不是余额不足。「验证尚未完成，请稍后再次验证。」与「验证暂时失败，请稍后重试。」不同，都不要把该人写成 hunter_unknown。超时或断线不假定未计费，不要自动再请求。'
+
+const CUSTOM_HUNTER_FAILURE_RULE =
+  '自定义通道：仅 HUNTER_NO_KEY / HUNTER_UNAUTHORIZED 提示配置 Hunter API Key；仅 HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED 说明用户自己的 Hunter 额度并立即停止，禁止重试。不要把这两句用于官方通道。'
+
+const ENRICH_DOMAIN_SEARCH_RULE =
+  '用 hunter-api.domain_search 找关键联系人。limit、type、department、seniority、offset 传哪些、如何组合，由当次判断决定。不写死 type=personal，不写死 limit 为 10、25、30 或 50。department 与 seniority 只用英文 slug，多个值用英文逗号分隔，不要用中文部门名或自造值。department（Hunter API v2 Domain Search 官方名单，以后可能增加）：executive, it, finance, management, sales, legal, support, hr, marketing, communication, education, design, health, operations, product, research, consulting, administrative, procurement。seniority：junior, senior, executive。需要下一页时再次调用工具并传入新的 offset。禁止把一家公司可能多达数千的邮箱从头翻到尾。不设最多翻几页。官方通道非空查找页按次计费，翻页会增加官方通道费用。不写单价，不写账本明细。一次调用只取一页，不要因为 meta.results 再请求下一页。'
+
+const ENRICH_VERIFY_ON =
+  'verify_emails=true：允许对关键联系人验邮，由你决定验谁、验几封。注意节省用量。官方通道每封实际发起的验邮计入官方通道费用。不写单价，不写账本。可以少验 info@ 和 generic，这只是节省建议，不是必须。未验的人留在 people[]。对挑中的邮箱调用 hunter-api.email_verifier。成功且 pending 不是 true 时，unknown 写成 hunter_unknown（终态），webmail 写成 hunter_invalid，再 patch，且 sync_valid_to_contacts=true。pending true 只属于自定义轮询用尽。工具报错（验证尚未完成 / 验证暂时失败）不要改成 hunter_unknown，不要再打同一封，按工具中文转述，不要改成配置 Hunter Key 或 Hunter 充值。'
+
+const ENRICH_VERIFY_OFF = 'verify_emails=false：禁止调用 email_verifier。'
+
 function buildEnrichLeadContactsPrompt(
   productId: string,
   leadIds: string[],
@@ -396,11 +410,12 @@ function buildEnrichLeadContactsPrompt(
       '',
       '执行要求：',
       '1. 对 lead_ids 中每一条依次处理；某条无域名/无结果则记录后继续下一条；配额耗尽则停止剩余。',
-      '2. 每条：leads_get_scored 定位 → 解析域名 → hunter-api.domain_search（limit=10）→ 排序后 leads_patch_scored 全量写入 people（sync_valid_to_contacts=false）。禁止猜邮。',
-      verifyEmails
-        ? '3. verify_emails=true：对当前 lead 的 people 每条调用 hunter-api.email_verifier，再 patch，且 sync_valid_to_contacts=true。'
-        : '3. verify_emails=false：禁止调用 email_verifier。',
-      '4. 配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。',
+      '2. 每条：leads_get_scored 定位 → 解析域名 → hunter-api.domain_search → 排序后 leads_patch_scored 全量写入 people（sync_valid_to_contacts=false）。禁止猜邮。',
+      ENRICH_DOMAIN_SEARCH_RULE,
+      verifyEmails ? `3. ${ENRICH_VERIFY_ON}` : `3. ${ENRICH_VERIFY_OFF}`,
+      '4. 自定义配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。官方失败同样禁止再打同一封。',
+      OFFICIAL_HUNTER_FAILURE_RULE,
+      CUSTOM_HUNTER_FAILURE_RULE,
       '5. 用简短中文汇报：处理条数、成功/跳过、代表邮箱摘要；若有配额错误一并说明。',
       '',
       `输出：data/leads/${productId}/scored.json 中目标 lead 的 people[]`,
@@ -415,12 +430,13 @@ function buildEnrichLeadContactsPrompt(
     '',
     '执行要求：',
     '1. 调用 lead-store.leads_get_scored 定位该线索；从 company.website 解析域名，失败则停止。',
-    '2. 调用 hunter-api.domain_search（limit=10）；禁止猜邮或编造邮箱。',
+    '2. 调用 hunter-api.domain_search；禁止猜邮或编造邮箱。',
+    ENRICH_DOMAIN_SEARCH_RULE,
     '3. 按邮箱质量排序后，用 lead-store.leads_patch_scored 写入全部 people（sync_valid_to_contacts=false）。',
-    verifyEmails
-      ? '4. verify_emails=true：对 people 中每一条调用 hunter-api.email_verifier，再 patch 更新 email_status，且 sync_valid_to_contacts=true。'
-      : '4. verify_emails=false：禁止调用 email_verifier。',
-    '5. 配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。',
+    verifyEmails ? `4. ${ENRICH_VERIFY_ON}` : `4. ${ENRICH_VERIFY_OFF}`,
+    '5. 自定义配额类错误（HUNTER_QUOTA_EXCEEDED / HUNTER_ALL_KEYS_EXHAUSTED）立即停止并中文说明，禁止重试循环。官方失败同样禁止再打同一封。',
+    OFFICIAL_HUNTER_FAILURE_RULE,
+    CUSTOM_HUNTER_FAILURE_RULE,
     '6. 用简短中文汇报：域名、people 条数、是否验证、关键邮箱摘要。',
     '',
     `输出：data/leads/${productId}/scored.json 中该 lead 的 people[]`,
