@@ -4,14 +4,14 @@
 > **状态**：**回归守门。** 自定义协议不改，不走 [契约附录](US-HC-网关代调契约草案.md)。通道分叉落地时用本页验收。不关 #156。  
 > **范围**：`FTCS_CHANNEL_MODE=custom` 时的 Key、测试、查找、按开关验邮、抽屉单条验证。  
 > **依赖**：现网 [US-C-03](US-C-03-Skill与桌面.md)、[US-C-04](US-C-04-抽屉people与手工维护.md)。官方删除分支是 [US-HC-05](US-HC-05-去掉官方通道自备Key直连.md)。  
-> **不做**：删除自定义 Key；把自定义通道改成代调；扣官方余额。  
+> **不做**：删除自定义 Key；把自定义通道改成代调；扣官方余额；改查找参数与翻页（[US-HC-08](US-HC-08-补全联系人查找参数与翻页.md)）；改验邮开关含义（[US-HC-09](US-HC-09-验邮开关允许对关键人验证.md)）。  
 > **索引**：[US-HC-官方通道网关代调Hunter.md](US-HC-官方通道网关代调Hunter.md)
 
 ---
 
 ## 1. 对应需求
 
-自定义通道下 Key 可编辑，可配置多个（上限 `HUNTER_API_KEYS_MAX = 5`），可测试连接。未配置时线索页按钮不可用，引导仍指向设置 → 集成。查找、按开关验邮、抽屉单条验证都直连 `https://api.hunter.io`。这些调用不经过 Token 网关，不扣官方余额。未配置 Key 时画像、探索、评分、开发信仍可用。
+自定义通道下 Key 可编辑，可配置多个（上限 `HUNTER_API_KEYS_MAX = 5`），可测试连接。未配置时线索页按钮不可用，引导仍指向设置 → 集成。查找、实际发起的验邮、抽屉单条验证都直连 `https://api.hunter.io`。这些调用不经过 Token 网关，不扣官方余额。未配置 Key 时画像、探索、评分、开发信仍可用。查找可带的可选字段在 US-HC-08，验谁在 US-HC-09。本故事只守直连与不计官方余额。
 
 ## 2. 模块与界面
 
@@ -33,7 +33,7 @@
 |----|------|
 | `HUNTER_API_KEYS` | 逗号分隔，槽位保存走 `resolveHunterApiKeysSlots` |
 | `HUNTER_API_KEY` | 旧单 Key。`readHunterKeysFromEnv` / `getHunterApiKeys` 仍合并进池 |
-| `HUNTER_VERIFY_EMAILS` | 缺省为开。自定义开启则直连验邮，关闭则技能不调用 `email_verifier` |
+| `HUNTER_VERIFY_EMAILS` | 缺省为开。关闭则技能不调用 `email_verifier`。开启后实际发起的验邮仍直连。验谁见 US-HC-09，不要实现成对全部联系人自动验邮。查找参数与翻页见 US-HC-08，本故事不验收 `limit` / `offset` |
 | Key 池 | `key-pool.ts`：429 `markKeyExhausted`，401 `markKeyInvalid`。只服务于自定义直连 |
 
 切到官方再切回自定义：上述键还在，输入框恢复可编辑。删除只发生在用户于自定义区块清空并保存。见 US-HC-05 的保存规则。
@@ -61,7 +61,7 @@
 
 - [ ] 自定义、多 Key：可编辑、可测试。测试请求发往 `api.hunter.io/v2/account`，不发往网关。
 - [ ] 自定义、未配置 Key：补全按钮与抽屉「验证」不可用，引导是设置 → 集成。探索、评分、开发信仍可启动。
-- [ ] 自定义查找、开关打开时的验邮、抽屉验证：host 为 `api.hunter.io`，头为用户 Hunter Key。请求里不出现 `FTCS_GATEWAY_API_KEY`，host 也不是 `{base}/hunter/`。
+- [ ] 自定义查找、开关打开后实际发起的验邮、抽屉验证：host 为 `api.hunter.io`，头为用户 Hunter Key。请求里不出现 `FTCS_GATEWAY_API_KEY`，host 也不是 `{base}/hunter/`。本条验收直连目的地，不验收「对全部联系人验邮」。
 - [ ] 官方余额（`refreshOfficialUsage` / `usage/me`）不因这些调用变化。桌面没有 Hunter 官方扣费账本可看；验收时以「请求未到网关」为准，不要求本故事去对网关账单。
 - [ ] 从官方切回自定义后，切走之前保存的 Key 仍在，测试与直连可用。
 
@@ -77,3 +77,4 @@
 |------|------|
 | 2026-11-16 | 初稿。列出现网直连符号，作为分叉时的回归清单。Related #156。 |
 | 2026-11-16 | 标明自定义的 401/429/402 不改成官方 `reason` 表。 |
+| 2026-11-17 | 查找参数指向 US-HC-08，验谁指向 US-HC-09。本故事仍只守自定义直连。Related #165。 |

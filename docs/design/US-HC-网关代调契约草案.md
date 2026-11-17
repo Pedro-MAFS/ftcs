@@ -31,16 +31,21 @@ Accept: application/json
 
 ## 2. 查找
 
-工具外形保持 `domain_search({ domain, limit, type?, department?, seniority? })`。技能仍只发 `limit: 10`（`DOMAIN_SEARCH_LIMIT`）。不给工具加 `offset`，也不按 `meta.results` 自动翻页。网关默认 `offset = 0`，不代翻页。
+工具入参是 `domain_search({ domain, limit?, type?, department?, seniority?, offset? })`。传哪些由智能体决定（US-HC-08）。客户端可传 `limit`（1–100）、`type` / `department` / `seniority`、`offset`。省略的字段不传，也不要传 `null`。
 
-正文只允许这些字段，可省略的不要传 `null`，也不要传 `company` 或其他未列出字段：
+客户端代码不按 `meta.results` 自动翻页。只在技能或智能体再次调用工具并传入新的 `offset` 时，才再请求一页。网关不代翻页。非空页按次计费（见 §5）。`job_titles` 本期不传。
+
+下列旧句作废，不要再按它们实现：工具不加 `offset`；技能仍只发 `limit: 10`（含常量 `DOMAIN_SEARCH_LIMIT`）；本产品固定 10。
+
+正文只允许下表这些字段。不要传 `company`、`job_titles`、`api_key` 或用户 Hunter Key：
 
 | 字段 | 规则 |
 |------|------|
 | `domain` | 必填。传域名，不传 URL 或邮箱。网关再转小写 |
-| `limit` | 1–100，缺省 10。本产品固定 10 |
-| `type` | 仅 `personal` 或 `generic` |
-| `department`、`seniority` | 非空字符串，多值逗号分隔；合法值由上游校验 |
+| `limit` | 可选。整数 1–100。调用方传入才写入正文。超出 1–100 由工具拒绝，不要截成 10。省略则不传该字段，不传 `null`，客户端不代填 10、25、30 或 50。网关在字段缺席时的缺省不是客户端固定值 |
+| `offset` | 可选。非负整数。调用方传入才写入正文，包含传入的 0。省略则不传该字段，不传 `null`。网关在字段缺席时视为 0，并且不代翻页 |
+| `type` | 仅 `personal` 或 `generic`。省略则不传，不默认 `personal` |
+| `department`、`seniority` | 非空字符串，多值逗号分隔；合法值由上游校验。省略则不传 |
 
 HTTP 200 的体是 `{ data, meta }`。客户端继续用现有 `HunterDomainSearchResponseSchema` 做校验，并容忍额外字段（现有 zod 对象默认丢掉未知键）。`meta.results` 缺失时，沿用 `parsed.meta?.results ?? parsed.data.emails.length`。`meta.results_approximate` 可以出现，不参与写回。校验通过后仍走 `trimDomainSearch` 再 `writeDomainSearchCache`。
 
@@ -113,13 +118,15 @@ Hunter 上游自己的 401/429 已由网关收成上面的 503，客户端不要
 
 | 故事 | 用到的契约 |
 |------|------------|
-| US-HC-01 | §1、§2、缓存不收费、空页/非空页、不自动翻页 |
+| US-HC-01 | §1、§2 的单次请求不代翻页、缓存不收费、空页/非空页。条数与 `offset` 的现行口径见 US-HC-08，不再是固定 10 |
 | US-HC-02 | §3 的单次 POST、`unknown` 终态、504 与 502 区分、90 秒 |
 | US-HC-03 | 与 §3 同一条验邮；抽屉不复用 24 秒轮询 |
 | US-HC-04 | 不用本附录。自定义仍直连 Hunter |
 | US-HC-05 | §1 的凭证与「失败不回退」；不自动重试 |
 | US-HC-06 | 不新增网关字段。O2/O4 已确认的界面 |
 | US-HC-07 | §4 全表，外加 §5 的不重试 |
+| US-HC-08 | §1、§2 的可传字段与不代翻页，§5 的非空页按次与缓存不收费 |
+| US-HC-09 | 不改 §3。开关含义不在本附录。实际发起的验邮仍用 §3 |
 
 ---
 
@@ -128,3 +135,4 @@ Hunter 上游自己的 401/429 已由网关收成上面的 503，客户端不要
 | 日期 | 说明 |
 |------|------|
 | 2026-11-16 | 按用户提供的联调草案写入客户端可执行契约。不链未提供的网关文件。Related #156。 |
+| 2026-11-17 | 客户端工具开放 `offset`，可传 `limit`（1–100）与筛选。取消「工具不加 offset」「技能仍只发 limit: 10」「本产品固定 10」。Related #165。 |
