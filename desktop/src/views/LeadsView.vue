@@ -22,8 +22,11 @@ import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonScreen } from '../ut
 import { parseCompanyDomain } from '../utils/parse-company-domain'
 import {
   canEnrichLeadGate,
+  enrichBannerText,
+  enrichBlockedTitle,
   enrichCredentialReady,
   enrichLeadTitle,
+  enrichNotReadyMessage,
 } from '../domain/enrich-lead-gate'
 
 defineOptions({ name: 'LeadsView' })
@@ -446,8 +449,12 @@ const hunterEnrichReady = computed(() =>
   }),
 )
 
-const showHunterKeyHint = computed(
-  () => !hunterKeySet.value && !hunterEnrichReady.value,
+const enrichHint = computed(() =>
+  enrichBannerText({
+    channelMode: channelMode.value,
+    officialProvisioned: officialProvisioned.value,
+    hunterKeySet: hunterKeySet.value,
+  }),
 )
 
 const canBatchEnrich = computed(() => {
@@ -661,7 +668,11 @@ async function startEnrichContacts(leadIds: string[]): Promise<void> {
     return
   }
   if (!hunterEnrichReady.value) {
-    actionMessage.value = '请先在设置 → 集成中配置 Hunter API Key'
+    actionMessage.value = enrichNotReadyMessage({
+      channelMode: channelMode.value,
+      officialProvisioned: officialProvisioned.value,
+      hunterKeySet: hunterKeySet.value,
+    })
     return
   }
 
@@ -851,7 +862,11 @@ onMounted(() => {
             (generating || isScoring || isDrafting || isEnriching || isWorkflowRunning)
               ? '已有任务在运行'
               : !hunterEnrichReady
-                ? '请先在设置 → 集成配置 Hunter API Key'
+                ? enrichBlockedTitle({
+                    channelMode,
+                    officialProvisioned,
+                    hunterKeySet,
+                  })
                 : pendingEnrichIds.length > 0
                   ? `为 ${pendingEnrichIds.length} 条尚无 people 的已评分线索批量补全`
                   : '暂无待补全线索（需已评分、有官网域名、且尚未有关键联系人）'
@@ -921,8 +936,8 @@ onMounted(() => {
       </div>
     </header>
 
-    <p v-if="showHunterKeyHint" class="leads-banner leads-banner--hint">
-      <span class="muted">补全联系人需 Hunter Key（设置 → 集成）</span>
+    <p v-if="enrichHint" class="leads-banner leads-banner--hint">
+      <span class="muted">{{ enrichHint }}</span>
     </p>
 
     <WorkflowPlanEditorDialog
