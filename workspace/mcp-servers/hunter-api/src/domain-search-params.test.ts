@@ -3,7 +3,13 @@ import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
-import { domainSearchToolSchema } from "./domain-search-params.js";
+import {
+  DEPARTMENT_SLUGS,
+  DOMAIN_SEARCH_TOOL_DESCRIPTION,
+  SENIORITY_SLUGS,
+  domainSearchToolSchema,
+  domainSearchToolShape,
+} from "./domain-search-params.js";
 import { buildOfficialDomainSearchBody } from "./gateway.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -62,6 +68,33 @@ describe("domain_search tool input", () => {
     });
     assert.equal("job_titles" in body, false);
     assert.equal("api_key" in body, false);
+  });
+
+  it("department 与 seniority 只在说明里列出英文 slug，客户端不枚举拒绝", () => {
+    const departmentDescription = domainSearchToolShape.department.description ?? "";
+    const seniorityDescription = domainSearchToolShape.seniority.description ?? "";
+    assert.match(departmentDescription, /English slugs only/);
+    assert.match(departmentDescription, /Do not use Chinese department names or invented values/);
+    assert.match(seniorityDescription, /Do not use Chinese names or invented values/);
+    assert.equal(departmentDescription.includes(DEPARTMENT_SLUGS), true);
+    assert.equal(seniorityDescription.includes(SENIORITY_SLUGS), true);
+    assert.equal(DOMAIN_SEARCH_TOOL_DESCRIPTION.includes(DEPARTMENT_SLUGS), true);
+    assert.equal(DOMAIN_SEARCH_TOOL_DESCRIPTION.includes(SENIORITY_SLUGS), true);
+    assert.equal(DOMAIN_SEARCH_TOOL_DESCRIPTION.includes("may grow later"), true);
+
+    for (const department of ["销售", "not-a-slug", "sales,it"]) {
+      const parsed = domainSearchToolSchema.safeParse({ domain: "acme.com", department });
+      assert.equal(parsed.success, true, department);
+    }
+    const seniority = domainSearchToolSchema.safeParse({ domain: "acme.com", seniority: "老板" });
+    assert.equal(seniority.success, true);
+    const forwarded = buildOfficialDomainSearchBody({
+      domain: "acme.com",
+      department: "销售",
+      seniority: "老板",
+    });
+    assert.equal(forwarded.department, "销售");
+    assert.equal(forwarded.seniority, "老板");
   });
 
   it("工具描述不再写死 limit，验邮工具不循环 people", () => {

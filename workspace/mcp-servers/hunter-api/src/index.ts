@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { HunterClient, HunterError } from "./client.js";
-import { domainSearchToolShape } from "./domain-search-params.js";
+import { DOMAIN_SEARCH_TOOL_DESCRIPTION, domainSearchToolShape } from "./domain-search-params.js";
 import { findProjectRoot } from "./paths.js";
 import { getHunterApiKeys } from "./provider.js";
 
@@ -43,7 +43,7 @@ function createClient(): HunterClient {
 
 server.tool(
   "domain_search",
-  "Hunter Domain Search: one call returns one page for a lead domain (cached 24h). Choose limit (1-100), type (personal or generic), department, seniority, and offset per call; omit any you are not setting. Do not assume a default limit or type. To read another page, call again with a new offset. This tool does not follow meta.results. Official channel uses the token gateway; custom channel uses HUNTER_API_KEYS.",
+  DOMAIN_SEARCH_TOOL_DESCRIPTION,
   domainSearchToolShape,
   async ({ domain, limit, type, department, seniority, offset }) => {
     try {

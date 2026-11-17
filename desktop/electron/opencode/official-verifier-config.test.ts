@@ -69,6 +69,12 @@ describe('official verifier config', () => {
       assert.match(text, /不设最多翻几页/)
       assert.match(text, /不写死 `?type=personal/)
       assert.match(text, /由你决定验谁、验几封|由当次判断决定/)
+      assert.match(
+        text,
+        /executive, it, finance, management, sales, legal, support, hr, marketing, communication, education, design, health, operations, product, research, consulting, administrative, procurement/,
+      )
+      assert.match(text, /junior, senior, executive/)
+      assert.match(text, /不要用中文/)
     }
     assert.match(skill, /由当次判断决定/)
     assert.match(skill, /允许对关键联系人验邮/)

@@ -91,6 +91,8 @@ website → domain → domain_search（当次选定参数，一次一页）→ �
 用 `hunter-api.domain_search` 找关键联系人。`domain` 必填，传域名，不传 URL 或邮箱。`limit`、`type`、`department`、`seniority`、`offset` 传哪些、如何组合，由当次判断决定。
 
 - 不写死 `type=personal`，不写死 `limit` 为 10、25、30 或 50。未传的字段不要补上，也不要传 `null`。
+- `department`（可选，逗号分隔，Hunter API v2 Domain Search 官方名单，以后可能增加）：`executive, it, finance, management, sales, legal, support, hr, marketing, communication, education, design, health, operations, product, research, consulting, administrative, procurement`。只用这些英文 slug，不要用中文部门名或自造值。
+- `seniority`（可选，逗号分隔）：`junior, senior, executive`。只用这些英文 slug，不要用中文或自造值。多个值仍用英文逗号分隔。
 - 需要下一页时，再次调用工具并传入新的 `offset`。禁止把一家公司可能多达数千的邮箱从头翻到尾。
 - 不设最多翻几页。官方通道非空查找页按次计费，翻页会增加官方通道费用。不写单价，不写账本明细。
 - 一次调用只取一页。不要因为 `meta.results` 在同一次调用里继续请求下一页。
