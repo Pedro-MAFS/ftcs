@@ -70,7 +70,7 @@ website → domain → domain_search → 映射+排序 → leads_patch_scored
 - **禁止**按邮箱 pattern 猜邮或编造地址；邮箱只能来自 Hunter 返回。
 - **禁止**在 `verify_emails=false`（或缺省）时调用 `email_verifier`。
 - **禁止**在配额/鉴权错误后重试烧额度。
-- **禁止**在官方验邮失败、超时或「验证尚未完成」后再打同一封。按工具中文转述，不要改写成配置 Hunter API Key 或到 Hunter 充值。
+- **禁止**在官方查找或验邮失败、超时或断线后再请求。按工具中文原样转述，不要改写成配置 Hunter API Key 或到 Hunter 充值，不要改打 `api.hunter.io`。
 - **禁止**覆盖已有 form/phone；`contacts` 仅按规则 **追加** email。
 
 ## 执行步骤
@@ -92,8 +92,19 @@ website → domain → domain_search → 映射+排序 → leads_patch_scored
 
 工具错误处理：
 
-- `HUNTER_NO_KEY` / `HUNTER_UNAUTHORIZED` → 停止整批，提示用户配置有效的 Hunter API Key
-- `HUNTER_QUOTA_EXCEEDED` / `HUNTER_ALL_KEYS_EXHAUSTED` → 停止剩余线索，说明额度问题，**不要重试**
+自定义通道才使用这些 code：
+
+- `HUNTER_NO_KEY` / `HUNTER_UNAUTHORIZED` → 停止整批，提示用户到设置 → 集成配置有效的 Hunter API Key。官方工具不会返回 `HUNTER_NO_KEY`。
+- `HUNTER_QUOTA_EXCEEDED` / `HUNTER_ALL_KEYS_EXHAUSTED` → 停止剩余线索，说明是用户自己的 Hunter 额度，**不要重试**。不要把这两句用于官方通道。
+
+官方通道：停止，并原样转述工具 `message`。不要改写成「配置 Hunter API Key」或「到 Hunter 充值」，不要再请求，不要改打 `api.hunter.io`，不要向用户展示 HTTP 数字或 `error.code`。
+
+- 「官方通道余额不足。请到设置 → 模型通道查看余额并充值。」这是官方余额，不是 Hunter 充值，也没有单价。
+- 「官方通道凭证不可用。请到设置 → 模型通道登录、开通或检查官方通道。」不要提示更换 Hunter Key。
+- 「补全联系人暂时不可用，请稍后再试。」价目未开也是这一句。不要引导充值，也不要引导换 Hunter Key。
+- 「请求过于频繁，请稍后重试。」这不是余额不足。
+- 「当前查找范围超出限制。」这不是余额不足。
+- 「补全联系人暂时失败，请稍后重试。」用于查找失败、非 JSON、超时或断线。不假定这次没计费，所以不要自动再请求。
 - `emails` 为空 → 如实说明未找到公开邮箱，**不要编造**，继续下一条
 
 ### Step 4：映射 PersonInput
@@ -138,7 +149,7 @@ website → domain → domain_search → 映射+排序 → leads_patch_scored
      - `unknown` → `hunter_unknown`（终态，不是未完成）
      - 其他非空状态 → `hunter_unknown`
    - `pending: true` 只出现在自定义通道约 24 秒轮询用尽时：将该人写成 `hunter_unknown`，继续下一条。官方通道不会返回 `pending: true`。
-   - 工具 `isError`，包括「验证尚未完成，请稍后再次验证」和「验证暂时失败，请稍后重试」：**不要**改这个人的 `email_status`，**不要**写成 `hunter_unknown`，**不要**再请求这一封。按工具中文转述。
+   - 工具 `isError`，包括「验证尚未完成，请稍后再次验证。」和「验证暂时失败，请稍后重试。」：两句不是同一种失败，原样转述。**停止**剩余验证；已写入的人保持原状态，**不要**写成 `hunter_unknown` 或 `hunter_valid`，**不要**再请求。不要改写成配置 Hunter API Key 或到 Hunter 充值。
    - `HUNTER_CLAIMED_EMAIL` / `OFFICIAL_CLAIMED_EMAIL` → 停止该邮箱，不自动重试；可标 `hunter_invalid` 或跳过。
    - 自定义配额类错误（`HUNTER_QUOTA_EXCEEDED` / `HUNTER_ALL_KEYS_EXHAUSTED`）→ **停止**剩余验证与后续线索；已有结果仍 patch。不要把这两句用于官方代调。
 2. 再次 `leads_patch_scored`，且 **`sync_valid_to_contacts: true`**（工具会把 `hunter_valid` + personal + confidence≥70 的邮箱追加进 `contacts`）。504/502 没有新状态的人保持 Step 5 已经写入的 `email_status`。
