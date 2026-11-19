@@ -2,12 +2,14 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
   key,
+  type AttachmentAction,
   type Conversation,
   type MessageView,
   type ReplyTarget,
   type Snapshot,
   type TimelineCursor,
 } from '../../../electron/mailbox/types'
+import { showToast } from '../../composables/useToast'
 import HtmlMailBody from './HtmlMailBody.vue'
 import Icon from '../shared/Icon.vue'
 const props = defineProps<{ snapshot: Snapshot; account: string; busy: boolean }>()
@@ -52,6 +54,21 @@ const visibleContacts = computed(() => {
   if (!query) return contacts.value
   return contacts.value.filter((c) => c.name?.toLowerCase().includes(query) || c.email.toLowerCase().includes(query))
 })
+const pendingAttachments = ref(new Set<string>())
+async function handleAttachment(messageId: string, index: number, action: AttachmentAction) {
+  const key = messageId + ':' + index
+  if (pendingAttachments.value.has(key)) return
+  pendingAttachments.value.add(key)
+  try {
+    const result = await api.attachment({ ...props.snapshot.context }, props.account, messageId, index, action)
+    if (result === 'saved') showToast('附件已保存', { tone: 'success' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    showToast(message.replace(/^Error invoking remote method '[^']+': Error: /, ''), { tone: 'error' })
+  } finally {
+    pendingAttachments.value.delete(key)
+  }
+}
 const messages = ref<MessageView[]>([]),
   before = ref<TimelineCursor | null>(null)
 const listing = ref(true),
@@ -340,8 +357,17 @@ onBeforeUnmount(() => {
                 <p>{{ m.quote }}</p>
               </details>
               <div v-for="(a, i) in m.attachments" :key="i" class="file">
-                <Icon name="file-text" :size="16" /> {{ a.filename }}
-                <small>·　{{ (a.size_bytes / 1024).toFixed(1) }} KB</small>
+                <button
+                  class="file-open"
+                  :disabled="!a.previewable || pendingAttachments.has(m.id + ':' + i)"
+                  :title="a.previewable ? '用系统默认应用打开 ' + a.filename : a.filename"
+                  @click="handleAttachment(m.id, i, 'open')"
+                ><Icon name="file-text" :size="16" /> {{ a.filename }}</button>
+                <small>{{ (a.size_bytes / 1024).toFixed(1) }} KB</small>
+                <button v-if="a.available" class="file-save" :aria-label="'另存为 ' + a.filename"
+                  :disabled="pendingAttachments.has(m.id + ':' + i)" @click="handleAttachment(m.id, i, 'save')"
+                >另存为</button>
+                <small v-else>本地不可用</small>
               </div>
             </div>
           </article>
@@ -694,6 +720,18 @@ summary svg {
   padding: 7px 10px;
   font-size: 12px;
 }
+.file-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.file-open svg { flex-shrink: 0; }
+.file-open:enabled:hover, .file-save:hover { text-decoration: underline; }
+.file-save { color: var(--soft-blue); white-space: nowrap; }
 .file small {
   white-space: nowrap;
 }

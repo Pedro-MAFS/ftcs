@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { imapClient, verify, diagnostic } from './protocol'
+import { clearAttachmentPreviews, localAttachment } from './attachments'
 import { importFolder } from './import'
 import { ImportIndex } from './conversations'
 import type { TimelineCursor } from './types'
@@ -98,6 +99,13 @@ export class MailboxService {
       if (this.loading === loading) this.loading = undefined
     }
   }
+  async attachment(ctx: Context, account: string, messageId: string, ordinal: number) {
+    const index = await this.reader(ctx, account)
+    const current = () => this.check(ctx)
+    current()
+    const file = localAttachment(accountDir(this.base(), account), index.attachment(messageId, ordinal))
+    return { file, current }
+  }
   async unreadCount() {
     const id = this.state().active_account_id
     if (!id) return 0
@@ -143,6 +151,7 @@ export class MailboxService {
     }
   }
   stop() {
+    clearAttachmentPreviews()
     this.epoch++
     this.connecting = false
     this.running = false

@@ -97,7 +97,7 @@ export async function importFolder(
             filename: a.filename ?? '附件',
             mime_type: a.contentType,
             size_bytes: a.size,
-            availability: 'local',
+            availability: 'local' as const,
           }
         })
         const message = {

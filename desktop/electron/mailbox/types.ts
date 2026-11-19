@@ -94,13 +94,15 @@ export interface MessageView extends TimelineCursor {
   to: MailAddress[]
   cc: MailAddress[]
   bcc: MailAddress[]
-  attachments: { filename: string; size_bytes: number }[]
+  attachments: { filename: string; size_bytes: number; available: boolean; previewable: boolean }[]
 }
 export interface TimelinePage {
   messages: MessageView[]
   before: TimelineCursor | null
 }
+export type AttachmentAction = 'open' | 'save'
 export interface MailboxAPI {
+  attachment(ctx: Context, account: string, messageId: string, ordinal: number, action: AttachmentAction): Promise<'opened' | 'saved' | 'canceled'>
   unreadCount(): Promise<number>
   conversations(ctx: Context, account: string): Promise<Conversation[]>
   timeline(ctx: Context, account: string, contact: string, before?: TimelineCursor, aroundId?: string): Promise<TimelinePage>

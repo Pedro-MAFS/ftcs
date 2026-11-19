@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { describeAttachment, type StoredAttachment } from './attachments'
 import { readableHtml } from './html-body'
 import { splitQuotedText } from './reply-quote'
 import { compile } from 'html-to-text'
@@ -30,7 +31,7 @@ interface MessageRow {
   to?: MailAddress[]
   cc?: MailAddress[]
   bcc?: MailAddress[]
-  attachments?: MessageView['attachments']
+  attachments?: StoredAttachment[]
   conversation_contact_ids: string[]
 }
 interface CopyRow {
@@ -173,6 +174,27 @@ export class ImportIndex {
     }
     return result.sort((a, b) => cmp(b.lastAt, a.lastAt) || cmp(b.lastId, a.lastId) || cmp(a.id, b.id))
   }
+  private readRecord(row: Summary): MessageRow {
+    const fd = fs.openSync(row.file, 'r')
+    try {
+      const buf = Buffer.alloc(row.length)
+      if (fs.readSync(fd, buf, 0, buf.length, row.offset) !== buf.length) throw new Error('邮件读取不完整')
+      const record: MessageRow = JSON.parse(buf.toString('utf8'))
+      if (record.message_id !== row.id) throw new Error('邮件位置已改变')
+      return record
+    } finally {
+      fs.closeSync(fd)
+    }
+  }
+  attachment(messageId: string, ordinal: number) {
+    const row = this.positions.get(messageId)
+    const attachment =
+      row && Number.isSafeInteger(ordinal) && ordinal >= 0
+        ? this.readRecord(row).attachments?.[ordinal]
+        : undefined
+    if (!attachment) throw new Error('此邮件中找不到这个附件。')
+    return attachment
+  }
   private replyTarget(row: MessageRow, contact: string) {
     const direct = [row.in_reply_to ?? []].flat().join(' ').trim()
     const id = direct || row.references?.at(-1)?.trim()
@@ -204,28 +226,20 @@ export class ImportIndex {
     }
     const selected = rows.slice(start, end)
     const readMessage = (row: Summary) => {
-      const fd = fs.openSync(row.file, 'r')
-      try {
-        const buf = Buffer.alloc(row.length)
-        if (fs.readSync(fd, buf, 0, buf.length, row.offset) !== buf.length) throw new Error('邮件读取不完整')
-        const r: MessageRow = JSON.parse(buf.toString('utf8'))
-        if (r.message_id !== row.id) throw new Error('邮件位置已改变')
-        return {
-          id: row.id,
-          at: row.at,
-          outgoing: row.outgoing,
-          subject: r.subject || '（无主题）',
-          ...(r.html_body?.trim() ? { body: body(r) } : splitQuotedText(body(r))),
-          replyTo: this.replyTarget(r, contact),
-          html: r.html_body?.trim() ? readableHtml(r.html_body) : undefined,
-          from: r.from,
-          to: r.to ?? [],
-          cc: r.cc ?? [],
-          bcc: r.bcc ?? [],
-          attachments: (r.attachments ?? []).map(({ filename, size_bytes }) => ({ filename, size_bytes })),
-        }
-      } finally {
-        fs.closeSync(fd)
+      const r = this.readRecord(row)
+      return {
+        id: row.id,
+        at: row.at,
+        outgoing: row.outgoing,
+        subject: r.subject || '（无主题）',
+        ...(r.html_body?.trim() ? { body: body(r) } : splitQuotedText(body(r))),
+        replyTo: this.replyTarget(r, contact),
+        html: r.html_body?.trim() ? readableHtml(r.html_body) : undefined,
+        from: r.from,
+        to: r.to ?? [],
+        cc: r.cc ?? [],
+        bcc: r.bcc ?? [],
+        attachments: (r.attachments ?? []).map(describeAttachment),
       }
     }
     let messages: MessageView[]

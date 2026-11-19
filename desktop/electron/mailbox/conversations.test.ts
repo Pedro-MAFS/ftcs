@@ -78,7 +78,7 @@ test('existing monthly shards: stable pagination, attribution, readable HTML and
   assert.equal(bob.messages[0].html?.remoteImages, true)
   assert.match(bob.messages[0].body, /第一段\s+第二段/)
   assert.doesNotMatch(bob.messages[0].body, /alert|invalid.test/)
-  assert.deepEqual(bob.messages[0].attachments, [{ filename: '询价单.pdf', size_bytes: 1200 }])
+  assert.deepEqual(bob.messages[0].attachments, [{ filename: '询价单.pdf', size_bytes: 1200, available: false, previewable: false }])
   await assert.rejects(
     index.timeline('orphan', undefined, () => {}),
     /会话/,

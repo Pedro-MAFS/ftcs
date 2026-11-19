@@ -101,6 +101,7 @@ import type {
 } from './ipc/types'
 
 const mailbox: import('./mailbox/types').MailboxAPI = {
+  attachment: (ctx, account, message, ordinal, action) => ipcRenderer.invoke(IPC.MAILBOX_ATTACHMENT, ctx, account, message, ordinal, action),
   unreadCount: () => ipcRenderer.invoke(IPC.MAILBOX_UNREAD_COUNT),
   conversations: (ctx,account) => ipcRenderer.invoke(IPC.MAILBOX_CONVERSATIONS,ctx,account),
   timeline: (ctx,account,contact,before,aroundId) => ipcRenderer.invoke(IPC.MAILBOX_TIMELINE,ctx,account,contact,before,aroundId),

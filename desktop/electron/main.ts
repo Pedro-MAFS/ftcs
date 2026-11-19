@@ -1,3 +1,4 @@
+import { openAttachment, saveAttachment } from './mailbox/attachments'
 import { MailboxService } from './mailbox/service'
 import { safeStorage } from 'electron'
 import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount, getCloudflareCredentials } from './cloudflare/cloudflare-auth'
@@ -714,6 +715,23 @@ function registerIpcHandlers(): void {
     if (!mainWindow || e.sender !== mainWindow.webContents || e.senderFrame !== e.sender.mainFrame)
       throw new Error('邮箱仅允许从工作区窗口访问。')
   }
+  ipcMain.handle(IPC.MAILBOX_ATTACHMENT, async (event, ctx, account, message, ordinal, action) => {
+    checkMailboxSender(event)
+    const parent = mainWindow!
+    const { file, current } = await mailbox.attachment(ctx, account, message, ordinal)
+    if (action === 'open') {
+      await openAttachment(file, current, (name) => shell.openPath(name))
+      return 'opened'
+    }
+    if (action !== 'save') throw new Error('未知的附件操作。')
+    const result = await dialog.showSaveDialog(parent, {
+      title: '附件另存为',
+      defaultPath: path.join(app.getPath('downloads'), file.filename),
+    })
+    if (result.canceled || !result.filePath) return 'canceled'
+    await saveAttachment(file, result.filePath, current)
+    return 'saved'
+  })
   ipcMain.handle(IPC.MAILBOX_UNREAD_COUNT, event => {
     checkMailboxSender(event)
     return mailbox.unreadCount()
