@@ -4,7 +4,7 @@ import type { Connection, Endpoint, MailAction, Snapshot } from '../../electron/
 import { key } from '../../electron/mailbox/types'
 
 import MailConversations from '../components/mailbox/MailConversations.vue'
-const settingsOpen=ref(false)
+const settingsDialog = ref<HTMLDialogElement>()
 const api = window.ftcs?.mailbox
 const state = ref<Snapshot>()
 const error = ref('')
@@ -52,6 +52,10 @@ function configure() {
     advanced.value = !hosts
   }
 }
+function confirmDisconnect() {
+  settingsDialog.value?.close()
+  confirmation.value = { kind: 'disconnect' }
+}
 function reconnect(email: string) {
   form.value.password = ''
   editing.value = true
@@ -94,6 +98,7 @@ function listen() {
   }
 }
 function leave() {
+  settingsDialog.value?.close()
   unsubscribe?.()
   unsubscribe = undefined
   form.value.password = ''
@@ -123,8 +128,8 @@ async function act(action: MailAction) {
 </script>
 
 <template>
-  <section class="mail-page">
-    <header>
+  <section class="mail-page" :class="{ connected: active && !editing }">
+    <header v-if="!active || editing">
       <h1>邮箱</h1>
       <span v-if="active">{{ active.email }}</span>
     </header>
@@ -187,10 +192,12 @@ async function act(action: MailAction) {
       </section>
     </template>
     <template v-else>
-      <button class="settings-toggle" :aria-expanded="settingsOpen" @click="settingsOpen=!settingsOpen">邮箱设置</button>
-      <small v-if="!settingsOpen && state.folders.some(f=>f.error || !f.path)">同步需要处理，请打开邮箱设置。</small>
-      <section v-if="settingsOpen">
-        <h2>连接与同步</h2>
+      <dialog ref="settingsDialog" class="settings-dialog" aria-labelledby="mail-settings-title">
+        <header>
+          <h2 id="mail-settings-title">邮箱设置</h2>
+          <button autofocus @click="settingsDialog?.close()">关闭</button>
+        </header>
+        <p>{{ active.email }}</p>
         <div v-for="f in state.folders" :key="f.role" class="row">
           <strong>{{ f.role === 'inbox' ? '收件箱' : '已发送' }}</strong>
           <span>{{
@@ -214,10 +221,21 @@ async function act(action: MailAction) {
             {{ state.running ? '同步中…' : '重新同步' }}
           </button>
           <button @click="reconnect(active.email)">重新验证</button
-          ><button @click="confirmation = { kind: 'disconnect' }">取消托管</button>
+          ><button
+            @click="confirmDisconnect"
+          >
+            取消托管
+          </button>
         </div>
-      </section>
-      <MailConversations :key="JSON.stringify([state.context.root,state.context.generation,active.id])" :account="active.id" :snapshot="state" />
+      </dialog>
+      <MailConversations
+        :key="JSON.stringify([state.context.root, state.context.generation, active.id])"
+        :account="active.id"
+        :snapshot="state"
+        :busy="busy"
+        @settings="settingsDialog?.showModal()"
+        @sync="act({ kind: 'retry' })"
+      />
     </template>
     <div v-if="confirmation" class="confirm" role="alertdialog">
       <strong>{{
@@ -240,8 +258,41 @@ async function act(action: MailAction) {
   </section>
 </template>
 <style scoped>
-.settings-toggle{margin:8px 8px 8px 0}
-.mail-page :deep(.threads){height:calc(100% - 90px)}
+.mail-page.connected {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+.settings-dialog {
+  width: min(420px, 90vw);
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+.settings-dialog[open] {
+  display: grid;
+  gap: 14px;
+}
+.settings-dialog header {
+  justify-content: space-between;
+}
+.settings-dialog::backdrop {
+  background: rgb(0 0 0 / 42%);
+}
+.connected .confirm {
+  position: absolute;
+  z-index: 2;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  width: min(380px, 90%);
+}
+
 .mail-page {
   height: 100%;
   overflow: auto;

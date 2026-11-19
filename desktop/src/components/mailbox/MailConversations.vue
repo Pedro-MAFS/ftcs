@@ -7,7 +7,38 @@ import {
   type Snapshot,
   type TimelineCursor,
 } from '../../../electron/mailbox/types'
-const props = defineProps<{ snapshot: Snapshot; account: string }>()
+import Icon from '../shared/Icon.vue'
+const props = defineProps<{ snapshot: Snapshot; account: string; busy: boolean }>()
+defineEmits<{ settings: []; sync: [] }>()
+const accountEmail = computed(() => props.snapshot.accounts.find((a) => a.id === props.account)?.email || '')
+const syncLabel = computed(() => {
+  const folders = props.snapshot.folders
+  if (folders.some((f) => f.error)) return '同步需要处理'
+  if (props.snapshot.running) return '正在同步…'
+  if (folders.some((f) => !f.path)) return '待选择已发送文件夹'
+  const last = folders
+    .map((f) => f.lastSyncedAt || '')
+    .sort()
+    .at(-1)
+  return last ? '已同步 · ' + clock(last) : '等待同步'
+})
+function initials(name: string) {
+  const parts = name.split(/[@._+\s-]+/).filter(Boolean)
+  return (parts.length > 1 ? parts[0][0] + parts[1][0] : name.slice(0, 2)).toUpperCase()
+}
+function avatarTone(email: string) {
+  const tones = ['#405873', '#665148', '#425f57', '#5d4d68', '#405962']
+  return tones[Array.from(email).reduce((n, c) => n + c.charCodeAt(0), 0) % tones.length]
+}
+function formattedDay(at: string) {
+  const date = new Date(at)
+  const label = date.toLocaleDateString('zh-CN', {
+    month: 'long',
+    day: 'numeric',
+    ...(date.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' as const } : {}),
+  })
+  return day(at) === day(new Date().toISOString()) ? '今天 · ' + label : label
+}
 const api = window.ftcs!.mailbox
 const contacts = ref<Conversation[]>([]),
   selected = ref(''),
@@ -140,11 +171,20 @@ onBeforeUnmount(() => {
 <template>
   <div class="threads">
     <aside aria-label="联系人列表">
-      <header><strong>最近会话</strong><button @click="compose = !compose">新会话</button></header>
+      <header class="inbox-heading">
+        <div>
+          <h1>邮箱</h1>
+          <div class="account" :title="accountEmail">{{ accountEmail }}</div>
+        </div>
+        <button class="compose" :aria-expanded="compose" @click="compose = !compose">
+          <Icon name="plus" :size="15" />新会话
+        </button>
+      </header>
       <form v-if="compose" @submit.prevent="openAddress">
         <label>收件邮箱<input v-model="address" type="email" required placeholder="name@example.com" /></label
         ><button>打开</button>
       </form>
+      <h2 class="list-title">最近会话</h2>
       <p v-if="listError" role="alert">{{ listError }} <button @click="refresh">重试</button></p>
       <p v-else-if="listing">正在读取本地往来…</p>
       <p v-else-if="!contacts.length">还没有邮件往来</p>
@@ -153,14 +193,16 @@ onBeforeUnmount(() => {
           v-for="c in contacts"
           :key="c.id"
           class="person"
+          :title="c.email"
           :class="{ active: selected === c.id }"
           :aria-pressed="selected === c.id"
           @click="select(c.id)"
         >
-          <span class="avatar">{{ (c.name || c.email).slice(0, 1).toUpperCase() }}</span>
+          <span class="avatar" :style="{ backgroundColor: avatarTone(c.email) }">{{
+            initials(c.name || c.email.split('@')[0])
+          }}</span>
           <span class="summary"
             ><strong>{{ c.name || c.email }}</strong
-            ><small v-if="c.name">{{ c.email }}</small
             ><span>{{ c.preview }}</span></span
           >
           <span class="meta"
@@ -171,6 +213,21 @@ onBeforeUnmount(() => {
           >
         </button>
       </div>
+      <footer>
+        <button class="status" @click="$emit('settings')">{{ syncLabel }}</button>
+        <button class="tool" aria-label="邮箱设置" title="邮箱设置" @click="$emit('settings')">
+          <Icon name="settings" :size="15" />
+        </button>
+        <button
+          class="tool"
+          aria-label="重新同步"
+          title="重新同步"
+          :disabled="busy || snapshot.running"
+          @click="$emit('sync')"
+        >
+          <Icon name="refresh-cw" :size="15" />
+        </button>
+      </footer>
     </aside>
     <main>
       <header v-if="current || temporary">
@@ -196,7 +253,9 @@ onBeforeUnmount(() => {
         <button v-if="before" class="older" :disabled="reading" @click="load('older')">加载更早邮件</button>
         <p v-if="reading && !messages.length">正在读取邮件…</p>
         <template v-for="(m, index) in messages" :key="m.id">
-          <div v-if="!index || day(m.at) !== day(messages[index - 1].at)" class="date">{{ day(m.at) }}</div>
+          <div v-if="!index || day(m.at) !== day(messages[index - 1].at)" class="date">
+            {{ formattedDay(m.at) }}
+          </div>
           <article :data-message="m.id" :class="{ out: m.outgoing }">
             <div class="byline">
               {{ m.outgoing ? '我' : m.from?.name || m.from?.email || '发件人' }} · {{ clock(m.at) }}
@@ -204,7 +263,16 @@ onBeforeUnmount(() => {
             <div class="bubble">
               <strong>{{ m.subject }}</strong>
               <details>
-                <summary>收件详情</summary>
+                <summary :title="'展开收件详情'">
+                  收件人：{{
+                    m.to
+                      .map((a) => (key(a.email) === key(accountEmail) ? '我' : a.name || a.email))
+                      .join('、') || '—'
+                  }}<template v-if="m.cc.length"
+                    >　抄送：{{ m.cc.map((a) => a.name || a.email).join('、') }}</template
+                  >
+                  <Icon name="chevron-down" :size="12" />
+                </summary>
                 <div v-if="m.from">发件人　{{ m.from.email }}</div>
                 <div>收件人　{{ m.to.map((a) => a.email).join('、') || '—' }}</div>
                 <div v-if="m.cc.length">抄送　{{ m.cc.map((a) => a.email).join('、') }}</div>
@@ -219,7 +287,8 @@ onBeforeUnmount(() => {
               >
               <p v-else>{{ m.body || (m.attachments.length ? '' : '无正文') }}</p>
               <div v-for="(a, i) in m.attachments" :key="i" class="file">
-                {{ a.filename }} · {{ (a.size_bytes / 1024).toFixed(1) }} KB
+                <Icon name="file-text" :size="16" /> {{ a.filename }}
+                <small>·　{{ (a.size_bytes / 1024).toFixed(1) }} KB</small>
               </div>
             </div>
           </article>
@@ -231,176 +300,374 @@ onBeforeUnmount(() => {
 </template>
 <style scoped>
 .threads {
+  --rail: light-dark(#f5f6f8, #1c1e22);
+  --canvas: light-dark(#fff, #17191d);
+  --bubble: light-dark(#f1f3f6, #26292f);
+  --out: light-dark(#e5eeff, #253650);
+  --selected: light-dark(#dde8fb, #28354a);
+  --chip: light-dark(#e1e5ec, #343942);
+  --soft-blue: light-dark(#244f96, #bfd4ff);
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(160px, 31%) minmax(0, 1fr);
-  height: 100%;
-  min-height: 300px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  grid-template-columns: clamp(174px, 28.4%, 346px) minmax(0, 1fr);
   overflow: hidden;
+  container-type: inline-size;
 }
+
 aside,
 main {
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  min-width: 0;
 }
 aside {
-  background: var(--bg-panel);
+  background: var(--rail);
   border-right: 1px solid var(--border);
 }
 main {
+  background: var(--canvas);
   position: relative;
-  background: var(--bg-app);
 }
-header,
-form {
-  padding: 12px;
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -2px;
+}
+h1,
+h2,
+p {
+  margin: 0;
+}
+.inbox-heading {
+  padding: 22px 22px 14px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  border-bottom: 1px solid var(--border);
 }
-form label {
+.inbox-heading > div {
   min-width: 0;
 }
-input {
-  width: 100%;
+h1 {
+  font-size: 24px;
+  line-height: 1.3;
 }
-button,
-input {
-  background: var(--bg-elevated);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 5px 8px;
-  font: inherit;
-}
-button,
-summary {
-  cursor: pointer;
-}
-button:hover {
-  background: var(--bg-hover);
-}
-.list,
-.history {
-  overflow: auto;
-  min-height: 0;
-  flex: 1;
-}
-.list {
-  padding: 5px;
-}
-.person {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 10px 6px;
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-}
-.person.active {
-  border-color: var(--border-focus);
-  background: var(--accent-muted);
-}
-.summary {
-  min-width: 0;
-  flex: 1;
-  display: grid;
-}
-.summary > * {
+.account,
+main header small {
+  margin-top: 7px;
+  display: block;
+  color: var(--text-secondary);
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.summary span,
-small,
-.byline,
-.date,
-summary {
-  color: var(--text-secondary);
+.compose,
+.latest,
+form button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+  padding: 8px 12px;
+  background: var(--selected);
+  color: var(--soft-blue);
+  border-radius: 6px;
+  font-weight: 600;
+}
+.compose:hover,
+.latest:hover {
+  filter: brightness(1.1);
+}
+.list-title {
   font-size: 12px;
+  color: var(--text-secondary);
+  padding: 18px 22px 12px;
+  font-weight: 600;
 }
-small {
-  display: block;
+.list,
+.history {
+  min-height: 0;
+  overflow: auto;
+  flex: 1;
 }
-.meta {
-  align-self: flex-start;
-  text-align: right;
+.list {
+  padding: 0 9px;
 }
-.meta b {
-  background: var(--accent-hover);
-  color: white;
-  padding: 1px 5px;
+.person {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-content: center;
+  align-items: center;
+  gap: 4px 12px;
+  text-align: left;
+  padding: 10px 12px;
+  min-height: 77px;
+  margin-bottom: 6px;
   border-radius: 8px;
-  font-size: 11px;
+}
+.person:hover,
+.tool:hover {
+  background: var(--bg-hover);
+}
+.person.active {
+  background: var(--selected);
 }
 .avatar {
+  grid-row: span 2;
   display: grid;
   place-items: center;
-  background: var(--bg-active);
-  border-radius: 8px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  color: #f1f5fa;
+  font-weight: 600;
+}
+.summary,
+.meta {
+  display: contents;
+}
+.summary strong,
+.summary > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.summary strong {
+  grid-area: 1/2;
+  font-size: 14px;
+}
+.summary > span {
+  grid-area: 2/2/3/4;
+}
+.person:has(.meta b) .summary > span {
+  grid-column-end: 3;
+}
+.meta small {
+  grid-area: 1/3;
+}
+.meta b {
+  grid-area: 2/3;
+  justify-self: end;
+  background: #3768ca;
+  color: white;
+  border-radius: 99px;
+  padding: 1px 6px;
+  font-size: 11px;
+}
+.summary > span,
+.meta small,
+.byline,
+.date,
+summary,
+footer button {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+footer {
+  padding: 10px 17px;
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+.status {
+  margin-right: auto;
+  text-align: left;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0;
+}
+.tool {
+  display: grid;
+  place-items: center;
   width: 28px;
-  height: 32px;
+  height: 28px;
+  border-radius: 6px;
+}
+form {
+  padding: 0 16px;
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+form label {
+  min-width: 0;
+  font-size: 12px;
+}
+input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  padding: 7px;
+  border-radius: 5px;
+}
+main header {
+  padding: 16px clamp(16px, 3cqw, 36px);
+  border-bottom: 1px solid var(--border);
+  min-height: 86px;
+  display: flex;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+main header div {
+  min-width: 0;
+}
+main header strong {
+  font-size: 22px;
+  line-height: 1.25;
 }
 .history {
-  padding: 12px 16px;
+  padding: 12px clamp(16px, 3cqw, 36px) 22px;
   overflow-anchor: none;
 }
 .date,
 .older {
-  text-align: center;
-  margin: 5px auto 14px;
   display: block;
+  text-align: center;
+  margin: 0 auto 16px;
+}
+.older,
+.latest {
+  color: var(--soft-blue);
+}
+.older {
+  font-size: 12px;
 }
 .byline {
-  margin: 5px 0;
+  margin-bottom: 7px;
 }
 .bubble {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  padding: 12px;
-  border-radius: 9px;
+  background: var(--bubble);
+  border-radius: 12px;
+  padding: 13px 17px;
   overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.bubble strong {
+  font-size: 15px;
 }
 .bubble p {
   white-space: pre-wrap;
   margin: 8px 0 0;
 }
 .bubble details {
-  margin-top: 6px;
+  margin-top: 5px;
+}
+.bubble details div {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+summary {
+  cursor: pointer;
+  list-style: none;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+summary svg {
+  display: inline-block;
+  vertical-align: middle;
 }
 .file {
-  margin-top: 8px;
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 12px;
+  border-radius: 6px;
+  background: var(--chip);
+  padding: 7px 10px;
+  font-size: 12px;
+}
+.file small {
+  white-space: nowrap;
 }
 .out {
   margin-left: auto;
 }
 .out .bubble {
-  background: var(--accent-muted);
+  background: var(--out);
 }
 .out .byline {
   text-align: right;
 }
 article {
   width: fit-content;
-  max-width: 90%;
-  margin-bottom: 12px;
+  max-width: 89%;
+  margin-bottom: 20px;
 }
 .latest {
   position: absolute;
-  bottom: 10px;
-  right: 16px;
+  bottom: 12px;
+  right: 20px;
 }
+.history > p,
 aside > p,
 main > p {
-  padding: 0 12px;
+  padding: 12px 18px;
   color: var(--text-secondary);
+}
+@container (max-width:640px) {
+  .inbox-heading {
+    padding: 16px 10px;
+    gap: 4px;
+  }
+  .compose {
+    padding: 6px;
+    font-size: 12px;
+  }
+  .person {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    gap: 3px 6px;
+    padding: 7px;
+    min-height: 64px;
+  }
+  .avatar {
+    width: 30px;
+    height: 34px;
+    border-radius: 9px;
+  }
+  .list-title {
+    padding: 10px;
+  }
+  .meta small {
+    font-size: 10px;
+  }
+  .list {
+    padding: 0 4px;
+  }
+  footer {
+    padding: 7px;
+  }
+  .history {
+    padding: 12px;
+  }
+  article {
+    max-width: 95%;
+  }
 }
 </style>

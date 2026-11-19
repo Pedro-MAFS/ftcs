@@ -129,7 +129,7 @@ export class MailboxService {
       folders: active
         ? roles.map((role) => {
             const f = this.folder(accountDir(this.base(), active), role)
-            return { role, phase: f.phase, path: f.remote_path, error: this.errors[role] }
+            return { role, phase: f.phase, path: f.remote_path, error: this.errors[role], lastSyncedAt:f.last_synced_at }
           })
         : [],
     }

@@ -47,7 +47,7 @@ export interface Snapshot {
   context: Context
   active: string | null
   accounts: AccountSummary[]
-  folders: { role: FolderRole; phase: Folder['phase']; path: string | null; error?: string }[]
+  folders: { role: FolderRole; phase: Folder['phase']; path: string | null; error?: string; lastSyncedAt?:string }[]
   candidates: string[]
   imported: number
   contacts: string[]
