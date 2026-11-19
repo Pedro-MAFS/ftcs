@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { readableHtml } from './html-body'
 import { compile } from 'html-to-text'
 import { eachLine, type Position } from './storage'
 import type { Conversation, Folder, MailAddress, TimelineCursor, TimelinePage, MessageView } from './types'
@@ -176,6 +177,7 @@ export class ImportIndex {
           outgoing: row.outgoing,
           subject: r.subject || '（无主题）',
           body: body(r),
+          html: r.html_body?.trim() ? readableHtml(r.html_body) : undefined,
           from: r.from,
           to: r.to ?? [],
           cc: r.cc ?? [],

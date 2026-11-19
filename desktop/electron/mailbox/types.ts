@@ -82,6 +82,7 @@ export interface MessageView extends TimelineCursor {
   outgoing: boolean
   subject: string
   body: string
+  html?: { fragment: string; remoteImages: boolean }
   from?: MailAddress
   to: MailAddress[]
   cc: MailAddress[]

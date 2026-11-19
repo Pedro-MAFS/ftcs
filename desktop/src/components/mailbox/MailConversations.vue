@@ -7,6 +7,7 @@ import {
   type Snapshot,
   type TimelineCursor,
 } from '../../../electron/mailbox/types'
+import HtmlMailBody from './HtmlMailBody.vue'
 import Icon from '../shared/Icon.vue'
 const props = defineProps<{ snapshot: Snapshot; account: string; busy: boolean }>()
 defineEmits<{ settings: []; sync: [] }>()
@@ -44,6 +45,12 @@ const contacts = ref<Conversation[]>([]),
   selected = ref(''),
   temporary = ref('')
 const current = computed(() => contacts.value.find((c) => c.id === selected.value))
+const contactSearch = ref('')
+const visibleContacts = computed(() => {
+  const query = contactSearch.value.trim().toLowerCase()
+  if (!query) return contacts.value
+  return contacts.value.filter((c) => c.name?.toLowerCase().includes(query) || c.email.toLowerCase().includes(query))
+})
 const messages = ref<MessageView[]>([]),
   before = ref<TimelineCursor | null>(null)
 const listing = ref(true),
@@ -185,12 +192,23 @@ onBeforeUnmount(() => {
         ><button>打开</button>
       </form>
       <h2 class="list-title">最近会话</h2>
+      <label class="contact-search">
+        <Icon name="search" :size="15" aria-hidden="true" />
+        <input
+          v-model="contactSearch"
+          type="search"
+          aria-label="按姓名或邮箱搜索联系人"
+          placeholder="搜索姓名或邮箱"
+          @keydown.esc="contactSearch = ''"
+        />
+      </label>
       <p v-if="listError" role="alert">{{ listError }} <button @click="refresh">重试</button></p>
       <p v-else-if="listing">正在读取本地往来…</p>
       <p v-else-if="!contacts.length">还没有邮件往来</p>
+      <p v-else-if="!visibleContacts.length" role="status">没有找到匹配的联系人</p>
       <div class="list">
         <button
-          v-for="c in contacts"
+          v-for="c in visibleContacts"
           :key="c.id"
           class="person"
           :title="c.email"
@@ -278,7 +296,8 @@ onBeforeUnmount(() => {
                 <div v-if="m.cc.length">抄送　{{ m.cc.map((a) => a.email).join('、') }}</div>
                 <div v-if="m.bcc.length">密送　{{ m.bcc.map((a) => a.email).join('、') }}</div>
               </details>
-              <template v-if="m.body.length > 900"
+              <HtmlMailBody v-if="m.html" :html="m.html" :subject="m.subject" />
+              <template v-else-if="m.body.length > 900"
                 ><p>{{ m.body.slice(0, 900) }}</p>
                 <details>
                   <summary>展开全文</summary>
@@ -402,6 +421,23 @@ form button {
   color: var(--text-secondary);
   padding: 18px 22px 12px;
   font-weight: 600;
+}
+.contact-search {
+  position: relative;
+  margin: 0 21px 10px;
+}
+.contact-search svg {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.contact-search input {
+  box-sizing: border-box;
+  padding-left: 30px;
+  font-size: 13px;
 }
 .list,
 .history {
@@ -606,6 +642,7 @@ summary svg {
 .file small {
   white-space: nowrap;
 }
+article:has(.html-body) { width: min(700px, 89%); }
 .out {
   margin-left: auto;
 }
@@ -653,6 +690,9 @@ main > p {
   }
   .list-title {
     padding: 10px;
+  }
+  .contact-search {
+    margin-inline: 10px;
   }
   .meta small {
     font-size: 10px;
