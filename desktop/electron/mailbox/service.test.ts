@@ -106,6 +106,8 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
     })
   ).active!
   await until(() => service.snapshot().folders[0].phase === 'incremental' && !service.snapshot().running)
+  await assert.rejects(service.conversations(ctx(), a), /账号已改变/)
+  await assert.rejects(service.timeline(stale, a, 'alice'), /工作区已改变/)
   assert.notEqual(a, b)
   assert.equal(service.snapshot().imported, 0)
   await service.act(ctx(), { kind: 'disconnect' })
@@ -113,6 +115,9 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   assert.equal((await service.act(ctx(), { kind: 'connect', form })).active, a)
   await until(() => service.snapshot().imported === 3 && !service.snapshot().running)
   assert.equal(currentMail, calls)
+  const contacts = await service.conversations(ctx(), a)
+  const alice = contacts.find((c) => c.email === 'alice@example.test')!
+  assert.equal((await service.timeline(ctx(), a, alice.id)).messages.length, 2)
   await service.act(ctx(), { kind: 'delete', id: b })
   assert.equal(service.snapshot().accounts.length, 1)
 })

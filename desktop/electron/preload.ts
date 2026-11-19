@@ -101,6 +101,8 @@ import type {
 } from './ipc/types'
 
 const mailbox: import('./mailbox/types').MailboxAPI = {
+  conversations: (ctx,account) => ipcRenderer.invoke(IPC.MAILBOX_CONVERSATIONS,ctx,account),
+  timeline: (ctx,account,contact,before) => ipcRenderer.invoke(IPC.MAILBOX_TIMELINE,ctx,account,contact,before),
   snapshot: () => ipcRenderer.invoke(IPC.MAILBOX_GET),
   act: (ctx, action) => ipcRenderer.invoke(IPC.MAILBOX_ACTION, ctx, action),
   changed: callback => {

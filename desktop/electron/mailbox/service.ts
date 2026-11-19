@@ -2,7 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { imapClient, verify, diagnostic } from './protocol'
-import { ImportIndex, importFolder } from './import'
+import { importFolder } from './import'
+import { ImportIndex } from './conversations'
+import type { TimelineCursor } from './types'
 import { accounts, accountDir, atomic, read, save, newFolder, uuid } from './storage'
 import {
   validate,
@@ -39,6 +41,7 @@ export class MailboxService {
   private running = false
   private timer?: ReturnType<typeof setTimeout>
   private client?: ReturnType<typeof imapClient>
+  private loading?: Promise<ImportIndex>
   private index?: ImportIndex
   private candidates: string[] = []
   private errors: Partial<Record<FolderRole, string>> = {}
@@ -80,6 +83,33 @@ export class MailboxService {
   private folder(dir: string, role: FolderRole) {
     return read<Folder>(path.join(dir, 'sync', role + '.json'))
   }
+  private async reader(ctx: Context, id: string) {
+    this.check(ctx)
+    if (!id || this.state().active_account_id !== id) throw new Error('邮箱账号已改变。')
+    if (this.index) return this.index
+    this.loading ??= ImportIndex.load(accountDir(this.base(), id), () => this.check(ctx))
+    const loading = this.loading
+    try {
+      const index = await loading
+      this.check(ctx)
+      this.index = index
+      return index
+    } finally {
+      if (this.loading === loading) this.loading = undefined
+    }
+  }
+  async conversations(ctx: Context, id: string) {
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    return index.conversations(this.folder(accountDir(this.base(), id), 'inbox'))
+  }
+  async timeline(ctx: Context, id: string, contact: string, before?: TimelineCursor) {
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    const page = await index.timeline(contact, before, () => this.check(ctx))
+    this.check(ctx)
+    return page
+  }
   snapshot(): Snapshot {
     const state = this.state(),
       active = state.active_account_id
@@ -111,6 +141,7 @@ export class MailboxService {
     clearTimeout(this.timer)
     this.client?.close()
     this.client = undefined
+    this.loading = undefined
     this.index = undefined
     this.candidates = []
     this.errors = {}
@@ -272,7 +303,8 @@ export class MailboxService {
     try {
       const dir = accountDir(this.base(), id),
         account = read<Account>(path.join(dir, 'account.json'))
-      this.index ??= new ImportIndex(dir)
+      const index = await this.reader(ctx, id)
+      this.check(ctx)
       const client = this.protocol.imapClient(account.imap, this.password(state, account))
       this.client = client
       await client.connect()
@@ -297,7 +329,7 @@ export class MailboxService {
             dir,
             account,
             f,
-            this.index,
+            index,
             () => this.check(ctx),
             () => {
               if (Date.now() - last > 350) {

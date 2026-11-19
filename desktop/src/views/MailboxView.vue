@@ -3,6 +3,8 @@ import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watc
 import type { Connection, Endpoint, MailAction, Snapshot } from '../../electron/mailbox/types'
 import { key } from '../../electron/mailbox/types'
 
+import MailConversations from '../components/mailbox/MailConversations.vue'
+const settingsOpen=ref(false)
 const api = window.ftcs?.mailbox
 const state = ref<Snapshot>()
 const error = ref('')
@@ -185,7 +187,9 @@ async function act(action: MailAction) {
       </section>
     </template>
     <template v-else>
-      <section>
+      <button class="settings-toggle" :aria-expanded="settingsOpen" @click="settingsOpen=!settingsOpen">邮箱设置</button>
+      <small v-if="!settingsOpen && state.folders.some(f=>f.error || !f.path)">同步需要处理，请打开邮箱设置。</small>
+      <section v-if="settingsOpen">
         <h2>连接与同步</h2>
         <div v-for="f in state.folders" :key="f.role" class="row">
           <strong>{{ f.role === 'inbox' ? '收件箱' : '已发送' }}</strong>
@@ -213,13 +217,7 @@ async function act(action: MailAction) {
           ><button @click="confirmation = { kind: 'disconnect' }">取消托管</button>
         </div>
       </section>
-      <section>
-        <h2>
-          邮件往来 <small>{{ state.imported }} 封</small>
-        </h2>
-        <p v-if="!state.contacts.length">{{ state.running ? '正在检查邮件…' : '暂无往来联系人' }}</p>
-        <div v-for="email in state.contacts" :key="email" class="contact">{{ email }}</div>
-      </section>
+      <MailConversations :key="JSON.stringify([state.context.root,state.context.generation,active.id])" :account="active.id" :snapshot="state" />
     </template>
     <div v-if="confirmation" class="confirm" role="alertdialog">
       <strong>{{
@@ -242,6 +240,8 @@ async function act(action: MailAction) {
   </section>
 </template>
 <style scoped>
+.settings-toggle{margin:8px 8px 8px 0}
+.mail-page :deep(.threads){height:calc(100% - 90px)}
 .mail-page {
   height: 100%;
   overflow: auto;

@@ -1,32 +1,11 @@
-import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { simpleParser, type AddressObject } from 'mailparser'
 import type { ImapFlow } from 'imapflow'
-import { append, atomic, eachLine, save, uuid } from './storage'
+import { append, atomic, save, uuid } from './storage'
 import { key, type Account, type Folder } from './types'
 
-export class ImportIndex {
-  readonly contacts = new Map<string, string>()
-  readonly messages = new Map<string, string>()
-  readonly copies = new Set<string>()
-  count = 0
-  constructor(dir: string) {
-    const contacts = path.join(dir, 'contacts.jsonl')
-    if (fs.existsSync(contacts)) eachLine(contacts, (r) => this.contacts.set(r.address_key, r.contact_id))
-    for (const kind of ['messages', 'copies']) {
-      const base = path.join(dir, kind)
-      if (!fs.existsSync(base)) continue
-      for (const name of fs.readdirSync(base).filter((n) => n.endsWith('.jsonl')))
-        eachLine(path.join(base, name), (r) => {
-          if (kind === 'messages') {
-            this.count++
-            if (r.import_key) this.messages.set(r.import_key, r.message_id)
-          } else this.copies.add(name.slice(0, -6) + ':' + r.uid_validity + ':' + r.uid)
-        })
-    }
-  }
-}
+import type { ImportIndex } from './conversations'
 function addresses(value: AddressObject | AddressObject[] | undefined) {
   return [value ?? []]
     .flat()
@@ -91,15 +70,16 @@ export async function importFolder(
         let id = index.contacts.get(address)
         if (!id) {
           id = randomUUID()
-          append(path.join(dir, 'contacts.jsonl'), {
+          const contact = {
             contact_id: id,
             address_key: address,
             email: peer.email,
             display_name: peer.name,
             updated_at: new Date().toISOString(),
             rev: 1,
-          })
-          index.contacts.set(address, id)
+          }
+          append(path.join(dir, 'contacts.jsonl'), contact)
+          index.contact(contact)
         }
         ids.add(id)
       }
@@ -120,7 +100,7 @@ export async function importFolder(
             availability: 'local',
           }
         })
-        append(path.join(dir, 'messages', now.slice(0, 7) + '.jsonl'), {
+        const message = {
           message_id: messageId,
           internet_message_id: parsed.messageId,
           import_key: importKey,
@@ -140,11 +120,11 @@ export async function importFolder(
           attachments,
           occurred_at: (parsed.date ?? received).toISOString(),
           ingested_at: now,
-        })
-        index.messages.set(importKey, messageId)
-        index.count++
+        }
+        const position = append(path.join(dir, 'messages', now.slice(0, 7) + '.jsonl'), message)
+        index.message(message, position)
       }
-      append(path.join(dir, 'copies', folderId + '.jsonl'), {
+      const copy = {
         uid_validity: validity,
         uid,
         message_id: messageId,
@@ -152,8 +132,9 @@ export async function importFolder(
         present: true,
         rev: 1,
         updated_at: new Date().toISOString(),
-      })
-      index.copies.add(ref)
+      }
+      append(path.join(dir, 'copies', folderId + '.jsonl'), copy)
+      index.copy(folderId, copy)
       folder.last_scanned_uid = uid
       save(file, folder)
       progress()

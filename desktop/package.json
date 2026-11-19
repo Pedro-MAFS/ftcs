@@ -24,6 +24,7 @@
   "dependencies": {
     "@opencode-ai/sdk": "^1.18.1",
     "docutext": "^1.2.1",
+    "html-to-text": "10.0.1",
     "ignore": "^7.0.14",
     "imapflow": "^2.12.1",
     "mailparser": "^3.14.5",

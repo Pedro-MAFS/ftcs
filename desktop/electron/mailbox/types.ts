@@ -59,7 +59,42 @@ export type MailAction =
   | { kind: 'retry' }
   | { kind: 'disconnect' }
   | { kind: 'delete'; id: string }
+export interface Conversation {
+  id: string
+  email: string
+  name?: string
+  company?: string
+  preview: string
+  lastAt: string
+  lastId: string
+  unread: number
+  count: number
+}
+export interface MailAddress {
+  email: string
+  name?: string
+}
+export interface TimelineCursor {
+  at: string
+  id: string
+}
+export interface MessageView extends TimelineCursor {
+  outgoing: boolean
+  subject: string
+  body: string
+  from?: MailAddress
+  to: MailAddress[]
+  cc: MailAddress[]
+  bcc: MailAddress[]
+  attachments: { filename: string; size_bytes: number }[]
+}
+export interface TimelinePage {
+  messages: MessageView[]
+  before: TimelineCursor | null
+}
 export interface MailboxAPI {
+  conversations(ctx: Context, account: string): Promise<Conversation[]>
+  timeline(ctx: Context, account: string, contact: string, before?: TimelineCursor): Promise<TimelinePage>
   snapshot(): Promise<Snapshot>
   act(ctx: Context, action: MailAction): Promise<Snapshot>
   changed(callback: () => void): () => void

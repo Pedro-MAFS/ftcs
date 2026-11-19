@@ -21,22 +21,38 @@ export function save(file: string, value: unknown) {
 }
 export function append(file: string, record: object) {
   fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.appendFileSync(file, JSON.stringify({ v: 1, ...record }) + '\n', { flush: true, mode: 0o600 })
+  const line = Buffer.from(JSON.stringify({ v: 1, ...record }) + '\n')
+  fs.appendFileSync(file, line, { flush: true, mode: 0o600 })
+  return { file, offset: fs.statSync(file).size - line.length, length: line.length - 1 }
 }
-export function eachLine(file: string, visit: (row: any) => void) {
+export interface Position {
+  file: string
+  offset: number
+  length: number
+}
+export async function eachLine(
+  file: string,
+  visit: (row: any, position: Position) => void,
+  guard: () => void,
+) {
   // A crash during append can leave an incomplete final line. Preserve that fragment for diagnosis.
   const fd = fs.openSync(file, 'r+')
   try {
     const chunk = Buffer.alloc(65536)
     let tail: Buffer = Buffer.alloc(0),
       complete = 0
+    let chunks = 0
     for (;;) {
+      if (++chunks % 8 === 0) {
+        await new Promise<void>((resolve) => setImmediate(resolve))
+        guard()
+      }
       const size = fs.readSync(fd, chunk)
       if (!size) break
       const data = Buffer.concat([tail, chunk.subarray(0, size)])
       let start = 0
       for (let end = data.indexOf(10); end >= 0; end = data.indexOf(10, start)) {
-        visit(JSON.parse(data.toString('utf8', start, end)))
+        visit(JSON.parse(data.toString('utf8', start, end)), { file, offset: complete, length: end - start })
         complete += end - start + 1
         start = end + 1
       }
