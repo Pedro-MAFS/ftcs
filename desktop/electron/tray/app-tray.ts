@@ -29,7 +29,7 @@ export function createAppTray(
   }
 
   tray = new Tray(image)
-  tray.setToolTip('外贸获客智能体')
+  tray.setToolTip('FTCS 外贸获客智能体')
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {

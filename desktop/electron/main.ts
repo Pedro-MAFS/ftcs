@@ -403,7 +403,7 @@ function getWindowOptions(): BrowserWindowConstructorOptions {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: chrome.windowBg,
-    title: '外贸获客智能体',
+    title: 'FTCS 外贸获客智能体',
     icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),

@@ -105,7 +105,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "外贸获客",
+      "shortcutName": "FTCS 外贸获客",
+      "uninstallDisplayName": "FTCS 外贸获客",
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "portable": {
