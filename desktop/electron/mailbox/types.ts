@@ -61,6 +61,7 @@ export type MailAction =
   | { kind: 'disconnect' }
   | { kind: 'delete'; id: string }
 export interface Conversation {
+  revision?: number
   id: string
   email: string
   name?: string

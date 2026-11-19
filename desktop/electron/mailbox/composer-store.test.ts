@@ -5,6 +5,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { simpleParser } from 'mailparser'
+import { importFolder } from './import'
+import type { ImapFlow } from 'imapflow'
+import type { Account } from './types'
 import { ImportIndex, type MessageRow } from './conversations'
 import { append, newFolder } from './storage'
 import { envelope, type Draft, type DraftInput, type SendResult } from './compose-types'
@@ -179,12 +182,10 @@ test('并发发送、回执丢失和重启恢复，经已发送副本核对后�
       internetId +
       '\r\n\r\nnot the draft',
   )
-  assert.equal(reopened.composer.matchCopy(parsed, { email: self }, [{ email }], []), undefined)
-  parsed.subject = d.subject
-  parsed.text = d.text_body + '\r\n'
-  const matched = reopened.composer.matchCopy(parsed, { email: self }, [{ email }], [])
+  const matched = reopened.composer.matchCopy(parsed.messageId, undefined)!
   assert.ok(matched)
-  assert.equal(reopened.composer.matchCopy(parsed, { email: self }, [{ email }], []), matched)
+  reopened.composer.confirmCopy(matched, parsed.messageId)
+  reopened.composer.confirmCopy(matched, parsed.messageId)
   assert.equal(reopened.count, 1)
   assert.equal(reopened.composer.view(email, self).draft.rev, 0)
 })
@@ -202,7 +203,8 @@ test('明确拒绝可重试；副本先于成功回执时保留逐地址结果',
       const parsed = await simpleParser('Message-ID: ' + a.internet_message_id + '\r\n\r\n')
       parsed.text = d.text_body
       parsed.subject = d.subject
-      assert.ok(store.matchCopy(parsed, { email: self }, [{ email }], []))
+      const matched = store.matchCopy(parsed.messageId, undefined)!
+      store.confirmCopy(matched, parsed.messageId)
       assert.equal(store.view(email, self).result?.state, 'submitting')
       assert.equal(index.count, 0)
       return { state: 'accepted', accepted: [email] }
@@ -254,4 +256,171 @@ test('引用本方发件时收件范围排除密送，新邮件保留正文首�
   assert.deepEqual(all.cc, [{ email: 'cc@example.test' }])
   assert.equal(all.subject, source.subject)
   assert.deepEqual(envelope(self, self, edit).to, [{ email: self }])
+})
+
+test('旧 QQ 副本两种标识均未匹配，内容和时间相同也保留两条', async (t) => {
+  const { dir, store } = await setup(t)
+  const d = store.write(email, self, store.view(email, self).draft, edit).draft
+  const qq = '<tencent_86D8DDA29AB15997BC016F5C90CD43858609@qq.com>'
+  let localId = '',
+    date = ''
+  await store.send(
+    email,
+    self,
+    command(d),
+    async (a) => {
+      localId = a.message_id
+      date = new Date(Math.floor(Date.parse(a.created_at) / 1000) * 1000).toISOString()
+      return { state: 'accepted' }
+    },
+    idle,
+    idle,
+  )
+  const historical: MessageRow = {
+    message_id: randomUUID(),
+    internet_message_id: qq,
+    import_key: qq + '/mimehash',
+    origin_copy: { folder_id: randomUUID(), uid_validity: 1, uid: 199 },
+    occurred_at: date,
+    ingested_at: date,
+    from: { email: self },
+    to: [{ email }],
+    cc: [],
+    bcc: [],
+    direction: 'outgoing',
+    references: [],
+    subject: d.subject,
+    text_body: d.text_body,
+    attachments: [],
+    conversation_contact_ids: [d.contact_id],
+  }
+  const log = path.join(dir, 'messages', date.slice(0, 7) + '.jsonl')
+  append(log, historical)
+  const reply = {
+    ...historical,
+    message_id: randomUUID(),
+    internet_message_id: '<response@example.test>',
+    direction: 'incoming',
+    origin_copy: undefined,
+    import_key: undefined,
+    in_reply_to: qq,
+    from: { email },
+    to: [{ email: self }],
+  }
+  append(log, reply)
+  for (let i = 0; i < 2; i++) {
+    const index = await ImportIndex.load(dir, idle)
+    assert.equal(index.count, 3)
+    const timeline = await index.timeline(d.contact_id, undefined, idle)
+    assert.equal(timeline.messages.filter((m) => m.outgoing).length, 2)
+    assert.equal(timeline.messages.find((m) => !m.outgoing)?.replyTo?.id, historical.message_id)
+    assert.notEqual(index.original(historical.message_id, d.contact_id).record.message_id, localId)
+  }
+})
+test('按两个标识同步，服务器改写标识后原位更新正文、附件、地址和回复链', async (t) => {
+  const { dir, index, store } = await setup(t)
+  const d = store.write(email, self, store.view(email, self).draft, edit).draft
+  let local = '',
+    original = '',
+    marker = ''
+  await store.send(
+    email,
+    self,
+    command(d),
+    async (a) => {
+      local = a.message_id
+      original = a.internet_message_id
+      marker = a.attempt_id
+      return { state: 'accepted', accepted: [email] }
+    },
+    idle,
+    idle,
+  )
+  const folder = newFolder('sent', 'Sent')
+  const raws: string[] = []
+  const client = {
+    mailboxOpen: async () => ({ uidValidity: 1, uidNext: raws.length + 1 }),
+    search: async () => [raws.length],
+    fetchOne: async () => ({ source: Buffer.from(raws.at(-1)!), internalDate: new Date() }),
+  } as unknown as ImapFlow
+  async function sync(id: string, tag: string, body = 'rewritten') {
+    raws.push(
+      [
+        'From: sales@atlas.test',
+        'To: other@example.test',
+        'Bcc: hidden@example.test',
+        'Subject: server subject',
+        'Message-ID: ' + id,
+        'X-FTCS-Send-ID: ' + tag,
+        'Content-Type: multipart/mixed; boundary=ftcs',
+        '',
+        '--ftcs',
+        'Content-Type: text/plain',
+        '',
+        body,
+        '--ftcs',
+        'Content-Disposition: attachment; filename=new.txt',
+        'Content-Type: text/plain',
+        '',
+        'attachment',
+        '--ftcs--',
+        '',
+      ].join('\r\n'),
+    )
+    await importFolder(
+      client,
+      dir,
+      { address_key: self, sync_from: '2020-01-01' } as Account,
+      folder,
+      index,
+      idle,
+      idle,
+    )
+  }
+  await sync(original, randomUUID())
+  assert.equal(index.count, 1)
+  assert.equal(index.original(local, d.contact_id).record.text_body, edit.text_body)
+  const rewritten = '<server@example.test>'
+  await sync(rewritten, marker)
+  await sync(rewritten, 'unrelated', 'another MIME encoding')
+  for (const ix of [index, await ImportIndex.load(dir, idle)]) {
+    const r = ix.original(local, d.contact_id).record
+    assert.equal(ix.count, 1)
+    assert.equal(r.internet_message_id, rewritten)
+    assert.equal(r.subject, 'server subject')
+    assert.equal(r.text_body?.trim(), 'rewritten')
+    assert.equal(r.attachments?.[0]?.filename, 'new.txt')
+    assert.equal(r.bcc?.[0]?.email, 'hidden@example.test')
+    assert.equal(r.to?.[0]?.email, 'other@example.test')
+    assert.equal(ix.composer.matchCopy(original, undefined)?.message_id, local)
+    assert.equal(ix.composer.matchCopy(rewritten, undefined)?.message_id, local)
+    assert.deepEqual((await ix.timeline(d.contact_id, undefined, idle)).messages[0].delivery?.accepted, [
+      email,
+    ])
+  }
+  const reply = store.write(email, self, store.view(email, self).draft, {
+    mode: 'reply',
+    quoted_message_id: local,
+    text_body: 'reply',
+  }).draft
+  await store.send(
+    email,
+    self,
+    command(reply),
+    async (a) => {
+      assert.equal(a.in_reply_to, rewritten)
+      await sync('<second-server-id@example.test>', a.attempt_id, 'copy arrived first')
+      return { state: 'unknown' }
+    },
+    idle,
+    idle,
+  )
+  for (const ix of [index, await ImportIndex.load(dir, idle)]) {
+    const messages = (await ix.timeline(d.contact_id, undefined, idle)).messages
+    assert.equal(messages.length, 2)
+    const second = messages.find((m) => m.id !== local)!
+    assert.equal(second.body, 'copy arrived first')
+    assert.equal(second.replyTo?.id, local)
+    assert.equal(second.delivery?.state, 'accepted')
+  }
 })

@@ -88,6 +88,7 @@ export function smtpSubmit(e: Endpoint, password: string, signal: AbortSignal): 
         attachments,
         date: new Date(a.created_at),
         messageId: a.internet_message_id,
+        headers: { 'X-FTCS-Send-ID': a.attempt_id },
         inReplyTo: a.in_reply_to,
         references: a.references.length ? a.references : undefined,
         signal,

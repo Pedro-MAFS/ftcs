@@ -2,10 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import { pipeline } from 'node:stream/promises'
-import type { ParsedMail } from 'mailparser'
 import type { ImportIndex, MessageRow } from './conversations'
 import { append, eachLine, read, readAt, save, uuid, type Position } from './storage'
-import { key, type MailAddress } from './types'
+import { key } from './types'
 import {
   envelope,
   validAddress,
@@ -38,18 +37,13 @@ type AttemptEntry = Omit<Attempt, 'snapshot'> & {
   draft: string
   draftRev: number
   copy_seen?: boolean
+  copy_internet_id?: string
 }
 export type SubmitMail = (
   attempt: Attempt,
   files: { filename: string; path: string }[],
 ) => Promise<SendResult>
 const validId = (id?: string) => !!id && /^<[^<>\s]+>$/.test(id)
-const normalizedText = (s: string) => s.replace(/\r\n/g, '\n').replace(/\n$/, '')
-const addressSet = (list: MailAddress[]) =>
-  list
-    .map((a) => key(a.email))
-    .sort()
-    .join('\n')
 function status(a?: SendResult): SendResult | undefined {
   if (a)
     return {
@@ -64,6 +58,9 @@ export class ComposerStore {
   private drafts = new Map<string, Draft>()
   private attempts = new Map<string, AttemptEntry>()
   private byInternetId = new Map<string, AttemptEntry>()
+  private byAttemptId = new Map<string, AttemptEntry>()
+  private copiesByInternetId = new Map<string, string | null>()
+  private byMessage = new Map<string, AttemptEntry>()
   private latest = new Map<string, AttemptEntry>()
   private attachmentHistory = new Set<string>()
   constructor(
@@ -88,6 +85,8 @@ export class ComposerStore {
     }
     this.attempts.set(a.request_id, a)
     this.byInternetId.set(a.internet_message_id, a)
+    this.byAttemptId.set(a.attempt_id, a)
+    this.byMessage.set(a.message_id, a)
     this.latest.set(a.draft, a)
     for (const file of snapshot.attachments) this.attachmentHistory.add(file.attachment_id)
     return a
@@ -118,8 +117,11 @@ export class ComposerStore {
         )
         guard()
       }
+  }
+  recover() {
     for (const a of this.attempts.values()) {
-      if (a.state === 'submitting')
+      if (a.copy_internet_id) this.indexCopyId(a)
+      if (a.state === 'submitting' || (a.copy_seen && a.state !== 'accepted'))
         this.record(
           a,
           a.copy_seen
@@ -138,9 +140,8 @@ export class ComposerStore {
     const d = this.drafts.get(contact)
     if (d) return d.text_body.trim().slice(0, 80) || d.subject || d.attachments[0]?.filename || '引用回复'
   }
-  delivery(message: string, id?: string) {
-    const entry = this.byInternetId.get(id ?? '')
-    if (entry?.message_id === message) return status(entry)
+  delivery(message: string) {
+    return status(this.byMessage.get(message))
   }
   private existing(email: string) {
     if (!validAddress(email)) throw new Error('收件邮箱无效。')
@@ -273,7 +274,23 @@ export class ComposerStore {
       throw e
     }
   }
-  private record(a: AttemptEntry, result: SendResult & { copy_seen?: boolean }) {
+  private indexCopyId(a: AttemptEntry) {
+    const id = a.copy_internet_id!
+    const existing = this.copiesByInternetId.get(id)
+    this.copiesByInternetId.set(id, existing === undefined || existing === a.message_id ? a.message_id : null)
+  }
+  copiedMessage(id: string) {
+    return this.copiesByInternetId.get(id)
+  }
+  replyInternetId(record: MessageRow) {
+    const entry = this.byInternetId.get(record.internet_message_id ?? '')
+    return entry?.message_id === record.message_id &&
+      entry.copy_internet_id &&
+      this.copiedMessage(entry.copy_internet_id) === record.message_id
+      ? entry.copy_internet_id
+      : record.internet_message_id
+  }
+  private record(a: AttemptEntry, result: SendResult & { copy_seen?: boolean; copy_internet_id?: string }) {
     const event = {
       attempt_id: a.attempt_id,
       request_id: a.request_id,
@@ -283,6 +300,8 @@ export class ComposerStore {
     }
     append(this.logPath(a), event)
     Object.assign(a, event)
+    this.index.deliveryChanged(a.message_id)
+    if (result.copy_internet_id) this.indexCopyId(a)
   }
   private publish(a: AttemptEntry) {
     if (!this.index.hasMessage(a.message_id)) {
@@ -291,6 +310,7 @@ export class ComposerStore {
       const row: MessageRow = {
         message_id: a.message_id,
         internet_message_id: a.internet_message_id,
+        ftcs_send_id: a.attempt_id,
         direction: 'outgoing',
         occurred_at: a.created_at,
         ingested_at: now,
@@ -350,7 +370,7 @@ export class ComposerStore {
       fields.subject !== d.subject
     )
       throw new Error('收件人或主题已变化，请重新核对草稿。')
-    const parent = original?.record.internet_message_id
+    const parent = original && this.replyInternetId(original.record)
     const references = validId(parent)
       ? [...new Set([...(original?.record.references ?? []).filter(validId), parent!])]
       : []
@@ -396,32 +416,36 @@ export class ComposerStore {
     notify()
     return status(entry)!
   }
-  matchCopy(mail: ParsedMail, sender: MailAddress | undefined, to: MailAddress[], cc: MailAddress[]) {
-    const a = this.byInternetId.get(mail.messageId ?? '')
-    if (!a || !sender || key(sender.email) !== key(a.from)) return
-    const d = readAt<Attempt>(a.position).snapshot
-    if (
-      mail.subject !== d.subject ||
-      addressSet(to) !== addressSet(d.to) ||
-      addressSet(cc) !== addressSet(d.cc) ||
-      normalizedText(mail.text ?? '') !== normalizedText(d.text_body) ||
-      mail.attachments.length !== d.attachments.length
-    )
-      return
-    if (
-      mail.attachments.some(
-        (f, i) =>
-          f.filename !== d.attachments[i].filename ||
-          createHash('sha256').update(f.content).digest('hex') !== d.attachments[i].sha256,
-      )
-    )
-      return
-    if (a.state === 'submitting') {
-      if (!a.copy_seen) this.record(a, { state: 'submitting', copy_seen: true })
-      return a.message_id
+  matchCopy(id: string | undefined, marker: unknown) {
+    const marked = typeof marker === 'string' ? this.byAttemptId.get(marker.trim()) : undefined
+    const alias = id && this.copiedMessage(id)
+    return marked ?? this.byInternetId.get(id ?? '') ?? (alias ? this.byMessage.get(alias) : undefined)
+  }
+  copyContext(a: AttemptEntry) {
+    return { contact: a.contact, quoted: readAt<Attempt>(a.position).snapshot.quoted_message_id }
+  }
+  restoreCopy(a: AttemptEntry, id?: string) {
+    a.copy_seen = true
+    if (validId(id) && id !== (a.copy_internet_id ?? a.internet_message_id)) {
+      a.copy_internet_id = id
+      this.indexCopyId(a)
     }
-    if (a.state !== 'accepted') this.record(a, { state: 'accepted', detail: '已发送副本已核对' })
-    this.publish(a)
-    return a.message_id
+  }
+  confirmCopy(a: AttemptEntry, id?: string) {
+    const rewritten = validId(id) && id !== (a.copy_internet_id ?? a.internet_message_id) ? id : undefined
+    if (
+      !a.copy_seen ||
+      (rewritten && rewritten !== a.copy_internet_id) ||
+      a.state === 'unknown' ||
+      a.state === 'failed'
+    ) {
+      this.record(a, {
+        state: a.state === 'submitting' ? 'submitting' : 'accepted',
+        copy_seen: true,
+        ...(rewritten && { copy_internet_id: rewritten }),
+        detail: '已发送副本已核对',
+      })
+    }
+    if (a.state === 'accepted') this.publish(a)
   }
 }

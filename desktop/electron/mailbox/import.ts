@@ -66,13 +66,27 @@ export async function importFolder(
       const ids = new Set<string>()
       const hash = createHash('sha256').update(raw.source).digest('hex')
       const importKey = (parsed.messageId ?? ref) + '/' + hash
-      let messageId = index.messages.get(importKey)
-      if (!messageId && isSent) messageId = index.composer.matchCopy(parsed, sender, to, cc)
-      if (!messageId) {
-        for (const peer of peers) {
-          if (key(peer.email) !== account.address_key) ids.add(index.ensureContact(peer))
-        }
-        messageId = randomUUID()
+      const marker = parsed.headers.get('x-ftcs-send-id')
+      const sent = isSent ? index.composer.matchCopy(parsed.messageId, marker) : undefined
+      const imported = index.messages.get(importKey)
+      const known = isSent && !sent ? index.knownSent(parsed.messageId, marker) : undefined
+      const replace =
+        known?.replace ||
+        !!(
+          sent &&
+          marker === sent.attempt_id &&
+          parsed.messageId &&
+          parsed.messageId !== (index.currentInternetId(sent.message_id) ?? sent.internet_message_id)
+        )
+      let messageId = sent?.message_id ?? known?.messageId ?? imported
+      if (!messageId || replace) {
+        const context = sent && index.composer.copyContext(sent)
+        if (context) ids.add(context.contact)
+        else
+          for (const peer of peers) {
+            if (key(peer.email) !== account.address_key) ids.add(index.ensureContact(peer))
+          }
+        messageId ??= randomUUID()
         const now = new Date().toISOString()
         const attachments = parsed.attachments.map((a) => {
           const attachment_id = randomUUID()
@@ -89,6 +103,8 @@ export async function importFolder(
           message_id: messageId,
           internet_message_id: parsed.messageId,
           import_key: importKey,
+          ftcs_send_id: marker,
+          quoted_message_id: context?.quoted,
           origin_copy: { folder_id: folderId, uid_validity: validity, uid },
           in_reply_to: parsed.inReplyTo,
           references: [parsed.references ?? []].flat(),
@@ -107,8 +123,9 @@ export async function importFolder(
           ingested_at: now,
         }
         const position = append(path.join(dir, 'messages', now.slice(0, 7) + '.jsonl'), message)
-        index.message(message, position)
+        index.message(message, position, replace)
       }
+      if (sent) index.composer.confirmCopy(sent, marker === sent.attempt_id ? parsed.messageId : undefined)
       const copy = {
         uid_validity: validity,
         uid,

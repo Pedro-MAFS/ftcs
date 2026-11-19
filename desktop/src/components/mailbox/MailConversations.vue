@@ -214,7 +214,9 @@ async function refresh() {
       const matched = rows.find((r) => key(r.email) === key(temporary.value))
       if (matched) select(matched.id)
     } else if (!current.value) select(rows[0]?.id ?? '')
-    else if (!originalPage.value && (current.value.count !== previous?.count || current.value.lastId !== previous?.lastId))
+    else if (originalPage.value && highlighted.value && current.value.revision !== previous?.revision)
+      void load('original', highlighted.value)
+    else if (!originalPage.value && (current.value.count !== previous?.count || current.value.lastId !== previous?.lastId || current.value.revision !== previous?.revision))
       void load('update')
   } catch (e) {
     if (request === listRequest) listError.value = String(e)

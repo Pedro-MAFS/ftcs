@@ -20,6 +20,8 @@ interface ContactRow {
   rev: number
 }
 export interface MessageRow {
+  ftcs_send_id?: unknown
+  origin_copy?: { folder_id: string; uid_validity: number; uid: number }
   quoted_message_id?: string
   reply_to?: MailAddress[]
   message_id: string
@@ -50,6 +52,9 @@ interface CopyRow {
   pending_seen?: boolean
 }
 interface Summary extends TimelineCursor, Position {
+  internetId?: string
+  storedId: string
+  quoted?: string
   outgoing: boolean
   preview: string
   subject: string
@@ -99,6 +104,10 @@ export class ImportIndex {
   hasMessage(id: string) {
     return this.positions.has(id)
   }
+  deliveryChanged(id: string) {
+    for (const contact of this.positions.get(id)?.contacts ?? [])
+      this.revisions.set(contact, (this.revisions.get(contact) ?? 0) + 1)
+  }
   hasConversation(contact: string) {
     return this.byContact.has(contact)
   }
@@ -121,7 +130,7 @@ export class ImportIndex {
     return id
   }
   original(id: string, contact: string) {
-    const row = this.positions.get(id)
+    const row = this.positions.get(this.aliases.get(id) ?? id)
     if (!row?.contacts.includes(contact)) throw new Error('当前会话中找不到引用的原邮件。')
     const record = this.readRecord(row)
     return { record, quote: quoteSource(record) }
@@ -134,6 +143,19 @@ export class ImportIndex {
   private people = new Map<string, ContactRow>()
   private byContact = new Map<string, Summary[]>()
   private positions = new Map<string, Summary>()
+  private aliases = new Map<string, string>()
+  private sentByHeader = new Map<string, string>()
+  currentInternetId(messageId: string) {
+    return this.positions.get(messageId)?.internetId
+  }
+  knownSent(id: string | undefined, marker: unknown) {
+    const marked =
+      typeof marker === 'string' && marker ? this.sentByHeader.get('marker/' + marker) : undefined
+    const byId = id ? this.sentByHeader.get('id/' + id) : undefined
+    const messageId = marked ?? byId
+    if (messageId) return { messageId, replace: !!(marked && id && this.currentInternetId(marked) !== id) }
+  }
+  private revisions = new Map<string, number>()
   private states = new Map<string, CopyRow>()
   get count() {
     return this.positions.size
@@ -142,15 +164,20 @@ export class ImportIndex {
     const index = new ImportIndex(dir)
     const contacts = path.join(dir, 'contacts.jsonl')
     if (fs.existsSync(contacts)) await eachLine(contacts, (r) => index.contact(r), guard)
+    await index.composer.restore(guard)
+    guard()
     for (const kind of ['messages', 'copies']) {
       const base = path.join(dir, kind)
       if (!fs.existsSync(base)) continue
-      for (const file of fs.readdirSync(base).filter((f) => f.endsWith('.jsonl'))) {
+      for (const file of fs
+        .readdirSync(base)
+        .filter((f) => f.endsWith('.jsonl'))
+        .sort()) {
         guard()
         await eachLine(
           path.join(base, file),
           (r, pos) => {
-            if (kind === 'messages') index.message(r, pos)
+            if (kind === 'messages') index.restoreMessage(r, pos)
             else index.copy(file.slice(0, -6), r)
           },
           guard,
@@ -158,7 +185,7 @@ export class ImportIndex {
       }
     }
     guard()
-    await index.composer.restore(guard)
+    index.composer.recover()
     return index
   }
   contact(r: ContactRow) {
@@ -166,9 +193,64 @@ export class ImportIndex {
     this.people.set(r.contact_id, r)
     this.contacts.set(r.address_key, r.contact_id)
   }
-  message(r: MessageRow, pos: Position) {
+  private restoreMessage(r: MessageRow, pos: Position) {
+    const a =
+      r.direction === 'outgoing' &&
+      r.origin_copy &&
+      this.composer.matchCopy(r.internet_message_id, r.ftcs_send_id)
+    if (a) {
+      const id = a.message_id
+      if (r.message_id !== id) this.aliases.set(r.message_id, id)
+      if (r.import_key) this.messages.set(r.import_key, id)
+      const marked = r.ftcs_send_id === a.attempt_id
+      this.composer.restoreCopy(a, marked ? r.internet_message_id : undefined)
+      if (
+        marked &&
+        r.internet_message_id &&
+        (r.message_id === id || r.internet_message_id !== a.internet_message_id)
+      ) {
+        const context = this.composer.copyContext(a)
+        this.message(
+          {
+            ...r,
+            message_id: id,
+            conversation_contact_ids: [context.contact],
+            quoted_message_id: context.quoted,
+          },
+          pos,
+          true,
+          r.message_id,
+        )
+      }
+      return
+    }
+    if (r.direction === 'outgoing' && r.origin_copy) {
+      const known = this.knownSent(r.internet_message_id, r.ftcs_send_id)
+      if (known) {
+        if (r.message_id !== known.messageId) this.aliases.set(r.message_id, known.messageId)
+        if (r.import_key) this.messages.set(r.import_key, known.messageId)
+        if (known.replace) this.message({ ...r, message_id: known.messageId }, pos, true, r.message_id)
+        return
+      }
+    }
+    this.message(r, pos)
+  }
+  message(r: MessageRow, pos: Position, replace = false, storedId = r.message_id) {
     if (r.import_key) this.messages.set(r.import_key, r.message_id)
-    if (this.positions.has(r.message_id)) return
+    if (r.origin_copy && r.direction === 'outgoing') {
+      if (r.internet_message_id) this.sentByHeader.set('id/' + r.internet_message_id, r.message_id)
+      if (typeof r.ftcs_send_id === 'string' && r.ftcs_send_id)
+        this.sentByHeader.set('marker/' + r.ftcs_send_id, r.message_id)
+    }
+    const previous = this.positions.get(r.message_id)
+    if (previous && !replace) return
+    if (previous)
+      for (const contact of previous.contacts) {
+        const list = this.byContact.get(contact)!
+        list.splice(lowerBound(list, previous), 1)
+        if (!list.length) this.byContact.delete(contact)
+        this.revisions.set(contact, (this.revisions.get(contact) ?? 0) + 1)
+      }
     const snippet =
       body(r).slice(0, 256).replace(/\s+/g, ' ').trim() ||
       r.attachments?.[0]?.filename ||
@@ -176,6 +258,9 @@ export class ImportIndex {
       '无正文'
     const row = {
       ...pos,
+      storedId,
+      internetId: r.internet_message_id,
+      quoted: r.quoted_message_id,
       id: r.message_id,
       at: r.occurred_at || r.ingested_at,
       outgoing: r.direction === 'outgoing',
@@ -185,7 +270,10 @@ export class ImportIndex {
     }
     this.positions.set(row.id, row)
     const internetId = r.internet_message_id?.trim()
-    if (internetId) this.internetIds.set(internetId, this.internetIds.has(internetId) ? null : row)
+    if (internetId) {
+      const prior = this.internetIds.get(internetId)
+      this.internetIds.set(internetId, prior === undefined || prior?.id === row.id ? row : null)
+    }
     for (const contact of new Set(r.conversation_contact_ids)) {
       const list = this.byContact.get(contact) ?? []
       list.splice(lowerBound(list, row), 0, row)
@@ -193,6 +281,8 @@ export class ImportIndex {
     }
   }
   copy(folder: string, r: CopyRow) {
+    const canonical = this.aliases.get(r.message_id)
+    if (canonical) r = { ...r, message_id: canonical }
     const id = folder + ':' + r.uid_validity + ':' + r.uid
     this.copies.add(id)
     if ((this.states.get(id)?.rev ?? 0) <= r.rev) this.states.set(id, r)
@@ -221,6 +311,7 @@ export class ImportIndex {
         company: person.company,
         lastAt: last.at,
         lastId: last.id,
+        revision: this.revisions.get(id),
         draftPreview: this.composer.preview(id),
         preview: (last.outgoing ? '我：' : '') + last.preview,
         count: list.length,
@@ -231,11 +322,16 @@ export class ImportIndex {
   }
   private readRecord(row: Summary): MessageRow {
     const record = readAt<MessageRow>(row)
-    if (record.message_id !== row.id) throw new Error('邮件位置已改变')
-    return record
+    if (record.message_id !== row.storedId) throw new Error('邮件位置已改变')
+    return {
+      ...record,
+      message_id: row.id,
+      quoted_message_id: row.quoted,
+      conversation_contact_ids: row.contacts,
+    }
   }
   attachment(messageId: string, ordinal: number) {
-    const row = this.positions.get(messageId)
+    const row = this.positions.get(this.aliases.get(messageId) ?? messageId)
     const attachment =
       row && Number.isSafeInteger(ordinal) && ordinal >= 0
         ? this.readRecord(row).attachments?.[ordinal]
@@ -245,14 +341,17 @@ export class ImportIndex {
   }
   private replyTarget(row: MessageRow, contact: string) {
     if (row.quoted_message_id) {
-      const parent = this.positions.get(row.quoted_message_id)
+      const parent = this.positions.get(this.aliases.get(row.quoted_message_id) ?? row.quoted_message_id)
       if (parent?.contacts.includes(contact)) return { id: parent.id, contact, subject: parent.subject }
     }
     const direct = [row.in_reply_to ?? []].flat().join(' ').trim()
     const id = direct || row.references?.at(-1)?.trim()
     // Multiple parents or malformed headers do not identify one original message.
     if (!id || !/^<[^<>\s]+>$/.test(id)) return
-    const parent = this.internetIds.get(id)
+    const copied = this.composer.copiedMessage(id) ?? this.composer.matchCopy(id, undefined)?.message_id
+    let parent = this.internetIds.get(id)
+    if (copied === null || (copied && this.internetIds.has(id) && parent?.id !== copied)) return
+    if (copied) parent = this.positions.get(copied)
     if (!parent?.contacts.length || parent.id === row.message_id) return
     return {
       id: parent.id,
@@ -271,7 +370,7 @@ export class ImportIndex {
     let end = before ? lowerBound(rows, before) : rows.length
     let start = Math.max(0, end - 30)
     if (aroundId) {
-      const target = this.positions.get(aroundId)
+      const target = this.positions.get(this.aliases.get(aroundId) ?? aroundId)
       if (!target || !target.contacts.includes(contact)) throw new Error('此会话中找不到原邮件。')
       start = lowerBound(rows, target)
       end = Math.min(rows.length, start + 30)
@@ -287,7 +386,7 @@ export class ImportIndex {
         subject: r.subject || '（无主题）',
         ...(r.html_body?.trim() ? { body: text } : splitQuotedText(text)),
         quoteSource: quoteSource(r, text),
-        delivery: this.composer.delivery(r.message_id, r.internet_message_id),
+        delivery: this.composer.delivery(r.message_id),
         replyTo: this.replyTarget(r, contact),
         html: r.html_body?.trim() ? readableHtml(r.html_body) : undefined,
         from: r.from,
@@ -305,8 +404,8 @@ export class ImportIndex {
         await eachLine(
           file,
           (r, pos) => {
-            const stored = this.positions.get(r.message_id)
-            if (stored?.file === file) Object.assign(stored, pos)
+            const stored = this.positions.get(this.aliases.get(r.message_id) ?? r.message_id)
+            if (stored?.file === file && stored.storedId === r.message_id) Object.assign(stored, pos)
           },
           guard,
         )
