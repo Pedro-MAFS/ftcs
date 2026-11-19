@@ -78,10 +78,17 @@ export interface TimelineCursor {
   at: string
   id: string
 }
+export interface ReplyTarget {
+  id: string
+  contact: string
+  subject: string
+}
 export interface MessageView extends TimelineCursor {
   outgoing: boolean
   subject: string
   body: string
+  replyTo?: ReplyTarget
+  quote?: string
   html?: { fragment: string; remoteImages: boolean }
   from?: MailAddress
   to: MailAddress[]
@@ -95,7 +102,7 @@ export interface TimelinePage {
 }
 export interface MailboxAPI {
   conversations(ctx: Context, account: string): Promise<Conversation[]>
-  timeline(ctx: Context, account: string, contact: string, before?: TimelineCursor): Promise<TimelinePage>
+  timeline(ctx: Context, account: string, contact: string, before?: TimelineCursor, aroundId?: string): Promise<TimelinePage>
   snapshot(): Promise<Snapshot>
   act(ctx: Context, action: MailAction): Promise<Snapshot>
   changed(callback: () => void): () => void

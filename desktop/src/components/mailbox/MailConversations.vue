@@ -4,6 +4,7 @@ import {
   key,
   type Conversation,
   type MessageView,
+  type ReplyTarget,
   type Snapshot,
   type TimelineCursor,
 } from '../../../electron/mailbox/types'
@@ -61,6 +62,23 @@ const compose = ref(false),
   address = ref(''),
   scroller = ref<HTMLElement>(),
   newMail = ref(false)
+const originalPage = ref(false)
+const highlighted = ref('')
+function focusOriginal(id: string) {
+  const row = scroller.value?.querySelector<HTMLElement>(`[data-message="${CSS.escape(id)}"]`)
+  if (!row) return false
+  highlighted.value = id
+  row.focus({ preventScroll: true })
+  row.scrollIntoView({ block: 'center' })
+  return true
+}
+function jumpToOriginal(target: ReplyTarget) {
+  if (selected.value === target.contact && focusOriginal(target.id)) return
+  if (selected.value !== target.contact) {
+    contactSearch.value = ''
+    select(target.contact, target.id)
+  } else void load('original', target.id)
+}
 let listRequest = 0,
   pageRequest = 0
 const clock = (date: string) => new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -79,7 +97,7 @@ function visibleAnchor() {
       return { row: row.dataset.message, offset: row.getBoundingClientRect().top - top }
   }
 }
-async function load(mode: 'open' | 'older' | 'update') {
+async function load(mode: 'open' | 'older' | 'update' | 'original', aroundId?: string) {
   const contact = selected.value
   if (!contact) return
   const request = ++pageRequest
@@ -94,7 +112,7 @@ async function load(mode: 'open' | 'older' | 'update') {
     let items: MessageView[] = []
     let more: TimelineCursor | null
     do {
-      const page = await api.timeline(ctx, account, contact, cursor)
+      const page = await api.timeline(ctx, account, contact, cursor, aroundId)
       if (request !== pageRequest) return
       items = page.messages.concat(items)
       more = page.before
@@ -111,11 +129,17 @@ async function load(mode: 'open' | 'older' | 'update') {
     const anchor = visibleAnchor()
     if (mode === 'older') items = items.concat(messages.value)
     if (mode === 'update' && !follow && newest && newest !== items.at(-1)?.id) newMail.value = true
+    if (mode === 'original' || mode === 'open') {
+      originalPage.value = mode === 'original'
+      highlighted.value = ''
+      newMail.value = false
+    }
     messages.value = items
     before.value = more
     await nextTick()
     if (request !== pageRequest) return
-    if (follow) bottom()
+    if (mode === 'original' && aroundId) focusOriginal(aroundId)
+    else if (follow) bottom()
     else if (anchor && el) {
       const row = Array.from(el.querySelectorAll<HTMLElement>('[data-message]')).find(
         (n) => n.dataset.message === anchor.row,
@@ -129,7 +153,9 @@ async function load(mode: 'open' | 'older' | 'update') {
     if (request === pageRequest) reading.value = false
   }
 }
-function select(id: string) {
+function select(id: string, aroundId?: string) {
+  originalPage.value = false
+  highlighted.value = ''
   pageRequest++
   selected.value = id
   temporary.value = ''
@@ -139,7 +165,7 @@ function select(id: string) {
   newMail.value = false
   readError.value = ''
   reading.value = false
-  if (id) void load('open')
+  if (id) void load(aroundId ? 'original' : 'open', aroundId)
 }
 function openAddress() {
   const email = address.value.trim()
@@ -161,7 +187,7 @@ async function refresh() {
       const matched = rows.find((r) => key(r.email) === key(temporary.value))
       if (matched) select(matched.id)
     } else if (!current.value) select(rows[0]?.id ?? '')
-    else if (current.value.count !== previous?.count || current.value.lastId !== previous?.lastId)
+    else if (!originalPage.value && (current.value.count !== previous?.count || current.value.lastId !== previous?.lastId))
       void load('update')
   } catch (e) {
     if (request === listRequest) listError.value = String(e)
@@ -255,6 +281,7 @@ onBeforeUnmount(() => {
             [current?.name && current?.email, current?.company].filter(Boolean).join(' · ')
           }}</small>
         </div>
+        <button v-if="originalPage" class="return-latest" @click="load('open')">返回最新邮件</button>
       </header>
       <p v-if="temporary">与此地址暂无邮件往来。</p>
       <p v-else-if="!current && !listing">选择联系人查看邮件往来。</p>
@@ -274,7 +301,7 @@ onBeforeUnmount(() => {
           <div v-if="!index || day(m.at) !== day(messages[index - 1].at)" class="date">
             {{ formattedDay(m.at) }}
           </div>
-          <article :data-message="m.id" :class="{ out: m.outgoing }">
+          <article :data-message="m.id" tabindex="-1" :class="{ out: m.outgoing, highlighted: highlighted === m.id }">
             <div class="byline">
               {{ m.outgoing ? '我' : m.from?.name || m.from?.email || '发件人' }} · {{ clock(m.at) }}
             </div>
@@ -296,6 +323,9 @@ onBeforeUnmount(() => {
                 <div v-if="m.cc.length">抄送　{{ m.cc.map((a) => a.email).join('、') }}</div>
                 <div v-if="m.bcc.length">密送　{{ m.bcc.map((a) => a.email).join('、') }}</div>
               </details>
+              <button v-if="m.replyTo" class="reply-link" @click="jumpToOriginal(m.replyTo)">
+                查看原邮件 · {{ m.replyTo.subject }}
+              </button>
               <HtmlMailBody v-if="m.html" :html="m.html" :subject="m.subject" />
               <template v-else-if="m.body.length > 900"
                 ><p>{{ m.body.slice(0, 900) }}</p>
@@ -304,7 +334,11 @@ onBeforeUnmount(() => {
                   <p>{{ m.body.slice(900) }}</p>
                 </details></template
               >
-              <p v-else>{{ m.body || (m.attachments.length ? '' : '无正文') }}</p>
+              <p v-else>{{ m.body || (m.attachments.length || m.quote ? '' : '无正文') }}</p>
+              <details v-if="m.quote">
+                <summary>引用原文</summary>
+                <p>{{ m.quote }}</p>
+              </details>
               <div v-for="(a, i) in m.attachments" :key="i" class="file">
                 <Icon name="file-text" :size="16" /> {{ a.filename }}
                 <small>·　{{ (a.size_bytes / 1024).toFixed(1) }} KB</small>
@@ -601,6 +635,27 @@ main header strong {
   overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 1.6;
+}
+.reply-link,
+.return-latest {
+  padding: 6px 8px;
+  border-radius: 5px;
+  color: var(--soft-blue);
+  background: var(--selected);
+  font-size: 12px;
+}
+.reply-link {
+  display: block;
+  margin-top: 8px;
+  text-align: left;
+  overflow-wrap: anywhere;
+  border-left: 2px solid currentColor;
+}
+.return-latest {
+  margin-left: auto;
+}
+.highlighted .bubble {
+  outline: 2px solid var(--soft-blue);
 }
 .bubble strong {
   font-size: 15px;

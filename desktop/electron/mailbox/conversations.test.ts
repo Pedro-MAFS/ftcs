@@ -87,3 +87,53 @@ test('existing monthly shards: stable pagination, attribution, readable HTML and
   fs.writeFileSync(files[0], ' ' + original)
   assert.equal((await index.timeline('bob', undefined, () => {})).messages[0].id, '64')
 })
+
+test('原邮件按账号内唯一标识定位，支持旧分片、跨页、跨联系人和后补导入', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-reply-'))
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  const file = path.join(dir, 'messages', '2026-11.jsonl')
+  const initial = await ImportIndex.load(dir, () => {})
+  const add = (id: number, extra: object = {}) => {
+    const row = {
+      message_id: String(id),
+      internet_message_id: '<' + id + '@example.test>',
+      occurred_at: new Date(1000 * id).toISOString(),
+      ingested_at: '',
+      direction: 'incoming',
+      conversation_contact_ids: ['alice'],
+      subject: '同一主题',
+      ...extra,
+    }
+    initial.message(row, append(file, row))
+  }
+  for (let i = 0; i < 70; i++) add(i)
+  add(70, { in_reply_to: '<0@example.test>' })
+  add(71, { references: ['<0@example.test>', '<1@example.test>'] })
+  add(72, { in_reply_to: '<missing>', references: ['<0@example.test>'] })
+  add(73, { in_reply_to: '<73@example.test>' })
+  add(74, { in_reply_to: '<0@example.test> <1@example.test>' })
+  add(75, { in_reply_to: '<duplicate>' })
+  add(76, { internet_message_id: '<duplicate>' })
+  add(77, { internet_message_id: '<duplicate>' })
+  add(78, { in_reply_to: '<other>', text_body: '这次回复\n> 引用内容' })
+  add(79, { internet_message_id: '<other>', conversation_contact_ids: ['bob'] })
+  add(80)
+  for (const index of [initial, await ImportIndex.load(dir, () => {})]) {
+    const page = await index.timeline('alice', undefined, () => {})
+    const message = (id: number) => page.messages.find((m) => m.id === String(id))!
+    assert.deepEqual(message(70).replyTo, { id: '0', contact: 'alice', subject: '同一主题' })
+    assert.equal(message(71).replyTo?.id, '1')
+    for (const id of [72, 73, 74, 75, 80]) assert.equal(message(id).replyTo, undefined)
+    assert.equal(message(78).replyTo?.contact, 'bob')
+    assert.equal(message(78).body, '这次回复')
+    assert.equal(message(78).quote, '> 引用内容')
+    assert.ok(!page.messages.some((m) => m.id === '0'))
+    const older = await index.timeline('alice', undefined, () => {}, '0')
+    assert.equal(older.messages[0].id, '0')
+    assert.equal(older.messages.length, 30)
+    await assert.rejects(
+      index.timeline('alice', undefined, () => {}, '79'),
+      /找不到原邮件/,
+    )
+  }
+})

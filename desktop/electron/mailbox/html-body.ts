@@ -24,6 +24,7 @@ export function readableHtml(source: string) {
       td: ['colspan', 'rowspan'],
       th: ['colspan', 'rowspan'],
       font: ['face', 'size', 'color'],
+      blockquote: ['type'],
       img: ['src', 'alt', 'title'],
       a: ['data-mail-link', 'role', 'tabindex'],
     },

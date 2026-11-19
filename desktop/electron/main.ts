@@ -715,7 +715,7 @@ function registerIpcHandlers(): void {
       throw new Error('邮箱仅允许从工作区窗口访问。')
   }
   ipcMain.handle(IPC.MAILBOX_CONVERSATIONS, (event,ctx,account) => { checkMailboxSender(event); return mailbox.conversations(ctx,account) })
-  ipcMain.handle(IPC.MAILBOX_TIMELINE, (event,ctx,account,contact,before) => { checkMailboxSender(event); return mailbox.timeline(ctx,account,contact,before) })
+  ipcMain.handle(IPC.MAILBOX_TIMELINE, (event,ctx,account,contact,before,aroundId) => { checkMailboxSender(event); return mailbox.timeline(ctx,account,contact,before,aroundId) })
   ipcMain.handle(IPC.MAILBOX_GET, event => { checkMailboxSender(event); return mailbox.snapshot() })
   ipcMain.handle(IPC.MAILBOX_ACTION, (event, ctx, action) => { checkMailboxSender(event); return mailbox.act(ctx, action) })
   ipcMain.handle(IPC.SITE_GET, () => getSiteSnapshot(getWorkspaceRoot()))

@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
+import { replyPrefix } from './html-quote'
 import type { MessageView } from '../../../electron/mailbox/types'
 const props = defineProps<{ html: NonNullable<MessageView['html']>; subject: string }>()
 const allowExternal = ref(false)
 const frame = ref<HTMLIFrameElement>()
 const height = ref(100)
+const hasQuote = ref(false)
+const expanded = ref(false)
+let toggleBody: (() => void) | undefined
 let observer: ResizeObserver | undefined
 const documentSource = computed(() => {
   const images = allowExternal.value ? 'data: https: http:' : 'data:'
@@ -20,6 +24,22 @@ function ready() {
   observer?.disconnect()
   const doc = frame.value?.contentDocument
   if (!doc?.body) return
+  const prefix = replyPrefix(doc)
+  hasQuote.value = !!prefix
+  toggleBody = undefined
+  if (prefix) {
+    const original = doc.createDocumentFragment()
+    function collapse() {
+      while (doc!.body.firstChild) original.append(doc!.body.firstChild)
+      doc!.body.append(prefix!.cloneNode(true))
+    }
+    if (!expanded.value) collapse()
+    toggleBody = () => {
+      expanded.value = !expanded.value
+      if (expanded.value) doc.body.replaceChildren(original)
+      else collapse()
+    }
+  }
   function openLink(event: Event) {
     if (event.type === 'keydown' && (event as KeyboardEvent).key !== 'Enter') return
     const link = (event.target as HTMLElement)?.closest?.('a[data-mail-link]')?.getAttribute('data-mail-link')
@@ -54,6 +74,9 @@ onBeforeUnmount(() => observer?.disconnect())
       :style="{ height: height + 'px' }"
       @load="ready"
     />
+    <button v-if="hasQuote" type="button" :aria-expanded="expanded" @click="toggleBody?.()">
+      {{ expanded ? '收起引用原文' : '展开引用原文' }}
+    </button>
   </div>
 </template>
 <style scoped>

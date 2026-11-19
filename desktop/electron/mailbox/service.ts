@@ -103,10 +103,10 @@ export class MailboxService {
     this.check(ctx)
     return index.conversations(this.folder(accountDir(this.base(), id), 'inbox'))
   }
-  async timeline(ctx: Context, id: string, contact: string, before?: TimelineCursor) {
+  async timeline(ctx: Context, id: string, contact: string, before?: TimelineCursor, aroundId?: string) {
     const index = await this.reader(ctx, id)
     this.check(ctx)
-    const page = await index.timeline(contact, before, () => this.check(ctx))
+    const page = await index.timeline(contact, before, () => this.check(ctx), aroundId)
     this.check(ctx)
     return page
   }

@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readableHtml } from './html-body'
+import { splitQuotedText } from './reply-quote'
 import { compile } from 'html-to-text'
 import { eachLine, type Position } from './storage'
 import type { Conversation, Folder, MailAddress, TimelineCursor, TimelinePage, MessageView } from './types'
@@ -15,6 +16,9 @@ interface ContactRow {
 }
 interface MessageRow {
   message_id: string
+  internet_message_id?: string
+  in_reply_to?: string | string[]
+  references?: string[]
   import_key?: string
   direction: string
   occurred_at: string
@@ -41,6 +45,8 @@ interface CopyRow {
 interface Summary extends TimelineCursor, Position {
   outgoing: boolean
   preview: string
+  subject: string
+  contacts: string[]
 }
 const plainText = compile({
   wordwrap: false,
@@ -69,6 +75,8 @@ export class ImportIndex {
   readonly contacts = new Map<string, string>()
   readonly messages = new Map<string, string>()
   readonly copies = new Set<string>()
+  // null marks an ambiguous Internet Message-ID within this mailbox account.
+  private internetIds = new Map<string, Summary | null>()
   private people = new Map<string, ContactRow>()
   private byContact = new Map<string, Summary[]>()
   private positions = new Map<string, Summary>()
@@ -117,8 +125,12 @@ export class ImportIndex {
       at: r.occurred_at || r.ingested_at,
       outgoing: r.direction === 'outgoing',
       preview: snippet.slice(0, 120),
+      subject: r.subject || '（无主题）',
+      contacts: r.conversation_contact_ids,
     }
     this.positions.set(row.id, row)
+    const internetId = r.internet_message_id?.trim()
+    if (internetId) this.internetIds.set(internetId, this.internetIds.has(internetId) ? null : row)
     for (const contact of new Set(r.conversation_contact_ids)) {
       const list = this.byContact.get(contact) ?? []
       list.splice(lowerBound(list, row), 0, row)
@@ -154,15 +166,35 @@ export class ImportIndex {
     }
     return result.sort((a, b) => cmp(b.lastAt, a.lastAt) || cmp(b.lastId, a.lastId) || cmp(a.id, b.id))
   }
+  private replyTarget(row: MessageRow, contact: string) {
+    const direct = [row.in_reply_to ?? []].flat().join(' ').trim()
+    const id = direct || row.references?.at(-1)?.trim()
+    // Multiple parents or malformed headers do not identify one original message.
+    if (!id || !/^<[^<>\s]+>$/.test(id)) return
+    const parent = this.internetIds.get(id)
+    if (!parent?.contacts.length || parent.id === row.message_id) return
+    return {
+      id: parent.id,
+      subject: parent.subject,
+      contact: parent.contacts.includes(contact) ? contact : parent.contacts[0],
+    }
+  }
   async timeline(
     contact: string,
     before: TimelineCursor | undefined,
     guard: () => void,
+    aroundId?: string,
   ): Promise<TimelinePage> {
     const rows = this.byContact.get(contact)
     if (!rows) throw new Error('当前账号中没有这个会话。')
-    const end = before ? lowerBound(rows, before) : rows.length,
-      start = Math.max(0, end - 30)
+    let end = before ? lowerBound(rows, before) : rows.length
+    let start = Math.max(0, end - 30)
+    if (aroundId) {
+      const target = this.positions.get(aroundId)
+      if (!target || !target.contacts.includes(contact)) throw new Error('此会话中找不到原邮件。')
+      start = lowerBound(rows, target)
+      end = Math.min(rows.length, start + 30)
+    }
     const selected = rows.slice(start, end)
     const readMessage = (row: Summary) => {
       const fd = fs.openSync(row.file, 'r')
@@ -176,7 +208,8 @@ export class ImportIndex {
           at: row.at,
           outgoing: row.outgoing,
           subject: r.subject || '（无主题）',
-          body: body(r),
+          ...(r.html_body?.trim() ? { body: body(r) } : splitQuotedText(body(r))),
+          replyTo: this.replyTarget(r, contact),
           html: r.html_body?.trim() ? readableHtml(r.html_body) : undefined,
           from: r.from,
           to: r.to ?? [],
