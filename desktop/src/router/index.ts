@@ -28,6 +28,7 @@ const router = createRouter({
         { path: 'explore', name: 'explore', component: ExploreView },
         { path: 'leads', name: 'leads', component: LeadsView },
         { path: 'email', name: 'email', component: EmailView },
+        { path: 'mailbox', name: 'mailbox', component: () => import('../views/MailboxView.vue') },
         { path: 'site', name: 'site', component: SiteView },
         { path: 'settings', name: 'settings', component: SettingsView },
       ],

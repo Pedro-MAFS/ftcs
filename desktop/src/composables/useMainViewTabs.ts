@@ -3,7 +3,7 @@ import { useRouter, type LocationQueryRaw, type Router } from 'vue-router'
 import type { BuiltinBrowserTabsPayload } from '../types/electron'
 import { showToast } from './useToast'
 
-export type PageKey = 'home' | 'input' | 'profile' | 'explore' | 'leads' | 'email' | 'site'
+export type PageKey = 'home' | 'input' | 'profile' | 'explore' | 'leads' | 'email' | 'site' | 'mailbox'
 
 export const PAGE_TITLE: Record<PageKey, string> = {
   home: '首页',
@@ -13,6 +13,7 @@ export const PAGE_TITLE: Record<PageKey, string> = {
   leads: '线索库',
   email: '邮件审核',
   site: '独立站',
+  mailbox: '邮箱',
 }
 
 export const PAGE_COMPONENT: Record<PageKey, string> = {
@@ -23,11 +24,12 @@ export const PAGE_COMPONENT: Record<PageKey, string> = {
   leads: 'LeadsView',
   email: 'EmailView',
   site: 'SiteView',
+  mailbox: 'MailboxView',
 }
 
 const BUSINESS_PAGES = new Set<PageKey>(['input', 'profile', 'explore', 'leads', 'email'])
 
-export type BusinessPage = Exclude<PageKey, 'home' | 'site'>
+export type BusinessPage = Exclude<PageKey, 'home' | 'site' | 'mailbox'>
 
 export interface PageTab {
   id: `page:${PageKey}`
@@ -79,7 +81,7 @@ function placeHomeFirst(list: MainTab[]): MainTab[] {
 
 export function createMainViewTabs(router: Pick<Router, 'push'>) {
   // 启动时展示全部入口，激活页仍由 useDefaultLanding 按流水线进度选择。
-  const tabs = ref<MainTab[]>([pageTab('home'), ...Array.from(BUSINESS_PAGES, pageTab), pageTab('site')])
+  const tabs = ref<MainTab[]>([pageTab('home'), ...Array.from(BUSINESS_PAGES, pageTab), pageTab('site'), pageTab('mailbox')])
   const activeId = ref<string | null>(null)
   const settingsCover = ref(false)
   let browserSeq = 0

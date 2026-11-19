@@ -5,7 +5,7 @@ import { createMainViewTabs } from './useMainViewTabs.ts'
 import { landingSectionFromSteps } from './landing-section'
 import type { PipelineStep } from '../types/workspace'
 
-const defaultTitles = ['首页', '资料', '产品画像', '获客探索', '线索库', '邮件审核', '独立站']
+const defaultTitles = ['首页', '资料', '产品画像', '获客探索', '线索库', '邮件审核', '独立站', '邮箱']
 
 function harness() {
   const pushes: Array<{ name?: string | symbol; query?: LocationQueryRaw }> = []
@@ -21,7 +21,7 @@ function harness() {
 }
 
 describe('useMainViewTabs', () => {
-  it('opens all seven pages without choosing the active page', () => {
+  it('opens all eight pages without choosing the active page', () => {
     const { tabs, pushes } = harness()
     assert.deepEqual(tabs.tabs.value.map((tab) => tab.title), defaultTitles)
     assert.equal(tabs.activeId.value, null)
@@ -35,7 +35,7 @@ describe('useMainViewTabs', () => {
     assert.equal(tabs.tabs.value.filter((tab) => tab.id === 'page:site').length, 1)
     await tabs.closeTab('page:site')
     assert.equal(tabs.tabs.value.some((tab) => tab.id === 'page:site'), false)
-    assert.equal(tabs.activeId.value, 'page:email')
+    assert.equal(tabs.activeId.value, 'page:mailbox')
     await tabs.openPageTab('site')
     assert.equal(tabs.tabs.value.filter((tab) => tab.id === 'page:site').length, 1)
     assert.equal(tabs.activeId.value, 'page:site')
@@ -66,7 +66,7 @@ describe('useMainViewTabs', () => {
     const { tabs, pushes } = harness()
     await tabs.openPageTab('leads')
     await tabs.openPageTab('leads')
-    assert.equal(tabs.tabs.value.length, 7)
+    assert.equal(tabs.tabs.value.length, 8)
     assert.equal(tabs.tabs.value[0]?.id, 'page:home')
     assert.equal(tabs.tabs.value[4]?.title, '线索库')
     assert.equal(tabs.tabs.value[4]?.id, 'page:leads')
@@ -85,7 +85,7 @@ describe('useMainViewTabs', () => {
     assert.equal(tabs.activeId.value, 'page:email')
     assert.deepEqual(
       tabs.tabs.value.map((tab) => tab.title),
-      ['首页', '资料', '产品画像', '获客探索', '邮件审核', '独立站'],
+      ['首页', '资料', '产品画像', '获客探索', '邮件审核', '独立站', '邮箱'],
     )
     assert.equal(pushes.at(-1)?.name, 'email')
 
@@ -102,7 +102,7 @@ describe('useMainViewTabs', () => {
     assert.equal(tabs.activeId.value, 'page:home')
     assert.deepEqual(
       tabs.tabs.value.map((tab) => tab.id),
-      ['page:home', 'page:site'],
+      ['page:home', 'page:site', 'page:mailbox'],
     )
     assert.equal(pushes.length, pushesBefore)
   })
@@ -112,7 +112,7 @@ describe('useMainViewTabs', () => {
     await tabs.openPageTab('home')
     await tabs.closeTab('page:leads')
     assert.equal(tabs.activeId.value, 'page:home')
-    assert.equal(tabs.tabs.value.length, 6)
+    assert.equal(tabs.tabs.value.length, 7)
   })
 
   it('covers the main view with settings without adding a tab', async () => {
@@ -120,7 +120,7 @@ describe('useMainViewTabs', () => {
     await tabs.openPageTab('leads')
     await tabs.openSettings()
     assert.equal(tabs.settingsCover.value, true)
-    assert.equal(tabs.tabs.value.length, 7)
+    assert.equal(tabs.tabs.value.length, 8)
     assert.equal(tabs.activeId.value, 'page:leads')
     assert.equal(pushes.at(-1)?.name, 'settings')
 
@@ -138,7 +138,7 @@ describe('useMainViewTabs', () => {
     await tabs.closeTab('page:explore')
     await tabs.closeTab('page:profile')
     await tabs.closeTab('page:input')
-    assert.equal(tabs.tabs.value.length, 2)
+    assert.equal(tabs.tabs.value.length, 3)
     assert.equal(tabs.tabs.value[0]?.id, 'page:home')
     assert.equal(tabs.activeId.value, 'page:site')
     assert.equal(tabs.settingsCover.value, true)
@@ -149,16 +149,16 @@ describe('useMainViewTabs', () => {
     const { tabs } = harness()
     await tabs.openUserBrowserTab()
     await tabs.openUserBrowserTab()
-    assert.equal(tabs.tabs.value.length, 8)
-    assert.equal(tabs.tabs.value[0]?.id, 'page:home')
-    assert.equal(tabs.tabs.value[7]?.kind, 'browser')
-    assert.equal(tabs.tabs.value[7]?.title, '浏览器')
-    if (tabs.tabs.value[7]?.kind === 'browser') tabs.tabs.value[7].url = 'https://acme-industrial.com/products/valves'
-    await tabs.openUserBrowserTab()
     assert.equal(tabs.tabs.value.length, 9)
     assert.equal(tabs.tabs.value[0]?.id, 'page:home')
+    assert.equal(tabs.tabs.value[8]?.kind, 'browser')
     assert.equal(tabs.tabs.value[8]?.title, '浏览器')
-    assert.equal(tabs.activeId.value, tabs.tabs.value[8]?.id)
+    if (tabs.tabs.value[8]?.kind === 'browser') tabs.tabs.value[8].url = 'https://acme-industrial.com/products/valves'
+    await tabs.openUserBrowserTab()
+    assert.equal(tabs.tabs.value.length, 10)
+    assert.equal(tabs.tabs.value[0]?.id, 'page:home')
+    assert.equal(tabs.tabs.value[8]?.title, '浏览器')
+    assert.equal(tabs.activeId.value, tabs.tabs.value.at(-1)?.id)
   })
 
   it('appends a task browser tab without leaving the current page', async () => {
@@ -226,8 +226,8 @@ describe('useMainViewTabs', () => {
       ],
     })
     await tabs.applyPublishedTabs({ focusKey: null, tabs: [] })
-    assert.equal(tabs.activeId.value, 'page:site')
-    assert.equal(pushes.at(-1)?.name, 'site')
+    assert.equal(tabs.activeId.value, 'page:mailbox')
+    assert.equal(pushes.at(-1)?.name, 'mailbox')
     assert.deepEqual(tabs.tabs.value.map((tab) => tab.title), defaultTitles)
   })
 })

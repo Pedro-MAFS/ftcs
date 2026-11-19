@@ -1,3 +1,5 @@
+import { MailboxService } from './mailbox/service'
+import { safeStorage } from 'electron'
 import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount, getCloudflareCredentials } from './cloudflare/cloudflare-auth'
 import { CloudflarePages, normalizeDomain, verifyPagesProject, type PagesProject } from './cloudflare/cloudflare-pages'
 import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub, getGithubAccessToken } from './github/github-auth'
@@ -267,6 +269,16 @@ try {
 }
 
 let mainWindow: BrowserWindow | null = null
+const mailbox = new MailboxService(getWorkspaceRoot, {
+  get dir() { return path.join(app.getPath('userData'), 'mail-credentials') },
+  encrypt(value) {
+    if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text'))
+      throw new Error('系统凭据加密不可用。')
+    return safeStorage.encryptString(value)
+  },
+  decrypt: value => safeStorage.decryptString(value),
+}, () => mainWindow?.webContents.send(IPC.MAILBOX_CHANGED))
+
 const siteRuntime = new SiteRuntime(resolveConfiguredNode, getWorkspaceRoot, snapshot => {
   if (snapshot.preview.state !== 'running') clearVerifiedPreviewTargets()
   broadcastToWindows(IPC.SITE_RUNTIME_EVENT, snapshot)
@@ -698,6 +710,12 @@ function registerIpcHandlers(): void {
     await shell.openExternal(parsed.toString())
     return { ok: true, message: '已打开浏览器' }
   })
+  const checkMailboxSender = (e: Electron.IpcMainInvokeEvent) => {
+    if (!mainWindow || e.sender !== mainWindow.webContents || e.senderFrame !== e.sender.mainFrame)
+      throw new Error('邮箱仅允许从工作区窗口访问。')
+  }
+  ipcMain.handle(IPC.MAILBOX_GET, event => { checkMailboxSender(event); return mailbox.snapshot() })
+  ipcMain.handle(IPC.MAILBOX_ACTION, (event, ctx, action) => { checkMailboxSender(event); return mailbox.act(ctx, action) })
   ipcMain.handle(IPC.SITE_GET, () => getSiteSnapshot(getWorkspaceRoot()))
   const currentSiteWorkspace = (expected: unknown): string => {
     const root = path.resolve(getWorkspaceRoot())
@@ -1292,6 +1310,7 @@ function registerIpcHandlers(): void {
     chatReferences.clear()
     writeUserPrefs({ workspaceRoot: dir })
     process.env.FTCS_WORKSPACE = dir
+    mailbox.start()
 
     // 新工作区通常需安装/构建 MCP 依赖
     await ensureMcpServersReady(dir)
@@ -2188,6 +2207,7 @@ app.whenReady().then(async () => {
 
   installUnexpectedWebContentsGuard()
   registerIpcHandlers()
+  mailbox.start()
 
   startHidden = shouldStartHidden()
   syncOpenAtLoginFromPrefs()
@@ -2239,6 +2259,7 @@ app.on('window-all-closed', () => {
  */
 app.on('before-quit', (event) => {
   isQuitting = true
+  mailbox.stop()
   noteBuiltinBrowserQuitting()
   stopWorkflowScheduler()
   destroyAppTray()

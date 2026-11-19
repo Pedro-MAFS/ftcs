@@ -100,7 +100,17 @@ import type {
   WorkflowSavePlanResult,
 } from './ipc/types'
 
+const mailbox: import('./mailbox/types').MailboxAPI = {
+  snapshot: () => ipcRenderer.invoke(IPC.MAILBOX_GET),
+  act: (ctx, action) => ipcRenderer.invoke(IPC.MAILBOX_ACTION, ctx, action),
+  changed: callback => {
+    const listener = () => callback()
+    ipcRenderer.on(IPC.MAILBOX_CHANGED, listener)
+    return () => ipcRenderer.removeListener(IPC.MAILBOX_CHANGED, listener)
+  },
+}
 const api = {
+  mailbox,
   platform: process.platform as NodeJS.Platform,
   getAppStatus: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.APP_GET_STATUS),
   getSite: (): Promise<SiteSnapshot> => ipcRenderer.invoke(IPC.SITE_GET),

@@ -936,6 +936,7 @@ export type SaveTextToDownloadsResult =
 declare global {
   interface Window {
     ftcs?: {
+      mailbox: import('../../electron/mailbox/types').MailboxAPI
       platform: NodeJS.Platform
       getAppStatus: () => Promise<AppStatus>
       getSite: () => Promise<SiteSnapshot>

@@ -1,6 +1,9 @@
 export type { MainViewLayout } from '../config/main-view-layout'
 
 export const IPC = {
+  MAILBOX_GET: 'mailbox:snapshot',
+  MAILBOX_ACTION: 'mailbox:action',
+  MAILBOX_CHANGED: 'mailbox:changed',
   APP_GET_STATUS: 'app:get-status',
   APP_AGENT_PREFLIGHT: 'app:agent-preflight',
   BUILTIN_BROWSER_GET_STATE: 'builtin-browser:get-state',
