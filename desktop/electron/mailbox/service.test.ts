@@ -55,7 +55,7 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
           ].join('\r\n'),
         ),
         internalDate: date,
-        flags: new Set(['\\Seen']),
+        flags: new Set(s === '2' ? [] : ['\\Seen']),
       }
     },
   }
@@ -90,6 +90,7 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   const a = (await service.act(ctx(), { kind: 'connect', form })).active!
   await until(() => !!service.snapshot().folders[0].error && !service.snapshot().running)
   assert.equal(service.snapshot().imported, 1)
+  assert.equal(await service.unreadCount(), 1)
   assert.deepEqual(service.snapshot().candidates, ['Outgoing'])
   failFetch = false
   await service.act(ctx(), { kind: 'retry' })
@@ -99,6 +100,7 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   assert.deepEqual(service.snapshot().contacts.sort(), ['alice@example.test', 'bob@example.test'])
   await assert.rejects(service.act(stale, { kind: 'disconnect' }), /改变/)
   await service.act(ctx(), { kind: 'disconnect' })
+  assert.equal(await service.unreadCount(), 0)
   const b = (
     await service.act(ctx(), {
       kind: 'connect',
@@ -109,12 +111,14 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   await assert.rejects(service.conversations(ctx(), a), /账号已改变/)
   await assert.rejects(service.timeline(stale, a, 'alice'), /工作区已改变/)
   assert.notEqual(a, b)
+  assert.equal(await service.unreadCount(), 0)
   assert.equal(service.snapshot().imported, 0)
   await service.act(ctx(), { kind: 'disconnect' })
   const calls = currentMail
   assert.equal((await service.act(ctx(), { kind: 'connect', form })).active, a)
   await until(() => service.snapshot().imported === 3 && !service.snapshot().running)
   assert.equal(currentMail, calls)
+  assert.equal(await service.unreadCount(), 1)
   const contacts = await service.conversations(ctx(), a)
   const alice = contacts.find((c) => c.email === 'alice@example.test')!
   assert.equal((await service.timeline(ctx(), a, alice.id)).messages.length, 2)

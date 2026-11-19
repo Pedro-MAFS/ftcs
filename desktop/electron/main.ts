@@ -714,6 +714,10 @@ function registerIpcHandlers(): void {
     if (!mainWindow || e.sender !== mainWindow.webContents || e.senderFrame !== e.sender.mainFrame)
       throw new Error('邮箱仅允许从工作区窗口访问。')
   }
+  ipcMain.handle(IPC.MAILBOX_UNREAD_COUNT, event => {
+    checkMailboxSender(event)
+    return mailbox.unreadCount()
+  })
   ipcMain.handle(IPC.MAILBOX_CONVERSATIONS, (event,ctx,account) => { checkMailboxSender(event); return mailbox.conversations(ctx,account) })
   ipcMain.handle(IPC.MAILBOX_TIMELINE, (event,ctx,account,contact,before,aroundId) => { checkMailboxSender(event); return mailbox.timeline(ctx,account,contact,before,aroundId) })
   ipcMain.handle(IPC.MAILBOX_GET, event => { checkMailboxSender(event); return mailbox.snapshot() })

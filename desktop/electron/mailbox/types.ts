@@ -101,6 +101,7 @@ export interface TimelinePage {
   before: TimelineCursor | null
 }
 export interface MailboxAPI {
+  unreadCount(): Promise<number>
   conversations(ctx: Context, account: string): Promise<Conversation[]>
   timeline(ctx: Context, account: string, contact: string, before?: TimelineCursor, aroundId?: string): Promise<TimelinePage>
   snapshot(): Promise<Snapshot>

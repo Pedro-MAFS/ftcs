@@ -142,11 +142,18 @@ export class ImportIndex {
     this.copies.add(id)
     if ((this.states.get(id)?.rev ?? 0) <= r.rev) this.states.set(id, r)
   }
-  conversations(inbox: Folder): Conversation[] {
+  unreadMessages(inbox: Folder): Set<string> {
     const unread = new Set<string>(),
       prefix = inbox.folder_id + ':' + inbox.uid_validity + ':'
     for (const [id, r] of this.states)
-      if (id.startsWith(prefix) && r.present && !(r.pending_seen ?? r.seen)) unread.add(r.message_id)
+      if (id.startsWith(prefix) && r.present && !(r.pending_seen ?? r.seen)) {
+        const message = this.positions.get(r.message_id)
+        if (message?.contacts.length && !message.outgoing) unread.add(message.id)
+      }
+    return unread
+  }
+  conversations(inbox: Folder): Conversation[] {
+    const unread = this.unreadMessages(inbox)
     const result: Conversation[] = []
     for (const [id, list] of this.byContact) {
       const person = this.people.get(id),
@@ -161,7 +168,7 @@ export class ImportIndex {
         lastId: last.id,
         preview: (last.outgoing ? '我：' : '') + last.preview,
         count: list.length,
-        unread: list.reduce((n, m) => n + Number(!m.outgoing && unread.has(m.id)), 0),
+        unread: list.reduce((n, m) => n + Number(unread.has(m.id)), 0),
       })
     }
     return result.sort((a, b) => cmp(b.lastAt, a.lastAt) || cmp(b.lastId, a.lastId) || cmp(a.id, b.id))

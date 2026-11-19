@@ -770,6 +770,7 @@ button:focus-visible {
   flex-shrink: 0;
 }
 
+.main-tab__badge,
 .auth-chip__badge,
 .auth-menu__badge {
   display: inline-flex;

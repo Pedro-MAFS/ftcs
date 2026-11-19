@@ -56,6 +56,7 @@ test('existing monthly shards: stable pagination, attribution, readable HTML and
     ['alice', 'bob'],
   )
   assert.equal(rows[0].company, 'Northwind')
+  assert.deepEqual([...index.unreadMessages(inbox)], ['01'])
   assert.equal(rows[0].unread, 1)
   assert.equal(rows[0].count, 65)
   const ids: string[] = []

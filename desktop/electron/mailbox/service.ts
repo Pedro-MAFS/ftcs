@@ -98,6 +98,14 @@ export class MailboxService {
       if (this.loading === loading) this.loading = undefined
     }
   }
+  async unreadCount() {
+    const id = this.state().active_account_id
+    if (!id) return 0
+    const ctx = { root: this.root(), generation: this.epoch }
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    return index.unreadMessages(this.folder(accountDir(this.base(), id), 'inbox')).size
+  }
   async conversations(ctx: Context, id: string) {
     const index = await this.reader(ctx, id)
     this.check(ctx)
