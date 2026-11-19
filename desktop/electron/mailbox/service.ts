@@ -1,10 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
-import { imapClient, verify, diagnostic } from './protocol'
+import { imapClient, verify, diagnostic, smtpSubmit } from './protocol'
 import { clearAttachmentPreviews, localAttachment } from './attachments'
 import { importFolder } from './import'
 import { ImportIndex } from './conversations'
+import type { ComposerAction, ComposerView } from './compose-types'
 import type { TimelineCursor } from './types'
 import { accounts, accountDir, atomic, read, save, newFolder, uuid } from './storage'
 import {
@@ -37,6 +38,7 @@ export class MailboxService {
     private notify: () => void,
     private protocol = { verify, imapClient, importFolder },
   ) {}
+  private sendScope = new AbortController()
   private epoch = 0
   private connecting = false
   private running = false
@@ -99,6 +101,75 @@ export class MailboxService {
       if (this.loading === loading) this.loading = undefined
     }
   }
+  async temporaryDrafts(ctx: Context, id: string) {
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    return index.composer.temporary()
+  }
+  async composer(
+    ctx: Context,
+    id: string,
+    email: string,
+    action: ComposerAction,
+    pick?: () => Promise<string[]>,
+  ): Promise<ComposerView> {
+    const index = await this.reader(ctx, id)
+    const guard = () => this.check(ctx)
+    guard()
+    const store = index.composer
+    const account = read<Account>(path.join(accountDir(this.base(), id), 'account.json'))
+    const self = account.email
+    switch (action.kind) {
+      case 'get':
+        return store.view(email, self)
+      case 'save': {
+        const view = store.write(email, self, action.version, action.edit)
+        this.notify()
+        return view
+      }
+      case 'remove': {
+        const view = store.remove(email, self, action.version, action.attachment)
+        this.notify()
+        return view
+      }
+      case 'pick': {
+        if (!pick) throw new Error('本机文件选择器不可用。')
+        const files = await pick()
+        guard()
+        let view = store.view(email, self),
+          version = action.version
+        const attachmentErrors: string[] = []
+        for (const file of files) {
+          try {
+            view = await store.addFile(email, self, version, file, guard)
+            version = view.draft
+            this.notify()
+          } catch (error) {
+            guard()
+            attachmentErrors.push(
+              path.basename(file) + '：' + (error instanceof Error ? error.message : '复制失败'),
+            )
+          }
+        }
+        return { ...view, attachmentErrors }
+      }
+      case 'send': {
+        const password = this.password(this.state(), account)
+        const result = await store.send(
+          email,
+          self,
+          action,
+          smtpSubmit(account.smtp, password, this.sendScope.signal),
+          guard,
+          this.notify,
+        )
+        guard()
+        return { ...store.view(email, self), result }
+      }
+      default:
+        throw new Error('未知的撰写操作。')
+    }
+  }
   async attachment(ctx: Context, account: string, messageId: string, ordinal: number) {
     const index = await this.reader(ctx, account)
     const current = () => this.check(ctx)
@@ -145,12 +216,20 @@ export class MailboxService {
       folders: active
         ? roles.map((role) => {
             const f = this.folder(accountDir(this.base(), active), role)
-            return { role, phase: f.phase, path: f.remote_path, error: this.errors[role], lastSyncedAt:f.last_synced_at }
+            return {
+              role,
+              phase: f.phase,
+              path: f.remote_path,
+              error: this.errors[role],
+              lastSyncedAt: f.last_synced_at,
+            }
           })
         : [],
     }
   }
   stop() {
+    this.sendScope.abort()
+    this.sendScope = new AbortController()
     clearAttachmentPreviews()
     this.epoch++
     this.connecting = false

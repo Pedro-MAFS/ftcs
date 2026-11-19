@@ -270,6 +270,16 @@ try {
 }
 
 let mainWindow: BrowserWindow | null = null
+async function flushMailDrafts() {
+  const contents = mainWindow?.webContents
+  if (!contents || contents.isDestroyed() || contents.isCrashed() || contents.isLoadingMainFrame()) return
+  // Listeners enqueue only local draft writes. SMTP submission is independent of editor shutdown.
+  await contents.executeJavaScript(`(async () => {
+    const pending = []
+    window.dispatchEvent(new CustomEvent('ftcs:flush-mail-drafts', { detail: pending }))
+    await Promise.all(pending)
+  })()`)
+}
 const mailbox = new MailboxService(getWorkspaceRoot, {
   get dir() { return path.join(app.getPath('userData'), 'mail-credentials') },
   encrypt(value) {
@@ -483,6 +493,7 @@ async function createWindow(): Promise<void> {
     onMainWindowBackgrounded()
   })
 
+  let closingAfterSave = false
   win.on('close', (event) => {
     if (isQuitting) return
     if (isCloseToTrayEnabled()) {
@@ -490,9 +501,19 @@ async function createWindow(): Promise<void> {
       win.hide()
       return
     }
-    // 未开启「关闭进托盘」：允许销毁并走 before-quit 清理
-    isQuitting = true
-    noteBuiltinBrowserQuitting()
+    event.preventDefault()
+    if (closingAfterSave) return
+    closingAfterSave = true
+    void flushMailDrafts()
+      .then(() => {
+        isQuitting = true
+        noteBuiltinBrowserQuitting()
+        win.close()
+      })
+      .catch(() => {
+        closingAfterSave = false
+        dialog.showErrorBox('草稿保存失败', '请在邮箱中处理草稿保存错误后重新关闭窗口。')
+      })
   })
 
   setTaskDoneNotifyMainWindowGetter(() =>
@@ -715,6 +736,21 @@ function registerIpcHandlers(): void {
     if (!mainWindow || e.sender !== mainWindow.webContents || e.senderFrame !== e.sender.mainFrame)
       throw new Error('邮箱仅允许从工作区窗口访问。')
   }
+  ipcMain.handle(IPC.MAILBOX_TEMP_DRAFTS, (event, ctx, account) => {
+    checkMailboxSender(event)
+    return mailbox.temporaryDrafts(ctx, account)
+  })
+  ipcMain.handle(IPC.MAILBOX_COMPOSER, (event, ctx, account, email, action) => {
+    checkMailboxSender(event)
+    const parent = mainWindow!
+    return mailbox.composer(ctx, account, email, action, async () => {
+      const result = await dialog.showOpenDialog(parent, {
+        title: '添加邮件附件',
+        properties: ['openFile', 'multiSelections'],
+      })
+      return result.canceled ? [] : result.filePaths
+    })
+  })
   ipcMain.handle(IPC.MAILBOX_ATTACHMENT, async (event, ctx, account, message, ordinal, action) => {
     checkMailboxSender(event)
     const parent = mainWindow!
@@ -1329,6 +1365,7 @@ function registerIpcHandlers(): void {
       }
     }
 
+    await flushMailDrafts()
     const init = initializeWorkspace(dir, { forceManaged: true })
     siteSource.close()
     chatReferences.clear()
@@ -2282,16 +2319,25 @@ app.on('window-all-closed', () => {
  * 必须先 preventDefault，等 stop() 完成（含 taskkill）再真正退出。
  */
 app.on('before-quit', (event) => {
-  isQuitting = true
-  mailbox.stop()
-  noteBuiltinBrowserQuitting()
-  stopWorkflowScheduler()
-  destroyAppTray()
-  if (isCleaningUp) return
   event.preventDefault()
+  if (isCleaningUp) return
   isCleaningUp = true
 
   void (async () => {
+    try {
+      await flushMailDrafts()
+    } catch {
+      isCleaningUp = false
+      isQuitting = false
+      showMainWindow(mainWindow)
+      dialog.showErrorBox('草稿保存失败', '请在邮箱中处理草稿保存错误后重新退出。')
+      return
+    }
+    isQuitting = true
+    mailbox.stop()
+    noteBuiltinBrowserQuitting()
+    stopWorkflowScheduler()
+    destroyAppTray()
     try {
       siteSource.close()
       await sitePublish.shutdown()

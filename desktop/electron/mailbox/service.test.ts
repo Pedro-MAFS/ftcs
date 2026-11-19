@@ -98,6 +98,13 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   await service.act(ctx(), { kind: 'bind', path: 'Outgoing' })
   await until(() => service.snapshot().imported === 3 && !service.snapshot().running)
   assert.deepEqual(service.snapshot().contacts.sort(), ['alice@example.test', 'bob@example.test'])
+  const destination = 'draft-only@example.test'
+  const initial = await service.composer(ctx(), a, destination, { kind: 'get' })
+  await service.composer(ctx(), a, destination, {
+    kind: 'save',
+    version: initial.draft,
+    edit: { mode: 'new', text_body: '仅保存在账号 A' },
+  })
   await assert.rejects(service.act(stale, { kind: 'disconnect' }), /改变/)
   await service.act(ctx(), { kind: 'disconnect' })
   assert.equal(await service.unreadCount(), 0)
@@ -111,12 +118,16 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   await assert.rejects(service.conversations(ctx(), a), /账号已改变/)
   await assert.rejects(service.timeline(stale, a, 'alice'), /工作区已改变/)
   assert.notEqual(a, b)
+  assert.deepEqual(await service.temporaryDrafts(ctx(),b),[])
+  assert.equal((await service.composer(ctx(),b,destination,{kind:'get'})).draft.text_body,'')
   assert.equal(await service.unreadCount(), 0)
   assert.equal(service.snapshot().imported, 0)
   await service.act(ctx(), { kind: 'disconnect' })
   const calls = currentMail
   assert.equal((await service.act(ctx(), { kind: 'connect', form })).active, a)
   await until(() => service.snapshot().imported === 3 && !service.snapshot().running)
+  assert.deepEqual(await service.temporaryDrafts(ctx(),a),[destination])
+  assert.equal((await service.composer(ctx(),a,destination,{kind:'get'})).draft.text_body,'仅保存在账号 A')
   assert.equal(currentMail, calls)
   assert.equal(await service.unreadCount(), 1)
   const contacts = await service.conversations(ctx(), a)

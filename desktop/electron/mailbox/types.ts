@@ -1,3 +1,4 @@
+import type { ComposerAction, ComposerView, QuoteSource, SendResult } from './compose-types'
 export type FolderRole = 'inbox' | 'sent'
 export type Mode = 'last_30_days' | 'from_connection'
 export interface Endpoint {
@@ -65,6 +66,7 @@ export interface Conversation {
   name?: string
   company?: string
   preview: string
+  draftPreview?: string
   lastAt: string
   lastId: string
   unread: number
@@ -86,6 +88,8 @@ export interface ReplyTarget {
 export interface MessageView extends TimelineCursor {
   outgoing: boolean
   subject: string
+  quoteSource?: QuoteSource
+  delivery?: SendResult
   body: string
   replyTo?: ReplyTarget
   quote?: string
@@ -102,6 +106,8 @@ export interface TimelinePage {
 }
 export type AttachmentAction = 'open' | 'save'
 export interface MailboxAPI {
+  composer(ctx: Context, account: string, email: string, action: ComposerAction): Promise<ComposerView>
+  temporaryDrafts(ctx: Context, account: string): Promise<string[]>
   attachment(ctx: Context, account: string, messageId: string, ordinal: number, action: AttachmentAction): Promise<'opened' | 'saved' | 'canceled'>
   unreadCount(): Promise<number>
   conversations(ctx: Context, account: string): Promise<Conversation[]>

@@ -1,6 +1,8 @@
 export type { MainViewLayout } from '../config/main-view-layout'
 
 export const IPC = {
+  MAILBOX_COMPOSER: 'mailbox:composer',
+  MAILBOX_TEMP_DRAFTS: 'mailbox:temporary-drafts',
   MAILBOX_ATTACHMENT: 'mailbox:attachment',
   MAILBOX_UNREAD_COUNT: 'mailbox:unread-count',
   MAILBOX_CONVERSATIONS: 'mailbox:conversations',

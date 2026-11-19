@@ -64,29 +64,14 @@ export async function importFolder(
         bcc = addresses(parsed.bcc)
       const peers = isSent ? [...to, ...cc, ...bcc] : sender ? [sender] : []
       const ids = new Set<string>()
-      for (const peer of peers) {
-        const address = key(peer.email)
-        if (address === account.address_key) continue
-        let id = index.contacts.get(address)
-        if (!id) {
-          id = randomUUID()
-          const contact = {
-            contact_id: id,
-            address_key: address,
-            email: peer.email,
-            display_name: peer.name,
-            updated_at: new Date().toISOString(),
-            rev: 1,
-          }
-          append(path.join(dir, 'contacts.jsonl'), contact)
-          index.contact(contact)
-        }
-        ids.add(id)
-      }
       const hash = createHash('sha256').update(raw.source).digest('hex')
       const importKey = (parsed.messageId ?? ref) + '/' + hash
       let messageId = index.messages.get(importKey)
+      if (!messageId && isSent) messageId = index.composer.matchCopy(parsed, sender, to, cc)
       if (!messageId) {
+        for (const peer of peers) {
+          if (key(peer.email) !== account.address_key) ids.add(index.ensureContact(peer))
+        }
         messageId = randomUUID()
         const now = new Date().toISOString()
         const attachments = parsed.attachments.map((a) => {

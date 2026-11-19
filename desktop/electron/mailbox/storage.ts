@@ -30,6 +30,17 @@ export interface Position {
   offset: number
   length: number
 }
+export function readAt<T>(position: Position): T {
+  const fd = fs.openSync(position.file, 'r')
+  try {
+    const buf = Buffer.alloc(position.length)
+    if (fs.readSync(fd, buf, 0, buf.length, position.offset) !== buf.length)
+      throw new Error('邮箱记录读取不完整。')
+    return JSON.parse(buf.toString('utf8'))
+  } finally {
+    fs.closeSync(fd)
+  }
+}
 export async function eachLine(
   file: string,
   visit: (row: any, position: Position) => void,

@@ -1,10 +1,14 @@
+import { randomUUID } from 'node:crypto'
+import { ComposerStore } from './composer-store'
+import type { QuoteSource } from './compose-types'
+import { key } from './types'
 import fs from 'node:fs'
 import path from 'node:path'
 import { describeAttachment, type StoredAttachment } from './attachments'
 import { readableHtml } from './html-body'
 import { splitQuotedText } from './reply-quote'
 import { compile } from 'html-to-text'
-import { eachLine, type Position } from './storage'
+import { append, eachLine, readAt, type Position } from './storage'
 import type { Conversation, Folder, MailAddress, TimelineCursor, TimelinePage, MessageView } from './types'
 
 interface ContactRow {
@@ -15,7 +19,9 @@ interface ContactRow {
   company?: string
   rev: number
 }
-interface MessageRow {
+export interface MessageRow {
+  quoted_message_id?: string
+  reply_to?: MailAddress[]
   message_id: string
   internet_message_id?: string
   in_reply_to?: string | string[]
@@ -72,7 +78,54 @@ function lowerBound(rows: Summary[], cursor: TimelineCursor) {
   }
   return lo
 }
+function quoteSource(r: MessageRow, text = body(r)): QuoteSource {
+  return {
+    id: r.message_id,
+    subject: r.subject ?? '',
+    snippet: text.slice(0, 140),
+    outgoing: r.direction === 'outgoing',
+    from: r.from,
+    replyTo: r.reply_to ?? [],
+    to: r.to ?? [],
+    cc: r.cc ?? [],
+    threaded: /^<[^<>\s]+>$/.test(r.internet_message_id ?? ''),
+  }
+}
 export class ImportIndex {
+  readonly composer: ComposerStore
+  private constructor(private dir: string) {
+    this.composer = new ComposerStore(dir, this)
+  }
+  hasMessage(id: string) {
+    return this.positions.has(id)
+  }
+  hasConversation(contact: string) {
+    return this.byContact.has(contact)
+  }
+  ensureContact(peer: MailAddress) {
+    const address = key(peer.email)
+    let id = this.contacts.get(address)
+    if (!id) {
+      id = randomUUID()
+      const contact = {
+        contact_id: id,
+        address_key: address,
+        email: peer.email,
+        display_name: peer.name,
+        updated_at: new Date().toISOString(),
+        rev: 1,
+      }
+      append(path.join(this.dir, 'contacts.jsonl'), contact)
+      this.contact(contact)
+    }
+    return id
+  }
+  original(id: string, contact: string) {
+    const row = this.positions.get(id)
+    if (!row?.contacts.includes(contact)) throw new Error('当前会话中找不到引用的原邮件。')
+    const record = this.readRecord(row)
+    return { record, quote: quoteSource(record) }
+  }
   readonly contacts = new Map<string, string>()
   readonly messages = new Map<string, string>()
   readonly copies = new Set<string>()
@@ -86,7 +139,7 @@ export class ImportIndex {
     return this.positions.size
   }
   static async load(dir: string, guard: () => void) {
-    const index = new ImportIndex()
+    const index = new ImportIndex(dir)
     const contacts = path.join(dir, 'contacts.jsonl')
     if (fs.existsSync(contacts)) await eachLine(contacts, (r) => index.contact(r), guard)
     for (const kind of ['messages', 'copies']) {
@@ -105,6 +158,7 @@ export class ImportIndex {
       }
     }
     guard()
+    await index.composer.restore(guard)
     return index
   }
   contact(r: ContactRow) {
@@ -167,6 +221,7 @@ export class ImportIndex {
         company: person.company,
         lastAt: last.at,
         lastId: last.id,
+        draftPreview: this.composer.preview(id),
         preview: (last.outgoing ? '我：' : '') + last.preview,
         count: list.length,
         unread: list.reduce((n, m) => n + Number(unread.has(m.id)), 0),
@@ -175,16 +230,9 @@ export class ImportIndex {
     return result.sort((a, b) => cmp(b.lastAt, a.lastAt) || cmp(b.lastId, a.lastId) || cmp(a.id, b.id))
   }
   private readRecord(row: Summary): MessageRow {
-    const fd = fs.openSync(row.file, 'r')
-    try {
-      const buf = Buffer.alloc(row.length)
-      if (fs.readSync(fd, buf, 0, buf.length, row.offset) !== buf.length) throw new Error('邮件读取不完整')
-      const record: MessageRow = JSON.parse(buf.toString('utf8'))
-      if (record.message_id !== row.id) throw new Error('邮件位置已改变')
-      return record
-    } finally {
-      fs.closeSync(fd)
-    }
+    const record = readAt<MessageRow>(row)
+    if (record.message_id !== row.id) throw new Error('邮件位置已改变')
+    return record
   }
   attachment(messageId: string, ordinal: number) {
     const row = this.positions.get(messageId)
@@ -196,6 +244,10 @@ export class ImportIndex {
     return attachment
   }
   private replyTarget(row: MessageRow, contact: string) {
+    if (row.quoted_message_id) {
+      const parent = this.positions.get(row.quoted_message_id)
+      if (parent?.contacts.includes(contact)) return { id: parent.id, contact, subject: parent.subject }
+    }
     const direct = [row.in_reply_to ?? []].flat().join(' ').trim()
     const id = direct || row.references?.at(-1)?.trim()
     // Multiple parents or malformed headers do not identify one original message.
@@ -227,12 +279,15 @@ export class ImportIndex {
     const selected = rows.slice(start, end)
     const readMessage = (row: Summary) => {
       const r = this.readRecord(row)
+      const text = body(r)
       return {
         id: row.id,
         at: row.at,
         outgoing: row.outgoing,
         subject: r.subject || '（无主题）',
-        ...(r.html_body?.trim() ? { body: body(r) } : splitQuotedText(body(r))),
+        ...(r.html_body?.trim() ? { body: text } : splitQuotedText(text)),
+        quoteSource: quoteSource(r, text),
+        delivery: this.composer.delivery(r.message_id, r.internet_message_id),
         replyTo: this.replyTarget(r, contact),
         html: r.html_body?.trim() ? readableHtml(r.html_body) : undefined,
         from: r.from,

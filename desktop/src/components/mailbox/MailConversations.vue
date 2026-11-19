@@ -10,10 +10,11 @@ import {
   type TimelineCursor,
 } from '../../../electron/mailbox/types'
 import { showToast } from '../../composables/useToast'
+import MailComposer from './MailComposer.vue'
 import HtmlMailBody from './HtmlMailBody.vue'
 import Icon from '../shared/Icon.vue'
 const props = defineProps<{ snapshot: Snapshot; account: string; busy: boolean }>()
-defineEmits<{ settings: []; sync: [] }>()
+const emit=defineEmits<{ settings: []; sync: [] }>()
 const accountEmail = computed(() => props.snapshot.accounts.find((a) => a.id === props.account)?.email || '')
 const syncLabel = computed(() => {
   const folders = props.snapshot.folders
@@ -48,6 +49,13 @@ const contacts = ref<Conversation[]>([]),
   selected = ref(''),
   temporary = ref('')
 const current = computed(() => contacts.value.find((c) => c.id === selected.value))
+const editor=ref<InstanceType<typeof MailComposer>>()
+async function leaveEditor(next:()=>void) {
+  try {await editor.value?.flush()} catch {return}
+  next()
+}
+const temporaryDrafts=ref<string[]>([])
+const composerEmail=computed(()=>current.value?.email || temporary.value)
 const contactSearch = ref('')
 const visibleContacts = computed(() => {
   const query = contactSearch.value.trim().toLowerCase()
@@ -196,7 +204,9 @@ async function refresh() {
   const request = ++listRequest
   listError.value = ''
   try {
-    const rows = await api.conversations({ ...props.snapshot.context }, props.account)
+    const ctx={...props.snapshot.context}
+    const [rows, drafts] = await Promise.all([api.conversations(ctx,props.account),api.temporaryDrafts(ctx,props.account)])
+    if(request === listRequest) temporaryDrafts.value=drafts
     if (request !== listRequest) return
     const previous = current.value
     contacts.value = rows
@@ -230,10 +240,14 @@ onBeforeUnmount(() => {
           <Icon name="plus" :size="15" />新会话
         </button>
       </header>
-      <form v-if="compose" @submit.prevent="openAddress">
+      <form v-if="compose" @submit.prevent="leaveEditor(openAddress)">
         <label>收件邮箱<input v-model="address" type="email" required placeholder="name@example.com" /></label
         ><button>打开</button>
       </form>
+      <div v-if="compose && temporaryDrafts.length" class="pending-drafts">
+        <small>未发送的草稿</small>
+        <button v-for="email in temporaryDrafts" :key="email" @click="leaveEditor(()=>{address=email;openAddress()})">{{email}}</button>
+      </div>
       <h2 class="list-title">最近会话</h2>
       <label class="contact-search">
         <Icon name="search" :size="15" aria-hidden="true" />
@@ -257,14 +271,14 @@ onBeforeUnmount(() => {
           :title="c.email"
           :class="{ active: selected === c.id }"
           :aria-pressed="selected === c.id"
-          @click="select(c.id)"
+          @click="leaveEditor(()=>select(c.id))"
         >
           <span class="avatar" :style="{ backgroundColor: avatarTone(c.email) }">{{
             initials(c.name || c.email.split('@')[0])
           }}</span>
           <span class="summary"
             ><strong>{{ c.name || c.email }}</strong
-            ><span>{{ c.preview }}</span></span
+            ><span>{{ c.draftPreview ? '草稿 · '+c.draftPreview : c.preview }}</span></span
           >
           <span class="meta"
             ><small>{{
@@ -275,8 +289,8 @@ onBeforeUnmount(() => {
         </button>
       </div>
       <footer>
-        <button class="status" @click="$emit('settings')">{{ syncLabel }}</button>
-        <button class="tool" aria-label="邮箱设置" title="邮箱设置" @click="$emit('settings')">
+        <button class="status" @click="leaveEditor(()=>emit('settings'))">{{ syncLabel }}</button>
+        <button class="tool" aria-label="邮箱设置" title="邮箱设置" @click="leaveEditor(()=>emit('settings'))">
           <Icon name="settings" :size="15" />
         </button>
         <button
@@ -323,7 +337,9 @@ onBeforeUnmount(() => {
               {{ m.outgoing ? '我' : m.from?.name || m.from?.email || '发件人' }} · {{ clock(m.at) }}
             </div>
             <div class="bubble">
+              <button v-if="m.quoteSource" class="cite" @click="editor?.cite(m.quoteSource)">引用</button>
               <strong>{{ m.subject }}</strong>
+              <small v-if="m.delivery?.rejected?.length">部分收件人未接受 · {{m.delivery.rejected.join('、')}}</small>
               <details>
                 <summary :title="'展开收件详情'">
                   收件人：{{
@@ -339,6 +355,8 @@ onBeforeUnmount(() => {
                 <div>收件人　{{ m.to.map((a) => a.email).join('、') || '—' }}</div>
                 <div v-if="m.cc.length">抄送　{{ m.cc.map((a) => a.email).join('、') }}</div>
                 <div v-if="m.bcc.length">密送　{{ m.bcc.map((a) => a.email).join('、') }}</div>
+                <div v-if="m.delivery?.accepted?.length">服务器已接受　{{ m.delivery.accepted.join('、') }}</div>
+                <div v-if="m.delivery?.rejected?.length">服务器已拒绝　{{ m.delivery.rejected.join('、') }}</div>
               </details>
               <button v-if="m.replyTo" class="reply-link" @click="jumpToOriginal(m.replyTo)">
                 查看原邮件 · {{ m.replyTo.subject }}
@@ -374,6 +392,8 @@ onBeforeUnmount(() => {
         </template>
       </div>
       <button v-if="newMail" class="latest" @click="bottom">查看新消息 ↓</button>
+      <MailComposer v-if="composerEmail" ref="editor" :key="key(composerEmail)" :snapshot="snapshot" :account="account"
+        :self="accountEmail" :email="composerEmail" @jump="jumpToOriginal" @changed="refresh"/>
     </main>
   </div>
 </template>
@@ -720,6 +740,9 @@ summary svg {
   padding: 7px 10px;
   font-size: 12px;
 }
+.cite { float:right; color:var(--soft-blue); font-size:12px; }
+.pending-drafts { display:grid; gap:3px; padding:6px 16px; }
+.pending-drafts button { text-align:left; overflow-wrap:anywhere; }
 .file-open {
   display: inline-flex;
   align-items: center;
