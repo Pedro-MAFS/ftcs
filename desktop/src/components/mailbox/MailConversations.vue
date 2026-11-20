@@ -135,6 +135,8 @@ useVisibleMail(
 )
 const originalPage = ref(false)
 const highlighted = ref('')
+const bodyPreviewLength = 900
+const expandedBodies = ref(new Set<string>())
 const followingLatest = ref(true)
 const historyContent = ref<HTMLElement>()
 let lastScrollTop = 0
@@ -170,9 +172,29 @@ function bottom() {
 function trackScroll() {
   const el = scroller.value
   if (!el || !el.clientHeight || el.scrollTop === lastScrollTop) return
+  updateScrollPosition(el)
+}
+function updateScrollPosition(el: HTMLElement) {
   lastScrollTop = el.scrollTop
   followingLatest.value = !originalPage.value && el.scrollHeight - el.clientHeight - el.scrollTop <= 2
   if (followingLatest.value) newMail.value = false
+}
+async function toggleBody(id: string, event: MouseEvent) {
+  const el = scroller.value
+  const button = event.currentTarget as HTMLButtonElement
+  if (!el) return
+  const expanding = !expandedBodies.value.has(id)
+  const top = el.scrollTop
+  const buttonTop = button.getBoundingClientRect().top
+  followingLatest.value = false
+  if (expanding) expandedBodies.value.add(id)
+  else expandedBodies.value.delete(id)
+  await nextTick()
+  if (!el.contains(button)) return
+  // Keep the reading position on expand and the clicked control in view on collapse.
+  if (expanding) el.scrollTop = top
+  else el.scrollTop += button.getBoundingClientRect().top - buttonTop
+  updateScrollPosition(el)
 }
 let historyResize: ResizeObserver | undefined
 onMounted(() => {
@@ -254,6 +276,7 @@ async function load(mode: 'open' | 'older' | 'update' | 'original', aroundId?: s
   }
 }
 function select(id: string, aroundId?: string) {
+  expandedBodies.value.clear()
   followingLatest.value = !aroundId
   originalPage.value = false
   highlighted.value = ''
@@ -498,13 +521,16 @@ onBeforeUnmount(() => {
                   查看原邮件 · {{ m.replyTo.subject }}
                 </button>
                 <HtmlMailBody v-if="m.html" :html="m.html" :subject="m.subject" />
-                <template v-else-if="m.body.length > 900"
-                  ><p>{{ m.body.slice(0, 900) }}</p>
-                  <details>
-                    <summary>展开全文</summary>
-                    <p>{{ m.body.slice(900) }}</p>
-                  </details></template
-                >
+                <template v-else-if="m.body.length > bodyPreviewLength">
+                  <p :id="'mail-body-' + m.id">{{ expandedBodies.has(m.id) ? m.body : m.body.slice(0, bodyPreviewLength) }}</p>
+                  <button
+                    type="button"
+                    class="body-toggle"
+                    :aria-expanded="expandedBodies.has(m.id)"
+                    :aria-controls="'mail-body-' + m.id"
+                    @click="toggleBody(m.id, $event)"
+                  >{{ expandedBodies.has(m.id) ? '收起全文' : '展开全文' }}</button>
+                </template>
                 <p v-else>{{ m.body || (m.attachments.length || m.quote ? '' : '无正文') }}</p>
                 <details v-if="m.quote">
                   <summary>引用原文</summary>
@@ -907,6 +933,16 @@ article[data-unread='true'] .read-state::before {
 }
 .bubble details {
   margin-top: 5px;
+}
+.body-toggle {
+  display: block;
+  margin-top: 5px;
+  padding: 0;
+  color: var(--soft-blue);
+  font-size: 12px;
+}
+.body-toggle:hover {
+  text-decoration: underline;
 }
 .bubble details div {
   font-size: 12px;
