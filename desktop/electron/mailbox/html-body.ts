@@ -1,4 +1,17 @@
 import sanitizeHtml from 'sanitize-html'
+import type { MailBody } from './compose-types'
+
+export function composeBody(body: MailBody): MailBody {
+  if (typeof body.text_body !== 'string') throw new Error('邮件正文无效。')
+  const html =
+    body.text_body.trim() &&
+    body.html_body &&
+    sanitizeHtml(body.html_body, {
+      allowedTags: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li'],
+      allowedAttributes: { ol: ['start'] },
+    })
+  return html ? { text_body: body.text_body, html_body: html } : { text_body: body.text_body }
+}
 
 // The result is a fragment for the sandboxed mail reader, never for the application document.
 export function readableHtml(source: string) {

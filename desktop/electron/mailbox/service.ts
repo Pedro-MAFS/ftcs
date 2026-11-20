@@ -122,6 +122,10 @@ export class MailboxService {
     switch (action.kind) {
       case 'get':
         return store.view(email, self)
+      case 'get-template':
+        return { ...store.view(email, self), bodyTemplate: store.bodyTemplate() }
+      case 'set-template':
+        return { ...store.view(email, self), bodyTemplate: store.setBodyTemplate(action.body) }
       case 'save': {
         const view = store.write(email, self, action.version, action.edit)
         this.notify()

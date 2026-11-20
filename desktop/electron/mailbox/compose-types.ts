@@ -11,8 +11,12 @@ export interface QuoteSource {
   cc: MailAddress[]
   threaded: boolean
 }
-export interface DraftInput {
+export interface MailBody {
   text_body: string
+  html_body?: string
+}
+export interface DraftInput extends MailBody {
+  template_applied?: boolean
   new_subject_override?: string
   reply_subject_override?: string
   quoted_message_id?: string
@@ -47,12 +51,15 @@ export interface SendResult {
 }
 export interface ComposerView {
   draft: Draft
+  bodyTemplate?: MailBody
   quote?: QuoteSource
   result?: SendResult
   attachmentErrors?: string[]
 }
 export type ComposerAction =
   | { kind: 'get' }
+  | { kind: 'get-template' }
+  | { kind: 'set-template'; body: MailBody }
   | { kind: 'save'; version: Version; edit: DraftInput }
   | { kind: 'pick'; version: Version }
   | { kind: 'remove'; version: Version; attachment: string }

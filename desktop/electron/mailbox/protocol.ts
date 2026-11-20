@@ -85,6 +85,7 @@ export function smtpSubmit(e: Endpoint, password: string, signal: AbortSignal): 
         cc: fields(a.snapshot.cc),
         subject: a.snapshot.subject,
         text: a.snapshot.text_body,
+        html: a.snapshot.html_body,
         attachments,
         date: new Date(a.created_at),
         messageId: a.internet_message_id,

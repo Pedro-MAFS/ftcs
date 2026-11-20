@@ -23,6 +23,8 @@
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.18.1",
+    "@tiptap/core": "^3.34.0",
+    "@tiptap/starter-kit": "^3.34.0",
     "docutext": "^1.2.1",
     "html-to-text": "10.0.1",
     "ignore": "^7.0.14",

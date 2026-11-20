@@ -18,17 +18,29 @@ function inOrder<T>(key: string, operation: () => Promise<T>) {
 }
 </script>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  nextTick,
+  onBeforeUnmount,
+  onDeactivated,
+  onMounted,
+  ref,
+  watch,
+} from 'vue'
 import {
   envelope,
   type ComposerAction,
   type ComposerView,
   type DraftInput,
+  type MailBody,
   type QuoteSource,
   type Version,
 } from '../../../electron/mailbox/compose-types'
 import type { Snapshot, ReplyTarget } from '../../../electron/mailbox/types'
 import { showToast } from '../../composables/useToast'
+import Icon from '../shared/Icon.vue'
+const MailBodyEditor = defineAsyncComponent(() => import('./MailBodyEditor.vue'))
 
 const props = defineProps<{ snapshot: Snapshot; account: string; self: string; email: string }>()
 const emit = defineEmits<{ jump: [target: ReplyTarget]; changed: [] }>()
@@ -47,6 +59,90 @@ const error = ref(''),
 const sending = ref(false)
 const conflict = computed(() => error.value.includes('草稿版本已改变'))
 const input = ref<HTMLTextAreaElement>()
+const richInput = ref<{ focus(): void }>()
+const expanded = ref(false),
+  usedEditor = ref(false),
+  editingTemplate = ref(false)
+const template = ref<MailBody>(),
+  templateEdit = ref<MailBody>({ text_body: '' })
+const expandButton = ref<HTMLButtonElement>()
+function html(body: MailBody) {
+  return (
+    body.html_body ??
+    body.text_body
+      .split('\n')
+      .map((line) => {
+        const p = document.createElement('p')
+        p.textContent = line
+        return p.outerHTML
+      })
+      .join('')
+  )
+}
+function applyTemplate() {
+  const body = template.value
+  if (!body || edit.value.template_applied) return
+  const current = edit.value
+  const combined: MailBody = current.text_body
+    ? {
+        text_body: current.text_body + '\n\n' + body.text_body,
+        html_body: current.html_body || body.html_body ? html(current) + '<p></p>' + html(body) : undefined,
+      }
+    : { ...body }
+  change({ ...combined, template_applied: true })
+}
+async function expand() {
+  if (locked.value) return
+  busy.value = true
+  try {
+    await flush()
+    const next = await call({ kind: 'get-template' })
+    if (disposed) return
+    template.value = next.bodyTemplate
+    expanded.value = true
+    usedEditor.value = true
+  } catch (e) {
+    report(e)
+    return
+  } finally {
+    busy.value = false
+  }
+  applyTemplate()
+  await nextTick()
+  richInput.value?.focus()
+}
+function collapse() {
+  if (editingTemplate.value) return
+  expanded.value = false
+  void nextTick(() => expandButton.value?.focus())
+}
+function escapeEditor(event: KeyboardEvent) {
+  if (!expanded.value || event.isComposing || event.keyCode === 229) return
+  event.stopPropagation()
+  if (busy.value) return
+  if (editingTemplate.value) editingTemplate.value = false
+  else collapse()
+}
+function openTemplate() {
+  templateEdit.value = template.value ? { ...template.value } : { text_body: '' }
+  editingTemplate.value = true
+}
+async function saveTemplate() {
+  if (locked.value) return
+  busy.value = true
+  try {
+    const next = await call({ kind: 'set-template', body: { ...templateEdit.value } })
+    if (disposed) return
+    template.value = next.bodyTemplate
+    editingTemplate.value = false
+  } catch (e) {
+    report(e)
+    return
+  } finally {
+    busy.value = false
+  }
+  applyTemplate()
+}
 let edits = 0,
   timer: ReturnType<typeof setTimeout> | undefined,
   disposed = false
@@ -76,6 +172,8 @@ function apply(next: ComposerView) {
   const d = next.draft
   edit.value = {
     text_body: d.text_body,
+    html_body: d.html_body,
+    template_applied: d.template_applied,
     mode: d.mode,
     quoted_message_id: d.quoted_message_id,
     new_subject_override: d.new_subject_override,
@@ -165,7 +263,8 @@ function cite(source: QuoteSource) {
   if (locked.value) return
   quote.value = source
   change({ mode: 'reply', quoted_message_id: source.id, reply_subject_override: undefined })
-  input.value?.focus()
+  if (richInput.value) richInput.value.focus()
+  else input.value?.focus()
 }
 function cancelQuote() {
   quote.value = undefined
@@ -196,6 +295,8 @@ async function act(kind: 'pick' | 'remove' | 'send', attachment?: string) {
     apply(next)
     if (next.attachmentErrors?.length) error.value = next.attachmentErrors.join('；')
     if (kind === 'send' && next.result?.state === 'accepted') {
+      expanded.value = false
+      usedEditor.value = false
       showToast(
         next.result.rejected?.length ? '部分收件人未接受：' + next.result.rejected.join('、') : '邮件已发送',
         { tone: next.result.rejected?.length ? 'info' : 'success' },
@@ -229,91 +330,146 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <section class="mail-composer" aria-label="撰写邮件">
-    <div v-if="quote" class="quote-strip">
-      <button
-        @click="emit('jump', { id: quote.id, subject: quote.subject, contact: view!.draft.contact_id })"
-      >
-        引用 · {{ quote.from?.name || quote.from?.email || '原邮件' }} · {{ quote.subject || '（无主题）' }}
-        <small>{{ quote.snippet }}</small>
-      </button>
-      <button aria-label="取消引用" :disabled="locked" @click="cancelQuote">×</button>
-    </div>
-    <small v-if="quote && !quote.threaded">此邮件缺少回复标识，对方邮箱可能无法归入原会话。</small>
-    <div class="address">
-      收件人　{{ fields.to.map((a) => a.email).join('、') }}
-      <label v-if="canReplyAll"
-        ><input
-          type="checkbox"
-          :checked="edit.mode === 'reply_all'"
-          :disabled="locked"
-          @change="change({ mode: edit.mode === 'reply_all' ? 'reply' : 'reply_all' })"
-        />
-        回复全部</label
-      >
-    </div>
-    <div v-if="fields.cc.length" class="address">抄送　{{ fields.cc.map((a) => a.email).join('、') }}</div>
-    <label class="subject"
-      >主题<input
-        :value="fields.subject"
-        :disabled="locked"
-        placeholder="默认使用正文第一行"
-        @input="
-          change(
-            quote
-              ? { reply_subject_override: ($event.target as HTMLInputElement).value }
-              : { new_subject_override: ($event.target as HTMLInputElement).value },
-          )
-        "
-    /></label>
-    <textarea
-      ref="input"
-      :value="edit.text_body"
-      :disabled="locked"
-      aria-label="邮件正文"
-      placeholder="写邮件…"
-      @input="change({ text_body: ($event.target as HTMLTextAreaElement).value })"
-    />
-    <div v-if="view?.draft.attachments.length" class="files">
-      <span v-for="f in view.draft.attachments" :key="f.attachment_id"
-        >{{ f.filename }} · {{ (f.size_bytes / 1024).toFixed(1) }} KB
-        <button :disabled="locked" :aria-label="'移除 ' + f.filename" @click="act('remove', f.attachment_id)">
-          ×
+  <section class="mail-composer" :class="{ expanded }" aria-label="撰写邮件" @keydown.esc="escapeEditor">
+    <header v-if="expanded" class="editor-heading">
+      <strong>{{ editingTemplate ? '邮件正文模板' : '撰写邮件' }}</strong>
+      <template v-if="!editingTemplate">
+        <button :disabled="locked" @click="openTemplate">设置模板</button>
+        <button class="resize" aria-label="收起编辑" title="收起编辑" @click="collapse">
+          <Icon name="minimize-2" />
         </button>
-      </span>
-    </div>
-    <div v-if="error" role="alert">
-      {{ error }}
-      <template v-if="conflict"
-        ><button :disabled="busy" @click="resolveConflict(false)">载入已保存版本</button>
-        <button :disabled="busy" @click="resolveConflict(true)">保留当前编辑</button></template
-      >
-      <button v-else @click="dirty ? flush().catch(report) : refresh()">重试</button>
-    </div>
-    <footer>
-      <button :disabled="locked" @click="act('pick')">添加附件</button>
-      <small role="status"
-        >{{
-          sending
-            ? '正在发送…'
-            : result?.state === 'unknown'
-              ? '发送结果待确认 · 请检查已发送邮件'
-              : result?.state === 'failed'
-                ? '发送失败 · ' + (result.detail || '请重试')
-                : result?.state === 'submitting'
-                  ? '正在发送…'
-                  : dirty
-                    ? '草稿待保存'
-                    : view?.draft.rev
-                      ? '草稿已保存'
-                      : ''
-        }}
-        <template v-if="result?.state !== 'accepted' && result?.rejected?.length"
-          >　已拒绝：{{ result.rejected.join('、') }}</template
-        ></small
-      >
-      <button class="send" :disabled="!canSend" @click="act('send')">发送</button>
-    </footer>
+      </template>
+    </header>
+    <template v-if="editingTemplate">
+      <small>此模板用于 {{ self }}。放大写信时自动带入，每份草稿只带入一次。清空后保存即可停用。</small>
+      <MailBodyEditor
+        key="template"
+        class="body-field"
+        :body="templateEdit"
+        expanded
+        :disabled="busy"
+        label="模板正文"
+        @change="templateEdit = $event"
+      />
+      <div v-if="error" role="alert">{{ error }}</div>
+      <footer>
+        <small></small><button :disabled="busy" @click="editingTemplate = false">取消</button>
+        <button class="send" :disabled="busy" @click="saveTemplate">保存模板</button>
+      </footer>
+    </template>
+    <template v-else>
+      <div v-if="quote" class="quote-strip">
+        <button
+          @click="emit('jump', { id: quote.id, subject: quote.subject, contact: view!.draft.contact_id })"
+        >
+          引用 · {{ quote.from?.name || quote.from?.email || '原邮件' }} · {{ quote.subject || '（无主题）' }}
+          <small>{{ quote.snippet }}</small>
+        </button>
+        <button aria-label="取消引用" :disabled="locked" @click="cancelQuote">×</button>
+      </div>
+      <small v-if="quote && !quote.threaded">此邮件缺少回复标识，对方邮箱可能无法归入原会话。</small>
+      <div class="address">
+        收件人　{{ fields.to.map((a) => a.email).join('、') }}
+        <label v-if="canReplyAll"
+          ><input
+            type="checkbox"
+            :checked="edit.mode === 'reply_all'"
+            :disabled="locked"
+            @change="change({ mode: edit.mode === 'reply_all' ? 'reply' : 'reply_all' })"
+          />
+          回复全部</label
+        >
+      </div>
+      <div v-if="fields.cc.length" class="address">抄送　{{ fields.cc.map((a) => a.email).join('、') }}</div>
+      <label class="subject"
+        >主题<input
+          :value="fields.subject"
+          :disabled="locked"
+          placeholder="默认使用正文第一行"
+          @input="
+            change(
+              quote
+                ? { reply_subject_override: ($event.target as HTMLInputElement).value }
+                : { new_subject_override: ($event.target as HTMLInputElement).value },
+            )
+          "
+      /></label>
+      <MailBodyEditor
+        v-if="expanded || usedEditor || edit.html_body"
+        key="draft"
+        ref="richInput"
+        class="body-field"
+        :body="edit"
+        :expanded="expanded"
+        :disabled="locked"
+        label="邮件正文"
+        @change="change"
+      />
+      <textarea
+        v-else
+        ref="input"
+        :value="edit.text_body"
+        :disabled="locked"
+        aria-label="邮件正文"
+        placeholder="写邮件…"
+        @input="change({ text_body: ($event.target as HTMLTextAreaElement).value })"
+      />
+      <div v-if="view?.draft.attachments.length" class="files">
+        <span v-for="f in view.draft.attachments" :key="f.attachment_id"
+          >{{ f.filename }} · {{ (f.size_bytes / 1024).toFixed(1) }} KB
+          <button
+            :disabled="locked"
+            :aria-label="'移除 ' + f.filename"
+            @click="act('remove', f.attachment_id)"
+          >
+            ×
+          </button>
+        </span>
+      </div>
+      <div v-if="error" role="alert">
+        {{ error }}
+        <template v-if="conflict"
+          ><button :disabled="busy" @click="resolveConflict(false)">载入已保存版本</button>
+          <button :disabled="busy" @click="resolveConflict(true)">保留当前编辑</button></template
+        >
+        <button v-else @click="dirty ? flush().catch(report) : refresh()">重试</button>
+      </div>
+      <footer>
+        <button :disabled="locked" @click="act('pick')">添加附件</button>
+        <button
+          v-if="!expanded"
+          ref="expandButton"
+          aria-label="放大编辑"
+          title="放大编辑"
+          class="resize"
+          :disabled="locked"
+          @click="expand"
+        >
+          <Icon name="maximize-2" /> 放大编辑
+        </button>
+        <small role="status"
+          >{{
+            sending
+              ? '正在发送…'
+              : result?.state === 'unknown'
+                ? '发送结果待确认 · 请检查已发送邮件'
+                : result?.state === 'failed'
+                  ? '发送失败 · ' + (result.detail || '请重试')
+                  : result?.state === 'submitting'
+                    ? '正在发送…'
+                    : dirty
+                      ? '草稿待保存'
+                      : view?.draft.rev
+                        ? '草稿已保存'
+                        : ''
+          }}
+          <template v-if="result?.state !== 'accepted' && result?.rejected?.length"
+            >　已拒绝：{{ result.rejected.join('、') }}</template
+          ></small
+        >
+        <button class="send" :disabled="!canSend" @click="act('send')">发送</button>
+      </footer>
+    </template>
   </section>
 </template>
 <style scoped>
@@ -327,6 +483,31 @@ onBeforeUnmount(() => {
   overflow: auto;
   font-size: 13px;
   color: var(--text);
+}
+.mail-composer.expanded {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: none;
+  padding: 16px;
+  border: 0;
+}
+.expanded .body-field {
+  flex: 1;
+  min-height: 110px;
+}
+.editor-heading,
+.resize {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.editor-heading strong {
+  margin-right: auto;
+  font-size: 15px;
 }
 button,
 input,

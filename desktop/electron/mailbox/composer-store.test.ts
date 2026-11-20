@@ -424,3 +424,43 @@ test('按两个标识同步，服务器改写标识后原位更新正文、附�
     assert.equal(second.delivery?.state, 'accepted')
   }
 })
+
+test('富文本和模板按账号保存，收起重启后仍在同一草稿，普通邮件保持纯文本', async (t) => {
+  const { dir, index, store } = await setup(t)
+  const other = await setup(t)
+  const rich = {
+    text_body: '报价\n样品',
+    html_body: '<p><strong>报价</strong></p><ul><li><p>样品</p></li></ul>',
+  }
+  assert.deepEqual(
+    store.setBodyTemplate({ ...rich, html_body: rich.html_body + '<script>bad()</script>' }),
+    rich,
+  )
+  assert.equal(other.store.bodyTemplate(), undefined)
+  const empty = store.view(email, self).draft
+  assert.equal(empty.text_body, '')
+  assert.equal(empty.html_body, undefined)
+  const d = store.write(email, self, empty, { ...rich, mode: 'new', template_applied: true }).draft
+  const reopened = await ImportIndex.load(dir, idle)
+  assert.deepEqual(reopened.composer.bodyTemplate(), rich)
+  assert.equal(reopened.composer.view(email, self).draft.template_applied, true)
+  assert.equal(reopened.composer.view(email, self).draft.html_body, rich.html_body)
+  assert.equal(store.setBodyTemplate({ text_body: '' }), undefined)
+  await store.send(
+    email,
+    self,
+    command(d),
+    async (a) => {
+      assert.equal(a.snapshot.text_body, rich.text_body)
+      assert.equal(a.snapshot.html_body, rich.html_body)
+      return { state: 'accepted' }
+    },
+    idle,
+    idle,
+  )
+  const [sent] = (await index.timeline(d.contact_id, undefined, idle)).messages
+  assert.equal(sent.subject, '报价')
+  assert.match(sent.html!.fragment, /<strong>报价<\/strong>/)
+  const next = store.write(email, self, store.view(email, self).draft, edit).draft
+  assert.equal(next.html_body, undefined)
+})

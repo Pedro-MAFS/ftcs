@@ -12,10 +12,12 @@ import {
   type ComposerView,
   type Draft,
   type DraftInput,
+  type MailBody,
   type SendResult,
   type Version,
 } from './compose-types'
 import { localAttachment } from './attachments'
+import { composeBody } from './html-body'
 
 interface Attempt extends SendResult {
   attempt_id: string
@@ -70,6 +72,17 @@ export class ComposerStore {
   private draftPath(contact: string) {
     if (!uuid(contact)) throw new Error('无效的草稿联系人。')
     return path.join(this.dir, 'drafts', contact + '.json')
+  }
+  bodyTemplate(): MailBody | undefined {
+    const file = path.join(this.dir, 'compose-template.json')
+    return fs.existsSync(file) ? composeBody(read<MailBody>(file)) : undefined
+  }
+  setBodyTemplate(input: MailBody) {
+    const body = composeBody(input)
+    const file = path.join(this.dir, 'compose-template.json')
+    if (body.text_body.trim()) save(file, { v: 1, ...body })
+    else fs.rmSync(file, { force: true })
+    return this.bodyTemplate()
   }
   private logPath(a: { created_at: string }) {
     return path.join(this.dir, 'sends', a.created_at.slice(0, 7) + '.jsonl')
@@ -210,7 +223,8 @@ export class ComposerStore {
     }
     const draft: Draft = {
       ...fields,
-      text_body: edit.text_body,
+      ...composeBody(edit),
+      template_applied: edit.template_applied || undefined,
       mode: edit.mode,
       quoted_message_id: quote?.id,
       new_subject_override: edit.new_subject_override,
@@ -319,6 +333,7 @@ export class ComposerStore {
         cc: d.cc,
         subject: d.subject,
         text_body: d.text_body,
+        html_body: d.html_body,
         in_reply_to: a.in_reply_to,
         references: a.references,
         quoted_message_id: d.quoted_message_id,
