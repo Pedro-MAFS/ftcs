@@ -446,10 +446,12 @@ export class MailboxService {
       f.binding = 'manual'
       save(path.join(accountDir(base, id), 'sync', 'sent.json'), f)
       this.schedule(0)
-    } else if (a.kind === 'pin' && id && a.account === id && uuid(a.contact) && typeof a.pinned === 'boolean') {
-      const index = await this.reader(ctx, id)
+    } else if ((a.kind === 'pin' || a.kind === 'remark') && uuid(a.contact)) {
+      const index = await this.reader(ctx, a.account)
       this.check(ctx)
-      index.setPinned(a.contact, a.pinned)
+      if (a.kind === 'pin' && typeof a.pinned === 'boolean') index.setPinned(a.contact, a.pinned)
+      else if (a.kind === 'remark' && typeof a.remark === 'string') index.setRemark(a.contact, a.remark)
+      else throw new Error('联系人设置无效。')
     } else if (a.kind === 'notifications' && id && a.account === id && typeof a.enabled === 'boolean') {
       const file = path.join(accountDir(base, id), 'account.json')
       save(file, { ...read<Account>(file), new_mail_notifications: a.enabled })
@@ -539,7 +541,7 @@ export class MailboxService {
                   if (latest)
                     this.notifications?.show(
                       { context: ctx, account: id, contact, message: latest.message },
-                      latest.sender,
+                      index.contactRemark(contact) || latest.sender,
                       eligible.length,
                     )
                 }

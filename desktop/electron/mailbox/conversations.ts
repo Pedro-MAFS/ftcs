@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { ComposerStore } from './composer-store'
 import type { QuoteSource } from './compose-types'
-import { key } from './types'
+import { key, MAX_CONTACT_REMARK_LENGTH } from './types'
 import fs from 'node:fs'
 import path from 'node:path'
 import { describeAttachment, type StoredAttachment } from './attachments'
@@ -17,6 +17,7 @@ interface ContactRow {
   email: string
   pinned?: boolean
   display_name?: string
+  remark?: string
   company?: string
   title?: string
   rev: number
@@ -137,13 +138,29 @@ export class ImportIndex {
     this.contact(contact)
     return id
   }
-  setPinned(id: string, pinned: boolean) {
+  private conversationContact(id: string) {
     const person = this.people.get(id)
     if (!person || !this.hasConversation(id)) throw new Error('当前账号中没有这个联系人会话。')
-    if ((person.pinned ?? false) === pinned) return
-    const next = { ...person, pinned, updated_at: new Date().toISOString(), rev: person.rev + 1 }
+    return person
+  }
+  private saveContact(person: ContactRow, change: Pick<ContactRow, 'pinned' | 'remark'>) {
+    const next = { ...person, ...change, updated_at: new Date().toISOString(), rev: person.rev + 1 }
     append(path.join(this.dir, 'contacts.jsonl'), next)
     this.contact(next)
+  }
+  setPinned(id: string, pinned: boolean) {
+    const person = this.conversationContact(id)
+    if ((person.pinned ?? false) !== pinned) this.saveContact(person, { pinned })
+  }
+  setRemark(id: string, value: string) {
+    const person = this.conversationContact(id)
+    const remark = value.trim() || undefined
+    if (remark && (remark.length > MAX_CONTACT_REMARK_LENGTH || /[\x00-\x1f\x7f]/.test(remark)))
+      throw new Error(`备注名请使用单行文字，最多 ${MAX_CONTACT_REMARK_LENGTH} 个字符。`)
+    if (person.remark !== remark) this.saveContact(person, { remark })
+  }
+  contactRemark(id: string) {
+    return this.people.get(id)?.remark
   }
   original(id: string, contact: string) {
     const row = this.positions.get(this.aliases.get(id) ?? id)
@@ -374,6 +391,7 @@ export class ImportIndex {
         id,
         email: person.email,
         name: person.display_name,
+        remark: person.remark,
         pinned: person.pinned ?? false,
         company: person.company,
         title: person.title,

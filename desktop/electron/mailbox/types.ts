@@ -70,6 +70,7 @@ export type MailAction =
   | { kind: 'bind'; path: string }
   | { kind: 'retry' }
   | { kind: 'pin'; account: string; contact: string; pinned: boolean }
+  | { kind: 'remark'; account: string; contact: string; remark: string }
   | { kind: 'notifications'; account: string; enabled: boolean }
   | { kind: 'disconnect' }
   | { kind: 'delete'; id: string }
@@ -79,6 +80,7 @@ export interface MailContactProfile {
   title?: string
 }
 export interface Conversation extends MailContactProfile {
+  remark?: string
   pinned: boolean
   revision?: number
   id: string
@@ -94,6 +96,7 @@ export interface MailAddress {
   email: string
   name?: string
 }
+export const MAX_CONTACT_REMARK_LENGTH = 120
 export interface TimelineCursor {
   at: string
   id: string

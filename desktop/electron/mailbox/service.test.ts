@@ -102,6 +102,12 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   await until(() => service.snapshot().imported === 3 && !service.snapshot().running)
   assert.equal(service.snapshot().folders[0].error, undefined)
   assert.deepEqual(service.snapshot().contacts.sort(), ['alice@example.test', 'bob@example.test'])
+  const contact = (await service.conversations(ctx(), a)).find(c => c.email === 'alice@example.test')!
+  const rename = { kind: 'remark', account: a, contact: contact.id, remark: '  老客户 Alice  ' } as const
+  await service.act(ctx(), rename)
+  await service.act(ctx(), { kind: 'pin', account: a, contact: contact.id, pinned: true })
+  await assert.rejects(service.act(ctx(), { ...rename, remark: '第一行\n第二行' }), /单行/)
+  await assert.rejects(service.act(ctx(), { ...rename, remark: 'A'.repeat(121) }), /最多/)
   const destination = 'draft-only@example.test'
   const initial = await service.composer(ctx(), a, destination, { kind: 'get' })
   await service.composer(ctx(), a, destination, {
@@ -120,6 +126,8 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   ).active!
   await until(() => service.snapshot().folders[0].phase === 'incremental' && !service.snapshot().running)
   await assert.rejects(service.conversations(ctx(), a), /账号已改变/)
+  await assert.rejects(service.act(ctx(), rename), /账号已改变/)
+  await assert.rejects(service.act(ctx(), { ...rename, account: b }), /没有这个联系人/)
   await assert.rejects(service.timeline(stale, a, 'alice'), /工作区已改变/)
   assert.notEqual(a, b)
   assert.deepEqual(await service.temporaryDrafts(ctx(),b),[])
@@ -136,6 +144,10 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   assert.equal(await service.unreadCount(), 1)
   const contacts = await service.conversations(ctx(), a)
   const alice = contacts.find((c) => c.email === 'alice@example.test')!
+  assert.deepEqual([alice.id, alice.name, alice.remark, alice.pinned], [contact.id, contact.name, '老客户 Alice', true])
+  await service.act(ctx(), { ...rename, remark: '   ' })
+  const cleared = (await service.conversations(ctx(), a)).find(c => c.id === contact.id)!
+  assert.deepEqual([cleared.name, cleared.remark, cleared.pinned], [contact.name, undefined, true])
   assert.equal((await service.timeline(ctx(), a, alice.id)).messages.length, 2)
   await service.act(ctx(), { kind: 'delete', id: b })
   assert.equal(service.snapshot().accounts.length, 1)
@@ -221,13 +233,13 @@ test('启动积压静默，新增来信分联系人合并通知，关闭开关�
       return ids.map((uid) => ({ uid, flags: new Set() }))
     },
   } as unknown as ImapFlow
-  const notices: { contact: string; count: number; message: string }[] = []
+  const notices: { contact: string; count: number; message: string; sender: string }[] = []
   const service = new MailboxService(
     () => root,
     { dir: root, encrypt: (s) => Buffer.from(s), decrypt: (b) => b.toString() },
     () => {},
     { verify: async () => {}, imapClient: () => client, importFolder },
-    { clear: () => {}, show: (target, _, count) => notices.push({ ...target, count }) },
+    { clear: () => {}, show: (target, sender, count) => notices.push({ ...target, sender, count }) },
   )
   t.after(() => {
     service.stop()
@@ -249,12 +261,15 @@ test('启动积压静默，新增来信分联系人合并通知，关闭开关�
   }
   await synced(0)
   assert.equal(notices.length, 0)
+  const [contact] = await service.conversations(ctx(), id)
+  await service.act(ctx(), { kind: 'remark', account: id, contact: contact.id, remark: '采购 Alice' })
   let prev = cycles
   upper = 3
   await service.act(ctx(), { kind: 'retry' })
   await synced(prev)
   assert.equal(notices.length, 1)
   assert.equal(notices[0].count, 2)
+  assert.equal(notices[0].sender, '采购 Alice')
   const rows = await service.timeline(ctx(), id, notices[0].contact)
   assert.equal(rows.messages.find((m) => m.id === notices[0].message)?.subject, '3')
   await service.act(ctx(), { kind: 'notifications', account: id, enabled: false })

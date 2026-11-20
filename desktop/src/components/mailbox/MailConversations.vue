@@ -2,8 +2,10 @@
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import {
   key,
+  MAX_CONTACT_REMARK_LENGTH,
   type AttachmentAction,
   type Conversation,
+  type MailAddress,
   type MessageView,
   type ReplyTarget,
   type Snapshot,
@@ -70,10 +72,49 @@ const contacts = ref<Conversation[]>([]),
   selected = ref(''),
   temporary = ref('')
 const current = computed(() => contacts.value.find((c) => c.id === selected.value))
+function contactName(c: Conversation) {
+  return c.remark || c.name || c.email
+}
 const contactSubtitle = computed(() => {
   const c = current.value
-  return c ? [c.company, c.title, c.name && c.email].filter(Boolean).join(' · ') : ''
+  return c ? [c.company, c.title, c.remark && c.name !== c.remark && c.name, (c.name || c.remark) && c.email].filter(Boolean).join(' · ') : ''
 })
+const remarksByAddress = computed(() => new Map(contacts.value.filter(c => c.remark).map(c => [key(c.email), c.remark])))
+function addressName(a: MailAddress) {
+  return remarksByAddress.value.get(key(a.email)) || a.name || a.email
+}
+const remarkDialog = ref<HTMLDialogElement>()
+const remarkInput = ref<HTMLInputElement>()
+const remarkTarget = ref<Conversation>()
+const remarkDraft = ref('')
+const savingRemark = ref(false)
+const remarkError = ref('')
+function editRemark(contact: Conversation) {
+  remarkTarget.value = contact
+  remarkDraft.value = contact.remark ?? ''
+  remarkError.value = ''
+  remarkDialog.value?.showModal()
+  void nextTick(() => remarkInput.value?.select())
+}
+async function saveRemark() {
+  const target = remarkTarget.value
+  if (!target || savingRemark.value) return
+  savingRemark.value = true
+  remarkError.value = ''
+  try {
+    await api.act({ ...props.snapshot.context }, {
+      kind: 'remark', account: props.account, contact: target.id, remark: remarkDraft.value,
+    })
+    await refresh()
+    if (remarkTarget.value === target) remarkDialog.value?.close()
+  } catch (e) {
+    if (remarkTarget.value === target)
+      remarkError.value = (e instanceof Error ? e.message : String(e)).replace(/^Error invoking remote method '[^']+': Error: /, '')
+  } finally {
+    savingRemark.value = false
+  }
+}
+watch(selected, () => remarkDialog.value?.close(), { flush: 'sync' })
 const editor=ref<InstanceType<typeof MailComposer>>()
 async function leaveEditor(next:()=>void) {
   try {await editor.value?.flush()} catch {return}
@@ -85,7 +126,7 @@ const contactSearch = ref('')
 const visibleContacts = computed(() => {
   const query = contactSearch.value.trim().toLowerCase()
   if (!query) return contacts.value
-  return contacts.value.filter((c) => c.name?.toLowerCase().includes(query) || c.email.toLowerCase().includes(query))
+  return contacts.value.filter(c => [c.remark, c.name, c.email].some(value => value?.toLowerCase().includes(query)))
 })
 const pendingPins = ref(new Set<string>())
 async function togglePin(contact: Conversation) {
@@ -129,7 +170,7 @@ const compose = ref(false),
   newMail = ref(false)
 useVisibleMail(
   scroller,
-  () => !!props.covered || !!editor.value?.expanded,
+  () => !!props.covered || !!editor.value?.expanded || !!remarkTarget.value,
   () => selected.value,
   () => messages.value,
   async (ids) => {
@@ -333,6 +374,7 @@ onActivated(() => {
 })
 onDeactivated(() => {
   pageActive.value = false
+  remarkDialog.value?.close()
 })
 watch(
   [
@@ -403,8 +445,8 @@ onBeforeUnmount(() => {
         <input
           v-model="contactSearch"
           type="search"
-          aria-label="按姓名或邮箱搜索联系人"
-          placeholder="搜索姓名或邮箱"
+          aria-label="按备注、姓名或邮箱搜索联系人"
+          placeholder="搜索备注、姓名或邮箱"
           @keydown.esc="contactSearch = ''"
         />
       </label>
@@ -422,10 +464,10 @@ onBeforeUnmount(() => {
             @click="leaveEditor(()=>select(c.id))"
           >
             <span class="avatar" :style="{ backgroundColor: avatarTone(c.email) }">{{
-              initials(c.name || c.email.split('@')[0])
+              initials(c.remark || c.name || c.email.split('@')[0])
             }}</span>
             <span class="summary"
-              ><strong>{{ c.name || c.email }}</strong
+              ><strong>{{ contactName(c) }}</strong
               ><span>{{ c.draftPreview ? '草稿 · '+c.draftPreview : c.preview }}</span></span
             >
             <span class="meta"
@@ -440,7 +482,7 @@ onBeforeUnmount(() => {
             class="pin"
             :class="{ pinned: c.pinned }"
             :title="c.pinned ? '取消置顶' : '置顶联系人'"
-            :aria-label="'置顶联系人 ' + (c.name || c.email)"
+            :aria-label="'置顶联系人 ' + contactName(c)"
             :aria-pressed="c.pinned"
             :disabled="pendingPins.has(c.id)"
             @click="togglePin(c)"
@@ -466,7 +508,11 @@ onBeforeUnmount(() => {
     <main>
       <header v-if="current || temporary">
         <div>
-          <strong>{{ current?.name || current?.email || temporary }}</strong>
+          <div class="contact-heading">
+            <strong :title="current ? contactName(current) : temporary">{{ current ? contactName(current) : temporary }}</strong>
+            <button v-if="current" class="tool" type="button" title="修改备注名" aria-label="修改备注名"
+              @click="editRemark(current)"><Icon name="pencil" :size="15" /></button>
+          </div>
           <small v-if="contactSubtitle" :title="contactSubtitle">{{ contactSubtitle }}</small>
         </div>
         <button v-if="originalPage" class="return-latest" @click="load('open')">返回最新邮件</button>
@@ -484,7 +530,7 @@ onBeforeUnmount(() => {
             </div>
             <article :data-message="m.id" :data-unread="!!m.unread" tabindex="-1" :class="{ out: m.outgoing, highlighted: highlighted === m.id }">
               <div class="byline">
-                {{ m.outgoing ? '我' : m.from?.name || m.from?.email || '发件人' }} · {{ clock(m.at) }}
+                {{ m.outgoing ? '我' : m.from ? addressName(m.from) : '发件人' }} · {{ clock(m.at) }}
               </div>
               <div class="bubble">
                 <button
@@ -501,10 +547,10 @@ onBeforeUnmount(() => {
                   <summary :title="'展开收件详情'">
                     收件人：{{
                       m.to
-                        .map((a) => (key(a.email) === key(accountEmail) ? '我' : a.name || a.email))
+                        .map((a) => (key(a.email) === key(accountEmail) ? '我' : addressName(a)))
                         .join('、') || '—'
                     }}<template v-if="m.cc.length"
-                      >　抄送：{{ m.cc.map((a) => a.name || a.email).join('、') }}</template
+                      >　抄送：{{ m.cc.map(addressName).join('、') }}</template
                     >
                     <Icon name="chevron-down" :size="12" />
                   </summary>
@@ -563,6 +609,23 @@ onBeforeUnmount(() => {
       <MailComposer v-if="composerEmail" ref="editor" :key="key(composerEmail)" :snapshot="snapshot" :account="account"
         :self="accountEmail" :email="composerEmail" @jump="jumpToOriginal" @changed="refresh"/>
     </main>
+    <dialog ref="remarkDialog" class="remark-dialog" aria-labelledby="mail-remark-title"
+      @close="remarkTarget = undefined" @cancel="savingRemark && $event.preventDefault()">
+      <form @submit.prevent="saveRemark">
+        <h2 id="mail-remark-title">修改备注名</h2>
+        <p>{{ [remarkTarget?.name, remarkTarget?.email].filter(Boolean).join(' · ') }}</p>
+        <label>备注名
+          <input ref="remarkInput" v-model="remarkDraft" :maxlength="MAX_CONTACT_REMARK_LENGTH"
+            :disabled="savingRemark" aria-describedby="mail-remark-hint" autofocus />
+        </label>
+        <small id="mail-remark-hint">清空并保存可恢复原名称。</small>
+        <p v-if="remarkError" role="alert">{{ remarkError }}</p>
+        <div class="remark-actions">
+          <button type="button" :disabled="savingRemark" @click="remarkDialog?.close()">取消</button>
+          <button :disabled="savingRemark">{{ savingRemark ? '正在保存…' : '保存' }}</button>
+        </div>
+      </form>
+    </dialog>
   </div>
 </template>
 <style scoped>
@@ -851,6 +914,57 @@ main header div {
 main header strong {
   font-size: 22px;
   line-height: 1.25;
+}
+.contact-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.contact-heading .tool {
+  flex: none;
+  color: var(--text-secondary);
+}
+.contact-heading strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.remark-dialog {
+  width: min(360px, 90vw);
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+.remark-dialog::backdrop {
+  background: rgb(0 0 0 / 42%);
+}
+.remark-dialog form, .remark-dialog label {
+  display: grid;
+  align-items: stretch;
+  gap: 8px;
+  padding: 0;
+}
+.remark-dialog p, .remark-dialog small {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+.remark-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+.remark-actions button {
+  padding: 6px 12px;
+  border-radius: 5px;
+  background: var(--bg-hover);
+}
+.remark-actions button:last-child {
+  color: var(--soft-blue);
+  background: var(--selected);
 }
 .history {
   padding: 12px clamp(16px, 3cqw, 36px) 22px;
