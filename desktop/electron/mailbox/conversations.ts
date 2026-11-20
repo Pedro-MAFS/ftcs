@@ -15,6 +15,7 @@ interface ContactRow {
   contact_id: string
   address_key: string
   email: string
+  pinned?: boolean
   display_name?: string
   company?: string
   rev: number
@@ -128,6 +129,14 @@ export class ImportIndex {
       this.contact(contact)
     }
     return id
+  }
+  setPinned(id: string, pinned: boolean) {
+    const person = this.people.get(id)
+    if (!person || !this.hasConversation(id)) throw new Error('当前账号中没有这个联系人会话。')
+    if ((person.pinned ?? false) === pinned) return
+    const next = { ...person, pinned, updated_at: new Date().toISOString(), rev: person.rev + 1 }
+    append(path.join(this.dir, 'contacts.jsonl'), next)
+    this.contact(next)
   }
   original(id: string, contact: string) {
     const row = this.positions.get(this.aliases.get(id) ?? id)
@@ -358,6 +367,7 @@ export class ImportIndex {
         id,
         email: person.email,
         name: person.display_name,
+        pinned: person.pinned ?? false,
         company: person.company,
         lastAt: last.at,
         lastId: last.id,
@@ -368,7 +378,9 @@ export class ImportIndex {
         unread: list.reduce((n, m) => n + Number(unread.has(m.id)), 0),
       })
     }
-    return result.sort((a, b) => cmp(b.lastAt, a.lastAt) || cmp(b.lastId, a.lastId) || cmp(a.id, b.id))
+    return result.sort((a, b) =>
+      Number(b.pinned) - Number(a.pinned) || cmp(b.lastAt, a.lastAt) || cmp(b.lastId, a.lastId) || cmp(a.id, b.id),
+    )
   }
   private readRecord(row: Summary): MessageRow {
     const record = readAt<MessageRow>(row)

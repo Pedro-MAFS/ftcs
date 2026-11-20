@@ -407,6 +407,10 @@ export class MailboxService {
       f.binding = 'manual'
       save(path.join(accountDir(base, id), 'sync', 'sent.json'), f)
       this.schedule(0)
+    } else if (a.kind === 'pin' && id && a.account === id && uuid(a.contact) && typeof a.pinned === 'boolean') {
+      const index = await this.reader(ctx, id)
+      this.check(ctx)
+      index.setPinned(a.contact, a.pinned)
     } else if (a.kind === 'notifications' && id && a.account === id && typeof a.enabled === 'boolean') {
       const file = path.join(accountDir(base, id), 'account.json')
       save(file, { ...read<Account>(file), new_mail_notifications: a.enabled })

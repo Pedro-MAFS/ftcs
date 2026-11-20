@@ -14,6 +14,7 @@ defineProps<{
     | 'play'
     | 'send'
     | 'reply'
+    | 'pin'
     | 'sparkles'
     | 'check'
     | 'save'
@@ -127,6 +128,9 @@ defineProps<{
     <template v-else-if="name === 'send'">
       <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.04a2 2 0 0 1 1.112 1.11z" />
       <path d="m21.854 2.147-10.94 10.939" />
+    </template>
+    <template v-else-if="name === 'pin'">
+      <path d="m16 3 5 5-3 1-4 4v3l-2 2-6-6 2-2h3l4-4zM9 15l-6 6" />
     </template>
     <template v-else-if="name === 'reply'">
       <path d="m9 5-6 6 6 6m-6-6h11a7 7 0 0 1 7 7v1" />

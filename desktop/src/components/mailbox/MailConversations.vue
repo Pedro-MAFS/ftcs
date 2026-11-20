@@ -64,6 +64,21 @@ const visibleContacts = computed(() => {
   if (!query) return contacts.value
   return contacts.value.filter((c) => c.name?.toLowerCase().includes(query) || c.email.toLowerCase().includes(query))
 })
+const pendingPins = ref(new Set<string>())
+async function togglePin(contact: Conversation) {
+  if (pendingPins.value.has(contact.id)) return
+  pendingPins.value.add(contact.id)
+  try {
+    await api.act({ ...props.snapshot.context }, {
+      kind: 'pin', account: props.account, contact: contact.id, pinned: !contact.pinned,
+    })
+    await refresh()
+  } catch (e) {
+    showToast(String(e).replace(/^Error invoking remote method '[^']+': Error: /, ''), { tone: 'error' })
+  } finally {
+    pendingPins.value.delete(contact.id)
+  }
+}
 const pendingAttachments = ref(new Set<string>())
 async function handleAttachment(messageId: string, index: number, action: AttachmentAction) {
   const key = messageId + ':' + index
@@ -324,29 +339,39 @@ onBeforeUnmount(() => {
       <p v-else-if="!contacts.length">还没有邮件往来</p>
       <p v-else-if="!visibleContacts.length" role="status">没有找到匹配的联系人</p>
       <div class="list">
-        <button
-          v-for="c in visibleContacts"
-          :key="c.id"
-          class="person"
-          :title="c.email"
-          :class="{ active: selected === c.id }"
-          :aria-pressed="selected === c.id"
-          @click="leaveEditor(()=>select(c.id))"
-        >
-          <span class="avatar" :style="{ backgroundColor: avatarTone(c.email) }">{{
-            initials(c.name || c.email.split('@')[0])
-          }}</span>
-          <span class="summary"
-            ><strong>{{ c.name || c.email }}</strong
-            ><span>{{ c.draftPreview ? '草稿 · '+c.draftPreview : c.preview }}</span></span
+        <div v-for="c in visibleContacts" :key="c.id" class="contact-row">
+          <button
+            class="person"
+            :title="c.email"
+            :class="{ active: selected === c.id }"
+            :aria-pressed="selected === c.id"
+            @click="leaveEditor(()=>select(c.id))"
           >
-          <span class="meta"
-            ><small>{{
-              day(c.lastAt) === day(new Date().toISOString()) ? clock(c.lastAt) : day(c.lastAt)
-            }}</small
-            ><b v-if="c.unread">{{ c.unread }}</b></span
-          >
-        </button>
+            <span class="avatar" :style="{ backgroundColor: avatarTone(c.email) }">{{
+              initials(c.name || c.email.split('@')[0])
+            }}</span>
+            <span class="summary"
+              ><strong>{{ c.name || c.email }}</strong
+              ><span>{{ c.draftPreview ? '草稿 · '+c.draftPreview : c.preview }}</span></span
+            >
+            <span class="meta"
+              ><small>{{
+                day(c.lastAt) === day(new Date().toISOString()) ? clock(c.lastAt) : day(c.lastAt)
+              }}</small
+              ><b v-if="c.unread">{{ c.unread }}</b></span
+            >
+          </button>
+          <button
+            type="button"
+            class="pin"
+            :class="{ pinned: c.pinned }"
+            :title="c.pinned ? '取消置顶' : '置顶联系人'"
+            :aria-label="'置顶联系人 ' + (c.name || c.email)"
+            :aria-pressed="c.pinned"
+            :disabled="pendingPins.has(c.id)"
+            @click="togglePin(c)"
+          ><Icon name="pin" :size="13" /></button>
+        </div>
       </div>
       <footer>
         <button class="status" @click="leaveEditor(()=>emit('settings'))">{{ syncLabel }}</button>
@@ -598,6 +623,37 @@ form button {
 .list {
   padding: 0 9px;
 }
+.contact-row {
+  position: relative;
+  margin-bottom: 6px;
+  --avatar-end: 54px;
+}
+.pin {
+  position: absolute;
+  left: calc(var(--avatar-end) - 16px);
+  top: calc(50% + 2px);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  opacity: 0;
+  pointer-events: none;
+}
+.contact-row:hover .pin, .contact-row:focus-within .pin, .pin.pinned {
+  opacity: 1;
+  pointer-events: auto;
+}
+.pin:is(:hover, :focus-visible), .pin.pinned {
+  color: var(--soft-blue);
+  background: var(--selected);
+}
+@media (hover: none) {
+  .pin { opacity: 1; pointer-events: auto; }
+}
 .person {
   width: 100%;
   display: grid;
@@ -609,7 +665,6 @@ form button {
   text-align: left;
   padding: 10px 12px;
   min-height: 77px;
-  margin-bottom: 6px;
   border-radius: 8px;
 }
 .person:hover,
@@ -917,6 +972,7 @@ main > p {
     padding: 6px;
     font-size: 12px;
   }
+  .contact-row { --avatar-end: 36px; }
   .person {
     grid-template-columns: 30px minmax(0, 1fr) auto;
     gap: 3px 6px;

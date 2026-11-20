@@ -68,10 +68,12 @@ export type MailAction =
   | { kind: 'connect'; form: Connection }
   | { kind: 'bind'; path: string }
   | { kind: 'retry' }
+  | { kind: 'pin'; account: string; contact: string; pinned: boolean }
   | { kind: 'notifications'; account: string; enabled: boolean }
   | { kind: 'disconnect' }
   | { kind: 'delete'; id: string }
 export interface Conversation {
+  pinned: boolean
   revision?: number
   id: string
   email: string

@@ -138,3 +138,31 @@ test('原邮件按账号内唯一标识定位，支持旧分片、跨页、跨�
     )
   }
 })
+
+test('联系人置顶按账号保存，两组均按最近往来排序，取消后恢复顺序', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-mail-pins-'))
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  const folder = newFolder('inbox', 'INBOX')
+  const ids = ['alice', 'bob', 'carol']
+  for (const [i, id] of ids.entries()) {
+    append(path.join(dir, 'contacts.jsonl'), { contact_id: id, email: id, address_key: id, rev: 1 })
+    append(path.join(dir, 'messages', '2026-11.jsonl'), {
+      message_id: id, direction: 'incoming', occurred_at: '2026-11-1' + i,
+      conversation_contact_ids: [id],
+    })
+  }
+  let index = await ImportIndex.load(dir, () => {})
+  const order = () => index.conversations(folder).map(c => c.id)
+  index.setPinned('bob', true)
+  index.setPinned('alice', true)
+  assert.deepEqual(order(), ['bob', 'alice', 'carol'])
+  index = await ImportIndex.load(dir, () => {})
+  assert.deepEqual(order(), ['bob', 'alice', 'carol'])
+  assert.equal(index.conversations(folder)[2].pinned, false)
+  const other = await ImportIndex.load(path.join(dir, 'other-account'), () => {})
+  assert.throws(() => other.setPinned('bob', false), /当前账号/)
+  index.setPinned('bob', false)
+  assert.deepEqual(order(), ['alice', 'carol', 'bob'])
+  index.setPinned('alice', false)
+  assert.deepEqual(order(), ['carol', 'bob', 'alice'])
+})
