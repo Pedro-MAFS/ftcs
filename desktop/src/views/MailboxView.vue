@@ -3,11 +3,23 @@ import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watc
 import { useRoute, useRouter } from 'vue-router'
 import type { Connection, Endpoint, MailAction, Snapshot } from '../../electron/mailbox/types'
 import { key } from '../../electron/mailbox/types'
+import { mailProvider, mailSetupQuestion } from '../components/mailbox/setup-help'
+import { useWorkspace } from '../composables/useWorkspace'
+import { useWorkspaceLayout } from '../composables/useWorkspaceLayout'
+import { showToast } from '../composables/useToast'
+import { RUNTIME_NOT_READY } from '../config/user-facing'
 
 import MailConversations from '../components/mailbox/MailConversations.vue'
 const route = useRoute(), router = useRouter()
 const settingsOpen = ref(false)
 const settingsDialog = ref<HTMLDialogElement>()
+const helpDialog = ref<HTMLDialogElement>()
+const helpInput = ref('')
+const helpError = ref('')
+const provider = computed(() => mailProvider(helpInput.value))
+const { dialogueBusy, generating, pendingPermission, awaitingUserReply } = useWorkspace()
+const { fill, agentCollapsed, exitFill, toggleAgentCollapsed } = useWorkspaceLayout()
+const helpBusy = computed(() => dialogueBusy.value || generating.value || !!pendingPermission.value || !!awaitingUserReply.value)
 const api = window.ftcs?.mailbox
 const state = ref<Snapshot>()
 const error = ref('')
@@ -33,6 +45,34 @@ const fresh = (): Connection => ({
 const form = ref(fresh())
 const saved = computed(() => state.value?.accounts.find((a) => key(a.email) === key(form.value.email)))
 const active = computed(() => state.value?.accounts.find((a) => a.id === state.value?.active))
+function openHelp(email: string) {
+  helpError.value = ''
+  helpInput.value = mailProvider(email) || helpInput.value
+  helpDialog.value?.showModal()
+}
+async function askForHelp() {
+  if (!provider.value || helpBusy.value) return
+  const send = window.ftcs?.sendAgentMessage
+  if (!send) {
+    helpError.value = RUNTIME_NOT_READY
+    return
+  }
+  const question = mailSetupQuestion(provider.value)
+  dialogueBusy.value = true
+  try {
+    helpDialog.value?.close()
+    settingsDialog.value?.close()
+    if (fill.value === 'main') exitFill()
+    if (fill.value === 'none' && agentCollapsed.value) toggleAgentCollapsed()
+    const result = await send(question)
+    if (!result.ok || !result.accepted)
+      showToast(result.message || '这次提问未发送，请稍后重试。', { tone: 'error' })
+  } catch (e) {
+    showToast(e instanceof Error ? e.message : RUNTIME_NOT_READY, { tone: 'error' })
+  } finally {
+    dialogueBusy.value = false
+  }
+}
 watch(settingsDialog, dialog => { if (!dialog) settingsOpen.value = false })
 watch([settingsDialog, () => route.name, () => route.query.settings], ([dialog, page, open]) => {
   if (dialog && page === 'mailbox' && open === '1') {
@@ -76,6 +116,8 @@ function reconnect(email: string) {
   configure()
 }
 function clearForm() {
+  helpDialog.value?.close()
+  helpInput.value = ''
   form.value = fresh()
   configured = ''
   advanced.value = false
@@ -110,6 +152,7 @@ function listen() {
   }
 }
 function leave() {
+  helpDialog.value?.close()
   settingsDialog.value?.close()
   unsubscribe?.()
   unsubscribe = undefined
@@ -158,7 +201,13 @@ async function act(action: MailAction) {
             :readonly="!!active"
             @blur="configure"
         /></label>
-        <label>邮箱授权码<input v-model="form.password" type="password" autocomplete="off" required /></label>
+        <div class="auth-field">
+          <div class="auth-label">
+            <label for="mail-auth-code">邮箱授权码</label>
+            <button type="button" class="help-link" @click="openHelp(form.email)">如何获取授权码？</button>
+          </div>
+          <input id="mail-auth-code" v-model="form.password" type="password" autocomplete="off" required />
+        </div>
         <button type="button" :aria-expanded="advanced" @click="advanced = !advanced">
           服务器设置 {{ advanced ? '▴' : '▾' }}
         </button>
@@ -210,6 +259,7 @@ async function act(action: MailAction) {
           <button autofocus @click="settingsDialog?.close()">关闭</button>
         </header>
         <p>{{ active.email }}</p>
+        <button type="button" class="help-link" @click="openHelp(active.email)">如何获取授权码？</button>
         <label class="choice"><input type="checkbox" :checked="active.notifications !== false" :disabled="busy"
           @change="act({kind: 'notifications', account: active.id, enabled: ($event.target as HTMLInputElement).checked})" />
           桌面新邮件通知</label>
@@ -254,6 +304,22 @@ async function act(action: MailAction) {
         @sync="act({ kind: 'retry' })"
       />
     </template>
+    <dialog ref="helpDialog" class="settings-dialog help-dialog" aria-labelledby="mail-help-title">
+      <form @submit.prevent="askForHelp">
+        <h2 id="mail-help-title">如何获取邮箱授权码？</h2>
+        <label>邮箱服务商或邮箱地址
+          <input v-model="helpInput" autofocus required maxlength="254" placeholder="例如 QQ、Google 或 name@company.com" />
+        </label>
+        <small>智能体会说明具体步骤。填写邮箱地址时，只会发送域名。</small>
+        <p v-if="helpInput.trim() && !provider" role="alert">请填写服务商名称或完整邮箱地址。</p>
+        <p v-if="helpBusy" role="status">请等智能体完成当前回复或任务后再提问。</p>
+        <p v-if="helpError" role="alert">{{ helpError }}</p>
+        <div class="row">
+          <button type="button" @click="helpDialog?.close()">取消</button>
+          <button class="primary" :disabled="!provider || helpBusy">向智能体提问</button>
+        </div>
+      </form>
+    </dialog>
     <div v-if="confirmation" class="confirm" role="alertdialog">
       <strong>{{
         confirmation.kind === 'disconnect'
@@ -396,6 +462,33 @@ button:disabled {
 button.primary {
   background: var(--accent-hover);
   color: white;
+}
+.auth-field {
+  display: grid;
+  gap: 5px;
+}
+.auth-label {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.help-link {
+  padding: 0;
+  border: 0;
+  color: var(--accent);
+  background: transparent;
+  font-size: 13px;
+}
+.help-link:hover {
+  text-decoration: underline;
+}
+.help-dialog form {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.help-dialog .row {
+  justify-content: flex-end;
 }
 small,
 header span,
