@@ -113,6 +113,7 @@ export async function importFolder(
           internet_message_id: parsed.messageId,
           import_key: importKey,
           ftcs_send_id: marker,
+          source: context?.source,
           quoted_message_id: context?.quoted,
           origin_copy: { folder_id: folderId, uid_validity: validity, uid },
           in_reply_to: parsed.inReplyTo,

@@ -627,6 +627,8 @@ export interface EmailVariantEditDto {
 }
 
 export interface ApproveEmailDraftInput {
+  selectedTo?: string
+  expectedVersion?: string
   productId: string
   leadId: string
   recipientKey?: string
@@ -653,6 +655,9 @@ export interface GetEmailDraftSlotInput {
 }
 
 export interface EmailDraftSlotDetailDto {
+  version?: string
+  selectedTo?: string
+  outreach?: import('../../electron/mailbox/outreach-types').OutreachBinding
   ok: boolean
   exists: boolean
   message?: string
@@ -677,6 +682,8 @@ export interface EmailDraftSlotDetailDto {
 }
 
 export interface SaveEmailDraftSlotInput {
+  selectedTo?: string
+  expectedVersion?: string
   productId: string
   leadId: string
   recipientKey: string

@@ -21,6 +21,10 @@ import {
   type Snapshot,
 } from './types'
 
+import { withEmailDraftWrite } from '../../../workspace/mcp-servers/lead-store/src/outreach-binding'
+import type { ReviewSlot, ReviewSend } from './outreach-types'
+import type { approveForDelivery } from '../emails/outreach-review'
+
 interface State {
   v: number
   workspace_id: string
@@ -38,7 +42,8 @@ export class MailboxService {
     private root: () => string,
     private vault: Vault,
     private notify: () => void,
-    private protocol = { verify, imapClient, importFolder },
+    private protocol: { verify: typeof verify; imapClient: typeof imapClient; importFolder: typeof importFolder; smtpSubmit?: typeof smtpSubmit }
+      = { verify, imapClient, importFolder },
     private notifications?: { show(target: MailTarget, sender: string, count: number): void; clear(): void },
   ) {}
   private sendScope = new AbortController()
@@ -88,6 +93,10 @@ export class MailboxService {
     }
     throw Object.assign(new Error('请重新验证邮箱。'), { code: 'EAUTH' })
   }
+  private submitter(account: Account) {
+    const transport = this.protocol.smtpSubmit ?? smtpSubmit
+    return transport(account.smtp, this.password(this.state(), account), this.sendScope.signal)
+  }
   private folder(dir: string, role: FolderRole) {
     return read<Folder>(path.join(dir, 'sync', role + '.json'))
   }
@@ -106,6 +115,37 @@ export class MailboxService {
       if (this.loading === loading) this.loading = undefined
     }
   }
+  async reviewResult(ctx: Context, id: string, slot: ReviewSlot, request: string) {
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    return index.composer.outreachResult(request, slot)
+  }
+  async sendReview(ctx: Context, id: string, edit: ReviewSend, prepare: typeof approveForDelivery) {
+    const index = await this.reader(ctx, id)
+    const guard = () => this.check(ctx)
+    guard()
+    // No await between checking the reviewed version, binding it and journaling submission.
+    const response = await withEmailDraftWrite(ctx.root, edit.leadId, () => {
+      const { binding, result } = prepare(ctx.root, id, edit, index.composer)
+      if (result) return result
+      this.notify()
+      const account = read<Account>(path.join(accountDir(this.base(), id), 'account.json'))
+      const submit = this.submitter(account)
+      // sendOutreach journals synchronously, then yields for the SMTP response.
+      return index.composer.sendOutreach(
+        edit,
+        binding.review_id,
+        binding.created_at,
+        account.email,
+        submit,
+        guard,
+        this.notify,
+      )
+    })
+    guard()
+    return response
+  }
+
   async temporaryDrafts(ctx: Context, id: string) {
     const index = await this.reader(ctx, id)
     this.check(ctx)
@@ -163,12 +203,11 @@ export class MailboxService {
         return { ...view, attachmentErrors }
       }
       case 'send': {
-        const password = this.password(this.state(), account)
         const result = await store.send(
           email,
           self,
           action,
-          smtpSubmit(account.smtp, password, this.sendScope.signal),
+          this.submitter(account),
           guard,
           this.notify,
         )

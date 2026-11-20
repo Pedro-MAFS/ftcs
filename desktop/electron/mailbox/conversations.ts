@@ -21,6 +21,7 @@ interface ContactRow {
   rev: number
 }
 export interface MessageRow {
+  source?: import('./outreach-types').OutreachSource
   ftcs_send_id?: unknown
   origin_copy?: { folder_id: string; uid_validity: number; uid: number }
   quoted_message_id?: string
@@ -450,6 +451,7 @@ export class ImportIndex {
         subject: r.subject || '（无主题）',
         ...(r.html_body?.trim() ? { body: text } : splitQuotedText(text)),
         quoteSource: quoteSource(r, text),
+        source: r.source,
         delivery: this.composer.delivery(r.message_id),
         replyTo: this.replyTarget(r, contact),
         html: r.html_body?.trim() ? readableHtml(r.html_body) : undefined,

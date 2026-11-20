@@ -18,6 +18,11 @@ export const EmailRecipientSchema = z.object({
 
 /** 磁盘目标 / 新写严格 Schema（无 variants） */
 export const EmailDraftSchema = z.object({
+  selected_to: z.string().optional(),
+  outreach: z.object({
+    account_id: z.string().uuid(), review_id: z.string().uuid(), request_id: z.string().uuid(),
+    created_at: z.string(), offset: z.number().int().nonnegative(),
+  }).optional(),
   id: z.string(),
   lead_id: z.string(),
   product_id: z.string(),
@@ -44,6 +49,8 @@ export const EmailDraftSchema = z.object({
 export type EmailDraft = z.infer<typeof EmailDraftSchema>;
 
 export const EmailDraftInputSchema = EmailDraftSchema.omit({
+  outreach: true,
+  selected_to: true,
   id: true,
   created_at: true,
 }).extend({

@@ -1,6 +1,8 @@
 export type { MainViewLayout } from '../config/main-view-layout'
 
 export const IPC = {
+  MAILBOX_REVIEW_SEND: 'mailbox:review-send',
+  MAILBOX_REVIEW_RESULT: 'mailbox:review-result',
   MAILBOX_MARK_READ: 'mailbox:mark-read',
   MAILBOX_OPEN: 'mailbox:open',
   MAILBOX_COMPOSER: 'mailbox:composer',
@@ -891,6 +893,8 @@ export interface EmailVariantEditDto {
 }
 
 export interface ApproveEmailDraftInput {
+  selectedTo?: string
+  expectedVersion?: string
   productId: string
   leadId: string
   recipientKey?: string
@@ -917,6 +921,9 @@ export interface GetEmailDraftSlotInput {
 }
 
 export interface EmailDraftSlotDetailDto {
+  version?: string
+  selectedTo?: string
+  outreach?: import('../mailbox/outreach-types').OutreachBinding
   ok: boolean
   exists: boolean
   message?: string
@@ -941,6 +948,8 @@ export interface EmailDraftSlotDetailDto {
 }
 
 export interface SaveEmailDraftSlotInput {
+  selectedTo?: string
+  expectedVersion?: string
   productId: string
   leadId: string
   recipientKey: string

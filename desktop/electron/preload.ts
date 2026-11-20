@@ -101,6 +101,8 @@ import type {
 } from './ipc/types'
 
 const mailbox: import('./mailbox/types').MailboxAPI = {
+  sendReview: (ctx, account, input) => ipcRenderer.invoke(IPC.MAILBOX_REVIEW_SEND, ctx, account, input),
+  reviewResult: (ctx, account, slot, request) => ipcRenderer.invoke(IPC.MAILBOX_REVIEW_RESULT, ctx, account, slot, request),
   markRead: (ctx, account, contact, ids) => ipcRenderer.invoke(IPC.MAILBOX_MARK_READ, ctx, account, contact, ids),
   onOpen: callback => {
     const listener = (_event: unknown, target: import('./mailbox/types').MailTarget) => callback(target)

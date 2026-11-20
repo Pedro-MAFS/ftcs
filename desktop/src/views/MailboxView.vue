@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { Connection, Endpoint, MailAction, Snapshot } from '../../electron/mailbox/types'
 import { key } from '../../electron/mailbox/types'
 
 import MailConversations from '../components/mailbox/MailConversations.vue'
+const route = useRoute(), router = useRouter()
 const settingsOpen = ref(false)
 const settingsDialog = ref<HTMLDialogElement>()
 const api = window.ftcs?.mailbox
@@ -32,6 +34,14 @@ const form = ref(fresh())
 const saved = computed(() => state.value?.accounts.find((a) => key(a.email) === key(form.value.email)))
 const active = computed(() => state.value?.accounts.find((a) => a.id === state.value?.active))
 watch(settingsDialog, dialog => { if (!dialog) settingsOpen.value = false })
+watch([settingsDialog, () => route.name, () => route.query.settings], ([dialog, page, open]) => {
+  if (dialog && page === 'mailbox' && open === '1') {
+    settingsOpen.value = true
+    dialog.showModal()
+    const { settings: _, ...query } = route.query
+    void router.replace({query})
+  }
+}, {flush: 'post'})
 const presetHosts: Record<string, [string, string]> = {
   'gmail.com': ['imap.gmail.com', 'smtp.gmail.com'],
   'qq.com': ['imap.qq.com', 'smtp.qq.com'],

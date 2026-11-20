@@ -14,9 +14,28 @@ import MailComposer from './MailComposer.vue'
 import HtmlMailBody from './HtmlMailBody.vue'
 import { useVisibleMail } from './useVisibleMail'
 import { pendingMailTarget } from './mail-navigation'
+import { useMainViewTabs } from '../../composables/useMainViewTabs'
+import { useWorkspace } from '../../composables/useWorkspace'
+import type { OutreachSource } from '../../../electron/mailbox/outreach-types'
 import Icon from '../shared/Icon.vue'
 const props = defineProps<{ snapshot: Snapshot; account: string; busy: boolean; covered?: boolean }>()
 const emit=defineEmits<{ settings: []; sync: []; navigate: [] }>()
+const { openPageTab } = useMainViewTabs()
+const { products, selectProduct } = useWorkspace()
+async function viewReview(source: OutreachSource) {
+  try {
+    const product = products.value.find(p => p.id === source.product_id)
+    if (!product) throw new Error('来源产品已移除。')
+    if (!window.ftcs) return
+    const slot = await window.ftcs.getEmailDraftSlot({productId: source.product_id, leadId: source.lead_id, recipientKey: source.recipient_key})
+    if (!slot.exists || !slot.ok) throw new Error('原开发信草稿已移除。')
+    if (slot.outreach?.review_id !== source.review_id) showToast('当前草稿已有更新，已发送的原文保存在这条消息中。')
+    await leaveEditor(() => {
+      selectProduct(product.id)
+      void openPageTab('email', {leadId: source.lead_id, recipientKey: source.recipient_key})
+    })
+  } catch (e) { showToast((e as Error).message) }
+}
 const accountEmail = computed(() => props.snapshot.accounts.find((a) => a.id === props.account)?.email || '')
 const syncLabel = computed(() => {
   const folders = props.snapshot.folders
@@ -464,6 +483,10 @@ onBeforeUnmount(() => {
                     >
                     <Icon name="chevron-down" :size="12" />
                   </summary>
+                  <div v-if="m.source">
+                    来自开发信审核 · {{ products.find(p => p.id === m.source?.product_id)?.name || m.source.product_id }} · {{ m.source.lead_id }}
+                    <button type="button" class="reply-link" @click="viewReview(m.source)">查看草稿</button>
+                  </div>
                   <div v-if="m.from">发件人　{{ m.from.email }}</div>
                   <div>收件人　{{ m.to.map((a) => a.email).join('、') || '—' }}</div>
                   <div v-if="m.cc.length">抄送　{{ m.cc.map((a) => a.email).join('、') }}</div>

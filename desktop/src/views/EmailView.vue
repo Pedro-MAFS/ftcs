@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import type { Snapshot } from '../../electron/mailbox/types'
+import { reviewAddresses, type OutreachResult } from '../../electron/mailbox/outreach-types'
+import { pendingMailTarget } from '../components/mailbox/mail-navigation'
 import { SECTION_META } from '../types/workspace'
 import { useWorkspace } from '../composables/useWorkspace'
 import { useMainViewTabs } from '../composables/useMainViewTabs'
@@ -63,6 +66,58 @@ const editBody = ref('')
 const savedSubject = ref('')
 const savedBody = ref('')
 
+const draftVersion = ref('')
+const editTo = ref('')
+const savedTo = ref('')
+const mail = ref<Snapshot>()
+const requests = ref(new Map<string, string>())
+const delivery = ref<{ request: string; result?: OutreachResult }>()
+const currentKey = computed(() =>
+  JSON.stringify([activeProductId.value, selectedId.value, selectedRecipientKey.value]),
+)
+const ownRequest = computed(() => requests.value.get(currentKey.value))
+const binding = computed(() => slotDetail.value?.outreach)
+const otherAccount = computed(() => !!binding.value && binding.value.account_id !== mail.value?.active)
+const result = computed(() =>
+  !otherAccount.value && delivery.value?.request === binding.value?.request_id
+    ? delivery.value?.result
+    : undefined,
+)
+const awaitingStatus = computed(() => !!binding.value && delivery.value?.request !== binding.value.request_id)
+const waiting = computed(
+  () => !!ownRequest.value || result.value?.state === 'submitting' || result.value?.state === 'unknown',
+)
+const frozen = computed(
+  () => waiting.value || result.value?.state === 'accepted' || otherAccount.value || awaitingStatus.value,
+)
+const currentSlot = computed(
+  () =>
+    !!slotDetail.value &&
+    slotDetail.value.productId === activeProductId.value &&
+    slotDetail.value.leadId === selectedId.value &&
+    slotDetail.value.recipientKey === selectedRecipientKey.value,
+)
+const addresses = computed(() =>
+  slotDetail.value ? reviewAddresses(slotDetail.value, activePoolItem.value) : [],
+)
+const actualTo = computed(() => (addresses.value.includes(editTo.value) ? editTo.value : ''))
+const sendingAccount = computed(() => mail.value?.accounts.find((a) => a.id === mail.value?.active))
+const sendIssue = computed(() =>
+  !actualTo.value
+    ? '请选择有效的收件邮箱。'
+    : !editSubject.value.trim() || /[\r\n\0]/.test(editSubject.value)
+      ? '请填写单行邮件主题。'
+      : !editBody.value.trim()
+        ? '请填写邮件正文。'
+        : '',
+)
+const stateLabels = {
+  submitting: '发送中…',
+  accepted: '已发送',
+  failed: '发送失败',
+  unknown: '发送结果待确认',
+}
+
 const emptyStats = { total: 0, pendingReview: 0, pendingHigh: 0 }
 
 const stats = computed(() => snapshot.value?.stats ?? emptyStats)
@@ -80,12 +135,12 @@ const activePoolItem = computed(
     null,
 )
 
-const hasSlotDraft = computed(() => Boolean(slotDetail.value?.exists))
+const hasSlotDraft = computed(() => currentSlot.value && Boolean(slotDetail.value?.exists))
 
 const isDirty = computed(
   () =>
     hasSlotDraft.value &&
-    (editSubject.value !== savedSubject.value || editBody.value !== savedBody.value),
+    (editSubject.value !== savedSubject.value || editBody.value !== savedBody.value || editTo.value !== savedTo.value),
 )
 
 const isDrafting = computed(
@@ -122,7 +177,7 @@ const canReject = computed(
     !!activeProductId.value &&
     !!selected.value &&
     hasSlotDraft.value &&
-    !isBusy.value,
+    !isBusy.value && !waiting.value && !awaitingStatus.value && !otherAccount.value && currentSlot.value,
 )
 
 const canApprove = computed(
@@ -130,7 +185,7 @@ const canApprove = computed(
     !!activeProductId.value &&
     !!selected.value &&
     hasSlotDraft.value &&
-    !isBusy.value,
+    !isBusy.value && !frozen.value && currentSlot.value,
 )
 
 const canViewLead = computed(() => !!selected.value?.leadId)
@@ -141,7 +196,7 @@ const canSave = computed(
     !!selected.value &&
     hasSlotDraft.value &&
     isDirty.value &&
-    !isBusy.value,
+    !isBusy.value && !frozen.value && currentSlot.value,
 )
 
 const canSlotDraft = computed(
@@ -149,7 +204,7 @@ const canSlotDraft = computed(
     !!activeProductId.value &&
     !!selected.value &&
     !!selectedRecipientKey.value &&
-    !isBusy.value,
+    !isBusy.value && !waiting.value && !awaitingStatus.value && !otherAccount.value,
 )
 
 const canGenerateZh = computed(
@@ -233,6 +288,8 @@ function routeRecipientKey(): string {
 }
 
 function clearEdits(): void {
+  draftVersion.value = ''
+  editTo.value = savedTo.value = ''
   editLeadId.value = ''
   editRecipientKey.value = ''
   editSubject.value = ''
@@ -245,13 +302,15 @@ function clearEdits(): void {
 function hydrateFromSlot(detail: EmailDraftSlotDetailDto, force: boolean): void {
   // 与旧版一致：同 lead+槽 且非强制时不覆盖编辑区，避免轮询把输入框「闪」掉
   if (
-    !force &&
+    !force && (isDirty.value || draftVersion.value === detail.version) &&
     editLeadId.value === detail.leadId &&
     editRecipientKey.value === detail.recipientKey
   ) {
     slotDetail.value = detail
     return
   }
+  draftVersion.value = detail.version ?? ''
+  editTo.value = savedTo.value = detail.selectedTo ?? reviewAddresses(detail, activePoolItem.value)[0] ?? ''
   editLeadId.value = detail.leadId
   editRecipientKey.value = detail.recipientKey
   if (detail.exists) {
@@ -335,6 +394,7 @@ async function selectLead(
 ): Promise<void> {
   selectedId.value = leadId
   const key = await loadRecipientPool(leadId)
+  if (selectedId.value !== leadId) return
   selectedRecipientKey.value = key
   await loadCurrentSlot({
     force: options?.forceSlot !== false,
@@ -361,6 +421,7 @@ async function confirmDiscardForLeadOrRecipient(): Promise<void> {
   const pending = pendingRecipientKey.value
   discardConfirmOpen.value = false
   pendingRecipientKey.value = ''
+  clearEdits()
   if (pending.startsWith('__lead__:')) {
     await selectLead(pending.slice('__lead__:'.length), { forceSlot: true })
     return
@@ -458,6 +519,7 @@ async function refreshEmail(): Promise<void> {
     const hasEdits = isDirty.value
     if (hasEdits) actionMessage.value = '未保存的修改会保留'
     await refreshDrafts({ soft: true, forceHydrate: !hasEdits })
+    await refreshMail()
   } finally {
     refreshing.value = false
   }
@@ -548,16 +610,20 @@ async function onSave(): Promise<void> {
   }
   saving.value = true
   actionMessage.value = ''
+  const target = currentKey.value
   try {
     const res = await window.ftcs.saveEmailDraftSlot({
       productId: activeProductId.value,
       leadId: selected.value.leadId,
       recipientKey: selectedRecipientKey.value,
+      selectedTo: editTo.value, expectedVersion: draftVersion.value,
       subject: editSubject.value,
       body: editBody.value,
     })
+    if (target !== currentKey.value) return
     actionMessage.value = res.message
     if (res.ok) {
+      savedTo.value = editTo.value
       savedSubject.value = editSubject.value
       savedBody.value = editBody.value
       await refreshDrafts({ soft: true })
@@ -629,49 +695,118 @@ function chipSecondary(item: EmailRecipientPoolItemDto): string {
   return item.email || ''
 }
 
-const COMPANY_TO_VISIBLE = 2
-
-const toEmails = computed((): string[] => {
-  const seen = new Set<string>()
-  const out: string[] = []
-  const push = (raw: string | null | undefined) => {
-    const email = (raw || '').trim().toLowerCase()
-    if (!email || seen.has(email)) return
-    seen.add(email)
-    out.push(email)
+let mailSeq = 0
+let stopMail: (() => void) | undefined
+async function refreshMail() {
+  const api = window.ftcs?.mailbox
+  if (!api || !window.ftcs) return
+  const seq = ++mailSeq
+  try {
+    const state = await api.snapshot()
+    if (seq !== mailSeq) return
+    if (mail.value && state.context.root !== mail.value.context.root) {
+      clearEdits()
+      mail.value = state
+      await refreshDrafts({ forceHydrate: true })
+      return
+    }
+    mail.value = state
+    if (!currentSlot.value || !slotDetail.value?.exists) return
+    const slot = {
+      productId: activeProductId.value!,
+      leadId: selectedId.value,
+      recipientKey: selectedRecipientKey.value,
+    }
+    const target = currentKey.value
+    const detail = await window.ftcs.getEmailDraftSlot(slot)
+    if (seq !== mailSeq || target !== currentKey.value || !detail.ok) return
+    const ours = detail.outreach && ownRequest.value === detail.outreach.request_id
+    hydrateFromSlot(detail, !!ours)
+    const b = detail.outreach
+    if (!b || b.account_id !== state.active) {
+      delivery.value = undefined
+      return
+    }
+    const status = await api.reviewResult({ ...state.context }, b.account_id, slot, b.request_id)
+    if (seq === mailSeq && target === currentKey.value)
+      delivery.value = { request: b.request_id, result: status }
+  } catch (e) {
+    if (seq === mailSeq) actionMessage.value = String(e)
   }
+}
+function listenMail() {
+  if (stopMail || !window.ftcs?.mailbox) return
+  stopMail = window.ftcs.mailbox.changed(refreshMail)
+  void refreshMail()
+}
+function leaveMail() {
+  stopMail?.()
+  stopMail = undefined
+  mailSeq++
+}
+watch([currentKey, currentSlot, () => binding.value?.request_id], () => {
+  if (stopMail) void refreshMail()
+})
+onMounted(listenMail)
+onActivated(listenMail)
+onDeactivated(leaveMail)
+onUnmounted(leaveMail)
 
-  if (activePoolItem.value?.kind === 'company') {
-    for (const e of activePoolItem.value.emails ?? []) push(e)
-    push(slotDetail.value?.email)
-    for (const a of slotDetail.value?.recipientAliases ?? []) push(a)
-    push(activePoolItem.value.email)
-    return out
+async function sendReviewed() {
+  const state = mail.value
+  if (!window.ftcs || !state?.active || !canApprove.value || sendIssue.value) return
+  const target = currentKey.value
+  const request = crypto.randomUUID()
+  requests.value.set(target, request)
+  try {
+    await window.ftcs.mailbox.sendReview({ ...state.context }, state.active, {
+      productId: activeProductId.value!,
+      leadId: selectedId.value,
+      recipientKey: selectedRecipientKey.value,
+      version: draftVersion.value,
+      request,
+      to: actualTo.value,
+      subject: editSubject.value.trim(),
+      body: editBody.value,
+    })
+  } catch (e) {
+    actionMessage.value = (e as Error).message
+  } finally {
+    try {
+      if (target === currentKey.value) await refreshMail()
+      await refreshDrafts({ soft: true })
+    } finally {
+      requests.value.delete(target)
+    }
   }
-
-  push(slotDetail.value?.email)
-  push(activePoolItem.value?.email)
-  return out
-})
-
-const toEmailsTitle = computed(() =>
-  toEmails.value.length > COMPANY_TO_VISIBLE ? toEmails.value.join('\n') : '',
-)
-
-const toEmailsSummary = computed(() => {
-  const list = toEmails.value
-  if (list.length === 0) {
-    return activePoolItem.value?.kind === 'company' ? '（无通用邮箱）' : '—'
+}
+async function inspectSent() {
+  const state = mail.value
+  if (!window.ftcs || !state?.active || state.active !== binding.value?.account_id) return
+  try {
+    if (!state.folders.some((f) => f.role === 'sent' && f.path)) {
+      await openPageTab('mailbox', { settings: '1' })
+      return
+    }
+    await window.ftcs.mailbox.act({ ...state.context }, { kind: 'retry' })
+    await refreshMail()
+  } catch (e) {
+    actionMessage.value = String(e)
   }
-  if (list.length <= COMPANY_TO_VISIBLE) return list.join(', ')
-  const head = list.slice(0, COMPANY_TO_VISIBLE).join(', ')
-  return `${head}`
-})
-
-const toEmailsMoreCount = computed(() => {
-  const n = toEmails.value.length - COMPANY_TO_VISIBLE
-  return n > 0 ? n : 0
-})
+}
+async function viewCorrespondence() {
+  const state = mail.value,
+    item = result.value
+  if (!state?.active || item?.state !== 'accepted') return
+  const target = {
+    context: { ...state.context },
+    account: state.active,
+    contact: item.contact,
+    message: item.message,
+  }
+  await openPageTab('mailbox')
+  pendingMailTarget.value = target
+}
 
 function openRejectConfirm(): void {
   if (!canReject.value) return
@@ -755,19 +890,23 @@ async function onApprove(): Promise<void> {
   }
   approving.value = true
   actionMessage.value = ''
+  const target = currentKey.value
   try {
     const res = await window.ftcs.approveEmailDraft({
       productId: activeProductId.value,
       leadId: selected.value.leadId,
       recipientKey: selectedRecipientKey.value,
+      selectedTo: editTo.value, expectedVersion: draftVersion.value,
       subject: editSubject.value,
       body: editBody.value,
     })
+    if (target !== currentKey.value) return
     actionMessage.value = res.message
     if (res.ok) {
+      savedTo.value = editTo.value
       savedSubject.value = editSubject.value
       savedBody.value = editBody.value
-      await refreshDrafts({ forceHydrate: true })
+      await refreshDrafts({ soft: true, forceHydrate: true })
     }
   } catch (err) {
     actionMessage.value = err instanceof Error ? err.message : String(err)
@@ -823,7 +962,7 @@ watch(
       typeof route.query.recipientKey === 'string' ? route.query.recipientKey : ''
     }`,
   (next, prev) => {
-    if (next === prev) return
+    if (next === prev || route.name !== 'email' || (!routeLeadId() && isDirty.value)) return
     void refreshDrafts({ forceHydrate: true })
   },
 )
@@ -912,6 +1051,7 @@ onMounted(() => {
         <button
           type="button"
           class="btn-secondary"
+          v-if="slotDetail?.status !== 'approved'"
           :disabled="!canApprove"
           title="通过并保存当前收件人草稿（不发送）"
           @click="onApprove"
@@ -919,6 +1059,16 @@ onMounted(() => {
           <Icon name="check" :size="12" />
           {{ approving ? '保存中…' : '通过' }}
         </button>
+        <template v-if="currentSlot && hasSlotDraft">
+          <button v-if="result?.state === 'accepted'" class="btn-primary" @click="viewCorrespondence">查看往来</button>
+          <button v-else-if="result?.state === 'unknown'" class="btn-secondary" :disabled="mail?.running" @click="inspectSent">
+            {{ mail?.running ? '正在同步…' : '检查已发送邮件' }}
+          </button>
+          <button v-else-if="mail && !mail.active" class="btn-secondary" @click="openPageTab('mailbox')">连接工作区邮箱</button>
+          <button v-else-if="!otherAccount" class="btn-primary" :disabled="!mail?.active || !canApprove || !!sendIssue" @click="sendReviewed">
+            {{ waiting ? '发送中…' : result?.state === 'failed' ? '重新发送' : slotDetail?.status === 'approved' ? '发送' : '通过并发送' }}
+          </button>
+        </template>
       </div>
     </header>
 
@@ -993,20 +1143,37 @@ onMounted(() => {
         </p>
 
         <template v-if="hasSlotDraft">
+          <p v-if="otherAccount" role="status">此发送记录属于原邮箱，请重新连接原邮箱查看。</p>
+          <p v-else-if="result" role="status">
+            已通过 · {{ stateLabels[result.state] }} · {{ result.from }} · {{ new Date(result.at).toLocaleString() }}
+            <span v-if="result.detail">{{ result.detail }}</span>
+            <template v-if="result.state === 'unknown'">
+              {{ mail?.folders.find(f => f.role === 'sent')?.error || '若同步后仍待确认，请到网页邮箱核对已发送邮件。' }}
+            </template>
+          </p>
+          <p v-else-if="slotDetail?.status === 'approved'" role="status">已通过 · {{ awaitingStatus ? '正在读取发送记录…' : '尚未发送' }}</p>
+          <p v-if="!frozen && sendIssue" class="muted">{{ sendIssue }}</p>
+          <details v-if="isDirty && draftVersion !== slotDetail?.version && slotDetail">
+            <summary>草稿已在其他位置更新，请核对新版</summary>
+            <strong>{{ slotDetail.subject }}</strong><pre>{{ slotDetail.body }}</pre>
+            <button type="button" @click="hydrateFromSlot(slotDetail, true)">载入新版</button>
+            <button type="button" @click="draftVersion = slotDetail.version || ''">保留我的编辑</button>
+          </details>
           <dl class="email-preview__fields">
             <div class="email-preview__field email-preview__field--to-company">
               <div class="email-preview__meta-block email-preview__meta-block--to">
-                <dt>To</dt>
-                <dd
-                  class="email-preview__to"
-                  :class="{ 'has-more': toEmailsMoreCount > 0 }"
-                  :title="toEmailsTitle || toEmailsSummary || undefined"
-                >
-                  <span class="email-preview__to-text">{{ toEmailsSummary }}</span>
-                  <span v-if="toEmailsMoreCount > 0" class="email-preview__to-more">
-                    +{{ toEmailsMoreCount }}
-                  </span>
+                <dt>发件邮箱</dt><dd>{{ sendingAccount?.email || '尚未连接工作区邮箱' }}</dd>
+              </div>
+              <div class="email-preview__meta-block">
+                <dt><label for="review-to">收件邮箱</label></dt>
+                <dd v-if="frozen && slotDetail?.selectedTo">{{ slotDetail.selectedTo }}</dd>
+                <dd v-else-if="addresses.length > 1 || (addresses.length && !actualTo)">
+                  <select id="review-to" v-model="editTo" :disabled="isBusy || frozen">
+                    <option v-if="!actualTo" :value="editTo" disabled>请选择收件邮箱</option>
+                    <option v-for="address in addresses" :key="address" :value="address">{{ address }}</option>
+                  </select>
                 </dd>
+                <dd v-else>{{ actualTo || '暂无有效邮箱' }}</dd>
               </div>
               <div class="email-preview__meta-block email-preview__meta-block--company">
                 <dt>Company</dt>
@@ -1025,7 +1192,7 @@ onMounted(() => {
                   v-model="editSubject"
                   type="text"
                   class="email-preview__input"
-                  :disabled="isBusy"
+                  :disabled="isBusy || frozen"
                   placeholder="邮件主题"
                 />
               </dd>
@@ -1036,7 +1203,7 @@ onMounted(() => {
             <textarea
               v-model="editBody"
               class="email-preview__textarea"
-              :disabled="isBusy"
+              :disabled="isBusy || frozen"
               placeholder="邮件正文"
               spellcheck="false"
             />

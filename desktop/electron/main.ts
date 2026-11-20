@@ -1,4 +1,6 @@
 import { openAttachment, saveAttachment } from './mailbox/attachments'
+import { withEmailDraftWrite } from '../../workspace/mcp-servers/lead-store/src/outreach-binding'
+import { approveForDelivery } from './emails/outreach-review'
 import { MailboxService } from './mailbox/service'
 import { safeStorage } from 'electron'
 import { mailNotifications } from './notify/mail-notifications'
@@ -737,6 +739,14 @@ function registerIpcHandlers(): void {
     if (!mainWindow || e.sender !== mainWindow.webContents || e.senderFrame !== e.sender.mainFrame)
       throw new Error('邮箱仅允许从工作区窗口访问。')
   }
+  ipcMain.handle(IPC.MAILBOX_REVIEW_SEND, (event, ctx, account, input) => {
+    checkMailboxSender(event)
+    return mailbox.sendReview(ctx, account, input, approveForDelivery)
+  })
+  ipcMain.handle(IPC.MAILBOX_REVIEW_RESULT, (event, ctx, account, slot, request) => {
+    checkMailboxSender(event)
+    return mailbox.reviewResult(ctx, account, slot, request)
+  })
   ipcMain.handle(IPC.MAILBOX_TEMP_DRAFTS, (event, ctx, account) => {
     checkMailboxSender(event)
     return mailbox.temporaryDrafts(ctx, account)
@@ -1921,7 +1931,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.EMAIL_DRAFT_SAVE, (_event, input: SaveEmailDraftSlotInput) => {
     try {
-      return saveEmailDraftSlot(input, getWorkspaceRoot())
+      const root = getWorkspaceRoot()
+      return withEmailDraftWrite(root, input.leadId, () => saveEmailDraftSlot(input, root))
     } catch (err) {
       return {
         ok: false,
@@ -1951,7 +1962,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.EMAIL_DRAFT_REJECT, (_event, input: RejectEmailDraftInput) => {
     try {
-      return rejectEmailDraft(input, getWorkspaceRoot())
+      const root = getWorkspaceRoot()
+      return withEmailDraftWrite(root, input.leadId, () => rejectEmailDraft(input, root))
     } catch (err) {
       return {
         ok: false,
@@ -1962,7 +1974,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.EMAIL_DRAFT_APPROVE, (_event, input: ApproveEmailDraftInput) => {
     try {
-      return approveEmailDraft(input, getWorkspaceRoot())
+      const root = getWorkspaceRoot()
+      return withEmailDraftWrite(root, input.leadId, () => approveEmailDraft(input, root))
     } catch (err) {
       return {
         ok: false,

@@ -19,6 +19,8 @@ import {
 import { localAttachment } from './attachments'
 import { composeBody } from './html-body'
 
+import type { OutreachSource, OutreachResult, ReviewSend, ReviewSlot } from './outreach-types'
+
 interface Attempt extends SendResult {
   attempt_id: string
   request_id: string
@@ -27,6 +29,7 @@ interface Attempt extends SendResult {
   created_at: string
   rev: number
   snapshot: Draft
+  source?: OutreachSource
   from: string
   in_reply_to?: string
   references: string[]
@@ -317,7 +320,11 @@ export class ComposerStore {
     this.index.deliveryChanged(a.message_id)
     if (result.copy_internet_id) this.indexCopyId(a)
   }
+  private contactFor(a: AttemptEntry) {
+    return a.contact || (a.contact = this.index.ensureContact({email: a.email}))
+  }
   private publish(a: AttemptEntry) {
+    const contact = this.contactFor(a)
     if (!this.index.hasMessage(a.message_id)) {
       const d = readAt<Attempt>(a.position).snapshot
       const now = new Date().toISOString()
@@ -325,6 +332,7 @@ export class ComposerStore {
         message_id: a.message_id,
         internet_message_id: a.internet_message_id,
         ftcs_send_id: a.attempt_id,
+        source: a.source,
         direction: 'outgoing',
         occurred_at: a.created_at,
         ingested_at: now,
@@ -338,10 +346,11 @@ export class ComposerStore {
         references: a.references,
         quoted_message_id: d.quoted_message_id,
         attachments: d.attachments,
-        conversation_contact_ids: [d.contact_id],
+        conversation_contact_ids: [contact],
       }
       this.index.message(row, append(path.join(this.dir, 'messages', now.slice(0, 7) + '.jsonl'), row))
     }
+    if (a.source) return
     const old = this.drafts.get(a.contact)
     if (old?.draft_id === a.draft && old.rev === a.draftRev) {
       fs.rmSync(this.draftPath(a.contact), { force: true })
@@ -360,7 +369,7 @@ export class ComposerStore {
     const prior = this.attempts.get(action.request) ?? this.latest.get(action.version.draft_id)
     if (
       prior &&
-      (key(prior.email) !== key(email) ||
+      (prior.source || key(prior.email) !== key(email) ||
         prior.draft !== action.version.draft_id ||
         (prior.request_id === action.request && prior.draftRev !== action.version.rev))
     )
@@ -393,18 +402,97 @@ export class ComposerStore {
       filename: f.filename,
       path: localAttachment(this.dir, f).content,
     }))
+    return this.submitSnapshot({ ...d, ...fields }, self, action.request, { references, parent: references.length ? parent : undefined }, files, submit, guard, notify)
+  }
+
+  outreachResult(request: string, slot: ReviewSlot): OutreachResult | undefined {
+    const a = this.attempts.get(request)
+    if (!a) return
+    if (
+      a.source?.product_id !== slot.productId ||
+      a.source.lead_id !== slot.leadId ||
+      a.source.recipient_key !== slot.recipientKey
+    )
+      throw new Error('发送记录与当前开发信不一致。')
+    if (a.state === 'accepted' && !this.index.hasMessage(a.message_id)) this.publish(a)
+    return { ...status(a)!, contact: a.contact, message: a.message_id, at: a.created_at, from: a.from }
+  }
+  sameReview(request: string, edit: ReviewSend) {
+    const a = this.attempts.get(request)
+    if (!a) return false
+    const d = readAt<Attempt>(a.position).snapshot
+    return d.email === edit.to && d.subject === edit.subject && d.text_body === edit.body
+  }
+  async sendOutreach(
+    edit: ReviewSend,
+    review: string,
+    created: string,
+    self: string,
+    submit: SubmitMail,
+    guard: () => void,
+    notify: () => void,
+  ) {
+    const draft: Draft = {
+      mode: 'new',
+      draft_id: review,
+      rev: 1,
+      contact_id: this.index.contacts.get(key(edit.to)) ?? '',
+      subject: edit.subject,
+      subject_mode: 'manual',
+      text_body: edit.body,
+      email: edit.to,
+      to: [{ email: edit.to }],
+      cc: [],
+      attachments: [],
+      updated_at: created,
+    }
+    const source: OutreachSource = {
+      kind: 'outreach',
+      review_id: review,
+      product_id: edit.productId,
+      lead_id: edit.leadId,
+      recipient_key: edit.recipientKey,
+    }
+    await this.submitSnapshot(
+      draft,
+      self,
+      edit.request,
+      { references: [] },
+      [],
+      submit,
+      guard,
+      notify,
+      source,
+      created,
+    )
+    guard()
+    return this.outreachResult(edit.request, edit)!
+  }
+  private async submitSnapshot(
+    snapshot: Draft,
+    self: string,
+    request: string,
+    thread: { references: string[]; parent?: string },
+    files: Parameters<SubmitMail>[1],
+    submit: SubmitMail,
+    guard: () => void,
+    notify: () => void,
+    source?: OutreachSource,
+    created = new Date().toISOString(),
+  ) {
     const a: Attempt = {
-      request_id: action.request,
+      request_id: request,
       attempt_id: randomUUID(),
       message_id: randomUUID(),
       internet_message_id: '<' + randomUUID() + '@' + self.split('@')[1] + '>',
       rev: 1,
-      created_at: new Date().toISOString(),
+      created_at: created,
       state: 'submitting',
-      snapshot: { ...d, ...fields },
+      snapshot,
+      source,
       from: self,
-      references,
-      in_reply_to: references.length ? parent : undefined,
+      references: thread.references,
+      in_reply_to: thread.parent,
     }
     const entry = this.remember(a, append(this.logPath(a), a))
     notify()
@@ -431,13 +519,14 @@ export class ComposerStore {
     notify()
     return status(entry)!
   }
+
   matchCopy(id: string | undefined, marker: unknown) {
     const marked = typeof marker === 'string' ? this.byAttemptId.get(marker.trim()) : undefined
     const alias = id && this.copiedMessage(id)
     return marked ?? this.byInternetId.get(id ?? '') ?? (alias ? this.byMessage.get(alias) : undefined)
   }
   copyContext(a: AttemptEntry) {
-    return { contact: a.contact, quoted: readAt<Attempt>(a.position).snapshot.quoted_message_id }
+    return { source: a.source, contact: this.contactFor(a), quoted: readAt<Attempt>(a.position).snapshot.quoted_message_id }
   }
   restoreCopy(a: AttemptEntry, id?: string) {
     a.copy_seen = true

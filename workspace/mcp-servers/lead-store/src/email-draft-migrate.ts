@@ -139,6 +139,8 @@ export function buildMigratedDraft(
     status,
     language: asString(raw.language) || "en",
     audience,
+    selected_to: raw.selected_to,
+    outreach: raw.outreach,
     recipient: normalizeRecipient(raw.recipient),
     subject: picked.subject,
     body: picked.body,

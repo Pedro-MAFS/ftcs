@@ -1,4 +1,5 @@
 import type { ComposerAction, ComposerView, QuoteSource, SendResult } from './compose-types'
+import type { ReviewSlot, ReviewSend, OutreachResult } from './outreach-types'
 export type FolderRole = 'inbox' | 'sent'
 export type Mode = 'last_30_days' | 'from_connection'
 export interface Endpoint {
@@ -100,6 +101,7 @@ export interface ReplyTarget {
   subject: string
 }
 export interface MessageView extends TimelineCursor {
+  source?: import('./outreach-types').OutreachSource
   unread?: boolean
   outgoing: boolean
   subject: string
@@ -121,6 +123,8 @@ export interface TimelinePage {
 }
 export type AttachmentAction = 'open' | 'save'
 export interface MailboxAPI {
+  reviewResult(ctx: Context, account: string, slot: ReviewSlot, request: string): Promise<OutreachResult | undefined>
+  sendReview(ctx: Context, account: string, input: ReviewSend): Promise<OutreachResult>
   markRead(ctx: Context, account: string, contact: string, ids: string[]): Promise<void>
   onOpen(callback: (target: MailTarget) => void): () => void
   composer(ctx: Context, account: string, email: string, action: ComposerAction): Promise<ComposerView>
