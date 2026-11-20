@@ -394,7 +394,6 @@ onBeforeUnmount(() => {
           </div>
           <article :data-message="m.id" :data-unread="!!m.unread" tabindex="-1" :class="{ out: m.outgoing, highlighted: highlighted === m.id }">
             <div class="byline">
-              <span v-if="m.unread" class="unread-dot" aria-label="未读" title="未读"></span>
               {{ m.outgoing ? '我' : m.from?.name || m.from?.email || '发件人' }} · {{ clock(m.at) }}
             </div>
             <div class="bubble">
@@ -454,6 +453,9 @@ onBeforeUnmount(() => {
                   :disabled="pendingAttachments.has(m.id + ':' + i)" @click="handleAttachment(m.id, i, 'save')"
                 >另存为</button>
                 <small v-else>本地不可用</small>
+              </div>
+              <div v-if="!m.outgoing && m.unread !== undefined" class="read-state">
+                {{ m.unread ? '未读' : '已读' }}
               </div>
             </div>
           </article>
@@ -739,13 +741,24 @@ main header strong {
 .older {
   font-size: 12px;
 }
-.unread-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  background: var(--soft-blue);
+.read-state {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+article[data-unread='true'] .read-state {
+  color: var(--soft-blue);
+}
+article[data-unread='true'] .read-state::before {
+  content: '';
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  vertical-align: middle;
+  background: currentColor;
 }
 .byline {
   margin-bottom: 7px;
