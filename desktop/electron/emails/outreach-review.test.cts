@@ -12,7 +12,7 @@ import { MailboxService } from '../mailbox/service'
 import { importFolder } from '../mailbox/import'
 import type { SubmitMail } from '../mailbox/composer-store'
 import type { ReviewSend } from '../mailbox/outreach-types'
-import { getEmailDraftSlot } from './emails-reader'
+import { getEmailDraftSlot, recipientKeyFromEmail } from './emails-reader'
 import { approveForDelivery } from './outreach-review'
 import { approveEmailDraft, rejectEmailDraft, saveEmailDraftSlot } from './emails-writer'
 import {
@@ -140,6 +140,10 @@ test('单次审核发送冻结选中地址和原文；双击、两产品消息�
   finish()
   const accepted = await pending
   assert.equal(accepted?.state, 'accepted')
+  const [recipient] = await service.conversations(ctx, account)
+  assert.equal(recipient.id, saved.draft.contact_id)
+  assert.equal(recipient.company, 'Example')
+  assert.equal(recipient.title, undefined)
   assert.equal((await send(edit))?.message, accepted.message)
   assert.equal(submits, 1)
   const second = await send(draft('p2').edit())
@@ -151,6 +155,42 @@ test('单次审核发送冻结选中地址和原文；双击、两产品消息�
     saved.draft.draft_id,
   )
   assert.equal(submits, 2)
+})
+
+test('新会话按审核收件地址带入姓名、公司和职位；公司别名和已有会话分别保留自己的资料', async (t) => {
+  const { root, service, account, ctx, draft, send } = await setup(t, async () => ({ state: 'accepted' }))
+  const address = 'jane@example.test'
+  function prepareLead(product: string, company: string, title: string) {
+    const item = draft(product)
+    const { leadId, productId } = item.slot
+    write(path.join(root, 'data', 'leads', productId, 'scored.json'), {
+      leads: [{ id: leadId, company: { name: company }, people: [
+        { email: address.toUpperCase(), name: 'Jane Smith', first_name: 'Jane', title },
+        { email: primary, name: 'Pat', title: 'Sales' },
+      ] }],
+    })
+    const recipientKey = recipientKeyFromEmail(address)!
+    write(path.join(root, 'data', 'emails', leadId, recipientKey, 'draft.json'), {
+      ...item.raw, audience: 'person', recipient: { email: address, name: 'Jane' },
+    })
+    const slot = getEmailDraftSlot(productId, leadId, recipientKey, root)
+    return { person: { ...item.edit(), recipientKey, to: address, version: slot.version! }, company: item.edit() }
+  }
+  const first = prepareLead('p1', 'Northwind', 'Purchasing Director')
+  await send(first.person)
+  await send(first.company)
+  const [person, alias] = (await service.conversations(ctx, account)).sort((a, b) => a.email.localeCompare(b.email))
+  assert.deepEqual([person.email, person.name, person.company, person.title],
+    [address, 'Jane Smith', 'Northwind', 'Purchasing Director'])
+  assert.deepEqual([alias.email, alias.name, alias.company, alias.title], [to, undefined, 'Northwind', undefined])
+
+  await send(prepareLead('p2', 'Other Company', 'Buyer').person)
+  service.stop()
+  const dir = path.join(root, 'data', 'mail', 'accounts', account)
+  const reopened = await ImportIndex.load(dir, () => {})
+  const same = reopened.conversations(newFolder('inbox', 'INBOX')).find((c) => c.id === person.id)!
+  assert.deepEqual([same.company, same.title, same.count], ['Northwind', 'Purchasing Director', 2])
+  assert.equal(fs.readFileSync(path.join(dir, 'contacts.jsonl'), 'utf8').trim().split('\n').length, 2)
 })
 
 test('明确失败可改投；未确认、切换账号、旧版页面和非法地址不会重复投递', async (t) => {
@@ -231,6 +271,7 @@ test('恢复中断提交并以服务器副本核对，保留来源和消息定�
   const recovered = await ImportIndex.load(dir, () => {})
   const result = recovered.composer.outreachResult(edit.request, edit)!
   assert.equal(result.state, 'accepted')
+  assert.equal(recovered.conversations(newFolder('inbox', 'INBOX'))[0].company, 'Example')
   assert.equal(result.message, pending.message)
   const [message] = (await recovered.timeline(result.contact, undefined, () => {}, result.message)).messages
   assert.equal(recovered.count, 1)

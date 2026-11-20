@@ -9,7 +9,7 @@ import { readableHtml } from './html-body'
 import { splitQuotedText } from './reply-quote'
 import { compile } from 'html-to-text'
 import { append, eachLine, readAt, type Position } from './storage'
-import type { Conversation, Folder, MailAddress, TimelineCursor, TimelinePage, MessageView } from './types'
+import type { Conversation, Folder, MailAddress, MailContactProfile, TimelineCursor, TimelinePage, MessageView } from './types'
 
 interface ContactRow {
   contact_id: string
@@ -18,6 +18,7 @@ interface ContactRow {
   pinned?: boolean
   display_name?: string
   company?: string
+  title?: string
   rev: number
 }
 export interface MessageRow {
@@ -113,22 +114,27 @@ export class ImportIndex {
   hasConversation(contact: string) {
     return this.byContact.has(contact)
   }
-  ensureContact(peer: MailAddress) {
+  ensureContact(peer: MailAddress, profile?: MailContactProfile) {
     const address = key(peer.email)
-    let id = this.contacts.get(address)
-    if (!id) {
-      id = randomUUID()
-      const contact = {
-        contact_id: id,
-        address_key: address,
-        email: peer.email,
-        display_name: peer.name,
-        updated_at: new Date().toISOString(),
-        rev: 1,
-      }
-      append(path.join(this.dir, 'contacts.jsonl'), contact)
-      this.contact(contact)
+    const id = this.contacts.get(address) ?? randomUUID()
+    const old = this.people.get(id)
+    // A private draft may already own this ID before the first mail creates a conversation.
+    if (old && (!profile || this.hasConversation(id))) return id
+    const contact = {
+      ...old,
+      contact_id: id,
+      address_key: address,
+      email: old?.email ?? peer.email,
+      display_name: old?.display_name || profile?.name || peer.name,
+      company: old?.company || profile?.company,
+      title: old?.title || profile?.title,
+      updated_at: new Date().toISOString(),
+      rev: (old?.rev ?? 0) + 1,
     }
+    if (old && old.display_name === contact.display_name && old.company === contact.company && old.title === contact.title)
+      return id
+    append(path.join(this.dir, 'contacts.jsonl'), contact)
+    this.contact(contact)
     return id
   }
   setPinned(id: string, pinned: boolean) {
@@ -370,6 +376,7 @@ export class ImportIndex {
         name: person.display_name,
         pinned: person.pinned ?? false,
         company: person.company,
+        title: person.title,
         lastAt: last.at,
         lastId: last.id,
         revision: this.revisions.get(id),

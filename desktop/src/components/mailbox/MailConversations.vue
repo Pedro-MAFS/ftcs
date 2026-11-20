@@ -70,6 +70,10 @@ const contacts = ref<Conversation[]>([]),
   selected = ref(''),
   temporary = ref('')
 const current = computed(() => contacts.value.find((c) => c.id === selected.value))
+const contactSubtitle = computed(() => {
+  const c = current.value
+  return c ? [c.company, c.title, c.name && c.email].filter(Boolean).join(' · ') : ''
+})
 const editor=ref<InstanceType<typeof MailComposer>>()
 async function leaveEditor(next:()=>void) {
   try {await editor.value?.flush()} catch {return}
@@ -462,10 +466,8 @@ onBeforeUnmount(() => {
     <main>
       <header v-if="current || temporary">
         <div>
-          <strong>{{ current?.name || current?.email || temporary }}</strong
-          ><small>{{
-            [current?.name && current?.email, current?.company].filter(Boolean).join(' · ')
-          }}</small>
+          <strong>{{ current?.name || current?.email || temporary }}</strong>
+          <small v-if="contactSubtitle" :title="contactSubtitle">{{ contactSubtitle }}</small>
         </div>
         <button v-if="originalPage" class="return-latest" @click="load('open')">返回最新邮件</button>
       </header>

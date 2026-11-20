@@ -73,13 +73,16 @@ export type MailAction =
   | { kind: 'notifications'; account: string; enabled: boolean }
   | { kind: 'disconnect' }
   | { kind: 'delete'; id: string }
-export interface Conversation {
+export interface MailContactProfile {
+  name?: string
+  company?: string
+  title?: string
+}
+export interface Conversation extends MailContactProfile {
   pinned: boolean
   revision?: number
   id: string
   email: string
-  name?: string
-  company?: string
   preview: string
   draftPreview?: string
   lastAt: string

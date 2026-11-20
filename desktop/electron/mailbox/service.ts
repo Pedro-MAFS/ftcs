@@ -126,7 +126,7 @@ export class MailboxService {
     guard()
     // No await between checking the reviewed version, binding it and journaling submission.
     const response = await withEmailDraftWrite(ctx.root, edit.leadId, () => {
-      const { binding, result } = prepare(ctx.root, id, edit, index.composer)
+      const { binding, result, source } = prepare(ctx.root, id, edit, index.composer)
       if (result) return result
       this.notify()
       const account = read<Account>(path.join(accountDir(this.base(), id), 'account.json'))
@@ -134,7 +134,7 @@ export class MailboxService {
       // sendOutreach journals synchronously, then yields for the SMTP response.
       return index.composer.sendOutreach(
         edit,
-        binding.review_id,
+        source,
         binding.created_at,
         account.email,
         submit,

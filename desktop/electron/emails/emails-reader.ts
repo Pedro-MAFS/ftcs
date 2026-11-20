@@ -3,6 +3,7 @@ import { reviewVersion } from './emails-writer'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { getWorkspaceRoot } from '../config/paths'
+import type { MailContactProfile } from '../mailbox/types'
 import {
   buildEmailRecipientPool,
   pickDefaultRecipientKey,
@@ -237,7 +238,7 @@ function loadScoredLeadMap(
       }
       map.set(id, {
         id,
-        companyName: asString(company.name) || id,
+        companyName: asString(company.name),
         tier: asString(raw.tier),
         status: asString(raw.status) || 'new',
         score: asNumber(raw.score),
@@ -654,7 +655,7 @@ export function buildEmailLeadStub(
     createdAt: '',
     status: 'pending_review',
     language: 'en',
-    companyName: lead.companyName,
+    companyName: lead.companyName || lead.id,
     recipientEmail: lead.email || '',
     tier: lead.tier || '',
     leadStatus: lead.status || '',
@@ -735,6 +736,7 @@ export function listEmailDraftsSnapshot(
 }
 
 export type EmailDraftSlotDetail = {
+  recipientProfile?: MailContactProfile
   version?: string
   selectedTo?: string
   outreach?: import('../mailbox/outreach-types').OutreachBinding
@@ -766,6 +768,7 @@ export function getEmailDraftSlot(
   leadId: string,
   recipientKey: string,
   workspaceRoot = getWorkspaceRoot(),
+  selectedEmail?: string,
 ): EmailDraftSlotDetail {
   const pid = productId.trim()
   const lid = leadId.trim()
@@ -836,8 +839,22 @@ export function getEmailDraftSlot(
   const bodyZh = asString(parsed.raw.body_zh) || null
   const zhSourceHash = asString(parsed.raw.zh_source_hash) || null
 
+  let recipientProfile: MailContactProfile | undefined
+  if (selectedEmail) {
+    const address = normalizeEmail(selectedEmail)
+    const person = scoredLead?.people.find((p) => normalizeEmail(p.email) === address)
+    const draftName = parsed.audience === 'person' && normalizeEmail(parsed.email) === address
+      ? parsed.name.trim() : ''
+    recipientProfile = {
+      name: person?.name?.trim() || person?.firstName?.trim() || draftName || undefined,
+      company: scoredLead?.companyName.trim() || asString(recipient.company).trim() || undefined,
+      title: person?.title?.trim() || undefined,
+    }
+  }
+
   return {
     ...base,
+    recipientProfile,
     exists: true,
     audience: parsed.audience,
     version: reviewVersion(parsed.raw),

@@ -1,4 +1,5 @@
 import { validAddress, type SendResult } from './compose-types'
+import type { MailContactProfile } from './types'
 import type { OutreachBinding } from '../../../workspace/mcp-servers/lead-store/src/outreach-binding'
 
 export type { OutreachBinding }
@@ -20,6 +21,7 @@ export interface OutreachSource {
   lead_id: string
   recipient_key: string
   review_id: string
+  recipient_profile?: MailContactProfile
 }
 export interface OutreachResult extends SendResult {
   contact: string

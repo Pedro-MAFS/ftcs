@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { getEmailDraftSlot, getEmailRecipientPool } from './emails-reader'
 import { approveEmailDraft, assertReviewSlot } from './emails-writer'
 import { accountDir, uuid } from '../mailbox/storage'
-import { reviewAddresses, type ReviewSend, type OutreachBinding } from '../mailbox/outreach-types'
+import { reviewAddresses, type ReviewSend, type OutreachBinding, type OutreachSource } from '../mailbox/outreach-types'
 import type { ComposerStore } from '../mailbox/composer-store'
 
 /** Finish local validation and persist the approval before the first SMTP call. */
@@ -19,7 +19,7 @@ export function approveForDelivery(root: string, account: string, edit: ReviewSe
   )
     throw new Error('请核对开发信的主题和正文。')
   const { productId, leadId, recipientKey } = edit
-  const slot = getEmailDraftSlot(productId, leadId, recipientKey, root)
+  const slot = getEmailDraftSlot(productId, leadId, recipientKey, root, edit.to)
   if (!slot.ok || !slot.exists) throw new Error(slot.message || '开发信不存在。')
   const old = slot.outreach
   if (old && old.account_id !== account) throw new Error('此发送记录属于原邮箱，请先重新连接原邮箱。')
@@ -57,5 +57,13 @@ export function approveForDelivery(root: string, account: string, edit: ReviewSe
     binding,
   )
   if (!approval.ok) throw new Error(approval.message)
-  return { binding }
+  const source: OutreachSource = {
+    kind: 'outreach',
+    product_id: productId,
+    lead_id: leadId,
+    recipient_key: recipientKey,
+    review_id: binding.review_id,
+    recipient_profile: slot.recipientProfile,
+  }
+  return { binding, source }
 }

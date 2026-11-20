@@ -321,7 +321,8 @@ export class ComposerStore {
     if (result.copy_internet_id) this.indexCopyId(a)
   }
   private contactFor(a: AttemptEntry) {
-    return a.contact || (a.contact = this.index.ensureContact({email: a.email}))
+    if (a.contact && !a.source?.recipient_profile) return a.contact
+    return (a.contact = this.index.ensureContact({ email: a.email }, a.source?.recipient_profile))
   }
   private publish(a: AttemptEntry) {
     const contact = this.contactFor(a)
@@ -425,7 +426,7 @@ export class ComposerStore {
   }
   async sendOutreach(
     edit: ReviewSend,
-    review: string,
+    source: OutreachSource,
     created: string,
     self: string,
     submit: SubmitMail,
@@ -434,7 +435,7 @@ export class ComposerStore {
   ) {
     const draft: Draft = {
       mode: 'new',
-      draft_id: review,
+      draft_id: source.review_id,
       rev: 1,
       contact_id: this.index.contacts.get(key(edit.to)) ?? '',
       subject: edit.subject,
@@ -445,13 +446,6 @@ export class ComposerStore {
       cc: [],
       attachments: [],
       updated_at: created,
-    }
-    const source: OutreachSource = {
-      kind: 'outreach',
-      review_id: review,
-      product_id: edit.productId,
-      lead_id: edit.leadId,
-      recipient_key: edit.recipientKey,
     }
     await this.submitSnapshot(
       draft,
