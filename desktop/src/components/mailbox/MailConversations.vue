@@ -339,7 +339,14 @@ onBeforeUnmount(() => {
               {{ m.outgoing ? '我' : m.from?.name || m.from?.email || '发件人' }} · {{ clock(m.at) }}
             </div>
             <div class="bubble">
-              <button v-if="m.quoteSource" class="cite" @click="editor?.cite(m.quoteSource)">引用</button>
+              <button
+                v-if="m.quoteSource"
+                class="cite"
+                type="button"
+                title="引用回复"
+                :aria-label="'引用回复：' + m.subject"
+                @click="editor?.cite(m.quoteSource)"
+              ><Icon name="reply" :size="16" /></button>
               <strong>{{ m.subject }}</strong>
               <small v-if="m.delivery?.rejected?.length">部分收件人未接受 · {{m.delivery.rejected.join('、')}}</small>
               <details>
@@ -677,6 +684,7 @@ main header strong {
   margin-bottom: 7px;
 }
 .bubble {
+  position: relative;
   background: var(--bubble);
   border-radius: 12px;
   padding: 13px 17px;
@@ -742,7 +750,40 @@ summary svg {
   padding: 7px 10px;
   font-size: 12px;
 }
-.cite { float:right; color:var(--soft-blue); font-size:12px; }
+.cite {
+  position: absolute;
+  inset-inline-start: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--cite-width);
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+}
+.out .cite {
+  inset-inline-start: auto;
+  inset-inline-end: 100%;
+}
+article:hover .cite,
+article:focus-within .cite {
+  opacity: 1;
+  pointer-events: auto;
+}
+.cite:is(:hover, :focus-visible) {
+  background: var(--bg-hover);
+  color: var(--soft-blue);
+}
+@media (hover: none) {
+  .cite {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 .pending-drafts { display:grid; gap:3px; padding:6px 16px; }
 .pending-drafts button { text-align:left; overflow-wrap:anywhere; }
 .file-open {
@@ -771,8 +812,9 @@ article:has(.html-body) { width: min(700px, 89%); }
   text-align: right;
 }
 article {
+  --cite-width: 32px;
   width: fit-content;
-  max-width: 89%;
+  max-width: min(89%, calc(100% - var(--cite-width)));
   margin-bottom: 20px;
 }
 .latest {
@@ -825,7 +867,7 @@ main > p {
     padding: 12px;
   }
   article {
-    max-width: 95%;
+    max-width: min(95%, calc(100% - var(--cite-width)));
   }
 }
 </style>
