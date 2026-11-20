@@ -2,6 +2,7 @@
 defineProps<{
   name:
     | 'package'
+    | 'paperclip'
     | 'file-text'
     | 'radar'
     | 'users'
@@ -66,6 +67,9 @@ defineProps<{
       <path d="M12 22V12" />
       <path d="m3.3 7 7.7 4.4 7.7-4.4" />
       <path d="m7.5 4.2 9 5.2" />
+    </template>
+    <template v-else-if="name === 'paperclip'">
+      <path d="m21.4 11.6-9.2 9.2a6 6 0 0 1-8.5-8.5L14 2a4 4 0 1 1 5.7 5.7L9.4 18a2 2 0 0 1-2.8-2.8L16 5.8" />
     </template>
     <template v-else-if="name === 'file-text'">
       <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />

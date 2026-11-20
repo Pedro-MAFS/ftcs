@@ -57,6 +57,7 @@ const error = ref(''),
   busy = ref(false),
   dirty = ref(false)
 const sending = ref(false)
+const importingImage = ref(false)
 const conflict = computed(() => error.value.includes('草稿版本已改变'))
 const input = ref<HTMLTextAreaElement>()
 const richInput = ref<{ focus(): void }>()
@@ -112,14 +113,14 @@ async function expand() {
   richInput.value?.focus()
 }
 function collapse() {
-  if (editingTemplate.value) return
+  if (editingTemplate.value || importingImage.value) return
   expanded.value = false
   void nextTick(() => expandButton.value?.focus())
 }
 function escapeEditor(event: KeyboardEvent) {
   if (!expanded.value || event.isComposing || event.keyCode === 229) return
   event.stopPropagation()
-  if (busy.value) return
+  if (busy.value || importingImage.value) return
   if (editingTemplate.value) editingTemplate.value = false
   else collapse()
 }
@@ -128,7 +129,7 @@ function openTemplate() {
   editingTemplate.value = true
 }
 async function saveTemplate() {
-  if (locked.value) return
+  if (locked.value || importingImage.value) return
   busy.value = true
   try {
     const next = await call({ kind: 'set-template', body: { ...templateEdit.value } })
@@ -162,6 +163,7 @@ const canReplyAll = computed(() => {
 const canSend = computed(
   () =>
     !locked.value &&
+    !importingImage.value &&
     !!fields.value.subject.trim() &&
     fields.value.to.length &&
     (edit.value.text_body.trim() || view.value?.draft.attachments.length),
@@ -272,7 +274,7 @@ function cancelQuote() {
 }
 defineExpose({ cite, flush: flushForNavigation })
 async function act(kind: 'pick' | 'remove' | 'send', attachment?: string) {
-  if (locked.value) return
+  if (locked.value || importingImage.value) return
   busy.value = true
   sending.value = kind === 'send'
   error.value = ''
@@ -334,10 +336,7 @@ onBeforeUnmount(() => {
     <header v-if="expanded" class="editor-heading">
       <strong>{{ editingTemplate ? '邮件正文模板' : '撰写邮件' }}</strong>
       <template v-if="!editingTemplate">
-        <button :disabled="locked" @click="openTemplate">设置模板</button>
-        <button class="resize" aria-label="收起编辑" title="收起编辑" @click="collapse">
-          <Icon name="minimize-2" />
-        </button>
+        <button :disabled="locked || importingImage" @click="openTemplate">设置模板</button>
       </template>
     </header>
     <template v-if="editingTemplate">
@@ -349,12 +348,14 @@ onBeforeUnmount(() => {
         expanded
         :disabled="busy"
         label="模板正文"
+        @importing="importingImage = $event"
         @change="templateEdit = $event"
       />
       <div v-if="error" role="alert">{{ error }}</div>
       <footer>
-        <small></small><button :disabled="busy" @click="editingTemplate = false">取消</button>
-        <button class="send" :disabled="busy" @click="saveTemplate">保存模板</button>
+        <small></small
+        ><button :disabled="busy || importingImage" @click="editingTemplate = false">取消</button>
+        <button class="send" :disabled="busy || importingImage" @click="saveTemplate">保存模板</button>
       </footer>
     </template>
     <template v-else>
@@ -394,26 +395,50 @@ onBeforeUnmount(() => {
             )
           "
       /></label>
-      <MailBodyEditor
-        v-if="expanded || usedEditor || edit.html_body"
-        key="draft"
-        ref="richInput"
-        class="body-field"
-        :body="edit"
-        :expanded="expanded"
-        :disabled="locked"
-        label="邮件正文"
-        @change="change"
-      />
-      <textarea
-        v-else
-        ref="input"
-        :value="edit.text_body"
-        :disabled="locked"
-        aria-label="邮件正文"
-        placeholder="写邮件…"
-        @input="change({ text_body: ($event.target as HTMLTextAreaElement).value })"
-      />
+      <div class="body-row">
+        <button
+          class="edge-tab"
+          type="button"
+          title="添加附件"
+          aria-label="添加附件"
+          :disabled="locked || importingImage"
+          @click="act('pick')"
+        >
+          <Icon name="paperclip" />
+        </button>
+        <MailBodyEditor
+          v-if="expanded || usedEditor || edit.html_body"
+          key="draft"
+          ref="richInput"
+          class="body-field"
+          :body="edit"
+          :expanded="expanded"
+          :disabled="locked"
+          label="邮件正文"
+          @importing="importingImage = $event"
+          @change="change"
+        />
+        <textarea
+          v-else
+          ref="input"
+          :value="edit.text_body"
+          :disabled="locked"
+          aria-label="邮件正文"
+          placeholder="写邮件…"
+          @input="change({ text_body: ($event.target as HTMLTextAreaElement).value })"
+        />
+        <button
+          ref="expandButton"
+          class="edge-tab"
+          type="button"
+          :title="expanded ? '收起编辑' : '放大编辑'"
+          :aria-label="expanded ? '收起编辑' : '放大编辑'"
+          :disabled="locked || importingImage"
+          @click="expanded ? collapse() : expand()"
+        >
+          <Icon :name="expanded ? 'minimize-2' : 'maximize-2'" />
+        </button>
+      </div>
       <div v-if="view?.draft.attachments.length" class="files">
         <span v-for="f in view.draft.attachments" :key="f.attachment_id"
           >{{ f.filename }} · {{ (f.size_bytes / 1024).toFixed(1) }} KB
@@ -435,18 +460,6 @@ onBeforeUnmount(() => {
         <button v-else @click="dirty ? flush().catch(report) : refresh()">重试</button>
       </div>
       <footer>
-        <button :disabled="locked" @click="act('pick')">添加附件</button>
-        <button
-          v-if="!expanded"
-          ref="expandButton"
-          aria-label="放大编辑"
-          title="放大编辑"
-          class="resize"
-          :disabled="locked"
-          @click="expand"
-        >
-          <Icon name="maximize-2" /> 放大编辑
-        </button>
         <small role="status"
           >{{
             sending
@@ -499,8 +512,45 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 110px;
 }
-.editor-heading,
-.resize {
+.body-row {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-input);
+}
+.body-row:focus-within {
+  border-color: var(--border-focus);
+}
+.body-row .body-field,
+.body-row textarea {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+}
+.expanded .body-row {
+  flex: 1;
+  min-height: 110px;
+}
+.body-row .edge-tab {
+  align-self: flex-start;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 4px;
+  padding: 0;
+  border: 0;
+  color: var(--text-secondary);
+  background: transparent;
+}
+.edge-tab:is(:hover, :focus-visible):enabled {
+  color: var(--soft-blue);
+  background: var(--selected);
+}
+.editor-heading {
   display: flex;
   align-items: center;
   gap: 6px;

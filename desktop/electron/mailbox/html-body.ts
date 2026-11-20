@@ -1,5 +1,5 @@
 import sanitizeHtml from 'sanitize-html'
-import type { MailBody } from './compose-types'
+import { isComposeImage, type MailBody } from './compose-types'
 
 export function composeBody(body: MailBody): MailBody {
   if (typeof body.text_body !== 'string') throw new Error('邮件正文无效。')
@@ -7,8 +7,37 @@ export function composeBody(body: MailBody): MailBody {
     body.text_body.trim() &&
     body.html_body &&
     sanitizeHtml(body.html_body, {
-      allowedTags: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li'],
-      allowedAttributes: { ol: ['start'] },
+      allowedTags: [
+        'p',
+        'br',
+        'strong',
+        'b',
+        'em',
+        'i',
+        'u',
+        'ul',
+        'ol',
+        'li',
+        'table',
+        'tbody',
+        'thead',
+        'tr',
+        'td',
+        'th',
+        'img',
+      ],
+      allowedAttributes: {
+        ol: ['start'],
+        table: ['border', 'cellpadding', 'cellspacing'],
+        td: ['colspan', 'rowspan'],
+        th: ['colspan', 'rowspan'],
+        img: ['src', 'alt'],
+      },
+      allowedSchemesByTag: { img: ['data'] },
+      transformTags: {
+        table: () => ({ tagName: 'table', attribs: { border: '1', cellpadding: '6', cellspacing: '0' } }),
+      },
+      exclusiveFilter: (frame) => frame.tag === 'img' && !isComposeImage(frame.attribs.src ?? ''),
     })
   return html ? { text_body: body.text_body, html_body: html } : { text_body: body.text_body }
 }

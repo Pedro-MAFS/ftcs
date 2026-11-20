@@ -2,10 +2,71 @@
 import { onBeforeUnmount, onMounted, ref, shallowRef, triggerRef, watch } from 'vue'
 import { createDocument, Editor, type JSONContent } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
-import type { MailBody } from '../../../electron/mailbox/compose-types'
+import { TableKit } from '@tiptap/extension-table'
+import Image from '@tiptap/extension-image'
+import type { Node as DocumentNode } from '@tiptap/pm/model'
+import { composeImageTypes, isComposeImage, type MailBody } from '../../../electron/mailbox/compose-types'
 
 const props = defineProps<{ body: MailBody; expanded: boolean; disabled: boolean; label: string }>()
-const emit = defineEmits<{ change: [body: MailBody] }>()
+const emit = defineEmits<{ change: [body: MailBody]; importing: [active: boolean] }>()
+const imagePicker = ref<HTMLInputElement>()
+const imageError = ref('')
+let importing = false
+const InlineImage = Image.extend({
+  parseHTML() {
+    return [
+      {
+        tag: 'img[src]',
+        getAttrs: (element) => (isComposeImage(element.getAttribute('src') ?? '') ? {} : false),
+      },
+    ]
+  },
+}).configure({ inline: true, allowBase64: true })
+
+async function insertImage(file?: File) {
+  const instance = editor.value
+  if (!instance || !file || !props.expanded || props.disabled || importing) return
+  imageError.value = ''
+  if (!composeImageTypes.some((type) => type === file.type)) {
+    imageError.value = '请选择 PNG、JPEG、GIF 或 WebP 图片。'
+    return
+  }
+  importing = true
+  emit('importing', true)
+  try {
+    const src = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result))
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    if (!isComposeImage(src)) throw new Error()
+    if (!instance.isDestroyed && !props.disabled && props.expanded) {
+      instance
+        .chain()
+        .focus()
+        .setImage({ src, alt: file.name || '图片' })
+        .run()
+    }
+  } catch {
+    imageError.value = '无法读取图片，请重新选择。'
+  } finally {
+    importing = false
+    emit('importing', false)
+  }
+}
+function pickImage(event: Event) {
+  const input = event.target as HTMLInputElement
+  void insertImage(input.files?.[0])
+  input.value = ''
+}
+const tableActions = [
+  ['addRowAfter', '加行'],
+  ['addColumnAfter', '加列'],
+  ['deleteRow', '删行'],
+  ['deleteColumn', '删列'],
+  ['deleteTable', '删除表格'],
+] as const
 const host = ref<HTMLElement>()
 const editor = shallowRef<Editor>()
 let lastBody: MailBody | undefined
@@ -30,10 +91,22 @@ function content(body: MailBody): string | JSONContent {
 function readBody(instance: Editor): MailBody {
   const lines: string[] = []
   let formatted = false
+  const plain = (node: DocumentNode) =>
+    node.textBetween(0, node.content.size, '\n', (leaf) => (leaf.type.name === 'image' ? '[图片]' : '\n'))
   instance.state.doc.descendants((node) => {
-    if (node.isTextblock) lines.push(node.textBetween(0, node.content.size, '', '\n'))
-    if (node.marks.length || node.type.name === 'bulletList' || node.type.name === 'orderedList')
+    if (node.type.name === 'table') {
       formatted = true
+      const rows: string[] = []
+      node.forEach((row) => {
+        const cells: string[] = []
+        row.forEach((cell) => cells.push(plain(cell)))
+        rows.push(cells.join('\t'))
+      })
+      lines.push(rows.join('\n').trim() ? rows.join('\n') : '[表格]')
+      return false
+    }
+    if (node.isTextblock) lines.push(plain(node))
+    if (node.marks.length || ['bulletList', 'orderedList', 'image'].includes(node.type.name)) formatted = true
   })
   return { text_body: lines.join('\n'), html_body: formatted ? instance.getHTML() : undefined }
 }
@@ -64,10 +137,12 @@ onMounted(() => {
         horizontalRule: false,
         link: false,
         strike: false,
-        trailingNode: false,
+        trailingNode: { notAfter: ['paragraph', 'bulletList', 'orderedList'] },
         dropcursor: false,
         gapcursor: false,
       }),
+      TableKit,
+      InlineImage,
     ],
     enableInputRules: false,
     enablePasteRules: false,
@@ -80,7 +155,16 @@ onMounted(() => {
       },
       handleDOMEvents: {
         paste(view, event) {
-          if (props.disabled || props.expanded) return false
+          if (props.disabled) return false
+          if (props.expanded) {
+            const image = Array.from(event.clipboardData?.files ?? []).find((file) =>
+              file.type.startsWith('image/'),
+            )
+            if (!image) return false
+            event.preventDefault()
+            void insertImage(image)
+            return true
+          }
           event.preventDefault()
           const plain = event.clipboardData?.getData('text/plain')
           if (plain) view.pasteText(plain, event)
@@ -163,7 +247,33 @@ onBeforeUnmount(() => editor.value?.destroy())
       >
         {{ name }}
       </button>
+      <button type="button" :disabled="disabled" @mousedown.prevent @click="imagePicker?.click()">
+        插入图片
+      </button>
+      <input ref="imagePicker" type="file" hidden :accept="composeImageTypes.join(',')" @change="pickImage" />
+      <button
+        v-if="!editor?.isActive('table')"
+        type="button"
+        :disabled="disabled"
+        @mousedown.prevent
+        @click="editor?.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run()"
+      >
+        插入表格
+      </button>
+      <template v-else>
+        <button
+          v-for="[action, label] in tableActions"
+          :key="action"
+          type="button"
+          :disabled="disabled"
+          @mousedown.prevent
+          @click="editor?.chain().focus()[action]().run()"
+        >
+          {{ label }}
+        </button>
+      </template>
     </div>
+    <div v-if="imageError" role="alert">{{ imageError }}</div>
     <div ref="host" class="editor-host" />
   </div>
 </template>
@@ -237,6 +347,30 @@ onBeforeUnmount(() => editor.value?.destroy())
 .large :deep(.tiptap) {
   padding: 14px 16px;
 }
+.editor-host :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+}
+.editor-host :deep(td),
+.editor-host :deep(th) {
+  min-width: 3em;
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  vertical-align: top;
+}
+.editor-host :deep(th),
+.editor-host :deep(.selectedCell) {
+  background: var(--selected);
+}
+.editor-host :deep(img) {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+[role='alert'] {
+  color: var(--danger);
+  padding: 4px 8px;
+}
 .editor-host :deep(p) {
   margin: 0;
 }
@@ -251,7 +385,7 @@ onBeforeUnmount(() => editor.value?.destroy())
 .editor-host :deep(ol) {
   list-style: decimal;
 }
-.editor-host :deep(.tiptap p:only-child:has(> br:only-child)::before) {
+.editor-host :deep(.tiptap > p:only-child:has(> br:only-child)::before) {
   content: '写邮件…';
   color: var(--text-secondary);
   pointer-events: none;

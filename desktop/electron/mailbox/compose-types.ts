@@ -11,6 +11,11 @@ export interface QuoteSource {
   cc: MailAddress[]
   threaded: boolean
 }
+// Inline images travel with the draft and become related MIME parts at submission.
+export const composeImageTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
+export function isComposeImage(src: string) {
+  return /^data:image\/(png|jpeg|gif|webp);base64,[a-z0-9+/]+=*$/i.test(src)
+}
 export interface MailBody {
   text_body: string
   html_body?: string

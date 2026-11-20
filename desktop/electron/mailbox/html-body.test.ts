@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { simpleParser } from 'mailparser'
-import { readableHtml } from './html-body'
+import { composeBody, readableHtml } from './html-body'
 
 test('保留邮件排版和 RFC 邮件内嵌图片', async () => {
   const mail = await simpleParser(
@@ -40,4 +40,22 @@ test('外部资源需用户选择，邮件不能携带可执行元素或导航�
   assert.match(fragment, /data-mail-link="https:\/\/example.test"/)
   assert.match(fragment, /<style>/)
   assert.doesNotMatch(fragment, /<iframe|<meta|<script|bad\(\)|onerror|file:\/\/| href=/)
+})
+
+test('撰写和恢复草稿保留表格及内嵌图片，只允许支持的图片数据', () => {
+  const src = 'data:image/png;base64,iVBORw0KGgo='
+  const body = composeBody({
+    text_body: '报价\n[图片]',
+    html_body:
+      '<table style="width:99%"><tbody><tr><th colspan="2">报价</th></tr>' +
+      '<tr><td rowspan="2"><img src="' +
+      src +
+      '" alt="样品"></td></tr></tbody></table>' +
+      '<img src="https://invalid.test/external"><img src="file:///private">' +
+      '<img src="data:image/svg+xml;base64,AAAA"><img src="data:image/png;base64,invalid!">',
+  })
+  assert.match(body.html_body!, /<th colspan="2">报价/)
+  assert.match(body.html_body!, /<td rowspan="2"><img src="data:image\/png;base64,iVBORw0KGgo=" alt="样品"/)
+  assert.doesNotMatch(body.html_body!, /external|private|svg|invalid|style=/)
+  assert.deepEqual(composeBody(body), body)
 })
