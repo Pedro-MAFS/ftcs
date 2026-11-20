@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import {
   key,
   type AttachmentAction,
@@ -116,9 +116,13 @@ useVisibleMail(
 )
 const originalPage = ref(false)
 const highlighted = ref('')
+const followingLatest = ref(true)
+const historyContent = ref<HTMLElement>()
+let lastScrollTop = 0
 function focusOriginal(id: string) {
   const row = scroller.value?.querySelector<HTMLElement>(`[data-message="${CSS.escape(id)}"]`)
   if (!row) return false
+  followingLatest.value = false
   highlighted.value = id
   row.focus({ preventScroll: true })
   row.scrollIntoView({ block: 'center' })
@@ -137,9 +141,31 @@ const clock = (date: string) => new Date(date).toLocaleTimeString([], { hour: '2
 const day = (date: string) => new Date(date).toLocaleDateString()
 function bottom() {
   const el = scroller.value
-  if (el) el.scrollTop = el.scrollHeight
+  followingLatest.value = true
+  if (el) {
+    el.scrollTop = el.scrollHeight
+    lastScrollTop = el.scrollTop
+  }
   newMail.value = false
 }
+function trackScroll() {
+  const el = scroller.value
+  if (!el || !el.clientHeight || el.scrollTop === lastScrollTop) return
+  lastScrollTop = el.scrollTop
+  followingLatest.value = !originalPage.value && el.scrollHeight - el.clientHeight - el.scrollTop <= 2
+  if (followingLatest.value) newMail.value = false
+}
+let historyResize: ResizeObserver | undefined
+onMounted(() => {
+  historyResize = new ResizeObserver(() => {
+    if (!scroller.value?.clientHeight) return
+    trackScroll()
+    if (followingLatest.value) bottom()
+  })
+  historyResize.observe(scroller.value!)
+  historyResize.observe(historyContent.value!)
+})
+onBeforeUnmount(() => historyResize?.disconnect())
 function visibleAnchor() {
   const el = scroller.value
   if (!el) return
@@ -164,7 +190,7 @@ async function load(mode: 'open' | 'older' | 'update' | 'original', aroundId?: s
     let items: MessageView[] = []
     let more: TimelineCursor | null
     do {
-      const page = await api.timeline(ctx, account, contact, cursor, aroundId)
+      const page = await api.timeline(ctx, account, contact, cursor, cursor ? undefined : aroundId)
       if (request !== pageRequest) return
       items = page.messages.concat(items)
       more = page.before
@@ -176,11 +202,12 @@ async function load(mode: 'open' | 'older' | 'update' | 'original', aroundId?: s
       (more.at > earliest.at || (more.at === earliest.at && more.id > earliest.id))
     )
     const el = scroller.value
-    const follow =
-      mode === 'open' || (mode === 'update' && el && el.scrollHeight - el.clientHeight - el.scrollTop < 40)
+    trackScroll()
+    const follow = mode === 'open' || (mode === 'update' && !aroundId && followingLatest.value)
+    followingLatest.value = follow
     const anchor = visibleAnchor()
     if (mode === 'older') items = items.concat(messages.value)
-    if (mode === 'update' && !follow && newest && newest !== items.at(-1)?.id) newMail.value = true
+    if (mode === 'update' && !aroundId && !follow && newest && newest !== items.at(-1)?.id) newMail.value = true
     if (mode === 'original' || mode === 'open') {
       originalPage.value = mode === 'original'
       highlighted.value = ''
@@ -208,6 +235,7 @@ async function load(mode: 'open' | 'older' | 'update' | 'original', aroundId?: s
   }
 }
 function select(id: string, aroundId?: string) {
+  followingLatest.value = !aroundId
   originalPage.value = false
   highlighted.value = ''
   pageRequest++
@@ -244,7 +272,7 @@ async function refresh() {
       if (matched) select(matched.id)
     } else if (!current.value) select(rows[0]?.id ?? '')
     else if (originalPage.value && highlighted.value && current.value.revision !== previous?.revision)
-      void load('original', highlighted.value)
+      void load('update', highlighted.value)
     else if (!originalPage.value && (current.value.unread !== previous?.unread || current.value.count !== previous?.count || current.value.lastId !== previous?.lastId || current.value.revision !== previous?.revision))
       void load('update')
   } catch (e) {
@@ -402,89 +430,83 @@ onBeforeUnmount(() => {
       <p v-if="temporary">与此地址暂无邮件往来。</p>
       <p v-else-if="!current && !listing">选择联系人查看邮件往来。</p>
       <p v-if="readError" role="alert">{{ readError }} <button @click="load('update')">重新读取</button></p>
-      <div
-        ref="scroller"
-        class="history"
-        @scroll="
-          scroller &&
-          scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 40 &&
-          (newMail = false)
-        "
-      >
-        <button v-if="before" class="older" :disabled="reading" @click="load('older')">加载更早邮件</button>
-        <p v-if="reading && !messages.length">正在读取邮件…</p>
-        <template v-for="(m, index) in messages" :key="m.id">
-          <div v-if="!index || day(m.at) !== day(messages[index - 1].at)" class="date">
-            {{ formattedDay(m.at) }}
-          </div>
-          <article :data-message="m.id" :data-unread="!!m.unread" tabindex="-1" :class="{ out: m.outgoing, highlighted: highlighted === m.id }">
-            <div class="byline">
-              {{ m.outgoing ? '我' : m.from?.name || m.from?.email || '发件人' }} · {{ clock(m.at) }}
+      <div ref="scroller" class="history" :class="{ following: followingLatest }" @scroll="trackScroll">
+        <div ref="historyContent" class="history-content">
+          <button v-if="before" class="older" :disabled="reading" @click="load('older')">加载更早邮件</button>
+          <p v-if="reading && !messages.length">正在读取邮件…</p>
+          <template v-for="(m, index) in messages" :key="m.id">
+            <div v-if="!index || day(m.at) !== day(messages[index - 1].at)" class="date">
+              {{ formattedDay(m.at) }}
             </div>
-            <div class="bubble">
-              <button
-                v-if="m.quoteSource"
-                class="cite"
-                type="button"
-                title="引用回复"
-                :aria-label="'引用回复：' + m.subject"
-                @click="editor?.cite(m.quoteSource)"
-              ><Icon name="reply" :size="16" /></button>
-              <strong>{{ m.subject }}</strong>
-              <small v-if="m.delivery?.rejected?.length">部分收件人未接受 · {{m.delivery.rejected.join('、')}}</small>
-              <details>
-                <summary :title="'展开收件详情'">
-                  收件人：{{
-                    m.to
-                      .map((a) => (key(a.email) === key(accountEmail) ? '我' : a.name || a.email))
-                      .join('、') || '—'
-                  }}<template v-if="m.cc.length"
-                    >　抄送：{{ m.cc.map((a) => a.name || a.email).join('、') }}</template
-                  >
-                  <Icon name="chevron-down" :size="12" />
-                </summary>
-                <div v-if="m.from">发件人　{{ m.from.email }}</div>
-                <div>收件人　{{ m.to.map((a) => a.email).join('、') || '—' }}</div>
-                <div v-if="m.cc.length">抄送　{{ m.cc.map((a) => a.email).join('、') }}</div>
-                <div v-if="m.bcc.length">密送　{{ m.bcc.map((a) => a.email).join('、') }}</div>
-                <div v-if="m.delivery?.accepted?.length">服务器已接受　{{ m.delivery.accepted.join('、') }}</div>
-                <div v-if="m.delivery?.rejected?.length">服务器已拒绝　{{ m.delivery.rejected.join('、') }}</div>
-              </details>
-              <button v-if="m.replyTo" class="reply-link" @click="jumpToOriginal(m.replyTo)">
-                查看原邮件 · {{ m.replyTo.subject }}
-              </button>
-              <HtmlMailBody v-if="m.html" :html="m.html" :subject="m.subject" />
-              <template v-else-if="m.body.length > 900"
-                ><p>{{ m.body.slice(0, 900) }}</p>
-                <details>
-                  <summary>展开全文</summary>
-                  <p>{{ m.body.slice(900) }}</p>
-                </details></template
-              >
-              <p v-else>{{ m.body || (m.attachments.length || m.quote ? '' : '无正文') }}</p>
-              <details v-if="m.quote">
-                <summary>引用原文</summary>
-                <p>{{ m.quote }}</p>
-              </details>
-              <div v-for="(a, i) in m.attachments" :key="i" class="file">
+            <article :data-message="m.id" :data-unread="!!m.unread" tabindex="-1" :class="{ out: m.outgoing, highlighted: highlighted === m.id }">
+              <div class="byline">
+                {{ m.outgoing ? '我' : m.from?.name || m.from?.email || '发件人' }} · {{ clock(m.at) }}
+              </div>
+              <div class="bubble">
                 <button
-                  class="file-open"
-                  :disabled="!a.previewable || pendingAttachments.has(m.id + ':' + i)"
-                  :title="a.previewable ? '用系统默认应用打开 ' + a.filename : a.filename"
-                  @click="handleAttachment(m.id, i, 'open')"
-                ><Icon name="file-text" :size="16" /> {{ a.filename }}</button>
-                <small>{{ (a.size_bytes / 1024).toFixed(1) }} KB</small>
-                <button v-if="a.available" class="file-save" :aria-label="'另存为 ' + a.filename"
-                  :disabled="pendingAttachments.has(m.id + ':' + i)" @click="handleAttachment(m.id, i, 'save')"
-                >另存为</button>
-                <small v-else>本地不可用</small>
+                  v-if="m.quoteSource"
+                  class="cite"
+                  type="button"
+                  title="引用回复"
+                  :aria-label="'引用回复：' + m.subject"
+                  @click="editor?.cite(m.quoteSource)"
+                ><Icon name="reply" :size="16" /></button>
+                <strong>{{ m.subject }}</strong>
+                <small v-if="m.delivery?.rejected?.length">部分收件人未接受 · {{m.delivery.rejected.join('、')}}</small>
+                <details>
+                  <summary :title="'展开收件详情'">
+                    收件人：{{
+                      m.to
+                        .map((a) => (key(a.email) === key(accountEmail) ? '我' : a.name || a.email))
+                        .join('、') || '—'
+                    }}<template v-if="m.cc.length"
+                      >　抄送：{{ m.cc.map((a) => a.name || a.email).join('、') }}</template
+                    >
+                    <Icon name="chevron-down" :size="12" />
+                  </summary>
+                  <div v-if="m.from">发件人　{{ m.from.email }}</div>
+                  <div>收件人　{{ m.to.map((a) => a.email).join('、') || '—' }}</div>
+                  <div v-if="m.cc.length">抄送　{{ m.cc.map((a) => a.email).join('、') }}</div>
+                  <div v-if="m.bcc.length">密送　{{ m.bcc.map((a) => a.email).join('、') }}</div>
+                  <div v-if="m.delivery?.accepted?.length">服务器已接受　{{ m.delivery.accepted.join('、') }}</div>
+                  <div v-if="m.delivery?.rejected?.length">服务器已拒绝　{{ m.delivery.rejected.join('、') }}</div>
+                </details>
+                <button v-if="m.replyTo" class="reply-link" @click="jumpToOriginal(m.replyTo)">
+                  查看原邮件 · {{ m.replyTo.subject }}
+                </button>
+                <HtmlMailBody v-if="m.html" :html="m.html" :subject="m.subject" />
+                <template v-else-if="m.body.length > 900"
+                  ><p>{{ m.body.slice(0, 900) }}</p>
+                  <details>
+                    <summary>展开全文</summary>
+                    <p>{{ m.body.slice(900) }}</p>
+                  </details></template
+                >
+                <p v-else>{{ m.body || (m.attachments.length || m.quote ? '' : '无正文') }}</p>
+                <details v-if="m.quote">
+                  <summary>引用原文</summary>
+                  <p>{{ m.quote }}</p>
+                </details>
+                <div v-for="(a, i) in m.attachments" :key="i" class="file">
+                  <button
+                    class="file-open"
+                    :disabled="!a.previewable || pendingAttachments.has(m.id + ':' + i)"
+                    :title="a.previewable ? '用系统默认应用打开 ' + a.filename : a.filename"
+                    @click="handleAttachment(m.id, i, 'open')"
+                  ><Icon name="file-text" :size="16" /> {{ a.filename }}</button>
+                  <small>{{ (a.size_bytes / 1024).toFixed(1) }} KB</small>
+                  <button v-if="a.available" class="file-save" :aria-label="'另存为 ' + a.filename"
+                    :disabled="pendingAttachments.has(m.id + ':' + i)" @click="handleAttachment(m.id, i, 'save')"
+                  >另存为</button>
+                  <small v-else>本地不可用</small>
+                </div>
+                <div v-if="!m.outgoing && m.unread !== undefined" class="read-state">
+                  {{ m.unread ? '未读' : '已读' }}
+                </div>
               </div>
-              <div v-if="!m.outgoing && m.unread !== undefined" class="read-state">
-                {{ m.unread ? '未读' : '已读' }}
-              </div>
-            </div>
-          </article>
-        </template>
+            </article>
+          </template>
+        </div>
       </div>
       <button v-if="newMail" class="latest" @click="bottom">查看新消息 ↓</button>
       <MailComposer v-if="composerEmail" ref="editor" :key="key(composerEmail)" :snapshot="snapshot" :account="account"
@@ -781,7 +803,12 @@ main header strong {
 }
 .history {
   padding: 12px clamp(16px, 3cqw, 36px) 22px;
+}
+.history.following {
   overflow-anchor: none;
+}
+.history-content {
+  display: flow-root;
 }
 .date,
 .older {
