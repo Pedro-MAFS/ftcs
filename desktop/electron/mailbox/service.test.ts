@@ -38,6 +38,9 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
       const [start, end] = uid.split(':').map(Number)
       return Array.from({ length: end - start + 1 }, (_, i) => start + i)
     },
+    async fetchAll(uids: number[]) {
+      return uids.map(uid => ({ uid, flags: new Set(uid === 2 ? [] : ['\\Seen']) }))
+    },
     async fetchOne(s: string) {
       if (s === '3' && failFetch) throw new Error('temporary failure')
       currentMail++
@@ -97,6 +100,7 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   await until(() => service.snapshot().imported === 2 && !service.snapshot().running)
   await service.act(ctx(), { kind: 'bind', path: 'Outgoing' })
   await until(() => service.snapshot().imported === 3 && !service.snapshot().running)
+  assert.equal(service.snapshot().folders[0].error, undefined)
   assert.deepEqual(service.snapshot().contacts.sort(), ['alice@example.test', 'bob@example.test'])
   const destination = 'draft-only@example.test'
   const initial = await service.composer(ctx(), a, destination, { kind: 'get' })
@@ -182,4 +186,87 @@ test('a verification completing after a workspace switch cannot activate or pers
   finish()
   await assert.rejects(connecting, /工作区已改变/)
   assert.deepEqual(fs.readdirSync(dir), [])
+})
+
+test('启动积压静默，新增来信分联系人合并通知，关闭开关后仍更新未读', async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-arrivals-'))
+  const endpoint = { host: 'mail.test', port: 993, username: 'a', security: 'tls' as const }
+  let upper = 1,
+    cycles = 0
+  const client = {
+    connect: async () => {},
+    close: () => {},
+    mailboxOpen: async () => ({ uidNext: upper + 1, uidValidity: 1n }),
+    list: async () => [],
+    search: async ({ uid }: { uid: string }) => {
+      const [start, end] = uid.split(':').map(Number)
+      return Array.from({ length: end - start + 1 }, (_, i) => i + start)
+    },
+    fetchOne: async (uid: string) => ({
+      internalDate: new Date(),
+      flags: new Set(),
+      source: Buffer.from(
+        [
+          'From: Alice <alice@mail.test>',
+          'To: a@mail.test',
+          'Message-ID: <' + uid + '@mail.test>',
+          'Subject: ' + uid,
+          '',
+          'body',
+        ].join('\r\n'),
+      ),
+    }),
+    fetchAll: async (ids: number[]) => {
+      cycles++
+      return ids.map((uid) => ({ uid, flags: new Set() }))
+    },
+  } as unknown as ImapFlow
+  const notices: { contact: string; count: number; message: string }[] = []
+  const service = new MailboxService(
+    () => root,
+    { dir: root, encrypt: (s) => Buffer.from(s), decrypt: (b) => b.toString() },
+    () => {},
+    { verify: async () => {}, imapClient: () => client, importFolder },
+    { clear: () => {}, show: (target, _, count) => notices.push({ ...target, count }) },
+  )
+  t.after(() => {
+    service.stop()
+    fs.rmSync(root, { recursive: true, force: true })
+  })
+  const ctx = () => service.snapshot().context
+  const id = (
+    await service.act(ctx(), {
+      kind: 'connect',
+      form: { email: 'a@mail.test', password: 'x', mode: 'last_30_days', imap: endpoint, smtp: endpoint },
+    })
+  ).active!
+  async function synced(after: number) {
+    for (let i = 0; i < 200; i++) {
+      if (cycles > after && !service.snapshot().running) return
+      await wait(10)
+    }
+    assert.fail('同步超时')
+  }
+  await synced(0)
+  assert.equal(notices.length, 0)
+  let prev = cycles
+  upper = 3
+  await service.act(ctx(), { kind: 'retry' })
+  await synced(prev)
+  assert.equal(notices.length, 1)
+  assert.equal(notices[0].count, 2)
+  const rows = await service.timeline(ctx(), id, notices[0].contact)
+  assert.equal(rows.messages.find((m) => m.id === notices[0].message)?.subject, '3')
+  await service.act(ctx(), { kind: 'notifications', account: id, enabled: false })
+  prev = cycles
+  upper = 4
+  await service.act(ctx(), { kind: 'retry' })
+  await synced(prev)
+  assert.equal(await service.unreadCount(), 4)
+  assert.equal(notices.length, 1)
+  prev = cycles
+  service.start()
+  await synced(prev)
+  assert.equal(service.snapshot().accounts[0].notifications, false)
+  assert.equal(notices.length, 1)
 })

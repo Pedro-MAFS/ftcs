@@ -101,6 +101,12 @@ import type {
 } from './ipc/types'
 
 const mailbox: import('./mailbox/types').MailboxAPI = {
+  markRead: (ctx, account, contact, ids) => ipcRenderer.invoke(IPC.MAILBOX_MARK_READ, ctx, account, contact, ids),
+  onOpen: callback => {
+    const listener = (_event: unknown, target: import('./mailbox/types').MailTarget) => callback(target)
+    ipcRenderer.on(IPC.MAILBOX_OPEN, listener)
+    return () => ipcRenderer.removeListener(IPC.MAILBOX_OPEN, listener)
+  },
   composer: (ctx, account, email, action) => ipcRenderer.invoke(IPC.MAILBOX_COMPOSER, ctx, account, email, action),
   temporaryDrafts: (ctx, account) => ipcRenderer.invoke(IPC.MAILBOX_TEMP_DRAFTS, ctx, account),
   attachment: (ctx, account, message, ordinal, action) => ipcRenderer.invoke(IPC.MAILBOX_ATTACHMENT, ctx, account, message, ordinal, action),

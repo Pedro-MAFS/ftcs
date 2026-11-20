@@ -27,6 +27,7 @@ export interface Account extends AccountSettings {
   first_connected_at: string
   last_connected_at: string
   sync_from: string
+  new_mail_notifications?: boolean
   initial_sync_mode: Mode
 }
 export interface Folder {
@@ -39,9 +40,18 @@ export interface Folder {
   uid_validity: number | null
   last_scanned_uid: number
   initial_upper_uid: number | null
+  flags_modseq?: string
+  flags_after_uid?: number
   last_synced_at?: string
 }
+export interface MailTarget {
+  context: Context
+  account: string
+  contact: string
+  message: string
+}
 export interface AccountSummary extends AccountSettings {
+  notifications?: boolean
   id: string
 }
 export interface Snapshot {
@@ -58,6 +68,7 @@ export type MailAction =
   | { kind: 'connect'; form: Connection }
   | { kind: 'bind'; path: string }
   | { kind: 'retry' }
+  | { kind: 'notifications'; account: string; enabled: boolean }
   | { kind: 'disconnect' }
   | { kind: 'delete'; id: string }
 export interface Conversation {
@@ -87,6 +98,7 @@ export interface ReplyTarget {
   subject: string
 }
 export interface MessageView extends TimelineCursor {
+  unread?: boolean
   outgoing: boolean
   subject: string
   quoteSource?: QuoteSource
@@ -107,6 +119,8 @@ export interface TimelinePage {
 }
 export type AttachmentAction = 'open' | 'save'
 export interface MailboxAPI {
+  markRead(ctx: Context, account: string, contact: string, ids: string[]): Promise<void>
+  onOpen(callback: (target: MailTarget) => void): () => void
   composer(ctx: Context, account: string, email: string, action: ComposerAction): Promise<ComposerView>
   temporaryDrafts(ctx: Context, account: string): Promise<string[]>
   attachment(ctx: Context, account: string, messageId: string, ordinal: number, action: AttachmentAction): Promise<'opened' | 'saved' | 'canceled'>

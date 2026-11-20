@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { imapClient, verify, diagnostic, smtpSubmit } from './protocol'
 import { clearAttachmentPreviews, localAttachment } from './attachments'
 import { importFolder } from './import'
+import { ReadOnlyInbox, syncFlags } from './flags'
 import { ImportIndex } from './conversations'
 import type { ComposerAction, ComposerView } from './compose-types'
 import type { TimelineCursor } from './types'
@@ -14,6 +15,7 @@ import {
   type Account,
   type Context,
   type MailAction,
+  type MailTarget,
   type Folder,
   type FolderRole,
   type Snapshot,
@@ -37,11 +39,14 @@ export class MailboxService {
     private vault: Vault,
     private notify: () => void,
     private protocol = { verify, imapClient, importFolder },
+    private notifications?: { show(target: MailTarget, sender: string, count: number): void; clear(): void },
   ) {}
   private sendScope = new AbortController()
   private epoch = 0
   private connecting = false
   private running = false
+  private wake = false
+  private arrivalBoundary?: { validity: number; upper: number }
   private timer?: ReturnType<typeof setTimeout>
   private client?: ReturnType<typeof imapClient>
   private loading?: Promise<ImportIndex>
@@ -181,6 +186,17 @@ export class MailboxService {
     const file = localAttachment(accountDir(this.base(), account), index.attachment(messageId, ordinal))
     return { file, current }
   }
+  async markRead(ctx: Context, id: string, contact: string, ids: string[]) {
+    if (!uuid(contact) || !Array.isArray(ids) || ids.length > 200 || !ids.every(uuid))
+      throw new Error('无效的邮件阅读记录。')
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    if (index.markRead(this.folder(accountDir(this.base(), id), 'inbox'), contact, new Set(ids))) {
+      this.notify()
+      if (this.running) this.wake = true
+      else this.schedule(0)
+    }
+  }
   async unreadCount() {
     const id = this.state().active_account_id
     if (!id) return 0
@@ -197,7 +213,8 @@ export class MailboxService {
   async timeline(ctx: Context, id: string, contact: string, before?: TimelineCursor, aroundId?: string) {
     const index = await this.reader(ctx, id)
     this.check(ctx)
-    const page = await index.timeline(contact, before, () => this.check(ctx), aroundId)
+    const unread = index.unreadMessages(this.folder(accountDir(this.base(), id), 'inbox'))
+    const page = await index.timeline(contact, before, () => this.check(ctx), aroundId, unread)
     this.check(ctx)
     return page
   }
@@ -209,6 +226,7 @@ export class MailboxService {
       active,
       accounts: accounts(this.base()).map((a) => ({
         id: a.account_id,
+        notifications: a.new_mail_notifications ?? true,
         email: a.email,
         imap: a.imap,
         smtp: a.smtp,
@@ -236,6 +254,9 @@ export class MailboxService {
     this.sendScope = new AbortController()
     clearAttachmentPreviews()
     this.epoch++
+    this.wake = false
+    this.arrivalBoundary = undefined
+    this.notifications?.clear()
     this.connecting = false
     this.running = false
     clearTimeout(this.timer)
@@ -310,6 +331,7 @@ export class MailboxService {
           smtp: f.smtp,
           first_connected_at: existing?.first_connected_at ?? now.toISOString(),
           last_connected_at: now.toISOString(),
+          new_mail_notifications: existing?.new_mail_notifications,
           initial_sync_mode: existing?.initial_sync_mode ?? f.mode,
           sync_from:
             existing?.sync_from ??
@@ -385,6 +407,10 @@ export class MailboxService {
       f.binding = 'manual'
       save(path.join(accountDir(base, id), 'sync', 'sent.json'), f)
       this.schedule(0)
+    } else if (a.kind === 'notifications' && id && a.account === id && typeof a.enabled === 'boolean') {
+      const file = path.join(accountDir(base, id), 'account.json')
+      save(file, { ...read<Account>(file), new_mail_notifications: a.enabled })
+      if (!a.enabled) this.notifications?.clear()
     } else if (a.kind === 'retry' && id) {
       if (!this.running) this.schedule(0)
     } else throw new Error('当前邮箱状态不支持此操作。')
@@ -424,7 +450,8 @@ export class MailboxService {
             save(path.join(dir, 'sync', 'sent.json'), f)
           }
           let last = 0
-          await this.protocol.importFolder(
+          const arrivals = new Map<string, { message: string; sender: string }[]>()
+          const box = await this.protocol.importFolder(
             client,
             dir,
             account,
@@ -437,11 +464,48 @@ export class MailboxService {
                 this.notify()
               }
             },
+            role === 'inbox'
+              ? {
+                  opened: (validity, upper) => {
+                    if (this.arrivalBoundary?.validity !== validity)
+                      this.arrivalBoundary = { validity, upper }
+                  },
+                  added: (uid, message, contact, sender) => {
+                    if (uid <= this.arrivalBoundary!.upper) return
+                    const list = arrivals.get(contact) ?? []
+                    list.push({ message, sender })
+                    arrivals.set(contact, list)
+                  },
+                }
+              : undefined,
           )
           this.check(ctx)
+          if (role === 'inbox') {
+            try {
+              await syncFlags(client, box, f, dir, index, () => this.check(ctx))
+            } finally {
+              this.check(ctx)
+              if (
+                arrivals.size &&
+                read<Account>(path.join(dir, 'account.json')).new_mail_notifications !== false
+              ) {
+                const unread = index.unreadMessages(f)
+                for (const [contact, arrivalsForContact] of arrivals) {
+                  const eligible = arrivalsForContact.filter((row) => unread.has(row.message))
+                  const latest = eligible.at(-1)
+                  if (latest)
+                    this.notifications?.show(
+                      { context: ctx, account: id, contact, message: latest.message },
+                      latest.sender,
+                      eligible.length,
+                    )
+                }
+              }
+            }
+          }
         } catch (err) {
           this.check(ctx)
-          this.errors[role] = diagnostic(err)
+          this.errors[role] = err instanceof ReadOnlyInbox ? err.message : diagnostic(err)
         }
       }
     } catch (err) {
@@ -455,7 +519,8 @@ export class MailboxService {
         this.client = undefined
         this.running = false
         this.notify()
-        this.schedule(60000)
+        this.schedule(this.wake ? 0 : 60000)
+        this.wake = false
       }
     }
   }

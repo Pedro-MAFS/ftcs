@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, ref, watch } from 'vue'
 import {
   key,
   type AttachmentAction,
@@ -12,9 +12,11 @@ import {
 import { showToast } from '../../composables/useToast'
 import MailComposer from './MailComposer.vue'
 import HtmlMailBody from './HtmlMailBody.vue'
+import { useVisibleMail } from './useVisibleMail'
+import { pendingMailTarget } from './mail-navigation'
 import Icon from '../shared/Icon.vue'
-const props = defineProps<{ snapshot: Snapshot; account: string; busy: boolean }>()
-const emit=defineEmits<{ settings: []; sync: [] }>()
+const props = defineProps<{ snapshot: Snapshot; account: string; busy: boolean; covered?: boolean }>()
+const emit=defineEmits<{ settings: []; sync: []; navigate: [] }>()
 const accountEmail = computed(() => props.snapshot.accounts.find((a) => a.id === props.account)?.email || '')
 const syncLabel = computed(() => {
   const folders = props.snapshot.folders
@@ -87,6 +89,16 @@ const compose = ref(false),
   address = ref(''),
   scroller = ref<HTMLElement>(),
   newMail = ref(false)
+useVisibleMail(
+  scroller,
+  () => !!props.covered || !!editor.value?.expanded,
+  () => selected.value,
+  () => messages.value,
+  async (ids) => {
+    await api.markRead({ ...props.snapshot.context }, props.account, selected.value, ids)
+  },
+  (e) => showToast(String(e), { tone: 'error' }),
+)
 const originalPage = ref(false)
 const highlighted = ref('')
 function focusOriginal(id: string) {
@@ -173,7 +185,9 @@ async function load(mode: 'open' | 'older' | 'update' | 'original', aroundId?: s
         el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - anchor.offset
     }
   } catch (e) {
-    if (request === pageRequest) readError.value = String(e)
+    if (request === pageRequest && mode === 'original' && String(e).includes('找不到原邮件')) {
+      void load('open')
+    } else if (request === pageRequest) readError.value = String(e)
   } finally {
     if (request === pageRequest) reading.value = false
   }
@@ -216,7 +230,7 @@ async function refresh() {
     } else if (!current.value) select(rows[0]?.id ?? '')
     else if (originalPage.value && highlighted.value && current.value.revision !== previous?.revision)
       void load('original', highlighted.value)
-    else if (!originalPage.value && (current.value.count !== previous?.count || current.value.lastId !== previous?.lastId || current.value.revision !== previous?.revision))
+    else if (!originalPage.value && (current.value.unread !== previous?.unread || current.value.count !== previous?.count || current.value.lastId !== previous?.lastId || current.value.revision !== previous?.revision))
       void load('update')
   } catch (e) {
     if (request === listRequest) listError.value = String(e)
@@ -224,8 +238,52 @@ async function refresh() {
     if (request === listRequest) listing.value = false
   }
 }
+const pageActive = ref(true)
+onActivated(() => {
+  pageActive.value = true
+})
+onDeactivated(() => {
+  pageActive.value = false
+})
+watch(
+  [
+    pendingMailTarget,
+    contacts,
+    listing,
+    pageActive,
+    () => editor.value?.editingTemplate,
+    () => editor.value?.importingImage,
+    () => editor.value?.busy,
+  ],
+  async () => {
+    const target = pendingMailTarget.value
+    if (
+      !target ||
+      !pageActive.value ||
+      listing.value ||
+      props.account !== target.account ||
+      props.snapshot.context.root !== target.context.root ||
+      props.snapshot.context.generation !== target.context.generation ||
+      editor.value?.editingTemplate ||
+      editor.value?.importingImage ||
+      editor.value?.busy
+    )
+      return
+    if (!contacts.value.some((c) => c.id === target.contact)) return
+    await leaveEditor(() => {
+      if (!pageActive.value || pendingMailTarget.value !== target) return
+      pendingMailTarget.value = undefined
+      emit('navigate')
+      editor.value?.collapse()
+      contactSearch.value = ''
+      select(target.contact, target.message)
+    })
+  },
+  { flush: 'post' },
+)
 watch(() => props.snapshot, refresh, { immediate: true })
 onBeforeUnmount(() => {
+  pageActive.value = false
   listRequest++
   pageRequest++
 })
@@ -334,8 +392,9 @@ onBeforeUnmount(() => {
           <div v-if="!index || day(m.at) !== day(messages[index - 1].at)" class="date">
             {{ formattedDay(m.at) }}
           </div>
-          <article :data-message="m.id" tabindex="-1" :class="{ out: m.outgoing, highlighted: highlighted === m.id }">
+          <article :data-message="m.id" :data-unread="!!m.unread" tabindex="-1" :class="{ out: m.outgoing, highlighted: highlighted === m.id }">
             <div class="byline">
+              <span v-if="m.unread" class="unread-dot" aria-label="未读" title="未读"></span>
               {{ m.outgoing ? '我' : m.from?.name || m.from?.email || '发件人' }} · {{ clock(m.at) }}
             </div>
             <div class="bubble">
@@ -679,6 +738,14 @@ main header strong {
 }
 .older {
   font-size: 12px;
+}
+.unread-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--soft-blue);
+  border-radius: 50%;
+  vertical-align: middle;
 }
 .byline {
   margin-bottom: 7px;

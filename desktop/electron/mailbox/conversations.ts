@@ -157,6 +157,7 @@ export class ImportIndex {
   }
   private revisions = new Map<string, number>()
   private states = new Map<string, CopyRow>()
+  private copiesByMessage = new Map<string, Set<string>>()
   get count() {
     return this.positions.size
   }
@@ -285,7 +286,56 @@ export class ImportIndex {
     if (canonical) r = { ...r, message_id: canonical }
     const id = folder + ':' + r.uid_validity + ':' + r.uid
     this.copies.add(id)
-    if ((this.states.get(id)?.rev ?? 0) <= r.rev) this.states.set(id, r)
+    const previous = this.states.get(id)
+    if (previous && previous.rev > r.rev) return
+    this.states.set(id, r)
+    if (previous?.present === r.present && previous.message_id === r.message_id) return
+    if (previous) this.copiesByMessage.get(previous.message_id)?.delete(id)
+    if (r.present) {
+      const keys = this.copiesByMessage.get(r.message_id) ?? new Set<string>()
+      keys.add(id)
+      this.copiesByMessage.set(r.message_id, keys)
+    }
+  }
+  inboxCopies(inbox: Folder) {
+    const prefix = inbox.folder_id + ':' + inbox.uid_validity + ':'
+    return Array.from(this.states.entries())
+      .filter(([key, row]) => key.startsWith(prefix) && row.present)
+      .map(([, row]) => row)
+  }
+  changeCopy(
+    folder: Folder,
+    uid: number,
+    delta: Partial<Pick<CopyRow, 'present' | 'pending_seen' | 'seen'>>,
+  ) {
+    const current = this.states.get(folder.folder_id + ':' + folder.uid_validity + ':' + uid)
+    if (!folder.folder_id || !current?.present) return false
+    const next = { ...current, ...delta }
+    if (
+      current.seen === next.seen &&
+      current.pending_seen === next.pending_seen &&
+      current.present === next.present
+    )
+      return false
+    const row = { ...next, rev: current.rev + 1, updated_at: new Date().toISOString() }
+    append(path.join(this.dir, 'copies', folder.folder_id + '.jsonl'), row)
+    this.copy(folder.folder_id, row)
+    this.deliveryChanged(row.message_id)
+    return true
+  }
+  markRead(inbox: Folder, contact: string, ids: Set<string>) {
+    let changed = false
+    const prefix = inbox.folder_id + ':' + inbox.uid_validity + ':'
+    for (const message of ids) {
+      const row = this.positions.get(message)
+      if (!row || row.outgoing || !row.contacts.includes(contact)) continue
+      for (const key of this.copiesByMessage.get(message) ?? []) {
+        const copy = this.states.get(key)!
+        if (key.startsWith(prefix) && !(copy.pending_seen ?? copy.seen))
+          changed = this.changeCopy(inbox, copy.uid, { pending_seen: true }) || changed
+      }
+    }
+    return changed
   }
   unreadMessages(inbox: Folder): Set<string> {
     const unread = new Set<string>(),
@@ -364,6 +414,7 @@ export class ImportIndex {
     before: TimelineCursor | undefined,
     guard: () => void,
     aroundId?: string,
+    unread?: Set<string>,
   ): Promise<TimelinePage> {
     const rows = this.byContact.get(contact)
     if (!rows) throw new Error('当前账号中没有这个会话。')
@@ -383,6 +434,7 @@ export class ImportIndex {
         id: row.id,
         at: row.at,
         outgoing: row.outgoing,
+        unread: unread?.has(row.id),
         subject: r.subject || '（无主题）',
         ...(r.html_body?.trim() ? { body: text } : splitQuotedText(text)),
         quoteSource: quoteSource(r, text),

@@ -20,6 +20,10 @@ export async function importFolder(
   index: ImportIndex,
   guard: () => void,
   progress: () => void,
+  arrivals?: {
+    opened(validity: number, upper: number): void
+    added(uid: number, message: string, contact: string, sender: string): void
+  },
 ) {
   const folderId = folder.folder_id
   if (!folderId || !uuid(folderId) || !folder.remote_path) throw new Error('无效文件夹')
@@ -28,7 +32,10 @@ export async function importFolder(
   const file = path.join(dir, 'sync', folder.role + '.json')
   const validity = Number(box.uidValidity)
   const upper = box.uidNext - 1
+  arrivals?.opened(validity, upper)
   if (folder.uid_validity !== validity) {
+    delete folder.flags_modseq
+    delete folder.flags_after_uid
     folder.uid_validity = validity
     folder.last_scanned_uid = 0
     folder.initial_upper_uid = upper
@@ -79,6 +86,7 @@ export async function importFolder(
           parsed.messageId !== (index.currentInternetId(sent.message_id) ?? sent.internet_message_id)
         )
       let messageId = sent?.message_id ?? known?.messageId ?? imported
+      let newContact: string | undefined
       if (!messageId || replace) {
         const context = sent && index.composer.copyContext(sent)
         if (context) ids.add(context.contact)
@@ -86,6 +94,7 @@ export async function importFolder(
           for (const peer of peers) {
             if (key(peer.email) !== account.address_key) ids.add(index.ensureContact(peer))
           }
+        if (!messageId && !isSent && !raw.flags?.has('\\Seen')) newContact = ids.values().next().value
         messageId ??= randomUUID()
         const now = new Date().toISOString()
         const attachments = parsed.attachments.map((a) => {
@@ -139,6 +148,7 @@ export async function importFolder(
       index.copy(folderId, copy)
       folder.last_scanned_uid = uid
       save(file, folder)
+      if (newContact) arrivals?.added(uid, messageId, newContact, sender?.name || sender?.email || '发件人')
       progress()
     }
   }
@@ -147,4 +157,5 @@ export async function importFolder(
   folder.phase = 'incremental'
   folder.last_synced_at = new Date().toISOString()
   save(file, folder)
+  return box
 }

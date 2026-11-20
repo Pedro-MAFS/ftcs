@@ -1,6 +1,7 @@
 import { openAttachment, saveAttachment } from './mailbox/attachments'
 import { MailboxService } from './mailbox/service'
 import { safeStorage } from 'electron'
+import { mailNotifications } from './notify/mail-notifications'
 import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount, getCloudflareCredentials } from './cloudflare/cloudflare-auth'
 import { CloudflarePages, normalizeDomain, verifyPagesProject, type PagesProject } from './cloudflare/cloudflare-pages'
 import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub, getGithubAccessToken } from './github/github-auth'
@@ -288,7 +289,7 @@ const mailbox = new MailboxService(getWorkspaceRoot, {
     return safeStorage.encryptString(value)
   },
   decrypt: value => safeStorage.decryptString(value),
-}, () => mainWindow?.webContents.send(IPC.MAILBOX_CHANGED))
+}, () => mainWindow?.webContents.send(IPC.MAILBOX_CHANGED), undefined, mailNotifications(() => mainWindow))
 
 const siteRuntime = new SiteRuntime(resolveConfiguredNode, getWorkspaceRoot, snapshot => {
   if (snapshot.preview.state !== 'running') clearVerifiedPreviewTargets()
@@ -767,6 +768,10 @@ function registerIpcHandlers(): void {
     if (result.canceled || !result.filePath) return 'canceled'
     await saveAttachment(file, result.filePath, current)
     return 'saved'
+  })
+  ipcMain.handle(IPC.MAILBOX_MARK_READ, (event, ctx, account, contact, ids) => {
+    checkMailboxSender(event)
+    return mailbox.markRead(ctx, account, contact, ids)
   })
   ipcMain.handle(IPC.MAILBOX_UNREAD_COUNT, event => {
     checkMailboxSender(event)

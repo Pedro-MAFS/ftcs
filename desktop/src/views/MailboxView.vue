@@ -4,6 +4,7 @@ import type { Connection, Endpoint, MailAction, Snapshot } from '../../electron/
 import { key } from '../../electron/mailbox/types'
 
 import MailConversations from '../components/mailbox/MailConversations.vue'
+const settingsOpen = ref(false)
 const settingsDialog = ref<HTMLDialogElement>()
 const api = window.ftcs?.mailbox
 const state = ref<Snapshot>()
@@ -30,6 +31,7 @@ const fresh = (): Connection => ({
 const form = ref(fresh())
 const saved = computed(() => state.value?.accounts.find((a) => key(a.email) === key(form.value.email)))
 const active = computed(() => state.value?.accounts.find((a) => a.id === state.value?.active))
+watch(settingsDialog, dialog => { if (!dialog) settingsOpen.value = false })
 const presetHosts: Record<string, [string, string]> = {
   'gmail.com': ['imap.gmail.com', 'smtp.gmail.com'],
   'qq.com': ['imap.qq.com', 'smtp.qq.com'],
@@ -192,12 +194,15 @@ async function act(action: MailAction) {
       </section>
     </template>
     <template v-else>
-      <dialog ref="settingsDialog" class="settings-dialog" aria-labelledby="mail-settings-title">
+      <dialog ref="settingsDialog" @close="settingsOpen = false" class="settings-dialog" aria-labelledby="mail-settings-title">
         <header>
           <h2 id="mail-settings-title">邮箱设置</h2>
           <button autofocus @click="settingsDialog?.close()">关闭</button>
         </header>
         <p>{{ active.email }}</p>
+        <label class="choice"><input type="checkbox" :checked="active.notifications !== false" :disabled="busy"
+          @change="act({kind: 'notifications', account: active.id, enabled: ($event.target as HTMLInputElement).checked})" />
+          桌面新邮件通知</label>
         <div v-for="f in state.folders" :key="f.role" class="row">
           <strong>{{ f.role === 'inbox' ? '收件箱' : '已发送' }}</strong>
           <span>{{
@@ -233,7 +238,9 @@ async function act(action: MailAction) {
         :account="active.id"
         :snapshot="state"
         :busy="busy"
-        @settings="settingsDialog?.showModal()"
+        :covered="settingsOpen || !!confirmation"
+        @settings="settingsOpen = true; settingsDialog?.showModal()"
+        @navigate="settingsDialog?.close(); confirmation = undefined"
         @sync="act({ kind: 'retry' })"
       />
     </template>

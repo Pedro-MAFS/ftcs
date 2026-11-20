@@ -272,7 +272,7 @@ function cancelQuote() {
   quote.value = undefined
   change({ mode: 'new', quoted_message_id: undefined, reply_subject_override: undefined })
 }
-defineExpose({ cite, flush: flushForNavigation })
+defineExpose({ cite, expanded, collapse, editingTemplate, importingImage, busy, flush: flushForNavigation })
 async function act(kind: 'pick' | 'remove' | 'send', attachment?: string) {
   if (locked.value || importingImage.value) return
   busy.value = true
