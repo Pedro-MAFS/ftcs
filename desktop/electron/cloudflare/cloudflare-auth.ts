@@ -6,7 +6,8 @@ import path from 'node:path'
 
 interface Credentials { accessToken: string; refreshToken?: string; expiresAt?: number; accountId?: string }
 export interface CloudflareAccount { id: string; name: string }
-export interface CloudflareState { connected: boolean; authorized?: boolean; pending?: boolean; accountId?: string; accountName?: string; accounts?: CloudflareAccount[]; message?: string }
+class CloudflareAuthorizationInvalid extends Error {}
+export interface CloudflareState { connected: boolean; checkFailed?: boolean; authorized?: boolean; pending?: boolean; accountId?: string; accountName?: string; accounts?: CloudflareAccount[]; message?: string }
 export interface CloudflareAction extends CloudflareState { ok: boolean; needsPageAuthorization?: boolean }
 const CLIENT_ID = '1a2011f887b64896fbfdbef7591dc8ec'
 const REDIRECT_URI = 'http://127.0.0.1:43862/callback'
@@ -37,6 +38,10 @@ function tokenRequest(values: Record<string, string>): Promise<Record<string, un
     method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(values), signal: AbortSignal.timeout(15000), redirect: 'error',
   }).then(async response => {
+    if (!response.ok && values.grant_type === 'refresh_token' && response.status === 400) {
+      const body = await response.json().catch(() => null)
+      if (body?.error === 'invalid_grant') throw new CloudflareAuthorizationInvalid('Cloudflare 授权已过期，请重新连接。')
+    }
     if (!response.ok) throw new Error(`Cloudflare 授权服务返回 HTTP ${response.status}。`)
     return await response.json() as Record<string, unknown>
   })
@@ -52,7 +57,7 @@ async function validToken(): Promise<Credentials | null> {
   const stored = load()
   if (!stored) return null
   if (!stored.expiresAt || stored.expiresAt > Date.now() + 60000) return stored
-  if (!stored.refreshToken) throw new Error('Cloudflare 授权已过期，请重新连接。')
+  if (!stored.refreshToken) throw new CloudflareAuthorizationInvalid('Cloudflare 授权已过期，请重新连接。')
   const current = generation
   const result = await tokenRequest({ grant_type: 'refresh_token', client_id: getClientId(), refresh_token: stored.refreshToken })
   const updated = credentialsFrom(result, stored)
@@ -69,7 +74,7 @@ async function api(token: string, suffix: string): Promise<Record<string, unknow
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
     signal: AbortSignal.timeout(15000), redirect: 'error',
   })
-  if (response.status === 401 || response.status === 403) throw new Error('Cloudflare 授权无效或缺少所需权限。')
+  if (response.status === 401 || response.status === 403) throw new CloudflareAuthorizationInvalid('Cloudflare 授权无效或缺少所需权限。')
   if (!response.ok) throw new Error(`Cloudflare 查询失败（HTTP ${response.status}）。`)
   const data = await response.json() as Record<string, unknown>
   if (data.success !== true || !Array.isArray(data.result)) throw new Error('Cloudflare 返回的数据无效。')
@@ -113,7 +118,7 @@ export async function getCloudflareState(): Promise<CloudflareState> {
     const credentials = await getValidToken()
     if (current !== generation || !credentials) return { connected: false, pending: !!pending }
     return await inspect(credentials, current)
-  } catch (error) { return { connected: false, authorized: !!load(), message: error instanceof Error ? error.message : '无法检查 Cloudflare 连接。' } }
+  } catch (error) { return { connected: false, authorized: !!load(), checkFailed: !(error instanceof CloudflareAuthorizationInvalid), message: error instanceof Error ? error.message : '无法检查 Cloudflare 连接。' } }
 }
 /** Main-process only: never expose the token to the renderer. */
 export async function getCloudflareCredentials(): Promise<{ accessToken: string; accountId: string }> {

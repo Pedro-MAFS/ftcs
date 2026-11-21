@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 
-const props = defineProps<{ root: string; accountId: string; project: string }>()
+const props = defineProps<{ root: string; accountId: string; project: string; initial?: Data | null }>()
+const emit = defineEmits<{ initialized: [] }>()
 type Data = Extract<Awaited<ReturnType<NonNullable<Window['ftcs']>['listSiteDomains']>>, { ok: true }>['value']
 type Domain = Data['domains'][number]
 const data = ref<Data | null>(null)
@@ -22,6 +23,11 @@ const current = () => `${props.root}\0${props.accountId}\0${props.project}`
 function label(status: string): string {
   return ({ initializing: '初始化中', pending: '验证中', active: 'Cloudflare 已激活', deactivated: '未启用', blocked: '已阻止', error: '验证异常' } as Record<string, string>)[status] || '状态待确认'
 }
+function applyDomains(snapshot: Data) {
+  data.value = snapshot; checkedAt.value = new Date().toLocaleString()
+  if (selected.value) selected.value = snapshot.domains.find(item => item.name === selected.value?.name) || selected.value
+  showRetry.value = !!snapshot.pending && !snapshot.domains.some(item => item.name === snapshot.pending?.name)
+}
 async function refresh() {
   if (!window.ftcs || !props.root || !props.accountId || !props.project || busy.value) return
   const context = current(), request = ++sequence
@@ -31,9 +37,7 @@ async function refresh() {
     if (request !== sequence || context !== current()) return
     if (!result.ok) { error.value = result.message; return }
     if (result.value.accountId !== props.accountId || result.value.project !== props.project) { error.value = 'Cloudflare 账号或项目已变化，请刷新页面。'; return }
-    data.value = result.value; checkedAt.value = new Date().toLocaleString()
-    if (selected.value) selected.value = result.value.domains.find(item => item.name === selected.value?.name) || selected.value
-    showRetry.value = !!result.value.pending && !result.value.domains.some(item => item.name === result.value.pending?.name)
+    applyDomains(result.value)
   } catch { if (request === sequence) error.value = '无法查询 Cloudflare 域名列表，请重试。' }
   finally { if (request === sequence) busy.value = false }
 }
@@ -108,7 +112,12 @@ async function connectDns() {
   await window.ftcs.openExternal(`https://dash.cloudflare.com${account}`)
 }
 async function copy(value: string) { try { await navigator.clipboard.writeText(value); note.value = '已复制。' } catch { note.value = '无法复制，请手动复制。' } }
-watch(() => [props.root, props.accountId, props.project], () => { sequence++; data.value = null; busy.value = false; selected.value = null; deleting.value = null; open.value = false; error.value = ''; note.value = ''; checkedAt.value = ''; showRetry.value = false; void refresh() }, { immediate: true })
+watch(() => [props.root, props.accountId, props.project], () => { sequence++; data.value = null; busy.value = false; selected.value = null; deleting.value = null; open.value = false; error.value = ''; note.value = ''; checkedAt.value = ''; showRetry.value = false
+  if (props.initial && props.initial.accountId === props.accountId && props.initial.project === props.project) {
+    applyDomains(props.initial)
+    emit('initialized')
+  } else void refresh()
+}, { immediate: true })
 watch(busy, value => { if (!value && refreshQueued) { refreshQueued = false; void refresh() } })
 onMounted(() => { removeListener = window.ftcs?.onSiteDomainsChanged(value => { if (value.root !== props.root) return; if (busy.value) refreshQueued = true; else void refresh() }) })
 onUnmounted(() => { sequence++; removeListener?.() })

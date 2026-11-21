@@ -1,4 +1,4 @@
-interface CloudflareState { connected: boolean; authorized?: boolean; pending?: boolean; accountId?: string; accountName?: string; accounts?: Array<{ id: string; name: string }>; message?: string }
+interface CloudflareState { connected: boolean; checkFailed?: boolean; authorized?: boolean; pending?: boolean; accountId?: string; accountName?: string; accounts?: Array<{ id: string; name: string }>; message?: string }
 interface SiteSnapshot { status: 'not_created' | 'empty' | 'existing' | 'ready' | 'missing' | 'invalid' | 'error'; workspaceRoot: string; projectPath: string; message: string; dependencies: 'missing' | 'unknown' }
 interface SiteRun { id: string; state: 'idle' | 'starting' | 'running' | 'address_pending' | 'stopping' | 'succeeded' | 'failed' | 'cancelled'; message: string; log: string; url?: string; startedAt?: string; finishedAt?: string; node?: string; output?: string; sourceHash?: string }
 interface SiteRuntimeSnapshot { workspaceRoot: string; sequence: number; outputDir: string | null; dependencies: 'missing' | 'unknown' | 'not_required'; install: SiteRun; preview: SiteRun; build: SiteRun }
@@ -9,7 +9,7 @@ interface PagesProject { name: string; subdomain: string; owner: string; repo: s
 interface PagesStatus { state: 'waiting' | 'building' | 'success' | 'failed' | 'skipped' | 'unknown'; message: string; deploymentId?: string; deploymentUrl?: string; productionUrl?: string; productionCurrent?: boolean }
 interface PagesDomain { name: string; status: string; validation?: { method?: string; status?: string; error?: string; txtName?: string; txtValue?: string }; verification?: { status?: string; error?: string } }
 interface SiteDomains { accountId: string; project: string; subdomain: string; domains: PagesDomain[]; pending?: { name: string; kind: 'root' | 'subdomain' } }
-type SiteResult<T> = { ok: true; value: T } | { ok: false; message: string }
+export type SiteResult<T> = { ok: true; value: T } | { ok: false; message: string }
 import type { AppStatus, OpenCodeActionResult } from './app'
 import type { AuthActionResult, AuthSessionSnapshot } from './auth'
 import type { LibraryMutationResult, LibrarySnapshot } from './library'
@@ -986,7 +986,7 @@ declare global {
       cancelCloudflareAuth: () => Promise<void>
       selectCloudflareAccount: (accountId: string) => Promise<CloudflareState & { ok: boolean }>
       disconnectCloudflare: () => Promise<void>
-      getGithubState: () => Promise<{ connected: boolean; authorized?: boolean; login?: string; message?: string; installUrl?: string }>
+      getGithubState: () => Promise<{ connected: boolean; checkFailed?: boolean; authorized?: boolean; login?: string; message?: string; installUrl?: string }>
       getSiteSource: (root: string) => Promise<SiteSourceSnapshot>
       onSiteSource: (callback: (snapshot: SiteSourceSnapshot) => void) => () => void
       getSiteRelease: (root: string) => Promise<SiteResult<SiteRelease>>
