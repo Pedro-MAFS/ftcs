@@ -87,8 +87,8 @@ export interface Conversation extends MailContactProfile {
   email: string
   preview: string
   draftPreview?: string
-  lastAt: string
-  lastId: string
+  lastAt?: string
+  lastId?: string
   unread: number
   count: number
 }

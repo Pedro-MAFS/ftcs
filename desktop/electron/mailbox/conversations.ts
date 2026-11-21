@@ -102,6 +102,7 @@ function quoteSource(r: MessageRow, text = body(r)): QuoteSource {
 }
 export class ImportIndex {
   readonly composer: ComposerStore
+  private presetContactId?: string
   private constructor(private dir: string) {
     this.composer = new ComposerStore(dir, this)
   }
@@ -119,8 +120,8 @@ export class ImportIndex {
     const address = key(peer.email)
     const id = this.contacts.get(address) ?? randomUUID()
     const old = this.people.get(id)
-    // A private draft may already own this ID before the first mail creates a conversation.
-    if (old && (!profile || this.hasConversation(id))) return id
+    // A draft or preset contact may own this ID before the first real mail arrives.
+    if (old && (!profile || this.byContact.get(id)?.length)) return id
     const contact = {
       ...old,
       contact_id: id,
@@ -194,10 +195,16 @@ export class ImportIndex {
   get count() {
     return this.positions.size
   }
-  static async load(dir: string, guard: () => void) {
+  static async load(dir: string, guard: () => void, preset?: MailAddress) {
     const index = new ImportIndex(dir)
     const contacts = path.join(dir, 'contacts.jsonl')
     if (fs.existsSync(contacts)) await eachLine(contacts, (r) => index.contact(r), guard)
+    if (preset) {
+      guard()
+      const id = index.ensureContact(preset, { name: preset.name })
+      index.presetContactId = id
+      index.byContact.set(id, [])
+    }
     await index.composer.restore(guard)
     guard()
     for (const kind of ['messages', 'copies']) {
@@ -282,7 +289,7 @@ export class ImportIndex {
       for (const contact of previous.contacts) {
         const list = this.byContact.get(contact)!
         list.splice(lowerBound(list, previous), 1)
-        if (!list.length) this.byContact.delete(contact)
+        if (!list.length && contact !== this.presetContactId) this.byContact.delete(contact)
         this.revisions.set(contact, (this.revisions.get(contact) ?? 0) + 1)
       }
     const snippet =
@@ -386,7 +393,7 @@ export class ImportIndex {
     for (const [id, list] of this.byContact) {
       const person = this.people.get(id),
         last = list.at(-1)
-      if (!person || !last) continue
+      if (!person) continue
       result.push({
         id,
         email: person.email,
@@ -395,17 +402,17 @@ export class ImportIndex {
         pinned: person.pinned ?? false,
         company: person.company,
         title: person.title,
-        lastAt: last.at,
-        lastId: last.id,
+        lastAt: last?.at,
+        lastId: last?.id,
         revision: this.revisions.get(id),
         draftPreview: this.composer.preview(id),
-        preview: (last.outgoing ? '我：' : '') + last.preview,
+        preview: last ? (last.outgoing ? '我：' : '') + last.preview : '',
         count: list.length,
         unread: list.reduce((n, m) => n + Number(unread.has(m.id)), 0),
       })
     }
     return result.sort((a, b) =>
-      Number(b.pinned) - Number(a.pinned) || cmp(b.lastAt, a.lastAt) || cmp(b.lastId, a.lastId) || cmp(a.id, b.id),
+      Number(b.pinned) - Number(a.pinned) || cmp(b.lastAt ?? '', a.lastAt ?? '') || cmp(b.lastId ?? '', a.lastId ?? '') || cmp(a.id, b.id),
     )
   }
   private readRecord(row: Summary): MessageRow {

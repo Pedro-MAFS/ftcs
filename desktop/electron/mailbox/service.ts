@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
+import developerContact from '../../../website/src/config/developer-contact.json' with { type: 'json' }
 import { imapClient, verify, diagnostic, smtpSubmit } from './protocol'
 import { clearAttachmentPreviews, localAttachment } from './attachments'
 import { importFolder } from './import'
@@ -104,7 +105,12 @@ export class MailboxService {
     this.check(ctx)
     if (!id || this.state().active_account_id !== id) throw new Error('邮箱账号已改变。')
     if (this.index) return this.index
-    this.loading ??= ImportIndex.load(accountDir(this.base(), id), () => this.check(ctx))
+    if (!this.loading) {
+      const dir = accountDir(this.base(), id)
+      const { email } = read<Account>(path.join(dir, 'account.json'))
+      const preset = email.toLowerCase() === developerContact.email ? undefined : developerContact
+      this.loading = ImportIndex.load(dir, () => this.check(ctx), preset)
+    }
     const loading = this.loading
     try {
       const index = await loading

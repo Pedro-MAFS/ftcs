@@ -10,6 +10,7 @@ import { showToast } from '../composables/useToast'
 import { RUNTIME_NOT_READY } from '../config/user-facing'
 
 import MailConversations from '../components/mailbox/MailConversations.vue'
+import Icon from '../components/shared/Icon.vue'
 const route = useRoute(), router = useRouter()
 const settingsOpen = ref(false)
 const settingsDialog = ref<HTMLDialogElement>()
@@ -184,73 +185,81 @@ async function act(action: MailAction) {
 
 <template>
   <section class="mail-page" :class="{ connected: active && !editing }">
-    <header v-if="!active || editing">
-      <h1>邮箱</h1>
-      <span v-if="active">{{ active.email }}</span>
-    </header>
-    <p v-if="error" role="alert">{{ error }}</p>
+    <p v-if="error && active && !editing" role="alert">{{ error }}</p>
     <p v-if="!state">正在读取邮箱设置…</p>
     <template v-else-if="!active || editing">
-      <form @submit.prevent="act({ kind: 'connect', form })">
-        <h2>{{ saved ? '重新连接邮箱' : '连接邮箱' }}</h2>
-        <label
-          >邮箱地址<input
-            v-model.trim="form.email"
-            type="email"
-            required
-            :readonly="!!active"
-            @blur="configure"
-        /></label>
-        <div class="auth-field">
-          <div class="auth-label">
-            <label for="mail-auth-code">邮箱授权码</label>
-            <button type="button" class="help-link" @click="openHelp(form.email)">如何获取授权码？</button>
+      <div class="setup">
+        <header class="setup-intro">
+          <div class="setup-mark"><Icon name="message-square" :size="24" /></div>
+          <div>
+            <h1>像聊微信一样使用邮箱</h1>
+            <p>连接邮箱后，和同一联系人的往来邮件会按时间排在一起。</p>
           </div>
-          <input id="mail-auth-code" v-model="form.password" type="password" autocomplete="off" required />
-        </div>
-        <button type="button" :aria-expanded="advanced" @click="advanced = !advanced">
-          服务器设置 {{ advanced ? '▴' : '▾' }}
-        </button>
-        <small v-if="!advanced && form.imap.host">{{ form.imap.host }} · {{ form.smtp.host }}</small>
-        <div v-if="advanced" class="servers">
-          <fieldset v-for="p in protocols" :key="p">
-            <legend>{{ p === 'imap' ? 'IMAP 收信' : 'SMTP 发信' }}</legend>
-            <label>服务器<input v-model.trim="form[p].host" required /></label>
-            <label
-              >端口<input v-model.number="form[p].port" type="number" min="1" max="65535" required
-            /></label>
-            <label
-              >加密方式<select v-model="form[p].security">
-                <option value="tls">TLS</option>
-                <option value="starttls">STARTTLS</option>
-              </select></label
+        </header>
+        <form class="setup-form" @submit.prevent="act({ kind: 'connect', form })">
+          <h2>{{ saved ? '重新连接邮箱' : '连接邮箱' }}</h2>
+          <label
+            >邮箱地址<input
+              v-model.trim="form.email"
+              type="email"
+              placeholder="name@example.com"
+              autocomplete="email"
+              required
+              :readonly="!!active"
+              @blur="configure"
+          /></label>
+          <div class="auth-field">
+            <div class="auth-label">
+              <label for="mail-auth-code">邮箱授权码</label>
+              <button type="button" class="help-link" @click="openHelp(form.email)">如何获取授权码？</button>
+            </div>
+            <input id="mail-auth-code" v-model="form.password" type="password" placeholder="输入邮箱服务商生成的授权码" autocomplete="off" required />
+          </div>
+          <button class="server-toggle" type="button" :aria-expanded="advanced" @click="advanced = !advanced">
+            <Icon name="sliders" :size="14" />服务器设置<Icon name="chevron-down" :size="14" />
+          </button>
+          <small v-if="!advanced && form.imap.host">{{ form.imap.host }} · {{ form.smtp.host }}</small>
+          <div v-if="advanced" class="servers">
+            <fieldset v-for="p in protocols" :key="p">
+              <legend>{{ p === 'imap' ? 'IMAP 收信' : 'SMTP 发信' }}</legend>
+              <label>服务器<input v-model.trim="form[p].host" required /></label>
+              <label
+                >端口<input v-model.number="form[p].port" type="number" min="1" max="65535" required
+              /></label>
+              <label
+                >加密方式<select v-model="form[p].security">
+                  <option value="tls">TLS</option>
+                  <option value="starttls">STARTTLS</option>
+                </select></label
+              >
+              <label>登录名<input v-model="form[p].username" required /></label>
+            </fieldset>
+          </div>
+          <p v-if="saved">将从上次进度继续同步。</p>
+          <fieldset v-else class="sync-options">
+            <legend>同步范围</legend>
+            <label class="choice"
+              ><input v-model="form.mode" type="radio" value="last_30_days" />同步最近 30 天的邮件往来</label
             >
-            <label>登录名<input v-model="form[p].username" required /></label>
+            <label class="choice"
+              ><input v-model="form.mode" type="radio" value="from_connection" />仅同步今后的邮件</label
+            >
           </fieldset>
-        </div>
-        <p v-if="saved">将从上次进度继续同步。</p>
-        <fieldset v-else>
-          <legend>同步范围</legend>
-          <label class="choice"
-            ><input v-model="form.mode" type="radio" value="last_30_days" />同步最近 30 天的邮件往来</label
-          >
-          <label class="choice"
-            ><input v-model="form.mode" type="radio" value="from_connection" />仅同步今后的邮件</label
-          >
-        </fieldset>
-        <div>
-          <button class="primary" :disabled="busy">{{ busy ? '正在验证收信和发信…' : '连接邮箱' }}</button>
-          <button v-if="editing" type="button" :disabled="busy" @click="clearForm">取消</button>
-        </div>
-      </form>
-      <section v-if="!active && state.accounts.length">
-        <h2>本机保留的邮箱</h2>
-        <div v-for="a in state.accounts" :key="a.id" class="row">
-          {{ a.email }}
-          <button :disabled="busy" @click="reconnect(a.email)">重新连接</button>
-          <button :disabled="busy" @click="confirmation = { kind: 'delete', id: a.id }">删除本地数据</button>
-        </div>
-      </section>
+          <p v-if="error" class="setup-error" role="alert">{{ error }}</p>
+          <div class="setup-actions">
+            <button class="primary" :disabled="busy">{{ busy ? '正在验证收信和发信…' : '连接邮箱' }}</button>
+            <button v-if="editing" type="button" :disabled="busy" @click="clearForm">取消</button>
+          </div>
+        </form>
+        <section v-if="!active && state.accounts.length" class="saved-accounts">
+          <h2>本机保留的邮箱</h2>
+          <div v-for="a in state.accounts" :key="a.id" class="row">
+            {{ a.email }}
+            <button :disabled="busy" @click="reconnect(a.email)">重新连接</button>
+            <button :disabled="busy" @click="confirmation = { kind: 'delete', id: a.id }">删除本地数据</button>
+          </div>
+        </section>
+      </div>
     </template>
     <template v-else>
       <dialog ref="settingsDialog" @close="settingsOpen = false" class="settings-dialog" aria-labelledby="mail-settings-title">
@@ -383,6 +392,91 @@ async function act(action: MailAction) {
   color: var(--text);
   background: var(--bg-app);
 }
+.mail-page:not(.connected) {
+  container-type: inline-size;
+  padding: 0;
+}
+.setup {
+  width: min(100%, 610px);
+  margin: auto;
+  padding: clamp(18px, 5cqw, 38px) clamp(12px, 4cqw, 28px);
+}
+.setup-intro {
+  flex-wrap: nowrap;
+  gap: 14px;
+  border: 0;
+  padding: 0;
+}
+.setup-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+.setup-intro h1 {
+  font-size: clamp(20px, 4.5cqw, 28px);
+  line-height: 1.3;
+}
+.setup-intro p {
+  margin-top: 4px;
+  color: var(--text-secondary);
+}
+.setup .setup-form, .saved-accounts {
+  display: grid;
+  gap: 15px;
+  margin: 20px 0 0;
+  padding: clamp(14px, 3.5cqw, 24px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.setup-form input:not([type='radio']), .setup-form select {
+  min-height: 36px;
+  width: 100%;
+}
+.setup-form .auth-label { justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+.setup-form .server-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+  border: 0;
+  color: var(--text-secondary);
+  background: transparent;
+}
+.server-toggle[aria-expanded='true'] svg:last-child { transform: rotate(180deg); }
+.setup-form .servers { grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr)); }
+.sync-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 174px), 1fr));
+  gap: 8px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.sync-options legend { padding: 0 0 6px; font-size: 13px; }
+.sync-options .choice {
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin: 0;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.sync-options .choice:has(:checked) {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+.sync-options input { margin: 0; accent-color: var(--accent); }
+.setup-actions { display: flex; gap: 8px; }
+.setup-form .setup-error { margin: 0; color: var(--danger); overflow-wrap: anywhere; }
+.setup-actions .primary { flex: 1; min-height: 38px; font-weight: 600; }
+.saved-accounts .row { overflow-wrap: anywhere; }
 header,
 .row,
 .choice {

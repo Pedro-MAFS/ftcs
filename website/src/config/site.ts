@@ -1,3 +1,5 @@
+import developerContact from './developer-contact.json'
+
 export interface DownloadMirror {
   id: 'gitee' | 'github'
   label: string
@@ -73,7 +75,7 @@ export const siteConfig: SiteConfig = {
     'FTCS Agent',
   ],
   phone: '+8617852032649',
-  email: 'mfs1998@qq.com',
+  email: developerContact.email,
   issuesUrl: 'https://github.com/Pedro-MAFS/ftcs/issues',
   downloadTip:
     '国内用户建议优先使用 Gitee 下载，速度通常明显更快；海外或 Gitee 不可用时可改用 GitHub。',

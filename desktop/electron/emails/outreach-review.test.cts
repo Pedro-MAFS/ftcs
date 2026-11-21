@@ -179,7 +179,9 @@ test('新会话按审核收件地址带入姓名、公司和职位；公司别�
   const first = prepareLead('p1', 'Northwind', 'Purchasing Director')
   await send(first.person)
   await send(first.company)
-  const [person, alias] = (await service.conversations(ctx, account)).sort((a, b) => a.email.localeCompare(b.email))
+  const contacts = await service.conversations(ctx, account)
+  const person = contacts.find(c => c.email === address)!
+  const alias = contacts.find(c => c.email === to)!
   assert.deepEqual([person.email, person.name, person.company, person.title],
     [address, 'Jane Smith', 'Northwind', 'Purchasing Director'])
   assert.deepEqual([alias.email, alias.name, alias.company, alias.title], [to, undefined, 'Northwind', undefined])
@@ -190,7 +192,8 @@ test('新会话按审核收件地址带入姓名、公司和职位；公司别�
   const reopened = await ImportIndex.load(dir, () => {})
   const same = reopened.conversations(newFolder('inbox', 'INBOX')).find((c) => c.id === person.id)!
   assert.deepEqual([same.company, same.title, same.count], ['Northwind', 'Purchasing Director', 2])
-  assert.equal(fs.readFileSync(path.join(dir, 'contacts.jsonl'), 'utf8').trim().split('\n').length, 2)
+  const contactLog = fs.readFileSync(path.join(dir, 'contacts.jsonl'), 'utf8').trim().split('\n')
+  assert.equal(contactLog.filter(line => [person.id, alias.id].includes(JSON.parse(line).contact_id)).length, 2)
 })
 
 test('明确失败可改投；未确认、切换账号、旧版页面和非法地址不会重复投递', async (t) => {
@@ -207,7 +210,7 @@ test('明确失败可改投；未确认、切换账号、旧版页面和非法�
   const failed = first.edit()
   assert.equal((await send(failed))?.state, 'failed')
   assert.equal((await send(failed))?.state, 'failed')
-  assert.deepEqual(await service.conversations(ctx, account), [])
+  assert.equal((await service.conversations(ctx, account)).some(c => c.email === failed.to), false)
   const before = first.detail().outreach!.review_id
   const retry = { ...first.edit(), to: primary }
   assert.equal((await send(retry))?.state, 'unknown')

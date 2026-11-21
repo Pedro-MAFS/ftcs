@@ -468,10 +468,10 @@ onBeforeUnmount(() => {
             }}</span>
             <span class="summary"
               ><strong>{{ contactName(c) }}</strong
-              ><span>{{ c.draftPreview ? '草稿 · '+c.draftPreview : c.preview }}</span></span
+              ><span>{{ c.draftPreview ? '草稿 · '+c.draftPreview : c.count === 0 ? '暂无邮件往来' : c.preview }}</span></span
             >
             <span class="meta"
-              ><small>{{
+              ><small v-if="c.lastAt">{{
                 day(c.lastAt) === day(new Date().toISOString()) ? clock(c.lastAt) : day(c.lastAt)
               }}</small
               ><b v-if="c.unread">{{ c.unread }}</b></span
@@ -517,7 +517,7 @@ onBeforeUnmount(() => {
         </div>
         <button v-if="originalPage" class="return-latest" @click="load('open')">返回最新邮件</button>
       </header>
-      <p v-if="temporary">与此地址暂无邮件往来。</p>
+      <p v-if="temporary || current?.count === 0">与此地址暂无邮件往来。</p>
       <p v-else-if="!current && !listing">选择联系人查看邮件往来。</p>
       <p v-if="readError" role="alert">{{ readError }} <button @click="load('update')">重新读取</button></p>
       <div ref="scroller" class="history" :class="{ following: followingLatest }" @scroll="trackScroll">

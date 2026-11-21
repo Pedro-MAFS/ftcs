@@ -8,6 +8,7 @@ import type { ImapFlow } from 'imapflow'
 import { MailboxService } from './service'
 import { importFolder } from './import'
 import { type Connection } from './types'
+import developerContact from '../../../website/src/config/developer-contact.json' with { type: 'json' }
 
 test('verify, import, resume, bind sent and isolate retained accounts', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-mail-test-'))
@@ -101,7 +102,7 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   await service.act(ctx(), { kind: 'bind', path: 'Outgoing' })
   await until(() => service.snapshot().imported === 3 && !service.snapshot().running)
   assert.equal(service.snapshot().folders[0].error, undefined)
-  assert.deepEqual(service.snapshot().contacts.sort(), ['alice@example.test', 'bob@example.test'])
+  assert.deepEqual(service.snapshot().contacts.sort(), ['alice@example.test', 'bob@example.test', developerContact.email].sort())
   const contact = (await service.conversations(ctx(), a)).find(c => c.email === 'alice@example.test')!
   const rename = { kind: 'remark', account: a, contact: contact.id, remark: '  老客户 Alice  ' } as const
   await service.act(ctx(), rename)
@@ -121,7 +122,7 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   const b = (
     await service.act(ctx(), {
       kind: 'connect',
-      form: { ...form, email: 'b@example.test', mode: 'from_connection' },
+      form: { ...form, email: developerContact.email, mode: 'from_connection' },
     })
   ).active!
   await until(() => service.snapshot().folders[0].phase === 'incremental' && !service.snapshot().running)
@@ -130,6 +131,7 @@ test('verify, import, resume, bind sent and isolate retained accounts', async (t
   await assert.rejects(service.act(ctx(), { ...rename, account: b }), /没有这个联系人/)
   await assert.rejects(service.timeline(stale, a, 'alice'), /工作区已改变/)
   assert.notEqual(a, b)
+  assert.deepEqual(await service.conversations(ctx(), b), [])
   assert.deepEqual(await service.temporaryDrafts(ctx(),b),[])
   assert.equal((await service.composer(ctx(),b,destination,{kind:'get'})).draft.text_body,'')
   assert.equal(await service.unreadCount(), 0)

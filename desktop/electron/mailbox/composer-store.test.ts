@@ -11,6 +11,7 @@ import type { Account } from './types'
 import { ImportIndex, type MessageRow } from './conversations'
 import { append, newFolder } from './storage'
 import { envelope, type Draft, type DraftInput, type SendResult } from './compose-types'
+import developerContact from '../../../website/src/config/developer-contact.json' with { type: 'json' }
 
 const self = 'sales@atlas.test',
   email = 'alice@example.test',
@@ -81,6 +82,35 @@ test('临时草稿与同名附件可恢复；只有 SMTP 接受后成为正式�
   assert.deepEqual(writer.temporary(), [])
   assert.equal((await ImportIndex.load(dir, idle)).count, 1)
 })
+test('预置开发者联系人：可直接写信，重开后复用联系人、备注和往来', async (t) => {
+  const { dir } = await setup(t)
+  const inbox = newFolder('inbox', 'INBOX')
+  const index = await ImportIndex.load(dir, idle, developerContact)
+  const [developer] = index.conversations(inbox)
+  assert.deepEqual([developer.name, developer.email, developer.count, developer.unread, developer.lastAt],
+    [developerContact.name, developerContact.email, 0, 0, undefined])
+  assert.deepEqual(await index.timeline(developer.id, undefined, idle), { messages: [], before: null })
+  index.setRemark(developer.id, '产品反馈')
+  index.setPinned(developer.id, true)
+  const writer = index.composer
+  const draft = writer.write(developer.email, self, writer.view(developer.email, self).draft, edit).draft
+  assert.equal(draft.contact_id, developer.id)
+  assert.deepEqual(writer.temporary(), [])
+  assert.equal(index.conversations(inbox)[0].draftPreview, edit.text_body)
+  await writer.send(developer.email, self, command(draft), async a => {
+    assert.deepEqual(a.snapshot.to, [{ email: developer.email }])
+    return { state: 'accepted' }
+  }, idle, idle)
+  const log = path.join(dir, 'contacts.jsonl')
+  const saved = fs.readFileSync(log, 'utf8')
+  const reopened = await ImportIndex.load(dir, idle, developerContact)
+  const rows = reopened.conversations(inbox)
+  assert.equal(rows.length, 1)
+  assert.deepEqual([rows[0].id, rows[0].remark, rows[0].pinned, rows[0].count], [developer.id, '产品反馈', true, 1])
+  assert.equal((await reopened.timeline(developer.id, undefined, idle)).messages[0].body, edit.text_body)
+  assert.equal(fs.readFileSync(log, 'utf8'), saved)
+})
+
 test('引用所选旧消息，回复全部去除本账号及重复地址，保留原信关系与本地跳转', async (t) => {
   const { dir, index, store } = await setup(t)
   const id = index.ensureContact({ email }),
