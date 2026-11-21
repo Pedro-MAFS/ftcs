@@ -2,7 +2,10 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import developerContact from '../../../website/src/config/developer-contact.json' with { type: 'json' }
-import { imapClient, verify, diagnostic, smtpSubmit } from './protocol'
+import { imapClient, verify, diagnostic, smtpSubmit, type MailCredential } from './protocol'
+import { refreshGmail, type GmailTokens } from './gmail-auth'
+import type { AccountSettings } from './types'
+import type { SubmitMail } from './composer-store'
 import { clearAttachmentPreviews, localAttachment } from './attachments'
 import { importFolder } from './import'
 import { ReadOnlyInbox, syncFlags } from './flags'
@@ -46,7 +49,10 @@ export class MailboxService {
     private protocol: { verify: typeof verify; imapClient: typeof imapClient; importFolder: typeof importFolder; smtpSubmit?: typeof smtpSubmit }
       = { verify, imapClient, importFolder },
     private notifications?: { show(target: MailTarget, sender: string, count: number): void; clear(): void },
+    private authorizeGmail?: (signal: AbortSignal, hint?: string) => Promise<{ settings: AccountSettings; tokens: GmailTokens }>,
   ) {}
+  private gmailFlow?: AbortController
+  private refreshing?: Promise<MailCredential>
   private sendScope = new AbortController()
   private epoch = 0
   private connecting = false
@@ -82,21 +88,45 @@ export class MailboxService {
   private configSignature(account: Account) {
     return JSON.stringify([this.root(), account.account_id, account.email, account.imap, account.smtp])
   }
-  private password(state: State, account: Account) {
+  private async mailCredential(state: State, account: Account, ctx: Context): Promise<MailCredential> {
+    this.check(ctx)
+    const binding = this.configSignature(account)
+    const file = this.credential(state, account.account_id)
+    let tokens: GmailTokens
     try {
-      const secret = JSON.parse(
-        this.vault.decrypt(fs.readFileSync(this.credential(state, account.account_id))),
-      )
-      if (secret.binding === this.configSignature(account) && typeof secret.password === 'string')
-        return secret.password as string
+      const secret = JSON.parse(this.vault.decrypt(fs.readFileSync(file)))
+      if (secret.binding !== binding) throw new Error()
+      if (!account.authMethod && typeof secret.password === 'string') return secret.password
+      if (account.authMethod !== 'google' || !secret.google?.refreshToken) throw new Error()
+      tokens = secret.google
     } catch {
-      /* The OS key store or the saved credentials can be unavailable after a move. */
+      throw Object.assign(new Error('请重新验证邮箱。'), { code: account.authMethod === 'google' ? 'GMAIL_REAUTH' : 'EAUTH' })
     }
-    throw Object.assign(new Error('请重新验证邮箱。'), { code: 'EAUTH' })
+    if (tokens.expiresAt > Date.now() + 60_000) return { accessToken: tokens.accessToken }
+    if (!this.refreshing) {
+      const pending = refreshGmail(tokens, this.sendScope.signal).then(updated => {
+        this.check(ctx)
+        atomic(file, this.vault.encrypt(JSON.stringify({ binding, google: updated })))
+        return { accessToken: updated.accessToken }
+      }).finally(() => { if (this.refreshing === pending) this.refreshing = undefined })
+      this.refreshing = pending
+    }
+    return this.refreshing
   }
-  private submitter(account: Account) {
+  private submitter(account: Account): SubmitMail {
     const transport = this.protocol.smtpSubmit ?? smtpSubmit
-    return transport(account.smtp, this.password(this.state(), account), this.sendScope.signal)
+    const ctx = { root: this.root(), generation: this.epoch }
+    const signal = this.sendScope.signal
+    return async (attempt, files) => {
+      let credential: MailCredential
+      try {
+        credential = await this.mailCredential(this.state(), account, ctx)
+        this.check(ctx)
+      } catch (error) {
+        return { state: 'failed', detail: diagnostic(error) }
+      }
+      return transport(account.smtp, credential, signal)(attempt, files)
+    }
   }
   private folder(dir: string, role: FolderRole) {
     return read<Folder>(path.join(dir, 'sync', role + '.json'))
@@ -271,6 +301,7 @@ export class MailboxService {
       active,
       accounts: accounts(this.base()).map((a) => ({
         id: a.account_id,
+        authMethod: a.authMethod,
         notifications: a.new_mail_notifications ?? true,
         email: a.email,
         imap: a.imap,
@@ -295,6 +326,9 @@ export class MailboxService {
     }
   }
   stop() {
+    this.gmailFlow?.abort()
+    this.gmailFlow = undefined
+    this.refreshing = undefined
     this.sendScope.abort()
     this.sendScope = new AbortController()
     clearAttachmentPreviews()
@@ -355,39 +389,64 @@ export class MailboxService {
     const base = this.base(),
       state = this.state(),
       id = state.active_account_id
-    if (a.kind === 'connect') {
-      const f = a.form
-      validate(f)
+    if (a.kind === 'cancel-gmail') {
+      this.gmailFlow?.abort()
+      return this.snapshot()
+    }
+    if (a.kind === 'connect' || a.kind === 'connect-gmail') {
+      const mode = a.kind === 'connect' ? a.form.mode : a.mode
+      if (mode !== 'last_30_days' && mode !== 'from_connection') throw new Error('请选择同步范围。')
       if (this.connecting) throw new Error('正在验证邮箱。')
-      const existing = accounts(base).find((row) => row.address_key === key(f.email))
-      if (id && id !== existing?.account_id) throw new Error('请先取消当前邮箱的托管。')
       this.connecting = true
       try {
-        await this.protocol.verify(f)
+        let f: AccountSettings
+        let credential: MailCredential
+        let google: GmailTokens | undefined
+        if (a.kind === 'connect-gmail') {
+          if (!this.authorizeGmail) throw new Error('Gmail 授权不可用。')
+          this.gmailFlow = new AbortController()
+          const grant = await this.authorizeGmail(this.gmailFlow.signal, a.expectedEmail)
+          this.check(ctx)
+          this.gmailFlow.signal.throwIfAborted()
+          f = grant.settings
+          if (a.expectedEmail && key(f.email) !== key(a.expectedEmail))
+            throw new Error('所选 Google 账号与要重新连接的邮箱不一致。')
+          google = grant.tokens
+          credential = { accessToken: google.accessToken }
+        } else {
+          validate(a.form)
+          f = a.form
+          credential = a.form.password
+        }
+        const existing = accounts(base).find((row) => row.address_key === key(f.email))
+        if (id && id !== existing?.account_id) throw new Error('请先取消当前邮箱的托管。')
+        await this.protocol.verify(f, credential)
         this.check(ctx)
+        this.gmailFlow?.signal.throwIfAborted()
         const now = new Date(),
           aid = existing?.account_id ?? randomUUID()
         const account: Account = {
           v: 1,
           account_id: aid,
           address_key: key(f.email),
+          authMethod: google ? 'google' : undefined,
           email: f.email.trim(),
           imap: f.imap,
           smtp: f.smtp,
           first_connected_at: existing?.first_connected_at ?? now.toISOString(),
           last_connected_at: now.toISOString(),
           new_mail_notifications: existing?.new_mail_notifications,
-          initial_sync_mode: existing?.initial_sync_mode ?? f.mode,
+          initial_sync_mode: existing?.initial_sync_mode ?? mode,
           sync_from:
             existing?.sync_from ??
-            new Date(+now - (f.mode === 'last_30_days' ? 30 * 86400000 : 0)).toISOString(),
+            new Date(+now - (mode === 'last_30_days' ? 30 * 86400000 : 0)).toISOString(),
         }
         if (!state.workspace_id) {
           state.workspace_id = randomUUID()
           save(path.join(base, 'workspace.json'), state)
         }
         const encrypted = this.vault.encrypt(
-          JSON.stringify({ binding: this.configSignature(account), password: f.password }),
+          JSON.stringify({ binding: this.configSignature(account), ...(google ? { google } : { password: credential }) }),
         )
         const dest = accountDir(base, aid),
           staging = existing ? dest : path.join(base, 'accounts', 'pending-' + aid)
@@ -417,7 +476,7 @@ export class MailboxService {
         this.stop()
         this.schedule(0)
       } finally {
-        if (ctx.generation === this.epoch) this.connecting = false
+        if (ctx.generation === this.epoch) { this.connecting = false; this.gmailFlow = undefined }
       }
     } else if (a.kind === 'disconnect' && id) {
       save(path.join(base, 'workspace.json'), {
@@ -438,7 +497,9 @@ export class MailboxService {
     } else if (a.kind === 'bind' && id) {
       if (!this.candidates.includes(a.path)) throw new Error('请选择已列出的文件夹。')
       const account = read<Account>(path.join(accountDir(base, id), 'account.json'))
-      const probe = this.protocol.imapClient(account.imap, this.password(state, account))
+      const credential = await this.mailCredential(state, account, ctx)
+      this.check(ctx)
+      const probe = this.protocol.imapClient(account.imap, credential)
       try {
         await probe.connect()
         this.check(ctx)
@@ -477,12 +538,16 @@ export class MailboxService {
     this.errors = {}
     this.notify()
     let role: FolderRole | undefined
+    let google = false
     try {
       const dir = accountDir(this.base(), id),
         account = read<Account>(path.join(dir, 'account.json'))
+      google = account.authMethod === 'google'
       const index = await this.reader(ctx, id)
       this.check(ctx)
-      const client = this.protocol.imapClient(account.imap, this.password(state, account))
+      const credential = await this.mailCredential(state, account, ctx)
+      this.check(ctx)
+      const client = this.protocol.imapClient(account.imap, credential)
       this.client = client
       await client.connect()
       this.check(ctx)
@@ -556,12 +621,12 @@ export class MailboxService {
           }
         } catch (err) {
           this.check(ctx)
-          this.errors[role] = err instanceof ReadOnlyInbox ? err.message : diagnostic(err)
+          this.errors[role] = err instanceof ReadOnlyInbox ? err.message : diagnostic(err, google)
         }
       }
     } catch (err) {
       if (this.epoch === ctx.generation) {
-        this.errors.inbox = diagnostic(err)
+        this.errors.inbox = diagnostic(err, google)
         this.errors.sent = this.errors.inbox
       }
     } finally {

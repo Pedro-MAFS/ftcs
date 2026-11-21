@@ -22,6 +22,7 @@ export interface Context {
   generation: number
 }
 export interface Account extends AccountSettings {
+  authMethod?: 'google'
   v: 1
   account_id: string
   address_key: string
@@ -52,6 +53,7 @@ export interface MailTarget {
   message: string
 }
 export interface AccountSummary extends AccountSettings {
+  authMethod?: 'google'
   notifications?: boolean
   id: string
 }
@@ -67,6 +69,8 @@ export interface Snapshot {
 }
 export type MailAction =
   | { kind: 'connect'; form: Connection }
+  | { kind: 'connect-gmail'; mode: Mode; expectedEmail?: string }
+  | { kind: 'cancel-gmail' }
   | { kind: 'bind'; path: string }
   | { kind: 'retry' }
   | { kind: 'pin'; account: string; contact: string; pinned: boolean }

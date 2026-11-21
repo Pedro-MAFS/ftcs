@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { defineConfig, externalizeDepsPlugin, loadEnv } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 
-function pickOrigin(
+function pickEnv(
   fileEnv: Record<string, string>,
   ...keys: string[]
 ): string | undefined {
@@ -20,10 +20,10 @@ export default defineConfig(({ mode }) => {
   const fileEnv = loadEnv(mode, process.cwd(), '')
 
   const siteOrigin =
-    pickOrigin(fileEnv, 'FTCS_SITE_ORIGIN', 'VITE_FTCS_SITE_ORIGIN') ||
+    pickEnv(fileEnv, 'FTCS_SITE_ORIGIN', 'VITE_FTCS_SITE_ORIGIN') ||
     'https://ftcs.ai-utills.com'
   const userOrigin =
-    pickOrigin(
+    pickEnv(
       fileEnv,
       'FTCS_USER_ORIGIN',
       'VITE_FTCS_USER_ORIGIN',
@@ -41,6 +41,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     main: {
+      define: { __FTCS_GMAIL_CLIENT_SECRET__: JSON.stringify(pickEnv(fileEnv, 'FTCS_GMAIL_CLIENT_SECRET') || '') },
       plugins: [externalizeDepsPlugin()],
       build: {
         rollupOptions: {

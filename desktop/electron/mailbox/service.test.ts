@@ -287,3 +287,37 @@ test('启动积压静默，新增来信分联系人合并通知，关闭开关�
   assert.equal(service.snapshot().accounts[0].notifications, false)
   assert.equal(notices.length, 1)
 })
+
+test('Gmail verifies and resumes the same account, with credentials isolated from workspace snapshots', async t => {
+  const { gmailSettings } = await import('./gmail-auth')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftcs-mail-gmail-'))
+  const dir = path.join(root, 'vault')
+  const email = 'mail@example.test'
+  let selected = email
+  let credentials = ''
+  const service = new MailboxService(() => root, {
+    dir, encrypt(value) { credentials = value; return Buffer.from(value) }, decrypt(buffer) { return buffer.toString() },
+  }, () => {}, {
+    async verify(f, credential) {
+      assert.equal(f.imap.host, 'imap.gmail.com')
+      assert.deepEqual(credential, { accessToken: 'test-access' })
+    },
+    imapClient() { throw new Error('offline') }, importFolder,
+  }, undefined, async () => ({
+    settings: gmailSettings(selected),
+    tokens: { accessToken: 'test-access', refreshToken: 'test-refresh', expiresAt: Date.now() + 3600000 },
+  }))
+  t.after(() => { service.stop(); fs.rmSync(root, { recursive: true, force: true }) })
+  const connect = () => service.act(service.snapshot().context, { kind: 'connect-gmail', mode: 'last_30_days', expectedEmail: email })
+  const first = await connect()
+  assert.ok(first.active)
+  assert.equal(first.accounts[0].authMethod, 'google')
+  assert.doesNotMatch(JSON.stringify(first), /test-access|test-refresh/)
+  assert.equal(JSON.parse(credentials).google.refreshToken, 'test-refresh')
+  selected = 'other@example.test'
+  await assert.rejects(connect(), /不一致/)
+  assert.equal(service.snapshot().active, first.active)
+  selected = email
+  await service.act(first.context, { kind: 'disconnect' })
+  assert.equal((await connect()).active, first.active)
+})

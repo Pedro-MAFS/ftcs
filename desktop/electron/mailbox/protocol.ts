@@ -1,15 +1,17 @@
 import { ImapFlow } from 'imapflow'
 import nodemailer from 'nodemailer'
 import type { SubmitMail } from './composer-store'
-import type { Endpoint, Connection } from './types'
+import type { Endpoint, AccountSettings } from './types'
 
-export function imapClient(e: Endpoint, password: string) {
+export type MailCredential = string | { accessToken: string }
+
+export function imapClient(e: Endpoint, credential: MailCredential) {
   const client = new ImapFlow({
     host: e.host,
     port: e.port,
     secure: e.security === 'tls',
     doSTARTTLS: e.security === 'starttls',
-    auth: { user: e.username, pass: password },
+    auth: typeof credential === 'string' ? { user: e.username, pass: credential } : { user: e.username, accessToken: credential.accessToken },
     logger: false,
     emitLogs: false,
     disableAutoIdle: true,
@@ -21,18 +23,19 @@ export function imapClient(e: Endpoint, password: string) {
   })
   return client
 }
-export function diagnostic(err: unknown) {
+export function diagnostic(err: unknown, google = false) {
   const { code, message, authenticationFailed } = err as {
     code?: string
     message?: string
     authenticationFailed?: boolean
   }
+  if (code === 'GMAIL_REAUTH') return 'Google 授权已失效，请重新连接 Gmail。'
   if (
     authenticationFailed ||
     code === 'EAUTH' ||
     /authentication|invalid credentials|login failed/i.test(message ?? '')
   )
-    return '认证失败，请检查登录名、授权码及邮箱协议开关。'
+    return google ? 'Google 邮箱认证失败，请重新连接 Gmail 并确认账号允许邮件客户端访问。' : '认证失败，请检查登录名、授权码及邮箱协议开关。'
   if (/tls|cert|ssl|starttls/i.test((code ?? '') + ' ' + message))
     return 'TLS 验证失败，请检查主机、端口与加密方式。'
   if (code === 'ENOSPC' || code === 'EACCES' || code === 'EPERM')
@@ -58,24 +61,24 @@ function recipientReplies() {
   }
   return { logger, rejected }
 }
-function smtpClient(e: Endpoint, password: string, replies?: ReturnType<typeof recipientReplies>) {
+function smtpClient(e: Endpoint, credential: MailCredential, replies?: ReturnType<typeof recipientReplies>) {
   return nodemailer.createTransport({
     host: e.host,
     port: e.port,
     secure: e.security === 'tls',
     forceAuth: true,
     requireTLS: e.security === 'starttls',
-    auth: { user: e.username, pass: password },
+    auth: typeof credential === 'string' ? { user: e.username, pass: credential } : { type: 'OAuth2', user: e.username, accessToken: credential.accessToken },
     connectionTimeout: 15000,
     greetingTimeout: 15000,
     socketTimeout: 30000,
     ...(replies && { transactionLog: true, logger: replies.logger }),
   })
 }
-export function smtpSubmit(e: Endpoint, password: string, signal: AbortSignal): SubmitMail {
+export function smtpSubmit(e: Endpoint, credential: MailCredential, signal: AbortSignal): SubmitMail {
   return async (a, attachments) => {
     const replies = recipientReplies()
-    const smtp = smtpClient(e, password, replies)
+    const smtp = smtpClient(e, credential, replies)
     try {
       const fields = (list: typeof a.snapshot.to) =>
         list.map((p) => ({ address: p.email, name: p.name ?? '' }))
@@ -117,7 +120,7 @@ export function smtpSubmit(e: Endpoint, password: string, signal: AbortSignal): 
         detail: definite
           ? err.responseCode
             ? '发件服务器拒绝提交（SMTP ' + err.responseCode + '）'
-            : diagnostic(err)
+            : diagnostic(err, typeof credential !== 'string')
           : '未取得最终回执，请检查已发送邮件。',
         rejected: err.rejected ?? [...replies.rejected],
       }
@@ -126,9 +129,9 @@ export function smtpSubmit(e: Endpoint, password: string, signal: AbortSignal): 
     }
   }
 }
-export async function verify(f: Connection) {
-  const client = imapClient(f.imap, f.password)
-  const smtp = smtpClient(f.smtp, f.password)
+export async function verify(f: AccountSettings, credential: MailCredential) {
+  const client = imapClient(f.imap, credential)
+  const smtp = smtpClient(f.smtp, credential)
   try {
     const results = await Promise.allSettled([
       (async () => {
@@ -142,7 +145,7 @@ export async function verify(f: Connection) {
         results
           .map(
             (r, i) =>
-              (i ? '发信' : '收信') + '：' + (r.status === 'fulfilled' ? '验证通过' : diagnostic(r.reason)),
+              (i ? '发信' : '收信') + '：' + (r.status === 'fulfilled' ? '验证通过' : diagnostic(r.reason, typeof credential !== 'string')),
           )
           .join('  '),
       )

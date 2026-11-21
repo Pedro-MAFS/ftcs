@@ -1,6 +1,7 @@
 import { openAttachment, saveAttachment } from './mailbox/attachments'
 import { withEmailDraftWrite } from '../../workspace/mcp-servers/lead-store/src/outreach-binding'
 import { approveForDelivery } from './emails/outreach-review'
+import { authorizeGmail } from './mailbox/gmail-auth'
 import { MailboxService } from './mailbox/service'
 import { safeStorage } from 'electron'
 import { mailNotifications } from './notify/mail-notifications'
@@ -291,7 +292,8 @@ const mailbox = new MailboxService(getWorkspaceRoot, {
     return safeStorage.encryptString(value)
   },
   decrypt: value => safeStorage.decryptString(value),
-}, () => mainWindow?.webContents.send(IPC.MAILBOX_CHANGED), undefined, mailNotifications(() => mainWindow))
+}, () => mainWindow?.webContents.send(IPC.MAILBOX_CHANGED), undefined, mailNotifications(() => mainWindow),
+  (signal, hint) => authorizeGmail(url => shell.openExternal(url), signal, hint))
 
 const siteRuntime = new SiteRuntime(resolveConfiguredNode, getWorkspaceRoot, snapshot => {
   if (snapshot.preview.state !== 'running') clearVerifiedPreviewTargets()

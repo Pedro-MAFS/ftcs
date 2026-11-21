@@ -3,6 +3,7 @@ import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watc
 import { useRoute, useRouter } from 'vue-router'
 import type { Connection, Endpoint, MailAction, Snapshot } from '../../electron/mailbox/types'
 import { key } from '../../electron/mailbox/types'
+import developerContact from '../../../website/src/config/developer-contact.json'
 import { mailProvider, mailSetupQuestion } from '../components/mailbox/setup-help'
 import { useWorkspace } from '../composables/useWorkspace'
 import { useWorkspaceLayout } from '../composables/useWorkspaceLayout'
@@ -15,6 +16,7 @@ const route = useRoute(), router = useRouter()
 const settingsOpen = ref(false)
 const settingsDialog = ref<HTMLDialogElement>()
 const helpDialog = ref<HTMLDialogElement>()
+const gmailInviteDialog = ref<HTMLDialogElement>()
 const helpInput = ref('')
 const helpError = ref('')
 const provider = computed(() => mailProvider(helpInput.value))
@@ -27,6 +29,9 @@ const error = ref('')
 const busy = ref(false)
 const advanced = ref(false)
 const editing = ref(false)
+const google = ref(false)
+const googlePending = ref(false)
+const expectedEmail = ref('')
 const chosen = ref('')
 const confirmation = ref<MailAction>()
 const protocols = ['imap', 'smtp'] as const
@@ -112,17 +117,22 @@ function confirmDisconnect() {
 function reconnect(email: string) {
   form.value.password = ''
   editing.value = true
+  expectedEmail.value = email
+  google.value = state.value?.accounts.find(account => account.email === email)?.authMethod === 'google'
   form.value.email = email
   configured = ''
   configure()
 }
 function clearForm() {
+  gmailInviteDialog.value?.close()
   helpDialog.value?.close()
   helpInput.value = ''
   form.value = fresh()
   configured = ''
   advanced.value = false
   editing.value = false
+  google.value = false
+  expectedEmail.value = ''
   chosen.value = ''
   confirmation.value = undefined
 }
@@ -153,6 +163,7 @@ function listen() {
   }
 }
 function leave() {
+  gmailInviteDialog.value?.close()
   helpDialog.value?.close()
   settingsDialog.value?.close()
   unsubscribe?.()
@@ -165,9 +176,28 @@ onMounted(listen)
 onActivated(listen)
 onDeactivated(leave)
 onUnmounted(leave)
+function connect() {
+  if (busy.value) return
+  if (google.value) {
+    gmailInviteDialog.value?.showModal()
+    return
+  }
+  return act({ kind: 'connect', form: form.value })
+}
+function confirmGmailInvite() {
+  gmailInviteDialog.value?.close()
+  return act({ kind: 'connect-gmail', mode: form.value.mode, expectedEmail: expectedEmail.value || undefined })
+}
+async function cancelGoogle() {
+  if (state.value && api) {
+    try { await api.act({ ...state.value.context }, { kind: 'cancel-gmail' }) }
+    catch (e) { error.value = String(e) }
+  }
+}
 async function act(action: MailAction) {
   if (!state.value || !api || busy.value) return
   busy.value = true
+  googlePending.value = action.kind === 'connect-gmail'
   error.value = ''
   try {
     await api.act({ ...state.value.context }, JSON.parse(JSON.stringify(action)))
@@ -176,6 +206,7 @@ async function act(action: MailAction) {
     error.value = (e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /, '')
     if (action.kind === 'connect') advanced.value = true
   } finally {
+    googlePending.value = false
     busy.value = false
     confirmation.value = undefined
     await refresh()
@@ -196,8 +227,14 @@ async function act(action: MailAction) {
             <p>连接邮箱后，和同一联系人的往来邮件会按时间排在一起。</p>
           </div>
         </header>
-        <form class="setup-form" @submit.prevent="act({ kind: 'connect', form })">
+        <form class="setup-form" @submit.prevent="connect">
           <h2>{{ saved ? '重新连接邮箱' : '连接邮箱' }}</h2>
+          <div class="auth-methods" role="group" aria-label="连接方式">
+            <button type="button" :aria-pressed="!google" :disabled="busy" @click="google = false">邮箱授权码</button>
+            <button type="button" :aria-pressed="google" :disabled="busy" @click="google = true">Google 授权</button>
+          </div>
+          <p v-if="google">{{ expectedEmail ? '请在浏览器中选择 ' + expectedEmail : '在浏览器中选择要连接的 Gmail 或 Google Workspace 邮箱。' }}</p>
+          <template v-else>
           <label
             >邮箱地址<input
               v-model.trim="form.email"
@@ -235,7 +272,8 @@ async function act(action: MailAction) {
               <label>登录名<input v-model="form[p].username" required /></label>
             </fieldset>
           </div>
-          <p v-if="saved">将从上次进度继续同步。</p>
+          </template>
+          <p v-if="google ? expectedEmail : saved">将从上次进度继续同步。</p>
           <fieldset v-else class="sync-options">
             <legend>同步范围</legend>
             <label class="choice"
@@ -247,8 +285,9 @@ async function act(action: MailAction) {
           </fieldset>
           <p v-if="error" class="setup-error" role="alert">{{ error }}</p>
           <div class="setup-actions">
-            <button class="primary" :disabled="busy">{{ busy ? '正在验证收信和发信…' : '连接邮箱' }}</button>
-            <button v-if="editing" type="button" :disabled="busy" @click="clearForm">取消</button>
+            <button class="primary" :disabled="busy">{{ googlePending ? '等待 Google 授权及邮箱验证…' : busy ? '正在验证收信和发信…' : google ? '连接 Gmail' : '连接邮箱' }}</button>
+            <button v-if="googlePending" type="button" @click="cancelGoogle">取消连接</button>
+            <button v-else-if="editing" type="button" :disabled="busy" @click="clearForm">取消</button>
           </div>
         </form>
         <section v-if="!active && state.accounts.length" class="saved-accounts">
@@ -268,7 +307,7 @@ async function act(action: MailAction) {
           <button autofocus @click="settingsDialog?.close()">关闭</button>
         </header>
         <p>{{ active.email }}</p>
-        <button type="button" class="help-link" @click="openHelp(active.email)">如何获取授权码？</button>
+        <button v-if="active.authMethod !== 'google'" type="button" class="help-link" @click="openHelp(active.email)">如何获取授权码？</button>
         <label class="choice"><input type="checkbox" :checked="active.notifications !== false" :disabled="busy"
           @change="act({kind: 'notifications', account: active.id, enabled: ($event.target as HTMLInputElement).checked})" />
           桌面新邮件通知</label>
@@ -313,6 +352,15 @@ async function act(action: MailAction) {
         @sync="act({ kind: 'retry' })"
       />
     </template>
+    <dialog ref="gmailInviteDialog" class="settings-dialog" aria-labelledby="gmail-invite-title" aria-describedby="gmail-invite-info gmail-invite-contact">
+      <h2 id="gmail-invite-title">Gmail 连接功能内测中</h2>
+      <p id="gmail-invite-info">目前仅受邀用户可以连接 Gmail。建议先使用 QQ、163 等其他邮箱。</p>
+      <p id="gmail-invite-contact">如需申请内测资格，请联系开发者：<strong>{{ developerContact.email }}</strong>。</p>
+      <div class="row">
+        <button type="button" autofocus @click="gmailInviteDialog?.close()">返回</button>
+        <button type="button" class="primary" :disabled="busy" @click="confirmGmailInvite">已获取内测资格，继续登录</button>
+      </div>
+    </dialog>
     <dialog ref="helpDialog" class="settings-dialog help-dialog" aria-labelledby="mail-help-title">
       <form @submit.prevent="askForHelp">
         <h2 id="mail-help-title">如何获取邮箱授权码？</h2>
@@ -340,7 +388,7 @@ async function act(action: MailAction) {
       <p>
         {{
           confirmation.kind === 'disconnect'
-            ? '将停止收发并移除授权码，邮件和草稿保留在本机。'
+            ? '将停止收发并移除本机连接凭据，邮件和草稿保留在本机。'
             : '该邮箱在本机的邮件、附件和草稿将被清除。服务器邮件保留。'
         }}
       </p>
@@ -473,6 +521,8 @@ async function act(action: MailAction) {
   background: var(--accent-muted);
 }
 .sync-options input { margin: 0; accent-color: var(--accent); }
+.auth-methods { display: flex; gap: 6px; }
+.auth-methods button[aria-pressed='true'] { font-weight: 600; border-color: currentColor; color: var(--accent); }
 .setup-actions { display: flex; gap: 8px; }
 .setup-form .setup-error { margin: 0; color: var(--danger); overflow-wrap: anywhere; }
 .setup-actions .primary { flex: 1; min-height: 38px; font-weight: 600; }
