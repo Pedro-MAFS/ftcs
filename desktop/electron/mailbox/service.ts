@@ -3,6 +3,7 @@ import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import developerContact from '../../../website/src/config/developer-contact.json' with { type: 'json' }
 import { imapClient, verify, diagnostic, smtpSubmit, type MailCredential } from './protocol'
+import { gmailSubmit } from './gmail-api'
 import { refreshGmail, type GmailTokens } from './gmail-auth'
 import type { AccountSettings } from './types'
 import type { SubmitMail } from './composer-store'
@@ -46,7 +47,7 @@ export class MailboxService {
     private root: () => string,
     private vault: Vault,
     private notify: () => void,
-    private protocol: { verify: typeof verify; imapClient: typeof imapClient; importFolder: typeof importFolder; smtpSubmit?: typeof smtpSubmit }
+    private protocol: { verify: typeof verify; imapClient: typeof imapClient; importFolder: typeof importFolder; smtpSubmit?: typeof smtpSubmit; gmailSubmit?: typeof gmailSubmit }
       = { verify, imapClient, importFolder },
     private notifications?: { show(target: MailTarget, sender: string, count: number): void; clear(): void },
     private authorizeGmail?: (signal: AbortSignal, hint?: string) => Promise<{ settings: AccountSettings; tokens: GmailTokens }>,
@@ -114,7 +115,6 @@ export class MailboxService {
     return this.refreshing
   }
   private submitter(account: Account): SubmitMail {
-    const transport = this.protocol.smtpSubmit ?? smtpSubmit
     const ctx = { root: this.root(), generation: this.epoch }
     const signal = this.sendScope.signal
     return async (attempt, files) => {
@@ -125,7 +125,10 @@ export class MailboxService {
       } catch (error) {
         return { state: 'failed', detail: diagnostic(error) }
       }
-      return transport(account.smtp, credential, signal)(attempt, files)
+      const submit = typeof credential === 'string'
+        ? (this.protocol.smtpSubmit ?? smtpSubmit)(account.smtp, credential, signal)
+        : (this.protocol.gmailSubmit ?? gmailSubmit)(credential.accessToken, signal)
+      return submit(attempt, files)
     }
   }
   private folder(dir: string, role: FolderRole) {
@@ -167,7 +170,7 @@ export class MailboxService {
       this.notify()
       const account = read<Account>(path.join(accountDir(this.base(), id), 'account.json'))
       const submit = this.submitter(account)
-      // sendOutreach journals synchronously, then yields for the SMTP response.
+      // sendOutreach journals synchronously, then yields for the delivery response.
       return index.composer.sendOutreach(
         edit,
         source,
@@ -420,7 +423,7 @@ export class MailboxService {
         }
         const existing = accounts(base).find((row) => row.address_key === key(f.email))
         if (id && id !== existing?.account_id) throw new Error('请先取消当前邮箱的托管。')
-        const verifiedSmtp = await this.protocol.verify(f, credential)
+        await this.protocol.verify(f, credential, this.gmailFlow?.signal)
         this.check(ctx)
         this.gmailFlow?.signal.throwIfAborted()
         const now = new Date(),
@@ -432,7 +435,7 @@ export class MailboxService {
           authMethod: google ? 'google' : undefined,
           email: f.email.trim(),
           imap: f.imap,
-          smtp: verifiedSmtp ?? f.smtp,
+          smtp: f.smtp,
           first_connected_at: existing?.first_connected_at ?? now.toISOString(),
           last_connected_at: now.toISOString(),
           new_mail_notifications: existing?.new_mail_notifications,

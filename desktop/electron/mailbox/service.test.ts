@@ -301,11 +301,16 @@ test('Gmail verifies and resumes the same account, with credentials isolated fro
     async verify(f, credential) {
       assert.equal(f.imap.host, 'imap.gmail.com')
       assert.deepEqual(credential, { accessToken: 'test-access' })
-      return { ...f.smtp, port: 587, security: 'starttls' as const }
     },
     imapClient() { throw new Error('offline') }, importFolder,
+    gmailSubmit: token => async () => {
+      assert.equal(token, 'test-access')
+      return { state: 'accepted', accepted: ['friend@example.com'] }
+    },
+    smtpSubmit() { throw new Error('Google OAuth account should use the Gmail API') },
   }, undefined, async () => ({
-    settings: gmailSettings(selected),
+    // Simulate a workspace whose previous version selected port 587 for Gmail.
+    settings: { ...gmailSettings(selected), smtp: { ...gmailSettings(selected).smtp, port: 587, security: 'starttls' } },
     tokens: { accessToken: 'test-access', refreshToken: 'test-refresh', expiresAt: Date.now() + 3600000 },
   }))
   t.after(() => { service.stop(); fs.rmSync(root, { recursive: true, force: true }) })
@@ -313,13 +318,21 @@ test('Gmail verifies and resumes the same account, with credentials isolated fro
   const first = await connect()
   assert.ok(first.active)
   assert.equal(first.accounts[0].authMethod, 'google')
-  assert.deepEqual(first.accounts[0].smtp, { ...gmailSettings(email).smtp, port: 587, security: 'starttls' })
   assert.doesNotMatch(JSON.stringify(first), /test-access|test-refresh/)
   assert.equal(JSON.parse(credentials).google.refreshToken, 'test-refresh')
+  service.start()
+  const restored = service.snapshot()
+  assert.equal(restored.accounts[0].smtp.port, 587)
+  const contact = 'friend@example.com'
+  const composer = (action: Parameters<typeof service.composer>[3]) => service.composer(restored.context, first.active!, contact, action)
+  const initial = await composer({ kind: 'get' })
+  const saved = await composer({ kind: 'save', version: initial.draft, edit: { mode: 'new', text_body: 'Hello' } })
+  const sent = await composer({ kind: 'send', version: saved.draft, request: crypto.randomUUID(), to: [contact], cc: [] })
+  assert.equal(sent.result?.state, 'accepted')
   selected = 'other@example.test'
   await assert.rejects(connect(), /不一致/)
   assert.equal(service.snapshot().active, first.active)
   selected = email
-  await service.act(first.context, { kind: 'disconnect' })
+  await service.act(restored.context, { kind: 'disconnect' })
   assert.equal((await connect()).active, first.active)
 })

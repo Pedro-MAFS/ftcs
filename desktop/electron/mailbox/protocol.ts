@@ -1,3 +1,5 @@
+import { outgoingMessage } from './outgoing-message'
+import { verifyGmailApi } from './gmail-api'
 import { ImapFlow } from 'imapflow'
 import nodemailer from 'nodemailer'
 import type { SubmitMail } from './composer-store'
@@ -61,44 +63,26 @@ function recipientReplies() {
   }
   return { logger, rejected }
 }
-function smtpClient(e: Endpoint, credential: MailCredential, replies?: ReturnType<typeof recipientReplies>) {
+function smtpClient(e: Endpoint, password: string, replies?: ReturnType<typeof recipientReplies>) {
   return nodemailer.createTransport({
     host: e.host,
     port: e.port,
     secure: e.security === 'tls',
     forceAuth: true,
     requireTLS: e.security === 'starttls',
-    auth: typeof credential === 'string' ? { user: e.username, pass: credential } : { type: 'OAuth2', user: e.username, accessToken: credential.accessToken },
+    auth: { user: e.username, pass: password },
     connectionTimeout: 15000,
     greetingTimeout: 15000,
     socketTimeout: 30000,
     ...(replies && { transactionLog: true, logger: replies.logger }),
   })
 }
-export function smtpSubmit(e: Endpoint, credential: MailCredential, signal: AbortSignal): SubmitMail {
+export function smtpSubmit(e: Endpoint, password: string, signal: AbortSignal): SubmitMail {
   return async (a, attachments) => {
     const replies = recipientReplies()
-    const smtp = smtpClient(e, credential, replies)
+    const smtp = smtpClient(e, password, replies)
     try {
-      const fields = (list: typeof a.snapshot.to) =>
-        list.map((p) => ({ address: p.email, name: p.name ?? '' }))
-      const info = await smtp.sendMail({
-        from: { address: a.from, name: '' },
-        to: fields(a.snapshot.to),
-        cc: fields(a.snapshot.cc),
-        subject: a.snapshot.subject,
-        text: a.snapshot.text_body,
-        html: a.snapshot.html_body,
-        attachDataUrls: true,
-        attachments,
-        date: new Date(a.created_at),
-        messageId: a.internet_message_id,
-        headers: { 'X-FTCS-Send-ID': a.attempt_id },
-        inReplyTo: a.in_reply_to,
-        references: a.references.length ? a.references : undefined,
-        signal,
-        disableUrlAccess: true,
-      })
+      const info = await smtp.sendMail(outgoingMessage(a, attachments, signal))
       return { state: 'accepted', accepted: info.accepted.map(String), rejected: info.rejected.map(String) }
     } catch (error) {
       const err = error as {
@@ -120,7 +104,7 @@ export function smtpSubmit(e: Endpoint, credential: MailCredential, signal: Abor
         detail: definite
           ? err.responseCode
             ? '发件服务器拒绝提交（SMTP ' + err.responseCode + '）'
-            : diagnostic(err, typeof credential !== 'string')
+            : diagnostic(err)
           : '未取得最终回执，请检查已发送邮件。',
         rejected: err.rejected ?? [...replies.rejected],
       }
@@ -129,7 +113,7 @@ export function smtpSubmit(e: Endpoint, credential: MailCredential, signal: Abor
     }
   }
 }
-async function probeSmtp(endpoint: Endpoint, credential: MailCredential) {
+async function probeSmtp(endpoint: Endpoint, credential: string) {
   const transport = smtpClient(endpoint, credential)
   try {
     await transport.verify()
@@ -138,32 +122,20 @@ async function probeSmtp(endpoint: Endpoint, credential: MailCredential) {
   }
 }
 
-export async function verifySmtp(endpoint: Endpoint, credential: MailCredential, probe = probeSmtp) {
-  const candidates = [endpoint]
-  const google = typeof credential !== 'string'
-  if (google && endpoint.host === 'smtp.gmail.com' && endpoint.port === 465 && endpoint.security === 'tls') {
-    candidates.push({ ...endpoint, port: 587, security: 'starttls' })
+export async function verifySmtp(endpoint: Endpoint, password: string, probe = probeSmtp) {
+  try {
+    await probe(endpoint, password)
+  } catch (error) {
+    const err = error as { code?: string; originalCode?: string; timeoutType?: string; command?: string; message?: string }
+    const code = err.originalCode || err.code || ''
+    const detail = err.command?.startsWith('AUTH') ? diagnostic({ code: 'EAUTH' }) : smtpConnectionDetail(err)
+    const label = endpoint.security === 'tls' ? 'TLS' : 'STARTTLS'
+    const suffix = /^[A-Z][A-Z0-9_]{1,63}$/.test(code) ? ' (' + code + ')' : ''
+    throw new Error(endpoint.host + ':' + endpoint.port + ' ' + label + ' — ' + detail + suffix)
   }
-  const failures: string[] = []
-  for (const candidate of candidates) {
-    try {
-      await probe(candidate, credential)
-      return candidate
-    } catch (error) {
-      const err = error as { code?: string; originalCode?: string; timeoutType?: string; command?: string; message?: string }
-      const code = err.originalCode || err.code || ''
-      const auth = err.command?.startsWith('AUTH') || err.code === 'EAUTH' || err.code === 'EOAUTH2'
-      const detail = auth ? diagnostic({ code: 'EAUTH' }, google) : smtpConnectionDetail(err, google)
-      const label = candidate.security === 'tls' ? 'TLS' : 'STARTTLS'
-      const suffix = /^[A-Z][A-Z0-9_]{1,63}$/.test(code) ? ' (' + code + ')' : ''
-      failures.push(candidate.host + ':' + candidate.port + ' ' + label + ' — ' + detail + suffix)
-      if (auth || !['ESOCKET', 'ETLS', 'ETIMEDOUT', 'ECONNECTION', 'ECONNREFUSED', 'ECONNRESET'].includes(err.code || '')) break
-    }
-  }
-  throw new Error(failures.join('；'))
 }
 
-function smtpConnectionDetail(err: { code?: string; originalCode?: string; timeoutType?: string; message?: string }, google: boolean) {
+function smtpConnectionDetail(err: { code?: string; originalCode?: string; timeoutType?: string; message?: string }) {
   const code = err.originalCode || err.code || ''
   switch (err.timeoutType) {
     case 'CONNECT_TIMEOUT': return '建立服务器连接超时。'
@@ -175,25 +147,24 @@ function smtpConnectionDetail(err: { code?: string; originalCode?: string; timeo
   if (/CERT|SELF_SIGNED|UNABLE_TO_VERIFY_LEAF/i.test(code + ' ' + err.message)) return '无法验证服务器证书。'
   if (err.code === 'ETLS' || /TLS|SSL/i.test(code + ' ' + err.message)) return '无法完成 TLS 握手。'
   if (err.code === 'EDNS') return '无法解析服务器地址。'
-  return diagnostic(err, google)
+  return diagnostic(err)
 }
 
-export async function verify(f: AccountSettings, credential: MailCredential): Promise<Endpoint | void> {
+export async function verify(f: AccountSettings, credential: MailCredential, signal?: AbortSignal) {
   const client = imapClient(f.imap, credential)
   try {
-    const [imap, smtp] = await Promise.allSettled([
+    const [imap, outbound] = await Promise.allSettled([
       (async () => {
         await client.connect()
         await client.mailboxOpen('INBOX', { readOnly: true })
       })(),
-      verifySmtp(f.smtp, credential),
+      typeof credential === 'string' ? verifySmtp(f.smtp, credential) : verifyGmailApi(f.email, credential.accessToken, signal),
     ])
-    if (imap.status === 'rejected' || smtp.status === 'rejected') {
+    if (imap.status === 'rejected' || outbound.status === 'rejected') {
       const incoming = imap.status === 'fulfilled' ? '验证通过' : diagnostic(imap.reason, typeof credential !== 'string')
-      const outgoing = smtp.status === 'fulfilled' ? '验证通过' : smtp.reason.message
+      const outgoing = outbound.status === 'fulfilled' ? '验证通过' : outbound.reason.message
       throw new Error('收信：' + incoming + '  发信：' + outgoing)
     }
-    return smtp.value
   } finally {
     client.close()
   }
