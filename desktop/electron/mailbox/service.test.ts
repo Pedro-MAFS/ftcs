@@ -301,6 +301,7 @@ test('Gmail verifies and resumes the same account, with credentials isolated fro
     async verify(f, credential) {
       assert.equal(f.imap.host, 'imap.gmail.com')
       assert.deepEqual(credential, { accessToken: 'test-access' })
+      return { ...f.smtp, port: 587, security: 'starttls' as const }
     },
     imapClient() { throw new Error('offline') }, importFolder,
   }, undefined, async () => ({
@@ -312,6 +313,7 @@ test('Gmail verifies and resumes the same account, with credentials isolated fro
   const first = await connect()
   assert.ok(first.active)
   assert.equal(first.accounts[0].authMethod, 'google')
+  assert.deepEqual(first.accounts[0].smtp, { ...gmailSettings(email).smtp, port: 587, security: 'starttls' })
   assert.doesNotMatch(JSON.stringify(first), /test-access|test-refresh/)
   assert.equal(JSON.parse(credentials).google.refreshToken, 'test-refresh')
   selected = 'other@example.test'

@@ -420,7 +420,7 @@ export class MailboxService {
         }
         const existing = accounts(base).find((row) => row.address_key === key(f.email))
         if (id && id !== existing?.account_id) throw new Error('请先取消当前邮箱的托管。')
-        await this.protocol.verify(f, credential)
+        const verifiedSmtp = await this.protocol.verify(f, credential)
         this.check(ctx)
         this.gmailFlow?.signal.throwIfAborted()
         const now = new Date(),
@@ -432,7 +432,7 @@ export class MailboxService {
           authMethod: google ? 'google' : undefined,
           email: f.email.trim(),
           imap: f.imap,
-          smtp: f.smtp,
+          smtp: verifiedSmtp ?? f.smtp,
           first_connected_at: existing?.first_connected_at ?? now.toISOString(),
           last_connected_at: now.toISOString(),
           new_mail_notifications: existing?.new_mail_notifications,
