@@ -62,7 +62,7 @@ export const siteConfig: SiteConfig = {
   productFullName: '外贸获客系统',
   agentName: '外贸获客智能体',
   tagline: '把产品信息变成可行动的外贸线索与开发信草稿',
-  version: '0.6.3',
+  version: '0.6.4',
   siteUrl: 'https://ftcs.ai-utills.com',
   brandSiteUrl: 'https://ai-utills.com',
   brandSiteName: 'AI-Utills',
@@ -85,7 +85,7 @@ export const siteConfig: SiteConfig = {
     {
       id: 'setup',
       label: 'Windows 安装包',
-      filename: '外贸获客-Setup-0.6.3.exe',
+      filename: '外贸获客-Setup-0.6.4.exe',
       note: 'NSIS 安装程序',
       mirrors: [
         {
@@ -93,19 +93,19 @@ export const siteConfig: SiteConfig = {
           label: 'Gitee 下载',
           badge: '国内更快',
           primary: true,
-          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.6.3/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Setup-0.6.3.exe',
+          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.6.4/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Setup-0.6.4.exe',
         },
         {
           id: 'github',
           label: 'GitHub 下载',
-          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.6.3/foreign-trade-Setup-0.6.3.exe',
+          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.6.4/foreign-trade-Setup-0.6.4.exe',
         },
       ],
     },
     {
       id: 'portable',
       label: 'Windows 便携版',
-      filename: '外贸获客-Portable-0.6.3.exe',
+      filename: '外贸获客-Portable-0.6.4.exe',
       note: '解压即用，无需安装',
       hidden: true,
       mirrors: [
@@ -114,12 +114,12 @@ export const siteConfig: SiteConfig = {
           label: 'Gitee 下载',
           badge: '国内更快',
           primary: true,
-          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.6.3/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Portable-0.6.3.exe',
+          url: 'https://gitee.com/mfs1998_admin/ftcs/releases/download/V0.6.4/%E5%A4%96%E8%B4%B8%E8%8E%B7%E5%AE%A2-Portable-0.6.4.exe',
         },
         {
           id: 'github',
           label: 'GitHub 下载',
-          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.6.3/foreign-trade-Portable-0.6.3.exe',
+          url: 'https://github.com/Pedro-MAFS/ftcs/releases/download/0.6.4/foreign-trade-Portable-0.6.4.exe',
         },
       ],
     },
@@ -137,7 +137,7 @@ export const seoCopy = {
   download: {
     title: '下载外贸获客系统 | FTCS Windows 桌面智能体',
     description:
-      '下载 FTCS 外贸获客系统 Windows 安装包。本机 AI 智能体：产品画像、公开网页与社媒公开摘要探索、开发信草稿。国内建议 Gitee，海外可用 GitHub。',
+      '下载 FTCS 外贸获客系统 Windows 安装包。本机 AI 智能体：产品画像、公开网页与社媒公开摘要探索、开发信审核与邮箱收发。国内建议 Gitee，海外可用 GitHub。',
     path: '/download',
   },
   docs: {
@@ -169,7 +169,7 @@ export const geoFaqs: GeoFaqItem[] = [
     id: 'data-and-send',
     question: '数据会上传到官网吗？现在能直接发开发信吗？',
     answer:
-      '工作区资料与配置保存在本机。执行 AI 分析、搜索等任务时，会调用你选择的模型及联网服务；本地保存不代表全程离线。开发信先生成可改稿草稿，你确认后再用，发出节奏由你掌握，避免误触达客户。',
+      '工作区资料与配置保存在本机。执行 AI 分析、搜索等任务时，会调用你选择的模型及联网服务；本地保存不代表全程离线。连接工作区邮箱后，可在邮件审核页检查收件人和草稿，点击「通过并发送」。发送成功后点「查看往来」，即可在联系人会话中继续跟进。',
   },
 ]
 

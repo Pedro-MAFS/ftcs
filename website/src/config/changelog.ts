@@ -13,6 +13,16 @@ export const CHANGELOG_STARTED_AT = '0.5.0'
  */
 export const changelogReleases: ChangelogRelease[] = [
   {
+    version: '0.6.4',
+    releasedAt: '2026-11-22',
+    title: 'FTCS Desktop 0.6.4',
+    notes: [
+      '工作区邮箱：像聊微信一样使用邮箱。',
+      '开发信审核：一键通过并发送，在联系人会话中跟进。',
+      '修复邮件重复显示和阅读时跳动的问题，优化独立站加载体验。',
+    ],
+  },
+  {
     version: '0.6.3',
     releasedAt: '2026-11-17',
     title: 'FTCS Desktop 0.6.3',

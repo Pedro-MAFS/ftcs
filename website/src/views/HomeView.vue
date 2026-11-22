@@ -19,7 +19,7 @@ const channels = [
         <div class="hero__intro">
           <p class="hero__eyebrow"><span class="eyebrow-dot"></span>FTCS · 外贸获客智能体</p>
           <h1 class="hero__brand">告别盲目开发，<br />用AI精准锁定<br class="hero-break" />全球买家。</h1>
-          <p class="hero__lead">从你的产品官网或资料出发，让 AI 帮你寻找海外潜在客户、整理匹配理由，并起草有依据的开发信。也可以通过对话创建和维护独立站。目标企业、邮件与网站内容由你审核确认。</p>
+          <p class="hero__lead">从你的产品官网或资料出发，让 AI 帮你寻找海外潜在客户、整理匹配理由，并起草有依据的开发信。连接工作区邮箱，审核后即可发信，像聊天一样跟进客户。也可以通过对话创建和维护独立站。</p>
           <div class="hero__actions">
             <RouterLink class="btn btn-primary" :to="casePath">看完整操作案例 <span aria-hidden="true">↗</span></RouterLink>
             <RouterLink class="btn btn-ghost" to="/download">下载 Windows 版</RouterLink>

@@ -30,7 +30,7 @@ function hasAnyMirror(mirrors: DownloadMirror[]): boolean {
         <h1>下载外贸获客桌面智能体</h1>
         <p>
           FTCS 是跑在本机的外贸获客系统。下载 Windows 安装包，即可用 AI
-          完成产品画像、线索探索与开发信草稿，并创建和维护独立站。
+          完成产品画像、线索探索和开发信起草。连接邮箱后可直接收发邮件，也可以在工作区创建和维护独立站。
         </p>
         <p>
           <RouterLink to="/">了解外贸获客智能体</RouterLink>
