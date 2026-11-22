@@ -1,6 +1,6 @@
 import { PRODUCT_LINKS } from '../config/links'
 
-const SHARE_TITLE = '外贸获客智能体'
+const SHARE_TITLE = 'FTCS 外贸获客智能体'
 
 /** 分享文案：官网下载页（随 FTCS_SITE_ORIGIN / 构建注入变化） */
 export function getAppSharePayload(): { title: string; text: string; url: string } {

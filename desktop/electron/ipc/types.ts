@@ -1,6 +1,19 @@
 export type { MainViewLayout } from '../config/main-view-layout'
 
 export const IPC = {
+  MAILBOX_REVIEW_SEND: 'mailbox:review-send',
+  MAILBOX_REVIEW_RESULT: 'mailbox:review-result',
+  MAILBOX_MARK_READ: 'mailbox:mark-read',
+  MAILBOX_OPEN: 'mailbox:open',
+  MAILBOX_COMPOSER: 'mailbox:composer',
+  MAILBOX_TEMP_DRAFTS: 'mailbox:temporary-drafts',
+  MAILBOX_ATTACHMENT: 'mailbox:attachment',
+  MAILBOX_UNREAD_COUNT: 'mailbox:unread-count',
+  MAILBOX_CONVERSATIONS: 'mailbox:conversations',
+  MAILBOX_TIMELINE: 'mailbox:timeline',
+  MAILBOX_GET: 'mailbox:snapshot',
+  MAILBOX_ACTION: 'mailbox:action',
+  MAILBOX_CHANGED: 'mailbox:changed',
   APP_GET_STATUS: 'app:get-status',
   APP_AGENT_PREFLIGHT: 'app:agent-preflight',
   BUILTIN_BROWSER_GET_STATE: 'builtin-browser:get-state',
@@ -880,6 +893,8 @@ export interface EmailVariantEditDto {
 }
 
 export interface ApproveEmailDraftInput {
+  selectedTo?: string
+  expectedVersion?: string
   productId: string
   leadId: string
   recipientKey?: string
@@ -906,6 +921,9 @@ export interface GetEmailDraftSlotInput {
 }
 
 export interface EmailDraftSlotDetailDto {
+  version?: string
+  selectedTo?: string
+  outreach?: import('../mailbox/outreach-types').OutreachBinding
   ok: boolean
   exists: boolean
   message?: string
@@ -930,6 +948,8 @@ export interface EmailDraftSlotDetailDto {
 }
 
 export interface SaveEmailDraftSlotInput {
+  selectedTo?: string
+  expectedVersion?: string
   productId: string
   leadId: string
   recipientKey: string

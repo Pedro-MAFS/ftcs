@@ -1,3 +1,10 @@
+import { openAttachment, saveAttachment } from './mailbox/attachments'
+import { withEmailDraftWrite } from '../../workspace/mcp-servers/lead-store/src/outreach-binding'
+import { approveForDelivery } from './emails/outreach-review'
+import { authorizeGmail } from './mailbox/gmail-auth'
+import { MailboxService } from './mailbox/service'
+import { safeStorage } from 'electron'
+import { mailNotifications } from './notify/mail-notifications'
 import { getCloudflareState, connectCloudflare, disconnectCloudflare, cancelCloudflareAuth, selectCloudflareAccount, getCloudflareCredentials } from './cloudflare/cloudflare-auth'
 import { CloudflarePages, normalizeDomain, verifyPagesProject, type PagesProject } from './cloudflare/cloudflare-pages'
 import { getGithubState, startGithubAuth, pollGithubAuth, cancelGithubAuth, disconnectGithub, getGithubAccessToken } from './github/github-auth'
@@ -267,6 +274,27 @@ try {
 }
 
 let mainWindow: BrowserWindow | null = null
+async function flushMailDrafts() {
+  const contents = mainWindow?.webContents
+  if (!contents || contents.isDestroyed() || contents.isCrashed() || contents.isLoadingMainFrame()) return
+  // Listeners enqueue only local draft writes. SMTP submission is independent of editor shutdown.
+  await contents.executeJavaScript(`(async () => {
+    const pending = []
+    window.dispatchEvent(new CustomEvent('ftcs:flush-mail-drafts', { detail: pending }))
+    await Promise.all(pending)
+  })()`)
+}
+const mailbox = new MailboxService(getWorkspaceRoot, {
+  get dir() { return path.join(app.getPath('userData'), 'mail-credentials') },
+  encrypt(value) {
+    if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text'))
+      throw new Error('系统凭据加密不可用。')
+    return safeStorage.encryptString(value)
+  },
+  decrypt: value => safeStorage.decryptString(value),
+}, () => mainWindow?.webContents.send(IPC.MAILBOX_CHANGED), undefined, mailNotifications(() => mainWindow),
+  (signal, hint) => authorizeGmail(url => shell.openExternal(url), signal, hint))
+
 const siteRuntime = new SiteRuntime(resolveConfiguredNode, getWorkspaceRoot, snapshot => {
   if (snapshot.preview.state !== 'running') clearVerifiedPreviewTargets()
   broadcastToWindows(IPC.SITE_RUNTIME_EVENT, snapshot)
@@ -391,7 +419,7 @@ function getWindowOptions(): BrowserWindowConstructorOptions {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: chrome.windowBg,
-    title: '外贸获客智能体',
+    title: 'FTCS 外贸获客智能体',
     icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.mjs'),
@@ -470,6 +498,7 @@ async function createWindow(): Promise<void> {
     onMainWindowBackgrounded()
   })
 
+  let closingAfterSave = false
   win.on('close', (event) => {
     if (isQuitting) return
     if (isCloseToTrayEnabled()) {
@@ -477,9 +506,19 @@ async function createWindow(): Promise<void> {
       win.hide()
       return
     }
-    // 未开启「关闭进托盘」：允许销毁并走 before-quit 清理
-    isQuitting = true
-    noteBuiltinBrowserQuitting()
+    event.preventDefault()
+    if (closingAfterSave) return
+    closingAfterSave = true
+    void flushMailDrafts()
+      .then(() => {
+        isQuitting = true
+        noteBuiltinBrowserQuitting()
+        win.close()
+      })
+      .catch(() => {
+        closingAfterSave = false
+        dialog.showErrorBox('草稿保存失败', '请在邮箱中处理草稿保存错误后重新关闭窗口。')
+      })
   })
 
   setTaskDoneNotifyMainWindowGetter(() =>
@@ -698,6 +737,62 @@ function registerIpcHandlers(): void {
     await shell.openExternal(parsed.toString())
     return { ok: true, message: '已打开浏览器' }
   })
+  const checkMailboxSender = (e: Electron.IpcMainInvokeEvent) => {
+    if (!mainWindow || e.sender !== mainWindow.webContents || e.senderFrame !== e.sender.mainFrame)
+      throw new Error('邮箱仅允许从工作区窗口访问。')
+  }
+  ipcMain.handle(IPC.MAILBOX_REVIEW_SEND, (event, ctx, account, input) => {
+    checkMailboxSender(event)
+    return mailbox.sendReview(ctx, account, input, approveForDelivery)
+  })
+  ipcMain.handle(IPC.MAILBOX_REVIEW_RESULT, (event, ctx, account, slot, request) => {
+    checkMailboxSender(event)
+    return mailbox.reviewResult(ctx, account, slot, request)
+  })
+  ipcMain.handle(IPC.MAILBOX_TEMP_DRAFTS, (event, ctx, account) => {
+    checkMailboxSender(event)
+    return mailbox.temporaryDrafts(ctx, account)
+  })
+  ipcMain.handle(IPC.MAILBOX_COMPOSER, (event, ctx, account, email, action) => {
+    checkMailboxSender(event)
+    const parent = mainWindow!
+    return mailbox.composer(ctx, account, email, action, async () => {
+      const result = await dialog.showOpenDialog(parent, {
+        title: '添加邮件附件',
+        properties: ['openFile', 'multiSelections'],
+      })
+      return result.canceled ? [] : result.filePaths
+    })
+  })
+  ipcMain.handle(IPC.MAILBOX_ATTACHMENT, async (event, ctx, account, message, ordinal, action) => {
+    checkMailboxSender(event)
+    const parent = mainWindow!
+    const { file, current } = await mailbox.attachment(ctx, account, message, ordinal)
+    if (action === 'open') {
+      await openAttachment(file, current, (name) => shell.openPath(name))
+      return 'opened'
+    }
+    if (action !== 'save') throw new Error('未知的附件操作。')
+    const result = await dialog.showSaveDialog(parent, {
+      title: '附件另存为',
+      defaultPath: path.join(app.getPath('downloads'), file.filename),
+    })
+    if (result.canceled || !result.filePath) return 'canceled'
+    await saveAttachment(file, result.filePath, current)
+    return 'saved'
+  })
+  ipcMain.handle(IPC.MAILBOX_MARK_READ, (event, ctx, account, contact, ids) => {
+    checkMailboxSender(event)
+    return mailbox.markRead(ctx, account, contact, ids)
+  })
+  ipcMain.handle(IPC.MAILBOX_UNREAD_COUNT, event => {
+    checkMailboxSender(event)
+    return mailbox.unreadCount()
+  })
+  ipcMain.handle(IPC.MAILBOX_CONVERSATIONS, (event,ctx,account) => { checkMailboxSender(event); return mailbox.conversations(ctx,account) })
+  ipcMain.handle(IPC.MAILBOX_TIMELINE, (event,ctx,account,contact,before,aroundId) => { checkMailboxSender(event); return mailbox.timeline(ctx,account,contact,before,aroundId) })
+  ipcMain.handle(IPC.MAILBOX_GET, event => { checkMailboxSender(event); return mailbox.snapshot() })
+  ipcMain.handle(IPC.MAILBOX_ACTION, (event, ctx, action) => { checkMailboxSender(event); return mailbox.act(ctx, action) })
   ipcMain.handle(IPC.SITE_GET, () => getSiteSnapshot(getWorkspaceRoot()))
   const currentSiteWorkspace = (expected: unknown): string => {
     const root = path.resolve(getWorkspaceRoot())
@@ -1287,11 +1382,13 @@ function registerIpcHandlers(): void {
       }
     }
 
+    await flushMailDrafts()
     const init = initializeWorkspace(dir, { forceManaged: true })
     siteSource.close()
     chatReferences.clear()
     writeUserPrefs({ workspaceRoot: dir })
     process.env.FTCS_WORKSPACE = dir
+    mailbox.start()
 
     // 新工作区通常需安装/构建 MCP 依赖
     await ensureMcpServersReady(dir)
@@ -1836,7 +1933,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.EMAIL_DRAFT_SAVE, (_event, input: SaveEmailDraftSlotInput) => {
     try {
-      return saveEmailDraftSlot(input, getWorkspaceRoot())
+      const root = getWorkspaceRoot()
+      return withEmailDraftWrite(root, input.leadId, () => saveEmailDraftSlot(input, root))
     } catch (err) {
       return {
         ok: false,
@@ -1866,7 +1964,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.EMAIL_DRAFT_REJECT, (_event, input: RejectEmailDraftInput) => {
     try {
-      return rejectEmailDraft(input, getWorkspaceRoot())
+      const root = getWorkspaceRoot()
+      return withEmailDraftWrite(root, input.leadId, () => rejectEmailDraft(input, root))
     } catch (err) {
       return {
         ok: false,
@@ -1877,7 +1976,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.EMAIL_DRAFT_APPROVE, (_event, input: ApproveEmailDraftInput) => {
     try {
-      return approveEmailDraft(input, getWorkspaceRoot())
+      const root = getWorkspaceRoot()
+      return withEmailDraftWrite(root, input.leadId, () => approveEmailDraft(input, root))
     } catch (err) {
       return {
         ok: false,
@@ -2188,6 +2288,7 @@ app.whenReady().then(async () => {
 
   installUnexpectedWebContentsGuard()
   registerIpcHandlers()
+  mailbox.start()
 
   startHidden = shouldStartHidden()
   syncOpenAtLoginFromPrefs()
@@ -2238,15 +2339,25 @@ app.on('window-all-closed', () => {
  * 必须先 preventDefault，等 stop() 完成（含 taskkill）再真正退出。
  */
 app.on('before-quit', (event) => {
-  isQuitting = true
-  noteBuiltinBrowserQuitting()
-  stopWorkflowScheduler()
-  destroyAppTray()
-  if (isCleaningUp) return
   event.preventDefault()
+  if (isCleaningUp) return
   isCleaningUp = true
 
   void (async () => {
+    try {
+      await flushMailDrafts()
+    } catch {
+      isCleaningUp = false
+      isQuitting = false
+      showMainWindow(mainWindow)
+      dialog.showErrorBox('草稿保存失败', '请在邮箱中处理草稿保存错误后重新退出。')
+      return
+    }
+    isQuitting = true
+    mailbox.stop()
+    noteBuiltinBrowserQuitting()
+    stopWorkflowScheduler()
+    destroyAppTray()
     try {
       siteSource.close()
       await sitePublish.shutdown()

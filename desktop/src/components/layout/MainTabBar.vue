@@ -1,10 +1,38 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import Icon from '../shared/Icon.vue'
 import { isPinnedPageTab, useMainViewTabs } from '../../composables/useMainViewTabs'
 import { useWorkspaceLayout } from '../../composables/useWorkspaceLayout'
 
 const { tabs, activeId, settingsCover, activateTab, closeTab, openPageTab } = useMainViewTabs()
 const { fill, enterFill, exitFill } = useWorkspaceLayout()
+
+const mailboxUnread = ref(0)
+watch(
+  () => tabs.value.some((tab) => tab.id === 'page:mailbox'),
+  (open, _, onCleanup) => {
+    const api = window.ftcs?.mailbox
+    mailboxUnread.value = 0
+    if (!open || !api) return
+    let sequence = 0
+    async function refresh() {
+      const request = ++sequence
+      try {
+        const count = await api!.unreadCount()
+        if (request === sequence) mailboxUnread.value = count
+      } catch {
+        if (request === sequence) mailboxUnread.value = 0
+      }
+    }
+    const unsubscribe = api.changed(refresh)
+    onCleanup(() => {
+      sequence++
+      unsubscribe()
+    })
+    void refresh()
+  },
+  { immediate: true },
+)
 
 function tabSelected(id: string): boolean {
   return !settingsCover.value && activeId.value === id
@@ -26,6 +54,12 @@ function tabSelected(id: string): boolean {
         @keydown.enter="activateTab(tab.id)"
       >
         <span class="main-tab__title">{{ tab.title }}</span>
+        <span
+          v-if="tab.id === 'page:mailbox' && mailboxUnread > 0"
+          class="main-tab__badge"
+          :title="`${mailboxUnread} 封未读邮件`"
+          :aria-label="`${mailboxUnread} 封未读邮件`"
+        >{{ mailboxUnread > 99 ? '99+' : mailboxUnread }}</span>
         <button
           v-if="!isPinnedPageTab(tab.id)"
           type="button"

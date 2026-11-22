@@ -1,8 +1,30 @@
 import fs from 'node:fs'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
+
+import { assertReviewEditable, withEmailDraftWrite, type OutreachBinding } from '../../../workspace/mcp-servers/lead-store/src/outreach-binding'
+import { atomic } from '../mailbox/storage'
+
+export function assertReviewSlot(product: string, lead: string, slot: string) {
+  if (![product, lead, slot].every(s => typeof s === 'string' && /^[a-z0-9._+-]+$/i.test(s) && s !== '.' && s !== '..'))
+    throw new Error('产品、线索或收件人标识无效。')
+}
 
 const COMPANY_KEY = 'company'
 
+export function reviewVersion(raw: Record<string, unknown>) {
+  const recipient = asRecord(raw.recipient)
+  const binding = asRecord(raw.outreach)
+  return createHash('sha256').update(JSON.stringify([
+    raw.id, raw.created_at, raw.product_id, raw.lead_id, raw.status, recipient?.email,
+    recipient?.recipient_aliases, raw.subject, raw.body, raw.variants, raw.selected_to,
+    binding?.request_id, asRecord(raw.review)?.reviewed_at,
+  ])).digest('hex')
+}
+function checkReview(root: string, draft: Record<string, unknown>, expected?: string) {
+  assertReviewEditable(root, draft.outreach as OutreachBinding | undefined)
+  if (expected && reviewVersion(draft) !== expected) throw new Error('草稿已更新，请刷新并重新核对。')
+}
 function resolveSlotDraftAbsPath(
   leadId: string,
   recipientKey: string,
@@ -48,6 +70,8 @@ export interface EmailVariantEdit {
 }
 
 export interface ApproveEmailDraftInput {
+  selectedTo?: string
+  expectedVersion?: string
   productId: string
   leadId: string
   /** 当前选中收件人槽；默认 company */
@@ -72,6 +96,8 @@ export interface ApproveEmailDraftResult {
 }
 
 export interface SaveEmailDraftSlotInput {
+  selectedTo?: string
+  expectedVersion?: string
   productId: string
   leadId: string
   recipientKey: string
@@ -410,6 +436,19 @@ export function rejectEmailDraft(
   if (!productId) return { ok: false, message: '缺少 productId' }
   if (!leadId) return { ok: false, message: '缺少 leadId' }
 
+  assertReviewSlot(productId, leadId, recipientKey)
+  const dir = getEmailLeadDir(leadId, workspaceRoot)
+  const keys = scope === 'lead' && fs.existsSync(dir)
+    ? ['company', ...fs.readdirSync(dir, {withFileTypes:true}).filter(e => e.isDirectory()).map(e => e.name)]
+    : [recipientKey]
+  for (const k of keys) {
+    const file = resolveSlotDraftAbsPath(leadId, k, workspaceRoot)
+    if (fs.existsSync(file)) {
+      const raw = JSON.parse(fs.readFileSync(file, 'utf8'))
+      if (raw.product_id && raw.product_id !== productId) throw new Error('草稿属于其他产品。')
+      assertReviewEditable(workspaceRoot, raw.outreach, true)
+    }
+  }
   if (scope === 'lead') {
     const emailDir = getEmailLeadDir(leadId, workspaceRoot)
     const hasEmailDir = fs.existsSync(emailDir)
@@ -511,6 +550,10 @@ export function clearEmailDraftZh(
   recipientKey: string,
   workspaceRoot: string,
 ): { cleared: boolean; draftPath: string } {
+  return withEmailDraftWrite(workspaceRoot, leadId, () => clearSavedTranslation(leadId, recipientKey, workspaceRoot))
+}
+
+function clearSavedTranslation(leadId: string, recipientKey: string, workspaceRoot: string) {
   const key = cleanString(recipientKey) || 'company'
   const draftPath = resolveSlotDraftAbsPath(leadId, key, workspaceRoot)
   const rel = resolveSlotDraftRelPath(leadId, key)
@@ -559,6 +602,7 @@ export function saveEmailDraftSlot(
   if (!productId) return { ok: false, message: '缺少 productId' }
   if (!leadId) return { ok: false, message: '缺少 leadId' }
 
+  assertReviewSlot(productId, leadId, recipientKey)
   const draftPath = resolveSlotDraftAbsPath(leadId, recipientKey, workspaceRoot)
   if (!fs.existsSync(draftPath)) {
     return {
@@ -587,6 +631,7 @@ export function saveEmailDraftSlot(
     }
   }
 
+  checkReview(workspaceRoot, draft, input.expectedVersion)
   const draftProductId = cleanString(draft.product_id)
   if (draftProductId && draftProductId !== productId) {
     return {
@@ -607,6 +652,7 @@ export function saveEmailDraftSlot(
   const now = new Date().toISOString()
   const nextDraft: Record<string, unknown> = {
     ...draft,
+    selected_to: input.selectedTo ?? draft.selected_to,
     product_id: draftProductId || productId,
     lead_id: cleanString(draft.lead_id) || leadId,
     updated_at: now,
@@ -615,7 +661,7 @@ export function saveEmailDraftSlot(
     status: cleanString(draft.status) || 'pending_review',
   }
 
-  fs.writeFileSync(draftPath, `${JSON.stringify(nextDraft, null, 2)}\n`, 'utf8')
+  atomic(draftPath, `${JSON.stringify(nextDraft, null, 2)}\n`)
   return {
     ok: true,
     message: '已保存当前收件人草稿',
@@ -632,6 +678,7 @@ export function saveEmailDraftSlot(
 export function approveEmailDraft(
   input: ApproveEmailDraftInput,
   workspaceRoot: string,
+  binding?: OutreachBinding,
 ): ApproveEmailDraftResult {
   const productId = cleanString(input.productId)
   const leadId = cleanString(input.leadId)
@@ -639,6 +686,7 @@ export function approveEmailDraft(
   if (!productId) return { ok: false, message: '缺少 productId' }
   if (!leadId) return { ok: false, message: '缺少 leadId' }
 
+  assertReviewSlot(productId, leadId, recipientKey)
   const draftPath = resolveSlotDraftAbsPath(leadId, recipientKey, workspaceRoot)
   if (!fs.existsSync(draftPath)) {
     return {
@@ -667,6 +715,7 @@ export function approveEmailDraft(
     }
   }
 
+  checkReview(workspaceRoot, draft, input.expectedVersion)
   const draftProductId = cleanString(draft.product_id)
   if (draftProductId && draftProductId !== productId) {
     return {
@@ -724,6 +773,7 @@ export function approveEmailDraft(
   const nextDraft: Record<string, unknown> = {
     id: cleanString(draft.id) || leadId,
     lead_id: cleanString(draft.lead_id) || leadId,
+    selected_to: input.selectedTo ?? draft.selected_to,
     product_id: draftProductId || productId,
     created_at: cleanString(draft.created_at) || reviewedAt,
     updated_at: reviewedAt,
@@ -749,6 +799,8 @@ export function approveEmailDraft(
     personalization_evidence: Array.isArray(draft.personalization_evidence)
       ? draft.personalization_evidence
       : [],
+    outreach: binding ?? draft.outreach,
+    zh_source_hash: draft.zh_source_hash,
     review: {
       approved: true,
       reviewer_notes: asRecord(draft.review)?.reviewer_notes ?? null,
@@ -756,7 +808,7 @@ export function approveEmailDraft(
     },
   }
 
-  fs.writeFileSync(draftPath, `${JSON.stringify(nextDraft, null, 2)}\n`, 'utf8')
+  atomic(draftPath, `${JSON.stringify(nextDraft, null, 2)}\n`)
   syncApprovedMarkdown(nextDraft, leadId, recipientKey, workspaceRoot)
 
   const recomputed = recomputeLeadEmailStatus(productId, leadId, workspaceRoot)

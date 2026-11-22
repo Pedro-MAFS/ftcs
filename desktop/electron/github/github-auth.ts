@@ -4,7 +4,8 @@ import path from 'node:path'
 
 interface Tokens { accessToken: string; refreshToken?: string; expiresAt?: number; login: string }
 interface Pending { deviceCode: string; expiresAt: number; interval: number; nextPollAt: number; clientId: string }
-export type GithubState = { connected: boolean; authorized?: boolean; login?: string; message?: string; installUrl?: string }
+class GithubAuthorizationExpired extends Error {}
+export type GithubState = { connected: boolean; checkFailed?: boolean; authorized?: boolean; login?: string; message?: string; installUrl?: string }
 export type GithubStart = { ok: boolean; message?: string; userCode?: string; verificationUrl?: string; interval?: number }
 export type GithubPoll = { status: 'pending' | 'connected' | 'failed'; interval?: number; message?: string; login?: string }
 let pending: Pending | null = null
@@ -41,6 +42,7 @@ async function user(token: string): Promise<string> {
     headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'User-Agent': 'FTCS-Desktop', 'X-GitHub-Api-Version': '2022-11-28' },
     signal: AbortSignal.timeout(15000), redirect: 'error',
   })
+  if (response.status === 401) throw new GithubAuthorizationExpired('GitHub 授权已失效，请重新连接。')
   if (!response.ok) throw new Error(`GitHub 用户信息读取失败 (${response.status})`)
   const data = await response.json() as { login?: unknown }
   if (typeof data.login !== 'string' || !data.login) throw new Error('GitHub 未返回用户名')
@@ -51,9 +53,10 @@ async function installationState(token: string, login: string): Promise<GithubSt
     headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'User-Agent': 'FTCS-Desktop', 'X-GitHub-Api-Version': '2022-11-28' },
     signal: AbortSignal.timeout(15000), redirect: 'error',
   })
-  if (!response.ok) return { connected: false, authorized: true, login, message: '已授权账号，但无法检查 GitHub App 安装状态。' }
+  if (response.status === 401) throw new GithubAuthorizationExpired('GitHub 授权已失效，请重新连接。')
+  if (!response.ok) return { connected: false, checkFailed: true, authorized: true, login, message: '已授权账号，但无法检查 GitHub App 安装状态。' }
   const data = await response.json() as { total_count?: unknown }
-  if (typeof data.total_count !== 'number') return { connected: false, authorized: true, login, message: '无法确认 GitHub App 安装状态。' }
+  if (typeof data.total_count !== 'number') return { connected: false, checkFailed: true, authorized: true, login, message: '无法确认 GitHub App 安装状态。' }
   if (data.total_count > 0) return { connected: true, authorized: true, login }
   const slug = process.env.FTCS_GITHUB_APP_SLUG?.trim() || DEFAULT_GITHUB_APP_SLUG
   return { connected: false, authorized: true, login,
@@ -97,7 +100,7 @@ async function checkGithubState(): Promise<GithubState> {
     const state = await installationState(saved.accessToken, login)
     return current === generation ? state : { connected: false }
   } catch (error) {
-    return { connected: false, message: error instanceof Error ? error.message : '无法检查 GitHub 连接' }
+    return { connected: false, checkFailed: !(error instanceof GithubAuthorizationExpired), message: error instanceof Error ? error.message : '无法检查 GitHub 连接' }
   }
 }
 export async function startGithubAuth(): Promise<GithubStart> {

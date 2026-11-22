@@ -2,6 +2,7 @@
 defineProps<{
   name:
     | 'package'
+    | 'paperclip'
     | 'file-text'
     | 'radar'
     | 'users'
@@ -12,6 +13,9 @@ defineProps<{
     | 'search'
     | 'play'
     | 'send'
+    | 'reply'
+    | 'pin'
+    | 'pencil'
     | 'sparkles'
     | 'check'
     | 'save'
@@ -66,6 +70,9 @@ defineProps<{
       <path d="M12 22V12" />
       <path d="m3.3 7 7.7 4.4 7.7-4.4" />
       <path d="m7.5 4.2 9 5.2" />
+    </template>
+    <template v-else-if="name === 'paperclip'">
+      <path d="m21.4 11.6-9.2 9.2a6 6 0 0 1-8.5-8.5L14 2a4 4 0 1 1 5.7 5.7L9.4 18a2 2 0 0 1-2.8-2.8L16 5.8" />
     </template>
     <template v-else-if="name === 'file-text'">
       <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
@@ -122,6 +129,15 @@ defineProps<{
     <template v-else-if="name === 'send'">
       <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.04a2 2 0 0 1 1.112 1.11z" />
       <path d="m21.854 2.147-10.94 10.939" />
+    </template>
+    <template v-else-if="name === 'pencil'">
+      <path d="m15 5 4 4M3 21l4.5-1 13-13a2.8 2.8 0 0 0-4-4l-13 13L3 21z" />
+    </template>
+    <template v-else-if="name === 'pin'">
+      <path d="m16 3 5 5-3 1-4 4v3l-2 2-6-6 2-2h3l4-4zM9 15l-6 6" />
+    </template>
+    <template v-else-if="name === 'reply'">
+      <path d="m9 5-6 6 6 6m-6-6h11a7 7 0 0 1 7 7v1" />
     </template>
     <template v-else-if="name === 'sparkles'">
       <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.22 4.684a1 1 0 0 0 .949.683h4.908a1 1 0 0 1 .588 1.81l-3.976 2.888a1 1 0 0 0-.363 1.118l1.52 4.684a1 1 0 0 1-1.541 1.118L12 18.347l-3.888 2.822a1 1 0 0 1-1.541-1.118l1.52-4.684a1 1 0 0 0-.363-1.118L3.752 9.99a1 1 0 0 1 .588-1.81h4.908a1 1 0 0 0 .95-.683z" />

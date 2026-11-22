@@ -770,6 +770,7 @@ button:focus-visible {
   flex-shrink: 0;
 }
 
+.main-tab__badge,
 .auth-chip__badge,
 .auth-menu__badge {
   display: inline-flex;
@@ -3192,6 +3193,7 @@ button:focus-visible {
 }
 
 .email-preview__field--to-company {
+  flex-wrap: wrap;
   grid-column: 1 / -1;
   flex-direction: row;
   align-items: flex-start;
@@ -3220,33 +3222,14 @@ button:focus-visible {
   color: var(--text-muted);
 }
 
-.email-preview__to {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: baseline;
-  gap: 4px;
-  min-width: 0;
-}
-
-.email-preview__to-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.email-preview__to.has-more {
-  cursor: help;
-}
-
-.email-preview__to-more {
-  flex-shrink: 0;
-  padding: 0 5px;
+.email-preview__meta-block select {
+  max-width: 100%;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--bg-hover);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
 }
 
 .email-preview__company {

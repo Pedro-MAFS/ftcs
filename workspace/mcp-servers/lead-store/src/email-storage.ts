@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { assertReviewEditable, withEmailDraftWrite } from "./outreach-binding.js";
 import type { ScoredLead } from "./lead-types.js";
 import type { EmailDraft, EmailDraftInput, EmailDraftSlot } from "./email-types.js";
 import {
@@ -63,6 +64,10 @@ export type EmailDraftLeadSummary = {
   slots: EmailDraftSlotSummary[];
 };
 
+function guardEmailWrite<A extends unknown[], R>(write: (root: string, lead: string, ...args: A) => R) {
+  return (root: string, lead: string, ...args: A) => withEmailDraftWrite(root, lead, () => write(root, lead, ...args));
+}
+
 function relativeDraftPath(leadId: string, slot: EmailDraftSlot): string {
   if (slot.kind === "company") {
     return `data/emails/${leadId}/draft.json`;
@@ -98,7 +103,7 @@ export function loadEmailDraft(root: string, leadId: string): EmailDraft | null 
   return loadEmailDraftSlot(root, leadId, { kind: "company" });
 }
 
-export function saveEmailDraftSlot(
+export const saveEmailDraftSlot = guardEmailWrite(function saveEmailDraftSlot(
   root: string,
   leadId: string,
   slot: EmailDraftSlot,
@@ -110,6 +115,7 @@ export function saveEmailDraftSlot(
     ? loadEmailDraftSlot(root, leadId, slot)
     : null;
 
+  assertReviewEditable(root, existing?.outreach, true);
   const raw = input as Record<string, unknown>;
   let subject = typeof raw.subject === "string" ? raw.subject : "";
   let body = typeof raw.body === "string" ? raw.body : "";
@@ -157,6 +163,9 @@ export function saveEmailDraftSlot(
 
   const draft: EmailDraft = EmailDraftSchema.parse({
     ...raw,
+    selected_to: existing?.selected_to,
+    outreach: undefined, // An explicit rewrite starts a new review.
+
     id:
       (typeof raw.id === "string" ? raw.id : undefined) ??
       existing?.id ??
@@ -200,7 +209,7 @@ export function saveEmailDraftSlot(
   }
 
   return draft;
-}
+})
 
 export function computeZhSourceHash(subject: string, body: string): string {
   return createHash("sha256")
@@ -212,7 +221,7 @@ export function computeZhSourceHash(subject: string, body: string): string {
 /**
  * 仅写入中文对照字段，不改外文 subject/body/status。
  */
-export function saveEmailDraftZh(
+export const saveEmailDraftZh = guardEmailWrite(function saveEmailDraftZh(
   root: string,
   leadId: string,
   slot: EmailDraftSlot,
@@ -272,9 +281,9 @@ export function saveEmailDraftZh(
     body_zh,
     zh_source_hash,
   };
-}
+})
 
-export function clearEmailDraftZh(
+export const clearEmailDraftZh = guardEmailWrite(function clearEmailDraftZh(
   root: string,
   leadId: string,
   slot: EmailDraftSlot
@@ -298,7 +307,7 @@ export function clearEmailDraftZh(
     "utf8"
   );
   return { cleared: true, path };
-}
+})
 
 export function saveEmailDraft(
   root: string,
@@ -431,7 +440,7 @@ export function listEmailDrafts(root: string, productId?: string): EmailDraft[] 
   return drafts;
 }
 
-export function deleteEmailDraftSlot(
+export const deleteEmailDraftSlot = guardEmailWrite(function deleteEmailDraftSlot(
   root: string,
   leadId: string,
   slot: EmailDraftSlot
@@ -440,6 +449,7 @@ export function deleteEmailDraftSlot(
   const mdPath = getEmailDraftMarkdownPathForSlot(root, leadId, slot);
   let removed = false;
   if (existsSync(draftPath)) {
+    assertReviewEditable(root, loadEmailDraftSlot(root, leadId, slot)?.outreach, true);
     rmSync(draftPath, { force: true });
     removed = true;
   }
@@ -457,7 +467,7 @@ export function deleteEmailDraftSlot(
     }
   }
   return { removed, path: relativeDraftPath(leadId, slot) };
-}
+})
 
 export function selectLeadsForEmailDraft(
   leads: ScoredLead[],

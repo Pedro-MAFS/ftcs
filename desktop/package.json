@@ -1,6 +1,6 @@
 {
   "name": "@ftcs/desktop",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "private": true,
   "description": "外贸获客桌面应用（Electron + Vue3 + OpenCode SDK Server/Client）",
   "author": "FTCS",
@@ -23,14 +23,26 @@
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.18.1",
+    "@tiptap/core": "^3.34.0",
+    "@tiptap/extension-image": "^3.34.0",
+    "@tiptap/extension-table": "^3.34.0",
+    "@tiptap/starter-kit": "^3.34.0",
     "docutext": "^1.2.1",
+    "html-to-text": "10.0.1",
     "ignore": "^7.0.14",
+    "imapflow": "^2.12.1",
+    "mailparser": "^3.14.5",
+    "nodemailer": "^10.6.0",
+    "sanitize-html": "^2.18.2",
     "socks-proxy-agent": "^8.0.5",
     "undici": "^6.21.2",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {
+    "@types/mailparser": "^3.9.0",
+    "@types/nodemailer": "^8.0.2",
+    "@types/sanitize-html": "^2.16.2",
     "@vitejs/plugin-vue": "^5.2.1",
     "electron": "^34.0.2",
     "electron-builder": "^25.1.8",
@@ -99,7 +111,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "外贸获客",
+      "shortcutName": "FTCS 外贸获客",
+      "uninstallDisplayName": "FTCS 外贸获客",
       "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "portable": {

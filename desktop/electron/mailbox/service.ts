@@ -1,0 +1,646 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { createHash, randomUUID } from 'node:crypto'
+import developerContact from '../../../website/src/config/developer-contact.json' with { type: 'json' }
+import { imapClient, verify, diagnostic, smtpSubmit, type MailCredential } from './protocol'
+import { gmailSubmit } from './gmail-api'
+import { refreshGmail, type GmailTokens } from './gmail-auth'
+import type { AccountSettings } from './types'
+import type { SubmitMail } from './composer-store'
+import { clearAttachmentPreviews, localAttachment } from './attachments'
+import { importFolder } from './import'
+import { ReadOnlyInbox, syncFlags } from './flags'
+import { ImportIndex } from './conversations'
+import type { ComposerAction, ComposerView } from './compose-types'
+import type { TimelineCursor } from './types'
+import { accounts, accountDir, atomic, read, save, newFolder, uuid } from './storage'
+import {
+  validate,
+  key,
+  type Account,
+  type Context,
+  type MailAction,
+  type MailTarget,
+  type Folder,
+  type FolderRole,
+  type Snapshot,
+} from './types'
+
+import { withEmailDraftWrite } from '../../../workspace/mcp-servers/lead-store/src/outreach-binding'
+import type { ReviewSlot, ReviewSend } from './outreach-types'
+import type { approveForDelivery } from '../emails/outreach-review'
+
+interface State {
+  v: number
+  workspace_id: string
+  active_account_id: string | null
+  connection_generation: number
+}
+interface Vault {
+  dir: string
+  encrypt(value: string): Buffer
+  decrypt(value: Buffer): string
+}
+const roles: FolderRole[] = ['inbox', 'sent']
+export class MailboxService {
+  constructor(
+    private root: () => string,
+    private vault: Vault,
+    private notify: () => void,
+    private protocol: { verify: typeof verify; imapClient: typeof imapClient; importFolder: typeof importFolder; smtpSubmit?: typeof smtpSubmit; gmailSubmit?: typeof gmailSubmit }
+      = { verify, imapClient, importFolder },
+    private notifications?: { show(target: MailTarget, sender: string, count: number): void; clear(): void },
+    private authorizeGmail?: (signal: AbortSignal, hint?: string) => Promise<{ settings: AccountSettings; tokens: GmailTokens }>,
+  ) {}
+  private gmailFlow?: AbortController
+  private refreshing?: Promise<MailCredential>
+  private sendScope = new AbortController()
+  private epoch = 0
+  private connecting = false
+  private running = false
+  private wake = false
+  private arrivalBoundary?: { validity: number; upper: number }
+  private timer?: ReturnType<typeof setTimeout>
+  private client?: ReturnType<typeof imapClient>
+  private loading?: Promise<ImportIndex>
+  private index?: ImportIndex
+  private candidates: string[] = []
+  private errors: Partial<Record<FolderRole, string>> = {}
+  private base() {
+    return path.join(this.root(), 'data', 'mail')
+  }
+  private state(): State {
+    const file = path.join(this.base(), 'workspace.json')
+    if (!fs.existsSync(file))
+      return { v: 1, workspace_id: '', active_account_id: null, connection_generation: 0 }
+    const state = read<State>(file)
+    if (!uuid(state.workspace_id) || (state.active_account_id && !uuid(state.active_account_id)))
+      throw new Error('邮箱工作区配置损坏。')
+    return state
+  }
+  private credentialRoot(state: State) {
+    const rootKey = createHash('sha256').update(this.root()).digest('hex')
+    return path.join(this.vault.dir, rootKey, state.workspace_id)
+  }
+  private credential(state: State, id: string) {
+    if (!uuid(id) || !uuid(state.workspace_id)) throw new Error('凭据标识无效。')
+    return path.join(this.credentialRoot(state), id + '.bin')
+  }
+  private configSignature(account: Account) {
+    return JSON.stringify([this.root(), account.account_id, account.email, account.imap, account.smtp])
+  }
+  private async mailCredential(state: State, account: Account, ctx: Context): Promise<MailCredential> {
+    this.check(ctx)
+    const binding = this.configSignature(account)
+    const file = this.credential(state, account.account_id)
+    let tokens: GmailTokens
+    try {
+      const secret = JSON.parse(this.vault.decrypt(fs.readFileSync(file)))
+      if (secret.binding !== binding) throw new Error()
+      if (!account.authMethod && typeof secret.password === 'string') return secret.password
+      if (account.authMethod !== 'google' || !secret.google?.refreshToken) throw new Error()
+      tokens = secret.google
+    } catch {
+      throw Object.assign(new Error('请重新验证邮箱。'), { code: account.authMethod === 'google' ? 'GMAIL_REAUTH' : 'EAUTH' })
+    }
+    if (tokens.expiresAt > Date.now() + 60_000) return { accessToken: tokens.accessToken }
+    if (!this.refreshing) {
+      const pending = refreshGmail(tokens, this.sendScope.signal).then(updated => {
+        this.check(ctx)
+        atomic(file, this.vault.encrypt(JSON.stringify({ binding, google: updated })))
+        return { accessToken: updated.accessToken }
+      }).finally(() => { if (this.refreshing === pending) this.refreshing = undefined })
+      this.refreshing = pending
+    }
+    return this.refreshing
+  }
+  private submitter(account: Account): SubmitMail {
+    const ctx = { root: this.root(), generation: this.epoch }
+    const signal = this.sendScope.signal
+    return async (attempt, files) => {
+      let credential: MailCredential
+      try {
+        credential = await this.mailCredential(this.state(), account, ctx)
+        this.check(ctx)
+      } catch (error) {
+        return { state: 'failed', detail: diagnostic(error) }
+      }
+      const submit = typeof credential === 'string'
+        ? (this.protocol.smtpSubmit ?? smtpSubmit)(account.smtp, credential, signal)
+        : (this.protocol.gmailSubmit ?? gmailSubmit)(credential.accessToken, signal)
+      return submit(attempt, files)
+    }
+  }
+  private folder(dir: string, role: FolderRole) {
+    return read<Folder>(path.join(dir, 'sync', role + '.json'))
+  }
+  private async reader(ctx: Context, id: string) {
+    this.check(ctx)
+    if (!id || this.state().active_account_id !== id) throw new Error('邮箱账号已改变。')
+    if (this.index) return this.index
+    if (!this.loading) {
+      const dir = accountDir(this.base(), id)
+      const { email } = read<Account>(path.join(dir, 'account.json'))
+      const preset = email.toLowerCase() === developerContact.email ? undefined : developerContact
+      this.loading = ImportIndex.load(dir, () => this.check(ctx), preset)
+    }
+    const loading = this.loading
+    try {
+      const index = await loading
+      this.check(ctx)
+      this.index = index
+      return index
+    } finally {
+      if (this.loading === loading) this.loading = undefined
+    }
+  }
+  async reviewResult(ctx: Context, id: string, slot: ReviewSlot, request: string) {
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    return index.composer.outreachResult(request, slot)
+  }
+  async sendReview(ctx: Context, id: string, edit: ReviewSend, prepare: typeof approveForDelivery) {
+    const index = await this.reader(ctx, id)
+    const guard = () => this.check(ctx)
+    guard()
+    // No await between checking the reviewed version, binding it and journaling submission.
+    const response = await withEmailDraftWrite(ctx.root, edit.leadId, () => {
+      const { binding, result, source } = prepare(ctx.root, id, edit, index.composer)
+      if (result) return result
+      this.notify()
+      const account = read<Account>(path.join(accountDir(this.base(), id), 'account.json'))
+      const submit = this.submitter(account)
+      // sendOutreach journals synchronously, then yields for the delivery response.
+      return index.composer.sendOutreach(
+        edit,
+        source,
+        binding.created_at,
+        account.email,
+        submit,
+        guard,
+        this.notify,
+      )
+    })
+    guard()
+    return response
+  }
+
+  async temporaryDrafts(ctx: Context, id: string) {
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    return index.composer.temporary()
+  }
+  async composer(
+    ctx: Context,
+    id: string,
+    email: string,
+    action: ComposerAction,
+    pick?: () => Promise<string[]>,
+  ): Promise<ComposerView> {
+    const index = await this.reader(ctx, id)
+    const guard = () => this.check(ctx)
+    guard()
+    const store = index.composer
+    const account = read<Account>(path.join(accountDir(this.base(), id), 'account.json'))
+    const self = account.email
+    switch (action.kind) {
+      case 'get':
+        return store.view(email, self)
+      case 'get-template':
+        return { ...store.view(email, self), bodyTemplate: store.bodyTemplate() }
+      case 'set-template':
+        return { ...store.view(email, self), bodyTemplate: store.setBodyTemplate(action.body) }
+      case 'save': {
+        const view = store.write(email, self, action.version, action.edit)
+        this.notify()
+        return view
+      }
+      case 'remove': {
+        const view = store.remove(email, self, action.version, action.attachment)
+        this.notify()
+        return view
+      }
+      case 'pick': {
+        if (!pick) throw new Error('本机文件选择器不可用。')
+        const files = await pick()
+        guard()
+        let view = store.view(email, self),
+          version = action.version
+        const attachmentErrors: string[] = []
+        for (const file of files) {
+          try {
+            view = await store.addFile(email, self, version, file, guard)
+            version = view.draft
+            this.notify()
+          } catch (error) {
+            guard()
+            attachmentErrors.push(
+              path.basename(file) + '：' + (error instanceof Error ? error.message : '复制失败'),
+            )
+          }
+        }
+        return { ...view, attachmentErrors }
+      }
+      case 'send': {
+        const result = await store.send(
+          email,
+          self,
+          action,
+          this.submitter(account),
+          guard,
+          this.notify,
+        )
+        guard()
+        return { ...store.view(email, self), result }
+      }
+      default:
+        throw new Error('未知的撰写操作。')
+    }
+  }
+  async attachment(ctx: Context, account: string, messageId: string, ordinal: number) {
+    const index = await this.reader(ctx, account)
+    const current = () => this.check(ctx)
+    current()
+    const file = localAttachment(accountDir(this.base(), account), index.attachment(messageId, ordinal))
+    return { file, current }
+  }
+  async markRead(ctx: Context, id: string, contact: string, ids: string[]) {
+    if (!uuid(contact) || !Array.isArray(ids) || ids.length > 200 || !ids.every(uuid))
+      throw new Error('无效的邮件阅读记录。')
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    if (index.markRead(this.folder(accountDir(this.base(), id), 'inbox'), contact, new Set(ids))) {
+      this.notify()
+      if (this.running) this.wake = true
+      else this.schedule(0)
+    }
+  }
+  async unreadCount() {
+    const id = this.state().active_account_id
+    if (!id) return 0
+    const ctx = { root: this.root(), generation: this.epoch }
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    return index.unreadMessages(this.folder(accountDir(this.base(), id), 'inbox')).size
+  }
+  async conversations(ctx: Context, id: string) {
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    return index.conversations(this.folder(accountDir(this.base(), id), 'inbox'))
+  }
+  async timeline(ctx: Context, id: string, contact: string, before?: TimelineCursor, aroundId?: string) {
+    const index = await this.reader(ctx, id)
+    this.check(ctx)
+    const unread = index.unreadMessages(this.folder(accountDir(this.base(), id), 'inbox'))
+    const page = await index.timeline(contact, before, () => this.check(ctx), aroundId, unread)
+    this.check(ctx)
+    return page
+  }
+  snapshot(): Snapshot {
+    const state = this.state(),
+      active = state.active_account_id
+    return {
+      context: { root: this.root(), generation: this.epoch },
+      active,
+      accounts: accounts(this.base()).map((a) => ({
+        id: a.account_id,
+        authMethod: a.authMethod,
+        notifications: a.new_mail_notifications ?? true,
+        email: a.email,
+        imap: a.imap,
+        smtp: a.smtp,
+      })),
+      candidates: this.candidates,
+      imported: this.index?.count ?? 0,
+      contacts: Array.from(this.index?.contacts.keys() ?? []),
+      running: this.running,
+      folders: active
+        ? roles.map((role) => {
+            const f = this.folder(accountDir(this.base(), active), role)
+            return {
+              role,
+              phase: f.phase,
+              path: f.remote_path,
+              error: this.errors[role],
+              lastSyncedAt: f.last_synced_at,
+            }
+          })
+        : [],
+    }
+  }
+  stop() {
+    this.gmailFlow?.abort()
+    this.gmailFlow = undefined
+    this.refreshing = undefined
+    this.sendScope.abort()
+    this.sendScope = new AbortController()
+    clearAttachmentPreviews()
+    this.epoch++
+    this.wake = false
+    this.arrivalBoundary = undefined
+    this.notifications?.clear()
+    this.connecting = false
+    this.running = false
+    clearTimeout(this.timer)
+    this.client?.close()
+    this.client = undefined
+    this.loading = undefined
+    this.index = undefined
+    this.candidates = []
+    this.errors = {}
+  }
+  start() {
+    this.stop()
+    try {
+      this.restore()
+    } catch {
+      this.notify()
+    }
+  }
+  private restore() {
+    const state = this.state()
+    if (state.workspace_id) {
+      const keys = this.credentialRoot(state)
+      if (fs.existsSync(keys))
+        for (const f of fs.readdirSync(keys)) {
+          if (f.endsWith('.bin') && uuid(f.slice(0, -4)) && f !== state.active_account_id + '.bin')
+            fs.rmSync(path.join(keys, f), { force: true })
+        }
+      const dir = path.join(this.base(), 'accounts')
+      if (fs.existsSync(dir))
+        for (const f of fs.readdirSync(dir)) {
+          if (/^(pending|deleted)-/.test(f) && uuid(f.slice(f.indexOf('-') + 1)))
+            fs.rmSync(path.join(dir, f), { recursive: true, force: true })
+        }
+    }
+    this.schedule(0)
+    this.notify()
+  }
+  private schedule(delay: number) {
+    clearTimeout(this.timer)
+    if (this.state().active_account_id)
+      this.timer = setTimeout(() => {
+        void this.sync().catch(() => this.notify())
+      }, delay)
+  }
+  private check(ctx: Context) {
+    if (ctx.root !== this.root() || ctx.generation !== this.epoch)
+      throw new Error('邮箱或工作区已改变，请刷新。')
+  }
+  async act(ctx: Context, a: MailAction) {
+    this.check(ctx)
+    const base = this.base(),
+      state = this.state(),
+      id = state.active_account_id
+    if (a.kind === 'cancel-gmail') {
+      this.gmailFlow?.abort()
+      return this.snapshot()
+    }
+    if (a.kind === 'connect' || a.kind === 'connect-gmail') {
+      const mode = a.kind === 'connect' ? a.form.mode : a.mode
+      if (mode !== 'last_30_days' && mode !== 'from_connection') throw new Error('请选择同步范围。')
+      if (this.connecting) throw new Error('正在验证邮箱。')
+      this.connecting = true
+      try {
+        let f: AccountSettings
+        let credential: MailCredential
+        let google: GmailTokens | undefined
+        if (a.kind === 'connect-gmail') {
+          if (!this.authorizeGmail) throw new Error('Gmail 授权不可用。')
+          this.gmailFlow = new AbortController()
+          const grant = await this.authorizeGmail(this.gmailFlow.signal, a.expectedEmail)
+          this.check(ctx)
+          this.gmailFlow.signal.throwIfAborted()
+          f = grant.settings
+          if (a.expectedEmail && key(f.email) !== key(a.expectedEmail))
+            throw new Error('所选 Google 账号与要重新连接的邮箱不一致。')
+          google = grant.tokens
+          credential = { accessToken: google.accessToken }
+        } else {
+          validate(a.form)
+          f = a.form
+          credential = a.form.password
+        }
+        const existing = accounts(base).find((row) => row.address_key === key(f.email))
+        if (id && id !== existing?.account_id) throw new Error('请先取消当前邮箱的托管。')
+        await this.protocol.verify(f, credential, this.gmailFlow?.signal)
+        this.check(ctx)
+        this.gmailFlow?.signal.throwIfAborted()
+        const now = new Date(),
+          aid = existing?.account_id ?? randomUUID()
+        const account: Account = {
+          v: 1,
+          account_id: aid,
+          address_key: key(f.email),
+          authMethod: google ? 'google' : undefined,
+          email: f.email.trim(),
+          imap: f.imap,
+          smtp: f.smtp,
+          first_connected_at: existing?.first_connected_at ?? now.toISOString(),
+          last_connected_at: now.toISOString(),
+          new_mail_notifications: existing?.new_mail_notifications,
+          initial_sync_mode: existing?.initial_sync_mode ?? mode,
+          sync_from:
+            existing?.sync_from ??
+            new Date(+now - (mode === 'last_30_days' ? 30 * 86400000 : 0)).toISOString(),
+        }
+        if (!state.workspace_id) {
+          state.workspace_id = randomUUID()
+          save(path.join(base, 'workspace.json'), state)
+        }
+        const encrypted = this.vault.encrypt(
+          JSON.stringify({ binding: this.configSignature(account), ...(google ? { google } : { password: credential }) }),
+        )
+        const dest = accountDir(base, aid),
+          staging = existing ? dest : path.join(base, 'accounts', 'pending-' + aid)
+        try {
+          if (!existing)
+            for (const role of roles)
+              save(
+                path.join(staging, 'sync', role + '.json'),
+                newFolder(role, role === 'inbox' ? 'INBOX' : null),
+              )
+          save(path.join(staging, 'account.json'), account)
+          atomic(this.credential(state, aid), encrypted)
+          if (!existing) fs.renameSync(staging, dest)
+          save(path.join(base, 'workspace.json'), {
+            ...state,
+            active_account_id: aid,
+            connection_generation: state.connection_generation + 1,
+          })
+        } catch (err) {
+          if (!existing) {
+            fs.rmSync(staging, { recursive: true, force: true })
+            fs.rmSync(dest, { recursive: true, force: true })
+            fs.rmSync(this.credential(state, aid), { force: true })
+          }
+          throw err
+        }
+        this.stop()
+        this.schedule(0)
+      } finally {
+        if (ctx.generation === this.epoch) { this.connecting = false; this.gmailFlow = undefined }
+      }
+    } else if (a.kind === 'disconnect' && id) {
+      save(path.join(base, 'workspace.json'), {
+        ...state,
+        active_account_id: null,
+        connection_generation: state.connection_generation + 1,
+      })
+      this.stop()
+      this.notify()
+      fs.rmSync(this.credential(state, id), { force: true })
+    } else if (a.kind === 'delete') {
+      if (a.id === id || this.connecting) throw new Error('请先取消托管或等待验证完成。')
+      const src = accountDir(base, a.id),
+        dest = path.join(base, 'accounts', 'deleted-' + a.id)
+      fs.renameSync(src, dest)
+      fs.rmSync(this.credential(state, a.id), { force: true })
+      fs.rmSync(dest, { recursive: true })
+    } else if (a.kind === 'bind' && id) {
+      if (!this.candidates.includes(a.path)) throw new Error('请选择已列出的文件夹。')
+      const account = read<Account>(path.join(accountDir(base, id), 'account.json'))
+      const credential = await this.mailCredential(state, account, ctx)
+      this.check(ctx)
+      const probe = this.protocol.imapClient(account.imap, credential)
+      try {
+        await probe.connect()
+        this.check(ctx)
+        await probe.mailboxOpen(a.path, { readOnly: true })
+        this.check(ctx)
+      } finally {
+        probe.close()
+      }
+      this.stop()
+      const f = newFolder('sent', a.path)
+      f.binding = 'manual'
+      save(path.join(accountDir(base, id), 'sync', 'sent.json'), f)
+      this.schedule(0)
+    } else if ((a.kind === 'pin' || a.kind === 'remark') && uuid(a.contact)) {
+      const index = await this.reader(ctx, a.account)
+      this.check(ctx)
+      if (a.kind === 'pin' && typeof a.pinned === 'boolean') index.setPinned(a.contact, a.pinned)
+      else if (a.kind === 'remark' && typeof a.remark === 'string') index.setRemark(a.contact, a.remark)
+      else throw new Error('联系人设置无效。')
+    } else if (a.kind === 'notifications' && id && a.account === id && typeof a.enabled === 'boolean') {
+      const file = path.join(accountDir(base, id), 'account.json')
+      save(file, { ...read<Account>(file), new_mail_notifications: a.enabled })
+      if (!a.enabled) this.notifications?.clear()
+    } else if (a.kind === 'retry' && id) {
+      if (!this.running) this.schedule(0)
+    } else throw new Error('当前邮箱状态不支持此操作。')
+    this.notify()
+    return this.snapshot()
+  }
+  private async sync() {
+    const ctx = { root: this.root(), generation: this.epoch }
+    const state = this.state(),
+      id = state.active_account_id
+    if (!id || this.running) return
+    this.running = true
+    this.errors = {}
+    this.notify()
+    let role: FolderRole | undefined
+    let google = false
+    try {
+      const dir = accountDir(this.base(), id),
+        account = read<Account>(path.join(dir, 'account.json'))
+      google = account.authMethod === 'google'
+      const index = await this.reader(ctx, id)
+      this.check(ctx)
+      const credential = await this.mailCredential(state, account, ctx)
+      this.check(ctx)
+      const client = this.protocol.imapClient(account.imap, credential)
+      this.client = client
+      await client.connect()
+      this.check(ctx)
+      for (role of roles) {
+        try {
+          const f = this.folder(dir, role)
+          if (role === 'sent' && !f.remote_path) {
+            const list = (await client.list()).filter(
+              (m) => !m.flags.has('\\Noselect') && m.path.toUpperCase() !== 'INBOX',
+            )
+            this.check(ctx)
+            this.candidates = list.map((m) => m.path)
+            const sent = list.filter((m) => m.specialUse === '\\Sent')
+            if (sent.length !== 1) continue
+            Object.assign(f, newFolder('sent', sent[0].path), { binding: 'detected' })
+            save(path.join(dir, 'sync', 'sent.json'), f)
+          }
+          let last = 0
+          const arrivals = new Map<string, { message: string; sender: string }[]>()
+          const box = await this.protocol.importFolder(
+            client,
+            dir,
+            account,
+            f,
+            index,
+            () => this.check(ctx),
+            () => {
+              if (Date.now() - last > 350) {
+                last = Date.now()
+                this.notify()
+              }
+            },
+            role === 'inbox'
+              ? {
+                  opened: (validity, upper) => {
+                    if (this.arrivalBoundary?.validity !== validity)
+                      this.arrivalBoundary = { validity, upper }
+                  },
+                  added: (uid, message, contact, sender) => {
+                    if (uid <= this.arrivalBoundary!.upper) return
+                    const list = arrivals.get(contact) ?? []
+                    list.push({ message, sender })
+                    arrivals.set(contact, list)
+                  },
+                }
+              : undefined,
+          )
+          this.check(ctx)
+          if (role === 'inbox') {
+            try {
+              await syncFlags(client, box, f, dir, index, () => this.check(ctx))
+            } finally {
+              this.check(ctx)
+              if (
+                arrivals.size &&
+                read<Account>(path.join(dir, 'account.json')).new_mail_notifications !== false
+              ) {
+                const unread = index.unreadMessages(f)
+                for (const [contact, arrivalsForContact] of arrivals) {
+                  const eligible = arrivalsForContact.filter((row) => unread.has(row.message))
+                  const latest = eligible.at(-1)
+                  if (latest)
+                    this.notifications?.show(
+                      { context: ctx, account: id, contact, message: latest.message },
+                      index.contactRemark(contact) || latest.sender,
+                      eligible.length,
+                    )
+                }
+              }
+            }
+          }
+        } catch (err) {
+          this.check(ctx)
+          this.errors[role] = err instanceof ReadOnlyInbox ? err.message : diagnostic(err, google)
+        }
+      }
+    } catch (err) {
+      if (this.epoch === ctx.generation) {
+        this.errors.inbox = diagnostic(err, google)
+        this.errors.sent = this.errors.inbox
+      }
+    } finally {
+      if (this.epoch === ctx.generation) {
+        this.client?.close()
+        this.client = undefined
+        this.running = false
+        this.notify()
+        this.schedule(this.wake ? 0 : 60000)
+        this.wake = false
+      }
+    }
+  }
+}

@@ -1,14 +1,21 @@
 <script setup lang="ts">
-import { computed, nextTick, onActivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import Icon from '../components/shared/Icon.vue'
 import SiteDomains from '../components/site/SiteDomains.vue'
 import { useWorkspace } from '../composables/useWorkspace'
 import { useWorkspaceLayout } from '../composables/useWorkspaceLayout'
+import { readSitePage } from './site-page-state'
 import { runSiteRelease } from './site-release-flow'
 defineOptions({ name: 'SiteView' })
 type SiteState = Awaited<ReturnType<NonNullable<Window['ftcs']>['getSite']>>
 type SiteRuntimeState = Awaited<ReturnType<NonNullable<Window['ftcs']>['getSiteRuntime']>>
 type SiteSourceState = Awaited<ReturnType<NonNullable<Window['ftcs']>['getSiteSource']>>
+const pageState = ref<'loading' | 'ready' | 'error'>('loading')
+const pageError = ref('')
+const initialDomains = ref<Awaited<ReturnType<typeof readSitePage>>['domains']>(null)
+let pageGeneration = 0
+let pageActive = false
+let connectionRevision = 0
 const site = ref<SiteState | null>(null)
 const { agentPrompt } = useWorkspace()
 const { fill, agentCollapsed, toggleAgentCollapsed, exitFill } = useWorkspaceLayout()
@@ -38,7 +45,7 @@ async function refreshSource() {
   if (!site.value || !window.ftcs) return
   const root = site.value.workspaceRoot
   try { const snapshot = await window.ftcs.getSiteSource(root); if (site.value?.workspaceRoot === root) applySiteSource(snapshot) }
-  catch { source.value = { workspaceRoot: root, sequence: 0, state: 'unknown', message: '无法检查站点源码，请刷新重试。', watching: false } }
+  catch { if (site.value?.workspaceRoot === root) applySiteSource({ workspaceRoot: root, sequence: 0, state: 'unknown', message: '无法检查站点源码，请刷新重试。', watching: false }) }
 }
 const buildSourceMessage = computed(() => {
   if (localRun.value?.build.state !== 'succeeded') return ''
@@ -118,11 +125,18 @@ const siteLabel = computed(() => {
   return site.value ? labels[site.value.status] : '正在检查'
 })
 async function refreshSite() {
-  if (!window.ftcs?.getSite) return
+  if (!pageActive || pageState.value !== 'ready' || !window.ftcs?.getSite) return
   const request = ++siteRequest
   try {
     const state = await window.ftcs.getSite()
-    if (request === siteRequest) { site.value = state; confirmRecreate.value = false; await refreshSiteRuntime(); await refreshSource(); await refreshRelease(); await refreshAgentRelease() }
+    if (request !== siteRequest) return
+    if (state.workspaceRoot !== site.value?.workspaceRoot) { await refreshAll(); return }
+    site.value = state
+    confirmRecreate.value = false
+    await refreshSiteRuntime()
+    await refreshSource()
+    await refreshRelease()
+    await refreshAgentRelease()
   } catch { if (request === siteRequest) siteMessage.value = '无法检查本地站点，请重试。' }
 }
 async function changeSite(action: 'create' | 'adopt') {
@@ -160,6 +174,7 @@ const cfBusy = ref(false)
 const cfMessage = ref('')
 let cfAttempt = 0
 function applyCloudflareState(state: { connected: boolean; authorized?: boolean; accountId?: string; accountName?: string; accounts?: Array<{ id: string; name: string }>; message?: string }) {
+  connectionRevision++
   cfConnected.value = state.connected
   cfAuthorized.value = state.authorized ?? false
   cfAccountId.value = state.accountId ?? ''
@@ -167,12 +182,6 @@ function applyCloudflareState(state: { connected: boolean; authorized?: boolean;
   cfAccounts.value = state.accounts ?? []
   cfMessage.value = state.message ?? ''
   if (state.connected) cfChoose.value = false
-}
-async function refreshCloudflare() {
-  if (!window.ftcs?.getCloudflareState) return
-  const current = cfAttempt
-  try { const state = await window.ftcs.getCloudflareState(); if (current === cfAttempt) applyCloudflareState(state) }
-  catch { cfMessage.value = '无法检查 Cloudflare 连接，请重试。' }
 }
 async function connectCloudflare() {
   if (!window.ftcs?.connectCloudflare || cfBusy.value) return
@@ -208,12 +217,44 @@ async function disconnectCloudflare() {
   try { await window.ftcs!.disconnectCloudflare(); applyCloudflareState({ connected: false, message: '已移除本机 Cloudflare 授权。' }); cfBusy.value = false }
   catch { cfMessage.value = '移除 Cloudflare 授权失败，请重试。' }
 }
-async function refreshAll() { await Promise.all([refresh(), refreshCloudflare(), refreshSite()]) }
+async function refreshAll(): Promise<boolean> {
+  if (!pageActive) return false
+  const generation = ++pageGeneration
+  const connectionAtStart = connectionRevision
+  const agentAtStart = agentReleaseSequence
+  siteRequest++
+  pageState.value = 'loading'
+  pageError.value = ''
+  try {
+    if (!window.ftcs) throw new Error('无法连接 FTCS 桌面端。')
+    const snapshot = await readSitePage(window.ftcs)
+    if (generation !== pageGeneration) return false
+    if (connectionAtStart !== connectionRevision) return refreshAll()
+    site.value = snapshot.site
+    confirmRecreate.value = false
+    applySiteRuntime(snapshot.runtime)
+    applySiteSource(snapshot.source)
+    applyGithubState(snapshot.github)
+    applyCloudflareState(snapshot.cloudflare)
+    release.value = snapshot.release
+    deployment.value = snapshot.deployment
+    deploymentError.value = ''
+    initialDomains.value = snapshot.domains
+    if (agentAtStart === agentReleaseSequence) agentPublishing.value = snapshot.agentRunning
+    pageState.value = 'ready'
+    return true
+  } catch (error) {
+    if (generation === pageGeneration) {
+      pageError.value = error instanceof Error ? error.message : '请检查网络后重试。'
+      pageState.value = 'error'
+    }
+    return false
+  }
+}
 let timer: ReturnType<typeof setTimeout> | undefined
 let attempt = 0
-async function refresh() {
-  if (!window.ftcs?.getGithubState) return
-  const state = await window.ftcs.getGithubState()
+function applyGithubState(state: Awaited<ReturnType<NonNullable<Window['ftcs']>['getGithubState']>>) {
+  connectionRevision++
   connected.value = state.connected
   authorized.value = state.authorized ?? false
   installUrl.value = state.installUrl ?? ''
@@ -229,7 +270,7 @@ function poll(current: number, interval: number) {
       if (result.status === 'pending') { poll(current, result.interval ?? interval); return }
       busy.value = false
       code.value = ''
-      if (result.status === 'connected') { await refresh() }
+      if (result.status === 'connected') { const state = await window.ftcs!.getGithubState(); if (current === attempt) applyGithubState(state) }
       else message.value = result.message ?? 'GitHub 授权失败，请重试。'
     } catch { busy.value = false; code.value = ''; message.value = '无法检查 GitHub 授权，请重试。' }
   }, interval * 1000)
@@ -258,7 +299,7 @@ async function cancel() {
   message.value = ''
 }
 async function disconnect() {
-  try { await window.ftcs!.disconnectGithub(); connected.value = false; authorized.value = false; installUrl.value = ''; login.value = ''; message.value = '已移除本机 GitHub 授权。' }
+  try { await window.ftcs!.disconnectGithub(); applyGithubState({ connected: false, message: '已移除本机 GitHub 授权。' }) }
   catch { message.value = '移除授权失败，请重试。' }
 }
 async function openDevice() { await window.ftcs!.openExternal(deviceUrl) }
@@ -360,10 +401,11 @@ async function chooseRepository(id: number) {
   finally { if (request === publishRequest) publishBusy.value = false }
 }
 async function refreshRelease() {
-  if (!site.value || !window.ftcs) return
+  const generation = pageGeneration
+  if (pageState.value !== 'ready' || !site.value || !window.ftcs) return
   const root = site.value.workspaceRoot
   const result = await window.ftcs.getSiteRelease(root)
-  if (site.value?.workspaceRoot !== root) return
+  if (generation !== pageGeneration || site.value?.workspaceRoot !== root) return
   if (result.ok) {
     release.value = result.value
     if (result.value.cloudflare) await refreshDeployment()
@@ -371,21 +413,22 @@ async function refreshRelease() {
   }
 }
 async function refreshDeployment() {
-  if (!site.value || !release.value?.cloudflare || !window.ftcs || checkingDeployment) return
+  if (pageState.value !== 'ready' || !site.value || !release.value?.cloudflare || !cfConnected.value || release.value.cloudflare.accountId !== cfAccountId.value || !window.ftcs || checkingDeployment) return
+  const generation = pageGeneration
   const root = site.value.workspaceRoot
   checkingDeployment = true
   try {
     const result = await window.ftcs.getSitePagesStatus(root)
-    if (site.value?.workspaceRoot !== root) return
+    if (generation !== pageGeneration || site.value?.workspaceRoot !== root) return
     if (result.ok) {
       deployment.value = result.value; deploymentError.value = ''
       if (result.value.deploymentId) {
         const latest = await window.ftcs.getSiteRelease(root)
-        if (latest.ok && site.value?.workspaceRoot === root) release.value = latest.value
+        if (latest.ok && generation === pageGeneration && site.value?.workspaceRoot === root) release.value = latest.value
       }
     }
     else { deploymentError.value = result.message; deployment.value = null }
-  } catch { deploymentError.value = '无法查询 Cloudflare 部署状态。'; deployment.value = null }
+  } catch { if (generation === pageGeneration) { deploymentError.value = '无法查询 Cloudflare 部署状态。'; deployment.value = null } }
   finally { checkingDeployment = false }
 }
 async function publishTarget(repositoryId: number, branch: string, acceptReadme = false) {
@@ -523,7 +566,7 @@ async function publish(changeTarget = false) {
   message.value = ''; publishError.value = ''
   publishStarting.value = true
   try {
-    await refreshAll()
+    if (!await refreshAll()) return
     if (site.value?.status !== 'ready') { message.value = '发布前请先创建或恢复本地站点。'; return }
     if (!localRun.value?.outputDir) { message.value = '发布前请先在构建检查中设置静态产物目录。'; return }
     if (!connected.value || !cfConnected.value) {
@@ -531,13 +574,11 @@ async function publish(changeTarget = false) {
       message.value = `发布前请先连接 ${missing}。`
       return
     }
-    const latest = await window.ftcs!.getSiteRelease(site.value.workspaceRoot)
-    if (!latest.ok) { message.value = latest.message || '无法读取发布记录，请刷新后重试。'; return }
-    release.value = latest.value
-    if (latest.value.pending || latest.value.pendingPages || latest.value.pendingDeployment) { message.value = '上一次发布操作的结果待确认，请先检查工作区独立站或发布记录。'; return }
-    if (!changeTarget && latest.value.target && latest.value.commitSha) {
+    const latest = release.value!
+    if (latest.pending || latest.pendingPages || latest.pendingDeployment) { message.value = '上一次发布操作的结果待确认，请先检查工作区独立站或发布记录。'; return }
+    if (!changeTarget && latest.target && latest.commitSha) {
       publishOpen.value = false
-      await publishTarget(latest.value.target.id, latest.value.target.branch)
+      await publishTarget(latest.target.id, latest.target.branch)
     } else {
       publishOpen.value = true
       await loadRepositories()
@@ -562,15 +603,64 @@ watch(() => site.value?.workspaceRoot, (next, previous) => {
     deployment.value = null
     pageProjects.value = []
     showPages.value = false
+    siteMessage.value = ''
+    localError.value = ''
+    editingOutput.value = false
+    installChoice.value = ''
+    createPageOpen.value = false
+    confirmClearDeployment.value = false
+    confirmClearPage.value = false
   }
+}, { flush: 'sync' })
+function activatePage() {
+  if (pageActive) return
+  pageActive = true
+  void refreshAll()
+}
+function deactivatePage() {
+  pageActive = false
+  pageGeneration++
+  siteRequest++
+  pageState.value = 'loading'
+}
+onMounted(() => {
+  removeRuntimeListener = window.ftcs?.onSiteRuntime?.(applySiteRuntime)
+  removeSourceListener = window.ftcs?.onSiteSource?.(applySiteSource)
+  removeAgentReleaseListener = window.ftcs?.onAgentSiteRelease?.(applyAgentRelease)
+  activatePage()
+  window.addEventListener('focus', refreshSite)
+  deploymentTimer = setInterval(() => void refreshDeployment(), 15000)
 })
-onMounted(() => { removeRuntimeListener = window.ftcs?.onSiteRuntime?.(applySiteRuntime); removeSourceListener = window.ftcs?.onSiteSource?.(applySiteSource); removeAgentReleaseListener = window.ftcs?.onAgentSiteRelease?.(applyAgentRelease); void refreshAll(); window.addEventListener('focus', refreshSite); deploymentTimer = setInterval(() => void refreshDeployment(), 15000) })
-onActivated(() => { void refreshSite() })
-onUnmounted(() => { removeRuntimeListener?.(); removeSourceListener?.(); removeAgentReleaseListener?.(); siteRequest++; publishRequest++; window.removeEventListener('focus', refreshSite); cfAttempt++; attempt++; if (timer) clearTimeout(timer); if (deploymentTimer) clearInterval(deploymentTimer); void window.ftcs?.cancelGithubAuth?.(); void window.ftcs?.cancelCloudflareAuth?.() })
+onActivated(activatePage)
+onDeactivated(deactivatePage)
+onUnmounted(() => {
+  deactivatePage()
+  removeRuntimeListener?.()
+  removeSourceListener?.()
+  removeAgentReleaseListener?.()
+  window.removeEventListener('focus', refreshSite)
+  publishRequest++
+  cfAttempt++
+  attempt++
+  if (timer) clearTimeout(timer)
+  if (deploymentTimer) clearInterval(deploymentTimer)
+  void window.ftcs?.cancelGithubAuth?.()
+  void window.ftcs?.cancelCloudflareAuth?.()
+})
 </script>
 
 <template>
-  <div class="site-page">
+  <div v-if="pageState !== 'ready'" class="site-page page-status" :aria-busy="pageState === 'loading'">
+    <div v-if="pageState === 'loading'" role="status">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>正在加载独立站状态…</p>
+    </div>
+    <div v-else>
+      <div role="alert"><strong>独立站状态加载失败</strong><p>{{ pageError }}</p></div>
+      <button class="btn secondary" type="button" @click="refreshAll">重新加载</button>
+    </div>
+  </div>
+  <div v-else class="site-page">
     <header class="page-header"><div><h1>独立站</h1><p>创建、预览并发布属于你的品牌网站</p></div><div class="header-actions"><button class="btn secondary" type="button" @click="refreshAll"><Icon name="refresh-cw" /> 刷新</button><button v-if="release?.target && release?.commitSha" class="btn secondary" type="button" :disabled="publishStarting || publishBusy || agentPublishing" @click="publish(true)">更换发布目标</button><button class="btn primary" type="button" :disabled="publishStarting || publishBusy || agentPublishing" @click="publish()">{{ publishBusy || agentPublishing ? '正在发布…' : publishStarting ? '正在检查…' : '发布网站' }}</button></div></header>
     <div class="connections" aria-label="账号连接">
       <div class="connection"><button v-if="!connected && !authorized" class="btn secondary" type="button" :disabled="busy" @click="connect"><Icon name="plus" /> {{ busy ? '正在连接 GitHub' : '连接 GitHub' }}</button><template v-else><span class="connection-status"><span class="dot" /> GitHub · {{ login }} · {{ connected ? '已连接' : '待完成安装' }}</span><button v-if="installUrl" class="text-button" type="button" @click="openInstall">安装 GitHub App</button><button class="text-button" type="button" @click="disconnect">断开</button></template></div>
@@ -615,7 +705,7 @@ onUnmounted(() => { removeRuntimeListener?.(); removeSourceListener?.(); removeA
       <div v-if="release?.commitSha && release.target" class="site-config">
         <h3>发布与域名配置</h3>
           <div class="local-row"><div><strong>Cloudflare Pages · {{ release.cloudflare?.project || '尚未关联' }}</strong><p>{{ deployment?.message || (release.cloudflare ? '等待查询部署状态。' : '创建或选择关联相同仓库的 Pages 项目。') }}</p><p v-if="deploymentError" role="alert">{{ deploymentError }}</p><p v-if="deployment?.deploymentId">部署 ID：{{ deployment.deploymentId }}</p></div><div class="site-actions"><button class="btn secondary" :disabled="publishBusy" @click="openCloudflarePages">打开 Cloudflare</button><button class="btn secondary" :disabled="publishBusy || !!release.pendingPages" @click="createPageOpen = !createPageOpen">创建 Pages 项目</button><button class="btn secondary" :disabled="publishBusy" @click="loadPages">选择 Pages 项目</button><button v-if="release.cloudflare" class="btn secondary" @click="refreshDeployment">刷新状态</button><button v-if="release.cloudflare && !release.pendingDeployment && (deployment?.state === 'waiting' || deployment?.state === 'failed' || deployment?.state === 'skipped')" class="btn primary" :disabled="publishBusy" @click="startDeployment">{{ deployment?.state === 'waiting' ? '开始构建' : '重新构建' }}</button><button v-if="deployment?.productionUrl" class="btn primary" @click="openOnlineSite(deployment.productionUrl)">打开网站</button></div></div>
-          <SiteDomains v-if="site && release.cloudflare && cfConnected && cfAccountId === release.cloudflare.accountId" :root="site.workspaceRoot" :account-id="release.cloudflare.accountId" :project="release.cloudflare.project" />
+          <SiteDomains :initial="initialDomains" @initialized="initialDomains = null" v-if="site && release.cloudflare && cfConnected && cfAccountId === release.cloudflare.accountId" :root="site.workspaceRoot" :account-id="release.cloudflare.accountId" :project="release.cloudflare.project" />
           <p v-else-if="release.cloudflare">请连接关联该项目的 Cloudflare 账号以管理自有域名。</p>
           <div v-if="release.pendingDeployment" class="inline-box"><strong>Cloudflare 构建请求待确认</strong><p>请先刷新状态或在 Cloudflare 检查部署记录，避免重复触发。{{ release.pendingDeployment.deploymentId ? `部署 ID：${release.pendingDeployment.deploymentId}` : '' }}</p><button class="text-button" :disabled="publishBusy" @click="confirmClearDeployment = true">我已检查，重新操作</button><div v-if="confirmClearDeployment"><p>请确认 Cloudflare 没有尚在处理的对应部署。清除后可以重新触发，不会删除云端部署。</p><div class="site-actions"><button class="btn secondary" :disabled="publishBusy" @click="clearPendingDeployment">确认清除待检查状态</button><button class="btn secondary" @click="confirmClearDeployment = false">取消</button></div></div></div>
           <div v-if="release.pendingPages" class="inline-box"><strong>项目 {{ release.pendingPages.project }} 的创建结果待确认</strong><p>请先刷新项目列表或到 Cloudflare 查看。若项目存在，选择并确认关联；未确认结果前不会自动重复创建。</p><div class="site-actions"><button class="btn secondary" :disabled="publishBusy" @click="loadPages">检查项目列表</button><button class="text-button" :disabled="publishBusy" @click="confirmClearPage = true">我已检查，重新操作</button></div><div v-if="confirmClearPage"><p>请确认已在 Cloudflare 检查项目是否创建。清除后可以重新尝试，但不会删除任何云端项目。</p><button class="btn secondary" :disabled="publishBusy" @click="clearPendingPage">确认清除待检查状态</button></div></div>
@@ -662,6 +752,11 @@ onUnmounted(() => { removeRuntimeListener?.(); removeSourceListener?.(); removeA
 </template>
 
 <style scoped>
+.page-status { display: grid; place-items: center; text-align: center; }
+.page-status p { color: var(--text-secondary); font-size: 13px; overflow-wrap: anywhere; }
+.spinner { display: inline-block; width: 22px; height: 22px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 .site-page{width:100%;flex:1;min-height:0;overflow-y:auto;max-width:1100px;margin:0 auto;padding:32px 36px 56px;color:var(--text)}
 .page-header,.section-header,.site-card-title,.connections,.header-actions,.connection,.auth-actions{display:flex;align-items:center}
 .page-header,.section-header{justify-content:space-between;gap:16px}.page-header h1{font-size:24px;margin:0 0 6px}.page-header p,.section p,.site-card-title p,.auth-panel p{color:var(--text-secondary);font-size:12px;margin:4px 0 0}.header-actions,.connections,.auth-actions,.connection{gap:10px}.connections{margin:24px 0;flex-wrap:wrap}.context{color:var(--text-muted);font-size:12px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:6px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}.btn:disabled{opacity:.5;cursor:not-allowed}.secondary{color:var(--text);background:var(--bg-elevated);border:1px solid var(--border)}.primary{color:white;background:var(--accent);border:1px solid var(--accent)}.text-button{color:var(--accent);background:none;border:0;cursor:pointer;font-size:12px}.connection-status{font-size:12px;color:var(--text);padding:8px 10px;border:1px solid var(--border);border-radius:6px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--success);margin-right:4px}.site-card,.auth-panel,.empty-record{border:1px solid var(--border);background:var(--bg-panel);border-radius:8px}.site-card-title{padding:18px 20px;gap:12px;border-bottom:1px solid var(--border)}.site-card-title h2,.section h2{font-size:15px;margin:0}.site-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:8px;color:var(--accent);background:var(--accent-muted)}.badge{margin-left:auto;color:var(--text-secondary);background:var(--bg-hover);border-radius:5px;padding:5px 8px;font-size:11px}.site-details{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:20px}.site-details div{display:grid;gap:8px;font-size:12px}.site-details span{color:var(--text-secondary)}.site-details strong{font-weight:500}.section{margin-top:28px}.section-header{margin-bottom:14px}.empty-preview{height:200px;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text-secondary)}.empty-preview strong{color:var(--text);font-size:13px}.empty-record{padding:24px;text-align:center;color:var(--text-secondary);font-size:12px}.auth-panel{padding:16px;margin-bottom:16px}.auth-actions{margin-top:14px;flex-wrap:wrap}.auth-actions code{font-size:18px;letter-spacing:.1em;color:var(--text)}.notice{margin:0 0 16px;color:var(--text-secondary);font-size:12px}@media(max-width:700px){.site-page{padding:24px 18px}.page-header{align-items:flex-start}.site-details{grid-template-columns:1fr}.context{width:100%}}

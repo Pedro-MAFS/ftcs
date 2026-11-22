@@ -1750,7 +1750,7 @@ async function onCheckUpdate(): Promise<void> {
               type="checkbox"
               @change="onOpenAtLoginChange"
             />
-            <span>开机时自动启动外贸获客</span>
+            <span>开机时自动启动 FTCS 外贸获客</span>
           </label>
 
           <hr class="settings-divider settings-divider--inner" />

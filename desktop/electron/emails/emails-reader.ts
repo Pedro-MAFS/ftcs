@@ -1,7 +1,9 @@
 import fs from 'node:fs'
+import { reviewVersion } from './emails-writer'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { getWorkspaceRoot } from '../config/paths'
+import type { MailContactProfile } from '../mailbox/types'
 import {
   buildEmailRecipientPool,
   pickDefaultRecipientKey,
@@ -236,7 +238,7 @@ function loadScoredLeadMap(
       }
       map.set(id, {
         id,
-        companyName: asString(company.name) || id,
+        companyName: asString(company.name),
         tier: asString(raw.tier),
         status: asString(raw.status) || 'new',
         score: asNumber(raw.score),
@@ -415,9 +417,12 @@ function migrateDraftFile(
       status: asString(raw.status) || 'pending_review',
       language: asString(raw.language) || 'en',
       audience,
+      selected_to: raw.selected_to,
+      outreach: raw.outreach,
       recipient: {
         company: asString(recipient.company) || undefined,
         email: asString(recipient.email).trim().toLowerCase() || undefined,
+        recipient_aliases: recipient.recipient_aliases,
         name: recipient.name === null ? null : asString(recipient.name) || undefined,
       },
       subject: picked.subject,
@@ -466,12 +471,12 @@ function migrateDraftFile(
   }
 }
 
-function migrateAllEmailDrafts(workspaceRoot: string): void {
+function migrateAllEmailDrafts(workspaceRoot: string, onlyLead?: string): void {
   const emailsDir = getEmailsDir(workspaceRoot)
   if (!fs.existsSync(emailsDir)) return
-  for (const name of fs.readdirSync(emailsDir)) {
+  for (const name of onlyLead ? [onlyLead] : fs.readdirSync(emailsDir)) {
     const leadDir = path.join(emailsDir, name)
-    if (!fs.statSync(leadDir).isDirectory()) continue
+    if (!fs.statSync(leadDir, {throwIfNoEntry: false})?.isDirectory()) continue
     const companyPath = path.join(leadDir, 'draft.json')
     if (fs.existsSync(companyPath)) migrateDraftFile(companyPath, 'company')
     for (const child of fs.readdirSync(leadDir, { withFileTypes: true })) {
@@ -650,7 +655,7 @@ export function buildEmailLeadStub(
     createdAt: '',
     status: 'pending_review',
     language: 'en',
-    companyName: lead.companyName,
+    companyName: lead.companyName || lead.id,
     recipientEmail: lead.email || '',
     tier: lead.tier || '',
     leadStatus: lead.status || '',
@@ -731,6 +736,10 @@ export function listEmailDraftsSnapshot(
 }
 
 export type EmailDraftSlotDetail = {
+  recipientProfile?: MailContactProfile
+  version?: string
+  selectedTo?: string
+  outreach?: import('../mailbox/outreach-types').OutreachBinding
   ok: boolean
   exists: boolean
   message?: string
@@ -759,6 +768,7 @@ export function getEmailDraftSlot(
   leadId: string,
   recipientKey: string,
   workspaceRoot = getWorkspaceRoot(),
+  selectedEmail?: string,
 ): EmailDraftSlotDetail {
   const pid = productId.trim()
   const lid = leadId.trim()
@@ -793,12 +803,12 @@ export function getEmailDraftSlot(
   const scoredLead = scored.get(lid)
   base.companyName = scoredLead?.companyName || lid
 
-  migrateAllEmailDrafts(workspaceRoot)
   const abs = resolveSlotDraftAbsPath(lid, key, workspaceRoot)
   if (!fs.existsSync(abs)) {
     return base
   }
 
+  migrateDraftFile(abs, key === COMPANY_KEY ? 'company' : 'person')
   const parsed = parseSlotFile(
     abs,
     key === COMPANY_KEY ? 'company' : 'person',
@@ -829,10 +839,27 @@ export function getEmailDraftSlot(
   const bodyZh = asString(parsed.raw.body_zh) || null
   const zhSourceHash = asString(parsed.raw.zh_source_hash) || null
 
+  let recipientProfile: MailContactProfile | undefined
+  if (selectedEmail) {
+    const address = normalizeEmail(selectedEmail)
+    const person = scoredLead?.people.find((p) => normalizeEmail(p.email) === address)
+    const draftName = parsed.audience === 'person' && normalizeEmail(parsed.email) === address
+      ? parsed.name.trim() : ''
+    recipientProfile = {
+      name: person?.name?.trim() || person?.firstName?.trim() || draftName || undefined,
+      company: scoredLead?.companyName.trim() || asString(recipient.company).trim() || undefined,
+      title: person?.title?.trim() || undefined,
+    }
+  }
+
   return {
     ...base,
+    recipientProfile,
     exists: true,
     audience: parsed.audience,
+    version: reviewVersion(parsed.raw),
+    outreach: parsed.raw.outreach as EmailDraftSlotDetail['outreach'],
+    selectedTo: asString(parsed.raw.selected_to) || undefined,
     email: parsed.email,
     name: parsed.name,
     recipientAliases: aliases,
@@ -907,7 +934,7 @@ export function getEmailRecipientPool(
     }
   }
 
-  migrateAllEmailDrafts(workspaceRoot)
+  migrateAllEmailDrafts(workspaceRoot, lid)
   const scored = loadScoredLeadMap(pid, workspaceRoot)
   const lead = scored.get(lid)
   const row = buildLeadRow(lid, scored, workspaceRoot, pid)

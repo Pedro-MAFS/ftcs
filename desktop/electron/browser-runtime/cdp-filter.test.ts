@@ -301,7 +301,7 @@ test('the app window stays hidden even if its id was recorded', () => {
         id: 'main',
         type: 'page',
         url: 'file:///F:/ft/install/@ftcsdesktop/resources/app.asar/out/renderer/index.html#/profile',
-        title: '外贸获客智能体',
+        title: 'FTCS 外贸获客智能体',
       },
       { id: pageId, type: 'page', url: 'https://fmicc.com/', title: 'FMICC' },
     ],

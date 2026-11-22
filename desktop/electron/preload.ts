@@ -100,7 +100,31 @@ import type {
   WorkflowSavePlanResult,
 } from './ipc/types'
 
+const mailbox: import('./mailbox/types').MailboxAPI = {
+  sendReview: (ctx, account, input) => ipcRenderer.invoke(IPC.MAILBOX_REVIEW_SEND, ctx, account, input),
+  reviewResult: (ctx, account, slot, request) => ipcRenderer.invoke(IPC.MAILBOX_REVIEW_RESULT, ctx, account, slot, request),
+  markRead: (ctx, account, contact, ids) => ipcRenderer.invoke(IPC.MAILBOX_MARK_READ, ctx, account, contact, ids),
+  onOpen: callback => {
+    const listener = (_event: unknown, target: import('./mailbox/types').MailTarget) => callback(target)
+    ipcRenderer.on(IPC.MAILBOX_OPEN, listener)
+    return () => ipcRenderer.removeListener(IPC.MAILBOX_OPEN, listener)
+  },
+  composer: (ctx, account, email, action) => ipcRenderer.invoke(IPC.MAILBOX_COMPOSER, ctx, account, email, action),
+  temporaryDrafts: (ctx, account) => ipcRenderer.invoke(IPC.MAILBOX_TEMP_DRAFTS, ctx, account),
+  attachment: (ctx, account, message, ordinal, action) => ipcRenderer.invoke(IPC.MAILBOX_ATTACHMENT, ctx, account, message, ordinal, action),
+  unreadCount: () => ipcRenderer.invoke(IPC.MAILBOX_UNREAD_COUNT),
+  conversations: (ctx,account) => ipcRenderer.invoke(IPC.MAILBOX_CONVERSATIONS,ctx,account),
+  timeline: (ctx,account,contact,before,aroundId) => ipcRenderer.invoke(IPC.MAILBOX_TIMELINE,ctx,account,contact,before,aroundId),
+  snapshot: () => ipcRenderer.invoke(IPC.MAILBOX_GET),
+  act: (ctx, action) => ipcRenderer.invoke(IPC.MAILBOX_ACTION, ctx, action),
+  changed: callback => {
+    const listener = () => callback()
+    ipcRenderer.on(IPC.MAILBOX_CHANGED, listener)
+    return () => ipcRenderer.removeListener(IPC.MAILBOX_CHANGED, listener)
+  },
+}
 const api = {
+  mailbox,
   platform: process.platform as NodeJS.Platform,
   getAppStatus: (): Promise<AppStatus> => ipcRenderer.invoke(IPC.APP_GET_STATUS),
   getSite: (): Promise<SiteSnapshot> => ipcRenderer.invoke(IPC.SITE_GET),

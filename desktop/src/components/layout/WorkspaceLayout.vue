@@ -15,16 +15,19 @@ import { isBusinessPage, useMainViewTabs } from '../../composables/useMainViewTa
 import { useDefaultLanding } from '../../composables/useDefaultLanding'
 import { useUpdateCheck } from '../../composables/useUpdateCheck'
 
+import { pendingMailTarget } from '../mailbox/mail-navigation'
+
 const route = useRoute()
 const { setAgentContext } = useWorkspace()
 const { settle } = useDefaultLanding()
 const { bootstrapUpdateCheck } = useUpdateCheck()
-const { fill, widths, setBodyWidth, noteSettingsOpen, replaceLayout } = useWorkspaceLayout()
-const { activeTab, settingsCover, cachedViewNames, applyPublishedTabs } = useMainViewTabs()
+const { fill, exitFill, widths, setBodyWidth, noteSettingsOpen, replaceLayout } = useWorkspaceLayout()
+const { activeTab, settingsCover, cachedViewNames, applyPublishedTabs, openPageTab } = useMainViewTabs()
 
 const bodyRef = ref<HTMLElement | null>(null)
 const layoutReady = ref(false)
 let bodyObserver: ResizeObserver | null = null
+let stopMailNavigation: (() => void) | undefined
 let stopBrowserTabs: (() => void) | null = null
 const settingsOpen = computed(() => route.name === 'settings' || settingsCover.value)
 
@@ -62,6 +65,15 @@ watch([activeTab, settingsCover, fill], () => {
 })
 
 onMounted(() => {
+  stopMailNavigation = window.ftcs?.mailbox?.onOpen(async target => {
+    const state = await window.ftcs!.mailbox.snapshot().catch(() => undefined)
+    if (!state || state.active !== target.account || state.context.root !== target.context.root ||
+        state.context.generation !== target.context.generation ||
+        state.accounts.find(account => account.id === target.account)?.notifications === false) return
+    if (fill.value === 'agent') exitFill()
+    await openPageTab('mailbox')
+    pendingMailTarget.value = target
+  })
   void bootstrapUpdateCheck()
   void settle()
   const apply = window.ftcs?.onBuiltinBrowserTabs
@@ -93,6 +105,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopMailNavigation?.()
   stopBrowserTabs?.()
   stopBrowserTabs = null
   bodyObserver?.disconnect()
