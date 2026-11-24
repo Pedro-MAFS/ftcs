@@ -7,6 +7,21 @@ import type { Endpoint, AccountSettings } from './types'
 
 export type MailCredential = string | { accessToken: string }
 
+/** 网易在登录后仍要求 ID，否则文件夹打开了也不给 UIDNEXT。 */
+export function netEaseImap(host: string): boolean {
+  const name = host.trim().toLowerCase().replace(/\.+$/, '')
+  return ['163.com', '126.com', 'yeah.net', '188.com'].some(
+    (suffix) => name === suffix || name.endsWith('.' + suffix),
+  )
+}
+
+const netEaseClientInfo = {
+  name: 'FTCS',
+  version: '1.0',
+  vendor: 'FTCS',
+  'support-email': 'mfs1998@qq.com',
+}
+
 export function imapClient(e: Endpoint, credential: MailCredential) {
   const client = new ImapFlow({
     host: e.host,
@@ -19,11 +34,22 @@ export function imapClient(e: Endpoint, credential: MailCredential) {
     disableAutoIdle: true,
     connectionTimeout: 15000,
     socketTimeout: 60000,
+    ...(netEaseImap(e.host) ? { clientInfo: netEaseClientInfo } : {}),
   })
   client.on('error', () => {
     /* Pending protocol operations reject on disconnect. */
   })
   return client
+}
+
+/** 登录后再发一次 ID。登录前的 ID 对网易不算数。 */
+export async function connectImap(client: ImapFlow, host: string): Promise<void> {
+  await client.connect()
+  if (!netEaseImap(host)) return
+  client.capabilities.set('ID', true)
+  await (
+    client as ImapFlow & { run(command: string, info: ImapFlow['clientInfo']): Promise<unknown> }
+  ).run('ID', client.clientInfo)
 }
 export function diagnostic(err: unknown, google = false) {
   const { code, message, authenticationFailed } = err as {
@@ -37,11 +63,12 @@ export function diagnostic(err: unknown, google = false) {
     code === 'EAUTH' ||
     /authentication|invalid credentials|login failed/i.test(message ?? '')
   )
-    return google ? 'Google 邮箱认证失败，请重新连接 Gmail 并确认账号允许邮件客户端访问。' : '认证失败，请检查登录名、授权码及邮箱协议开关。'
+    return google ? 'Google 邮箱认证失败，请重新连接 Gmail 并确认账号允许邮件客户端访问。' : '认证失败，请检查登录名、密码（或授权码）及邮箱协议开关。'
   if (/tls|cert|ssl|starttls/i.test((code ?? '') + ' ' + message))
     return 'TLS 验证失败，请检查主机、端口与加密方式。'
   if (code === 'ENOSPC' || code === 'EACCES' || code === 'EPERM')
     return '无法写入本地邮箱，请检查磁盘空间及权限。'
+  if (message === '邮件服务器未返回文件夹范围。') return message
   return '请求未完成，请检查网络、服务器配置或文件夹权限后重试。'
 }
 // A final socket error can omit RCPT rejections already returned by the server.
@@ -155,7 +182,7 @@ export async function verify(f: AccountSettings, credential: MailCredential, sig
   try {
     const [imap, outbound] = await Promise.allSettled([
       (async () => {
-        await client.connect()
+        await connectImap(client, f.imap.host)
         await client.mailboxOpen('INBOX', { readOnly: true })
       })(),
       typeof credential === 'string' ? verifySmtp(f.smtp, credential) : verifyGmailApi(f.email, credential.accessToken, signal),

@@ -13,6 +13,17 @@ export const CHANGELOG_STARTED_AT = '0.5.0'
  */
 export const changelogReleases: ChangelogRelease[] = [
   {
+    version: '0.6.5',
+    releasedAt: '2026-11-24',
+    title: 'FTCS Desktop 0.6.5',
+    notes: [
+      '修复 163、126 等网易邮箱能连上却同步不到邮件的问题。',
+      '邮箱连接凭据栏改为「授权码或邮箱密码」，允许客户端直接登录的服务商可填网页密码。',
+      '「该填什么？」改为先判断邮箱支持的登录方式，再给出对应步骤或说明暂不支持。',
+      '邮箱「删除本地数据」「取消托管」改用居中的确认对话框。',
+    ],
+  },
+  {
     version: '0.6.4',
     releasedAt: '2026-11-22',
     title: 'FTCS Desktop 0.6.4',

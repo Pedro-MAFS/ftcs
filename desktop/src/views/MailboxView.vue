@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Connection, Endpoint, MailAction, Snapshot } from '../../electron/mailbox/types'
 import { key } from '../../electron/mailbox/types'
@@ -34,6 +34,7 @@ const googlePending = ref(false)
 const expectedEmail = ref('')
 const chosen = ref('')
 const confirmation = ref<MailAction>()
+const confirmDialog = ref<HTMLDialogElement>()
 const protocols = ['imap', 'smtp'] as const
 const endpoint = (host = '', port = 993, username = ''): Endpoint => ({
   host,
@@ -63,7 +64,7 @@ async function askForHelp() {
     helpError.value = RUNTIME_NOT_READY
     return
   }
-  const question = mailSetupQuestion(provider.value)
+  const question = mailSetupQuestion(provider.value, developerContact.email)
   dialogueBusy.value = true
   try {
     helpDialog.value?.close()
@@ -114,6 +115,33 @@ function confirmDisconnect() {
   settingsDialog.value?.close()
   confirmation.value = { kind: 'disconnect' }
 }
+function dismissConfirm() {
+  confirmation.value = undefined
+}
+const confirmTitle = computed(() => {
+  const action = confirmation.value
+  if (action?.kind === 'disconnect') {
+    const current = state.value?.accounts.find((a) => a.id === state.value?.active)
+    return '取消托管 ' + (current?.email ?? '')
+  }
+  const email =
+    action?.kind === 'delete'
+      ? state.value?.accounts.find((a) => a.id === action.id)?.email
+      : ''
+  return '删除 ' + (email || '该邮箱') + ' 的本地数据'
+})
+const confirmMessage = computed(() =>
+  confirmation.value?.kind === 'disconnect'
+    ? '将停止收发并移除本机连接凭据，邮件和草稿保留在本机。'
+    : '该邮箱在本机的邮件、附件和草稿将被清除。服务器邮件保留。',
+)
+watch(confirmation, (action) => {
+  if (!action) return
+  void nextTick(() => {
+    const dialog = confirmDialog.value
+    if (dialog && !dialog.open) dialog.showModal()
+  })
+})
 function reconnect(email: string) {
   form.value.password = ''
   editing.value = true
@@ -166,6 +194,7 @@ function leave() {
   gmailInviteDialog.value?.close()
   helpDialog.value?.close()
   settingsDialog.value?.close()
+  confirmDialog.value?.close()
   unsubscribe?.()
   unsubscribe = undefined
   form.value.password = ''
@@ -230,7 +259,7 @@ async function act(action: MailAction) {
         <form class="setup-form" @submit.prevent="connect">
           <h2>{{ saved ? '重新连接邮箱' : '连接邮箱' }}</h2>
           <div class="auth-methods" role="group" aria-label="连接方式">
-            <button type="button" :aria-pressed="!google" :disabled="busy" @click="google = false">邮箱授权码</button>
+            <button type="button" :aria-pressed="!google" :disabled="busy" @click="google = false">授权码 / 密码</button>
             <button type="button" :aria-pressed="google" :disabled="busy" @click="google = true">Google 授权</button>
           </div>
           <p v-if="google">{{ expectedEmail ? '请在浏览器中选择 ' + expectedEmail : '在浏览器中选择要连接的 Gmail 或 Google Workspace 邮箱。' }}</p>
@@ -247,10 +276,10 @@ async function act(action: MailAction) {
           /></label>
           <div class="auth-field">
             <div class="auth-label">
-              <label for="mail-auth-code">邮箱授权码</label>
-              <button type="button" class="help-link" @click="openHelp(form.email)">如何获取授权码？</button>
+              <label for="mail-auth-code">授权码或邮箱密码</label>
+              <button type="button" class="help-link" @click="openHelp(form.email)">该填什么？</button>
             </div>
-            <input id="mail-auth-code" v-model="form.password" type="password" placeholder="输入邮箱服务商生成的授权码" autocomplete="off" required />
+            <input id="mail-auth-code" v-model="form.password" type="password" placeholder="服务商生成的授权码，或网页登录密码" autocomplete="off" required />
           </div>
           <button class="server-toggle" type="button" :aria-expanded="advanced" @click="advanced = !advanced">
             <Icon name="sliders" :size="14" />服务器设置<Icon name="chevron-down" :size="14" />
@@ -307,7 +336,7 @@ async function act(action: MailAction) {
           <button autofocus @click="settingsDialog?.close()">关闭</button>
         </header>
         <p>{{ active.email }}</p>
-        <button v-if="active.authMethod !== 'google'" type="button" class="help-link" @click="openHelp(active.email)">如何获取授权码？</button>
+        <button v-if="active.authMethod !== 'google'" type="button" class="help-link" @click="openHelp(active.email)">该填什么？</button>
         <label class="choice"><input type="checkbox" :checked="active.notifications !== false" :disabled="busy"
           @change="act({kind: 'notifications', account: active.id, enabled: ($event.target as HTMLInputElement).checked})" />
           桌面新邮件通知</label>
@@ -348,7 +377,7 @@ async function act(action: MailAction) {
         :busy="busy"
         :covered="settingsOpen || !!confirmation"
         @settings="settingsOpen = true; settingsDialog?.showModal()"
-        @navigate="settingsDialog?.close(); confirmation = undefined"
+        @navigate="settingsDialog?.close(); dismissConfirm()"
         @sync="act({ kind: 'retry' })"
       />
     </template>
@@ -363,11 +392,11 @@ async function act(action: MailAction) {
     </dialog>
     <dialog ref="helpDialog" class="settings-dialog help-dialog" aria-labelledby="mail-help-title">
       <form @submit.prevent="askForHelp">
-        <h2 id="mail-help-title">如何获取邮箱授权码？</h2>
+        <h2 id="mail-help-title">这个邮箱该填什么？</h2>
         <label>邮箱服务商或邮箱地址
           <input v-model="helpInput" autofocus required maxlength="254" placeholder="例如 QQ、Google 或 name@company.com" />
         </label>
-        <small>智能体会说明具体步骤。填写邮箱地址时，只会发送域名。</small>
+        <small>智能体会先判断该邮箱支持的登录方式，再说明具体步骤。填写邮箱地址时，只会发送域名。</small>
         <p v-if="helpInput.trim() && !provider" role="alert">请填写服务商名称或完整邮箱地址。</p>
         <p v-if="helpBusy" role="status">请等智能体完成当前回复或任务后再提问。</p>
         <p v-if="helpError" role="alert">{{ helpError }}</p>
@@ -377,24 +406,20 @@ async function act(action: MailAction) {
         </div>
       </form>
     </dialog>
-    <div v-if="confirmation" class="confirm" role="alertdialog">
-      <strong>{{
-        confirmation.kind === 'disconnect'
-          ? '取消托管 ' + active?.email
-          : '删除 ' +
-            state?.accounts.find((a) => confirmation?.kind === 'delete' && a.id === confirmation.id)?.email +
-            ' 的本地数据'
-      }}</strong>
-      <p>
-        {{
-          confirmation.kind === 'disconnect'
-            ? '将停止收发并移除本机连接凭据，邮件和草稿保留在本机。'
-            : '该邮箱在本机的邮件、附件和草稿将被清除。服务器邮件保留。'
-        }}
-      </p>
-      <button :disabled="busy" @click="confirmation = undefined">返回</button>
-      <button :disabled="busy" @click="act(confirmation)">确认</button>
-    </div>
+    <dialog
+      v-if="confirmation"
+      ref="confirmDialog"
+      class="settings-dialog mail-confirm"
+      aria-labelledby="mail-confirm-title"
+      @cancel.prevent="dismissConfirm"
+    >
+      <h2 id="mail-confirm-title">{{ confirmTitle }}</h2>
+      <p>{{ confirmMessage }}</p>
+      <div class="actions">
+        <button type="button" :disabled="busy" @click="dismissConfirm">返回</button>
+        <button type="button" class="primary" :disabled="busy" @click="act(confirmation)">确认</button>
+      </div>
+    </dialog>
   </section>
 </template>
 <style scoped>
@@ -424,13 +449,33 @@ async function act(action: MailAction) {
 .settings-dialog::backdrop {
   background: rgb(0 0 0 / 42%);
 }
-.connected .confirm {
-  position: absolute;
-  z-index: 2;
-  inset: 50% auto auto 50%;
-  transform: translate(-50%, -50%);
+.mail-confirm:not([open]) {
+  display: none;
+}
+.mail-confirm[open] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: min(380px, calc(100vw - 48px));
+  height: fit-content;
+  margin: auto;
+}
+.mail-confirm h2,
+.mail-confirm p {
   margin: 0;
-  width: min(380px, 90%);
+}
+.mail-confirm p {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.mail-confirm .actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0;
 }
 
 .mail-page {
@@ -551,8 +596,7 @@ h2 {
   font-size: 16px;
 }
 form,
-.mail-page > section,
-.confirm {
+.mail-page > section {
   max-width: 640px;
   display: grid;
   gap: 14px;
@@ -642,9 +686,6 @@ header span,
 .row,
 .contact {
   padding: 6px 0;
-}
-.confirm {
-  border-color: var(--accent);
 }
 [role='alert'] {
   margin-top: 12px;
