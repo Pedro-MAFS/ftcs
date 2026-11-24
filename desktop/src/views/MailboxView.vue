@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { Connection, Endpoint, MailAction, Snapshot } from '../../electron/mailbox/types'
 import { key } from '../../electron/mailbox/types'
@@ -34,6 +34,7 @@ const googlePending = ref(false)
 const expectedEmail = ref('')
 const chosen = ref('')
 const confirmation = ref<MailAction>()
+const confirmDialog = ref<HTMLDialogElement>()
 const protocols = ['imap', 'smtp'] as const
 const endpoint = (host = '', port = 993, username = ''): Endpoint => ({
   host,
@@ -114,6 +115,33 @@ function confirmDisconnect() {
   settingsDialog.value?.close()
   confirmation.value = { kind: 'disconnect' }
 }
+function dismissConfirm() {
+  confirmation.value = undefined
+}
+const confirmTitle = computed(() => {
+  const action = confirmation.value
+  if (action?.kind === 'disconnect') {
+    const current = state.value?.accounts.find((a) => a.id === state.value?.active)
+    return '取消托管 ' + (current?.email ?? '')
+  }
+  const email =
+    action?.kind === 'delete'
+      ? state.value?.accounts.find((a) => a.id === action.id)?.email
+      : ''
+  return '删除 ' + (email || '该邮箱') + ' 的本地数据'
+})
+const confirmMessage = computed(() =>
+  confirmation.value?.kind === 'disconnect'
+    ? '将停止收发并移除本机连接凭据，邮件和草稿保留在本机。'
+    : '该邮箱在本机的邮件、附件和草稿将被清除。服务器邮件保留。',
+)
+watch(confirmation, (action) => {
+  if (!action) return
+  void nextTick(() => {
+    const dialog = confirmDialog.value
+    if (dialog && !dialog.open) dialog.showModal()
+  })
+})
 function reconnect(email: string) {
   form.value.password = ''
   editing.value = true
@@ -166,6 +194,7 @@ function leave() {
   gmailInviteDialog.value?.close()
   helpDialog.value?.close()
   settingsDialog.value?.close()
+  confirmDialog.value?.close()
   unsubscribe?.()
   unsubscribe = undefined
   form.value.password = ''
@@ -348,7 +377,7 @@ async function act(action: MailAction) {
         :busy="busy"
         :covered="settingsOpen || !!confirmation"
         @settings="settingsOpen = true; settingsDialog?.showModal()"
-        @navigate="settingsDialog?.close(); confirmation = undefined"
+        @navigate="settingsDialog?.close(); dismissConfirm()"
         @sync="act({ kind: 'retry' })"
       />
     </template>
@@ -377,24 +406,20 @@ async function act(action: MailAction) {
         </div>
       </form>
     </dialog>
-    <div v-if="confirmation" class="confirm" role="alertdialog">
-      <strong>{{
-        confirmation.kind === 'disconnect'
-          ? '取消托管 ' + active?.email
-          : '删除 ' +
-            state?.accounts.find((a) => confirmation?.kind === 'delete' && a.id === confirmation.id)?.email +
-            ' 的本地数据'
-      }}</strong>
-      <p>
-        {{
-          confirmation.kind === 'disconnect'
-            ? '将停止收发并移除本机连接凭据，邮件和草稿保留在本机。'
-            : '该邮箱在本机的邮件、附件和草稿将被清除。服务器邮件保留。'
-        }}
-      </p>
-      <button :disabled="busy" @click="confirmation = undefined">返回</button>
-      <button :disabled="busy" @click="act(confirmation)">确认</button>
-    </div>
+    <dialog
+      v-if="confirmation"
+      ref="confirmDialog"
+      class="settings-dialog mail-confirm"
+      aria-labelledby="mail-confirm-title"
+      @cancel.prevent="dismissConfirm"
+    >
+      <h2 id="mail-confirm-title">{{ confirmTitle }}</h2>
+      <p>{{ confirmMessage }}</p>
+      <div class="actions">
+        <button type="button" :disabled="busy" @click="dismissConfirm">返回</button>
+        <button type="button" class="primary" :disabled="busy" @click="act(confirmation)">确认</button>
+      </div>
+    </dialog>
   </section>
 </template>
 <style scoped>
@@ -424,13 +449,33 @@ async function act(action: MailAction) {
 .settings-dialog::backdrop {
   background: rgb(0 0 0 / 42%);
 }
-.connected .confirm {
-  position: absolute;
-  z-index: 2;
-  inset: 50% auto auto 50%;
-  transform: translate(-50%, -50%);
+.mail-confirm:not([open]) {
+  display: none;
+}
+.mail-confirm[open] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: min(380px, calc(100vw - 48px));
+  height: fit-content;
+  margin: auto;
+}
+.mail-confirm h2,
+.mail-confirm p {
   margin: 0;
-  width: min(380px, 90%);
+}
+.mail-confirm p {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.mail-confirm .actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0;
 }
 
 .mail-page {
@@ -551,8 +596,7 @@ h2 {
   font-size: 16px;
 }
 form,
-.mail-page > section,
-.confirm {
+.mail-page > section {
   max-width: 640px;
   display: grid;
   gap: 14px;
@@ -642,9 +686,6 @@ header span,
 .row,
 .contact {
   padding: 6px 0;
-}
-.confirm {
-  border-color: var(--accent);
 }
 [role='alert'] {
   margin-top: 12px;
