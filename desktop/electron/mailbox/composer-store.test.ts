@@ -494,3 +494,37 @@ test('富文本和模板按账号保存，收起重启后仍在同一草稿，�
   const next = store.write(email, self, store.view(email, self).draft, edit).draft
   assert.equal(next.html_body, undefined)
 })
+
+test('a mailbox without UIDNEXT or EXISTS is not marked synced', async (t) => {
+  const { dir, index } = await setup(t)
+  const folder = newFolder('inbox', 'INBOX')
+  const client = { mailboxOpen: async () => ({ uidValidity: 1n }) } as unknown as ImapFlow
+  await assert.rejects(
+    importFolder(client, dir, { sync_from: new Date().toISOString() } as Account, folder, index, idle, idle),
+    /邮件服务器未返回文件夹范围/,
+  )
+  assert.equal(folder.phase, 'backfill')
+})
+
+test('a NetEase mailbox without UIDNEXT imports through the UID list', async (t) => {
+  const { dir, index } = await setup(t)
+  const folder = newFolder('inbox', 'INBOX')
+  const raw = Buffer.from('From: a@b.test\r\nTo: sales@atlas.test\r\nSubject: hi\r\nMessage-ID: <n@t>\r\n\r\nbody\r\n')
+  const client = {
+    mailboxOpen: async () => ({ uidValidity: 1n, exists: 1 }),
+    search: async () => [7],
+    fetchOne: async () => ({ source: raw, internalDate: new Date(), flags: new Set() }),
+  } as unknown as ImapFlow
+  await importFolder(
+    client,
+    dir,
+    { sync_from: '2020-01-01T00:00:00.000Z', address_key: self } as Account,
+    folder,
+    index,
+    idle,
+    idle,
+  )
+  assert.equal(folder.phase, 'incremental')
+  assert.equal(folder.last_scanned_uid, 7)
+  assert.equal(index.messages.size, 1)
+})

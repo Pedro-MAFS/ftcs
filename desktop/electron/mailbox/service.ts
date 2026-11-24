@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 import developerContact from '../../../website/src/config/developer-contact.json' with { type: 'json' }
-import { imapClient, verify, diagnostic, smtpSubmit, type MailCredential } from './protocol'
+import { connectImap, imapClient, verify, diagnostic, smtpSubmit, type MailCredential } from './protocol'
 import { gmailSubmit } from './gmail-api'
 import { refreshGmail, type GmailTokens } from './gmail-auth'
 import type { AccountSettings } from './types'
@@ -504,7 +504,7 @@ export class MailboxService {
       this.check(ctx)
       const probe = this.protocol.imapClient(account.imap, credential)
       try {
-        await probe.connect()
+        await connectImap(probe, account.imap.host)
         this.check(ctx)
         await probe.mailboxOpen(a.path, { readOnly: true })
         this.check(ctx)
@@ -552,7 +552,7 @@ export class MailboxService {
       this.check(ctx)
       const client = this.protocol.imapClient(account.imap, credential)
       this.client = client
-      await client.connect()
+      await connectImap(client, account.imap.host)
       this.check(ctx)
       for (role of roles) {
         try {

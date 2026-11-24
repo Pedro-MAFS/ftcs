@@ -31,7 +31,21 @@ export async function importFolder(
   guard()
   const file = path.join(dir, 'sync', folder.role + '.json')
   const validity = Number(box.uidValidity)
-  const upper = box.uidNext - 1
+  if (!Number.isSafeInteger(validity)) throw new Error('邮件服务器未返回文件夹范围。')
+  // 网易打开文件夹时给 EXISTS 和 UIDVALIDITY，不给 UIDNEXT。
+  let upper = Number.isSafeInteger(box.uidNext) ? box.uidNext - 1 : undefined
+  if (upper !== undefined && upper < 0) throw new Error('邮件服务器未返回文件夹范围。')
+  if (upper === undefined) {
+    if (box.exists === 0) upper = 0
+    else if (!Number.isSafeInteger(box.exists) || box.exists < 0) throw new Error('邮件服务器未返回文件夹范围。')
+    else {
+      const present = await client.search({ uid: '1:*' }, { uid: true })
+      guard()
+      if (!present) throw new Error('邮件搜索失败')
+      upper = 0
+      for (const uid of present) if (uid > upper) upper = uid
+    }
+  }
   arrivals?.opened(validity, upper)
   if (folder.uid_validity !== validity) {
     delete folder.flags_modseq
