@@ -158,7 +158,7 @@ export function validate(f: Connection) {
     !f.password ||
     !['last_30_days', 'from_connection'].includes(f.mode)
   )
-    throw new Error('请填写有效邮箱、授权码和同步范围。')
+    throw new Error('请填写有效邮箱、授权码或邮箱密码，以及同步范围。')
   for (const e of [f.imap, f.smtp]) {
     if (
       !e ||

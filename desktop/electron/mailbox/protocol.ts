@@ -63,7 +63,7 @@ export function diagnostic(err: unknown, google = false) {
     code === 'EAUTH' ||
     /authentication|invalid credentials|login failed/i.test(message ?? '')
   )
-    return google ? 'Google 邮箱认证失败，请重新连接 Gmail 并确认账号允许邮件客户端访问。' : '认证失败，请检查登录名、授权码及邮箱协议开关。'
+    return google ? 'Google 邮箱认证失败，请重新连接 Gmail 并确认账号允许邮件客户端访问。' : '认证失败，请检查登录名、密码（或授权码）及邮箱协议开关。'
   if (/tls|cert|ssl|starttls/i.test((code ?? '') + ' ' + message))
     return 'TLS 验证失败，请检查主机、端口与加密方式。'
   if (code === 'ENOSPC' || code === 'EACCES' || code === 'EPERM')

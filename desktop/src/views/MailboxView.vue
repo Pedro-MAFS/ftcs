@@ -64,7 +64,7 @@ async function askForHelp() {
     helpError.value = RUNTIME_NOT_READY
     return
   }
-  const question = mailSetupQuestion(provider.value)
+  const question = mailSetupQuestion(provider.value, developerContact.email)
   dialogueBusy.value = true
   try {
     helpDialog.value?.close()
@@ -259,7 +259,7 @@ async function act(action: MailAction) {
         <form class="setup-form" @submit.prevent="connect">
           <h2>{{ saved ? '重新连接邮箱' : '连接邮箱' }}</h2>
           <div class="auth-methods" role="group" aria-label="连接方式">
-            <button type="button" :aria-pressed="!google" :disabled="busy" @click="google = false">邮箱授权码</button>
+            <button type="button" :aria-pressed="!google" :disabled="busy" @click="google = false">授权码 / 密码</button>
             <button type="button" :aria-pressed="google" :disabled="busy" @click="google = true">Google 授权</button>
           </div>
           <p v-if="google">{{ expectedEmail ? '请在浏览器中选择 ' + expectedEmail : '在浏览器中选择要连接的 Gmail 或 Google Workspace 邮箱。' }}</p>
@@ -276,10 +276,10 @@ async function act(action: MailAction) {
           /></label>
           <div class="auth-field">
             <div class="auth-label">
-              <label for="mail-auth-code">邮箱授权码</label>
-              <button type="button" class="help-link" @click="openHelp(form.email)">如何获取授权码？</button>
+              <label for="mail-auth-code">授权码或邮箱密码</label>
+              <button type="button" class="help-link" @click="openHelp(form.email)">该填什么？</button>
             </div>
-            <input id="mail-auth-code" v-model="form.password" type="password" placeholder="输入邮箱服务商生成的授权码" autocomplete="off" required />
+            <input id="mail-auth-code" v-model="form.password" type="password" placeholder="服务商生成的授权码，或网页登录密码" autocomplete="off" required />
           </div>
           <button class="server-toggle" type="button" :aria-expanded="advanced" @click="advanced = !advanced">
             <Icon name="sliders" :size="14" />服务器设置<Icon name="chevron-down" :size="14" />
@@ -336,7 +336,7 @@ async function act(action: MailAction) {
           <button autofocus @click="settingsDialog?.close()">关闭</button>
         </header>
         <p>{{ active.email }}</p>
-        <button v-if="active.authMethod !== 'google'" type="button" class="help-link" @click="openHelp(active.email)">如何获取授权码？</button>
+        <button v-if="active.authMethod !== 'google'" type="button" class="help-link" @click="openHelp(active.email)">该填什么？</button>
         <label class="choice"><input type="checkbox" :checked="active.notifications !== false" :disabled="busy"
           @change="act({kind: 'notifications', account: active.id, enabled: ($event.target as HTMLInputElement).checked})" />
           桌面新邮件通知</label>
@@ -392,11 +392,11 @@ async function act(action: MailAction) {
     </dialog>
     <dialog ref="helpDialog" class="settings-dialog help-dialog" aria-labelledby="mail-help-title">
       <form @submit.prevent="askForHelp">
-        <h2 id="mail-help-title">如何获取邮箱授权码？</h2>
+        <h2 id="mail-help-title">这个邮箱该填什么？</h2>
         <label>邮箱服务商或邮箱地址
           <input v-model="helpInput" autofocus required maxlength="254" placeholder="例如 QQ、Google 或 name@company.com" />
         </label>
-        <small>智能体会说明具体步骤。填写邮箱地址时，只会发送域名。</small>
+        <small>智能体会先判断该邮箱支持的登录方式，再说明具体步骤。填写邮箱地址时，只会发送域名。</small>
         <p v-if="helpInput.trim() && !provider" role="alert">请填写服务商名称或完整邮箱地址。</p>
         <p v-if="helpBusy" role="status">请等智能体完成当前回复或任务后再提问。</p>
         <p v-if="helpError" role="alert">{{ helpError }}</p>
