@@ -1803,7 +1803,7 @@ async function onCheckUpdate(): Promise<void> {
           <template v-else>
             <p class="hint-line">
               <Icon name="info" :size="12" />
-              开启后，点窗口「×」会隐藏到系统托盘（进程继续跑，便于定时任务）；完全退出请用托盘菜单「退出」。默认关闭；需要定时任务时可在线索页一键开启。勾选后立即生效。
+              开启后，点窗口「×」会隐藏到系统托盘。要完全退出，请用托盘菜单「退出」。此设置默认关闭，勾选后立即生效，也可在首页的「定时任务」区域一键开启。
             </p>
             <label class="settings-checkbox">
               <input

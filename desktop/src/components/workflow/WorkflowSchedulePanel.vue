@@ -7,6 +7,7 @@ import type {
 } from '../../types/electron'
 import { useWorkspace } from '../../composables/useWorkspace'
 import { useWorkflowSchedules } from '../../composables/useWorkflowSchedules'
+import { useWorkflowExecute } from '../../composables/useWorkflowExecute'
 import { nextScheduledAt } from '../../../electron/schedule/workflow-schedule-types'
 import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import Icon from '../shared/Icon.vue'
@@ -19,6 +20,7 @@ const { products, activeProductId } = useWorkspace()
 
 const windowsBackground = window.ftcs?.platform === 'win32'
 const { schedules, loading, listError, reloadSchedules } = useWorkflowSchedules()
+const { runningScheduleId, currentStepLabel } = useWorkflowExecute()
 const now = ref(new Date())
 const openMenu = ref<string | null>(null)
 const deleteTarget = ref<WorkflowSchedule | null>(null)
@@ -282,11 +284,14 @@ watch(
       <li v-for="{ task, next } in rows" :key="task.id" class="schedule-item">
         <div class="schedule-item__time">
           <strong>{{ task.timeLocal }}</strong>
-          <span>{{ next ? dayLabel(next) : '已停用' }}</span>
+          <span>{{ task.id === runningScheduleId ? '计划时刻' : next ? dayLabel(next) : '已停用' }}</span>
         </div>
         <div class="schedule-item__info">
           <strong>{{ scheduleName(task) }}</strong>
-          <span class="muted">{{ frequency(task) }} {{ task.timeLocal }}</span>
+          <span v-if="task.id === runningScheduleId" class="schedule-item__running" role="status">
+            运行中<template v-if="currentStepLabel"> · {{ currentStepLabel }}</template>
+          </span>
+          <span v-else class="muted">{{ frequency(task) }} {{ task.timeLocal }}</span>
         </div>
         <button type="button" class="schedule-switch" role="switch" :aria-checked="task.enabled"
           :aria-label="scheduleName(task) + '，启用定时任务'" :title="task.enabled ? '停用' : '启用'"
@@ -409,6 +414,7 @@ watch(
 .schedule-item__time strong { font-size: 17px; font-variant-numeric: tabular-nums; }
 .schedule-item__time span, .schedule-item__info span { font-size: 12px; color: var(--text-secondary); }
 .schedule-item__info strong { overflow-wrap: anywhere; }
+.schedule-item__info .schedule-item__running { color: var(--accent); font-weight: 600; }
 .schedule-switch { width: 30px; height: 18px; border: 1px solid var(--border); padding: 2px; border-radius: 12px; background: var(--bg-active); }
 .schedule-switch span { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--text-secondary); }
 .schedule-switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }

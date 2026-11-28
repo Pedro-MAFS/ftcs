@@ -4,7 +4,7 @@ import {
   WORKFLOW_NODE_PREFLIGHT,
   workflowNodeLabel,
 } from '../constants/workflow-node-labels'
-import type { WorkflowNodeId, WorkflowPlan } from '../types/electron'
+import type { ScheduleTriggerPayload, WorkflowNodeId, WorkflowPlan } from '../types/electron'
 import { ensureAgentReady } from './useAgentPreflight'
 import { useWorkspace } from './useWorkspace'
 import { formatWorkflowPlanNotifyBody } from '../utils/format-workflow-plan-notify-body'
@@ -45,6 +45,7 @@ function isAbortError(err: unknown): boolean {
 
 /** 模块级共享，避免线索页与定时触发器各持一份 running */
 const workflowRunning = ref(false)
+const runningScheduleId = ref<string | null>(null)
 const workflowCurrentStepIndex = ref(-1)
 const workflowCurrentStepLabel = ref('')
 const workflowCurrentPlanName = ref('')
@@ -102,11 +103,12 @@ export function useWorkflowExecute(options?: {
   refreshLeads?: () => Promise<void>
 }): {
   running: Ref<boolean>
+  runningScheduleId: Ref<string | null>
   currentStepIndex: Ref<number>
   currentStepLabel: Ref<string>
   currentPlanName: Ref<string>
   runWorkflowPreflight: (plan: WorkflowPlan) => Promise<string | null>
-  executePlan: (planId: string, origin?: 'workflow' | 'schedule') => Promise<WorkflowExecuteResult>
+  executePlan: (planId: string, schedule?: Pick<ScheduleTriggerPayload, 'scheduleId'>) => Promise<WorkflowExecuteResult>
   cancel: () => Promise<void>
 } {
   const running = workflowRunning
@@ -116,7 +118,7 @@ export function useWorkflowExecute(options?: {
 
   const { activeProductId } = useWorkspace()
 
-  async function executePlan(planId: string, origin: 'workflow' | 'schedule' = 'workflow'): Promise<WorkflowExecuteResult> {
+  async function executePlan(planId: string, schedule?: Pick<ScheduleTriggerPayload, 'scheduleId'>): Promise<WorkflowExecuteResult> {
     if (running.value) {
       return { ok: false, message: '已有方案在执行中', completedSteps: 0 }
     }
@@ -136,7 +138,10 @@ export function useWorkflowExecute(options?: {
       return { ok: false, message: preflightErr, completedSteps: 0 }
     }
 
+    // 预检期间另一个入口可能已开始执行。
+    if (running.value) return { ok: false, message: '已有方案在执行中', completedSteps: 0 }
     running.value = true
+    runningScheduleId.value = schedule?.scheduleId ?? null
     currentPlanName.value = plan.name
     const planNameForNotify = plan.name
     workflowAbortController = new AbortController()
@@ -161,7 +166,7 @@ export function useWorkflowExecute(options?: {
         failedStep = step.nodeId
         workflowAbortController.signal.throwIfAborted()
         if (!window.ftcs?.launchWorkflowStep) throw new Error('桌面任务通道未连接')
-        const taskId = await window.ftcs.launchWorkflowStep(step.nodeId, productId, origin)
+        const taskId = await window.ftcs.launchWorkflowStep(step.nodeId, productId, schedule ? 'schedule' : 'workflow')
         const result = await waitForAgentDone(taskId, { signal: workflowAbortController.signal })
         if (!result.ok) throw new Error(result.message)
         failedStep = undefined
@@ -199,6 +204,7 @@ export function useWorkflowExecute(options?: {
       return outcome
     } finally {
       running.value = false
+      runningScheduleId.value = null
       currentStepIndex.value = -1
       currentStepLabel.value = ''
       currentPlanName.value = ''
@@ -218,6 +224,7 @@ export function useWorkflowExecute(options?: {
 
   return {
     running,
+    runningScheduleId,
     currentStepIndex,
     currentStepLabel,
     currentPlanName,

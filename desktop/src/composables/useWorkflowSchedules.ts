@@ -1,7 +1,6 @@
 import { ref } from 'vue'
 import type { WorkflowSchedule } from '../types/electron'
 
-// 首页和线索库在同一窗口内缓存，共用最近一次从主进程读取的列表。
 const schedules = ref<WorkflowSchedule[]>([])
 const loading = ref(false)
 const listError = ref('')

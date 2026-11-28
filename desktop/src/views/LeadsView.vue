@@ -15,7 +15,6 @@ import ConfirmDialog from '../components/shared/ConfirmDialog.vue'
 import WorkflowPlanControl from '../components/workflow/WorkflowPlanControl.vue'
 import WorkflowPlanManageMenu from '../components/workflow/WorkflowPlanManageMenu.vue'
 import WorkflowPlanEditorDialog from '../components/workflow/WorkflowPlanEditorDialog.vue'
-import WorkflowSchedulePanel from '../components/workflow/WorkflowSchedulePanel.vue'
 import LeadDetailDrawer from '../components/shared/LeadDetailDrawer.vue'
 import type { LeadRowDto, LeadsSnapshotDto, WorkflowPlan } from '../types/electron'
 import { buildLeadsCsv, defaultLeadsCsvFileName, matchReasonScreen } from '../utils/leads-export'
@@ -961,8 +960,6 @@ onMounted(() => {
       @confirm="onPlanDeleteConfirm"
       @cancel="deleteConfirmOpen = false"
     />
-
-    <WorkflowSchedulePanel :plans="workflowPlans" />
 
     <div class="filter-row">
       <button
