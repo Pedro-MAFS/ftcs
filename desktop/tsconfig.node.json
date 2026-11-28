@@ -1,7 +1,8 @@
 {
   "include": [
     "electron.vite.config.*",
-    "electron/**/*"
+    "electron/**/*",
+    "shared/**/*"
   ],
   "compilerOptions": {
     "composite": true,

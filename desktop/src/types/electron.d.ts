@@ -1,3 +1,4 @@
+import type { BackgroundUpdate, StartupPreferences } from '../../shared/background-preferences'
 interface CloudflareState { connected: boolean; checkFailed?: boolean; authorized?: boolean; pending?: boolean; accountId?: string; accountName?: string; accounts?: Array<{ id: string; name: string }>; message?: string }
 interface SiteSnapshot { status: 'not_created' | 'empty' | 'existing' | 'ready' | 'missing' | 'invalid' | 'error'; workspaceRoot: string; projectPath: string; message: string; dependencies: 'missing' | 'unknown' }
 interface SiteRun { id: string; state: 'idle' | 'starting' | 'running' | 'address_pending' | 'stopping' | 'succeeded' | 'failed' | 'cancelled'; message: string; log: string; url?: string; startedAt?: string; finishedAt?: string; node?: string; output?: string; sourceHash?: string }
@@ -1128,7 +1129,9 @@ declare global {
       ) => Promise<SettingsSaveResult & { status: AppStatus }>
       setOpenAtLogin?: (
         enabled: boolean,
-      ) => Promise<{ ok: boolean; openAtLogin: boolean }>
+      ) => Promise<{ ok: boolean; openAtLogin: boolean; message?: string }>
+      setBackgroundPreferences: (patch: BackgroundUpdate) => Promise<StartupPreferences>
+      onBackgroundPreferences: (callback: (value: StartupPreferences) => void) => () => void
       setCloseToTray?: (
         enabled: boolean,
       ) => Promise<{ ok: boolean; closeToTrayEnabled: boolean }>

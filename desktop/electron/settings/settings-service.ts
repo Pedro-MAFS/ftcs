@@ -1,3 +1,4 @@
+import { backgroundPreferences, type BackgroundPreferences } from '../../shared/background-preferences'
 import fs from 'node:fs'
 import path from 'node:path'
 import { dialog } from 'electron'
@@ -39,7 +40,7 @@ import {
 } from './email-draft-style'
 import { resolveTaskDoneNotificationEnabled } from '../notify/task-done-notify-logic'
 import { readUserPrefs, writeUserPrefs } from '../config/user-prefs'
-import { applyOpenAtLogin } from '../login/login-item'
+import { applyOpenAtLogin, currentOpenAtLogin } from '../login/login-item'
 import { applyCloseToTrayEnabled, resolveCloseToTrayEnabled } from '../tray/close-to-tray'
 import { resolveUiThemeMode } from '../theme/ui-theme'
 import {
@@ -67,7 +68,7 @@ type LegacyProviderId =
 
 export type PlacesProvider = 'custom' | 'gateway'
 
-export interface SettingsSnapshot {
+export interface SettingsSnapshot extends BackgroundPreferences {
   workspaceRoot: string
   channelMode: ChannelMode
   officialProvisioned: boolean
@@ -314,6 +315,8 @@ function ensureModelId(channelMode: ChannelMode, model: string, fallback: string
 }
 
 export function getSettingsSnapshot(): SettingsSnapshot {
+  const prefs = readUserPrefs()
+  const background = backgroundPreferences(prefs)
   const workspaceRoot = getWorkspaceRoot()
   const envPath = getEnvPath(workspaceRoot)
   const opencodeConfigPath = getOpenCodeConfigPath(workspaceRoot)
@@ -419,10 +422,9 @@ export function getSettingsSnapshot(): SettingsSnapshot {
     taskDoneNotificationEnabled: resolveTaskDoneNotificationEnabled(
       readUserPrefs().taskDoneNotificationEnabled,
     ),
-    openAtLogin: readUserPrefs().openAtLogin === true,
-    closeToTrayEnabled: resolveCloseToTrayEnabled(
-      readUserPrefs().closeToTrayEnabled,
-    ),
+    ...background,
+    openAtLogin: currentOpenAtLogin(),
+    closeToTrayEnabled: process.platform === 'win32' ? background.closeAction === 'background' : resolveCloseToTrayEnabled(prefs.closeToTrayEnabled),
     uiThemeMode: resolveUiThemeMode(readUserPrefs().uiThemeMode),
     exploreIntensity: resolveExploreIntensity(readUserPrefs().exploreIntensity),
   }
@@ -447,11 +449,11 @@ export function saveSettings(input: SettingsSaveInput): SettingsSaveResult {
     })
   }
 
-  if (input.openAtLogin !== undefined) {
+  if (process.platform !== 'win32' && input.openAtLogin !== undefined) {
     applyOpenAtLogin(Boolean(input.openAtLogin))
   }
 
-  if (input.closeToTrayEnabled !== undefined) {
+  if (process.platform !== 'win32' && input.closeToTrayEnabled !== undefined) {
     applyCloseToTrayEnabled(Boolean(input.closeToTrayEnabled))
   }
 

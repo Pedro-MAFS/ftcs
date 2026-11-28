@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import type {
   WorkflowPlan,
   WorkflowSchedule,
@@ -14,6 +14,7 @@ const props = defineProps<{
 
 const { products, activeProductId } = useWorkspace()
 
+const windowsBackground = window.ftcs?.platform === 'win32'
 const schedules = ref<WorkflowSchedule[]>([])
 const loading = ref(false)
 const saving = ref(false)
@@ -78,7 +79,7 @@ async function reloadBackgroundPrefs(): Promise<void> {
   try {
     const data = await window.ftcs.getSettings()
     openAtLogin.value = data.openAtLogin === true
-    closeToTrayEnabled.value = data.closeToTrayEnabled === true
+    closeToTrayEnabled.value = windowsBackground ? data.closeAction === 'background' : data.closeToTrayEnabled === true
   } catch {
     // ignore
   }
@@ -103,16 +104,25 @@ async function enableScheduleBackground(): Promise<void> {
   enablingBackground.value = true
   error.value = ''
   try {
-    if (!openAtLogin.value && window.ftcs?.setOpenAtLogin) {
-      const res = await window.ftcs.setOpenAtLogin(true)
-      if (res.ok) openAtLogin.value = true
+    const api = window.ftcs
+    if (!api) return
+    if (!openAtLogin.value) {
+      const result = await api.setOpenAtLogin?.(true)
+      openAtLogin.value = result?.openAtLogin === true
+      if (!result?.ok) throw new Error(result?.message || '未能开启开机自启。')
     }
-    if (!closeToTrayEnabled.value && window.ftcs?.setCloseToTray) {
-      const res = await window.ftcs.setCloseToTray(true)
-      if (res.ok) closeToTrayEnabled.value = true
+    if (!closeToTrayEnabled.value) {
+      if (windowsBackground) {
+        const prefs = await api.setBackgroundPreferences({ closeAction: 'background' })
+        closeToTrayEnabled.value = prefs.closeAction === 'background'
+      } else {
+        const result = await api.setCloseToTray?.(true)
+        closeToTrayEnabled.value = result?.closeToTrayEnabled === true
+      }
     }
-    message.value =
-      '已开启开机自启与关闭进托盘：关机后仍可自动拉起，关窗后进程留在托盘，定时任务才能到点执行'
+    await reloadBackgroundPrefs()
+    if (showBackgroundHint.value) throw new Error('请检查开机自启和关窗后台运行设置。')
+    message.value = '已开启开机自启与关窗后台运行。'
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -175,7 +185,7 @@ async function onSave(): Promise<void> {
     await reload()
     if (form.enabled && showBackgroundHint.value) {
       message.value =
-        '已保存定时任务。定时需要应用在后台运行：请开启开机自启（关机后仍能拉起）与关闭进托盘（关窗后进程不退出）。'
+        '已保存定时任务。定时需要应用在后台运行：请开启开机自启与关窗后台运行。'
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -214,7 +224,13 @@ async function onDelete(s: WorkflowSchedule): Promise<void> {
   await reload()
 }
 
+let removeBackgroundListener: (() => void) | undefined
+onUnmounted(() => removeBackgroundListener?.())
 onMounted(() => {
+  if (windowsBackground) removeBackgroundListener = window.ftcs?.onBackgroundPreferences(prefs => {
+    openAtLogin.value = prefs.openAtLogin
+    closeToTrayEnabled.value = prefs.closeAction === 'background'
+  })
   void reload()
   void reloadBackgroundPrefs()
 })
@@ -243,14 +259,14 @@ watch(
     </div>
     <p class="muted schedule-panel__hint">
       <Icon name="info" :size="12" />
-      绑定产品与方案，按每日/每周本地时刻自动执行。建议开启「启动与托盘」中的开机自启与关闭进托盘，以便后台常驻。最多 5 条。
+      绑定产品与方案，按每日/每周本地时刻自动执行。建议开启「启动与托盘」中的开机自启与关窗后台运行。最多 5 条。
     </p>
     <div v-if="showBackgroundHint" class="schedule-login-hint">
       <p>
         <strong>定时任务需要后台常驻。</strong>
-        默认不打扰：不开机自启、关窗即退出。若要用定时：
+        若要按时执行，建议开启以下两项。
         <em>开机自启</em>保证重启后仍能拉起；
-        <em>关闭进托盘</em>保证点「×」后进程还在，到点才能执行。
+        <em>关窗后台运行</em>保证点「×」后进程还在，到点才能执行。
         <template v-if="hasEnabledSchedule">你已有启用中的定时任务，建议现在开启。</template>
       </p>
       <button
@@ -259,7 +275,7 @@ watch(
         :disabled="enablingBackground"
         @click="enableScheduleBackground"
       >
-        {{ enablingBackground ? '开启中…' : '一键开启自启与托盘' }}
+        {{ enablingBackground ? '开启中…' : '一键开启自启与后台运行' }}
       </button>
     </div>
     <p v-if="error" class="schedule-panel__err">{{ error }}</p>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import type { BackgroundUpdate, CloseAction, StartupPreferences } from '../../shared/background-preferences'
 import { resolveSettingsUpdateActions } from '../composables/update-banner-model'
 import Icon from '../components/shared/Icon.vue'
 import { useAppStatus } from '../composables/useAppStatus'
@@ -114,6 +115,8 @@ const snapshot = ref<SettingsSnapshot | null>(null)
 const r2Sites = ref<ExploreR2SiteDto[]>([])
 const r2SitesHint = ref('')
 
+const windowsBackground = window.ftcs?.platform === 'win32'
+const backgroundSaving = ref(false)
 const form = reactive({
   channelMode: 'official' as ChannelMode,
   apiKey: '',
@@ -134,6 +137,8 @@ const form = reactive({
   taskDoneNotificationEnabled: true,
   openAtLogin: false,
   closeToTrayEnabled: false,
+  closeAction: 'ask' as CloseAction,
+  backgroundMascotEnabled: true,
   uiThemeMode: 'dark' as UiThemeMode,
   exploreIntensity: 'medium' as 'low' | 'medium' | 'high',
 })
@@ -428,7 +433,7 @@ function applySnapshot(data: SettingsSnapshot): void {
   form.emailDraftStylePrompt =
     data.emailDraftStylePrompt?.trim() || DEFAULT_EMAIL_DRAFT_STYLE_PROMPT
   form.taskDoneNotificationEnabled = data.taskDoneNotificationEnabled !== false
-  form.openAtLogin = data.openAtLogin === true
+  applyStartup(data)
   form.closeToTrayEnabled = data.closeToTrayEnabled === true
   form.uiThemeMode = (data.uiThemeMode as UiThemeMode) || 'dark'
   form.exploreIntensity =
@@ -647,8 +652,10 @@ async function onSave(): Promise<void> {
       customModelSupportsImage: form.customModelSupportsImage,
       emailDraftStylePrompt: form.emailDraftStylePrompt,
       taskDoneNotificationEnabled: form.taskDoneNotificationEnabled,
-      openAtLogin: form.openAtLogin,
-      closeToTrayEnabled: form.closeToTrayEnabled,
+      ...(windowsBackground ? {} : {
+        openAtLogin: form.openAtLogin,
+        closeToTrayEnabled: form.closeToTrayEnabled,
+      }),
       uiThemeMode: form.uiThemeMode,
     })
     applySnapshot(result.settings)
@@ -685,16 +692,32 @@ async function onExploreIntensityChange(): Promise<void> {
   }
 }
 
+function applyStartup(prefs: StartupPreferences) {
+  form.openAtLogin = prefs.openAtLogin
+  form.closeAction = prefs.closeAction
+  form.backgroundMascotEnabled = prefs.backgroundMascotEnabled
+}
+
+async function saveBackground(patch: BackgroundUpdate) {
+  if (!window.ftcs || backgroundSaving.value) return
+  backgroundSaving.value = true
+  try {
+    applyStartup(await window.ftcs.setBackgroundPreferences(patch))
+    showToast('后台运行设置已保存', { tone: 'success' })
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '无法保存后台运行设置'
+    applyStartup(await window.ftcs.getSettings())
+  } finally { backgroundSaving.value = false }
+}
+
 async function onOpenAtLoginChange(): Promise<void> {
   if (!window.ftcs?.setOpenAtLogin) return
   try {
     const res = await window.ftcs.setOpenAtLogin(form.openAtLogin)
+    form.openAtLogin = res.openAtLogin
     if (res.ok) {
-      form.openAtLogin = res.openAtLogin
-      showToast(form.openAtLogin ? '已开启开机自启' : '已关闭开机自启', {
-        tone: 'success',
-      })
-    }
+      showToast(form.openAtLogin ? '已开启开机自启' : '已关闭开机自启', { tone: 'success' })
+    } else error.value = res.message || '无法更新开机自启。'
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   }
@@ -866,7 +889,10 @@ async function onR2SiteToggle(siteId: string, event: Event): Promise<void> {
   await loadR2Sites()
 }
 
+let removeBackgroundListener: (() => void) | undefined
+onUnmounted(() => removeBackgroundListener?.())
 onMounted(() => {
+  if (windowsBackground) removeBackgroundListener = window.ftcs?.onBackgroundPreferences(applyStartup)
   void loadSettings()
   void loadR2Sites()
   void refreshAppVersion()
@@ -1758,18 +1784,36 @@ async function onCheckUpdate(): Promise<void> {
           <div class="settings-block__title" style="margin-top: 8px">
             <h3>关闭窗口行为</h3>
           </div>
-          <p class="hint-line">
-            <Icon name="info" :size="12" />
-            开启后，点窗口「×」会隐藏到系统托盘（进程继续跑，便于定时任务）；完全退出请用托盘菜单「退出」。默认关闭；需要定时任务时可在线索页一键开启。勾选后立即生效。
-          </p>
-          <label class="settings-checkbox">
-            <input
-              v-model="form.closeToTrayEnabled"
-              type="checkbox"
-              @change="onCloseToTrayChange"
-            />
-            <span>关闭窗口时最小化到托盘</span>
-          </label>
+          <template v-if="windowsBackground">
+            <label class="settings-checkbox">
+              点窗口 × 时
+              <select v-model="form.closeAction" class="text-input" :disabled="backgroundSaving" @change="saveBackground({ closeAction: form.closeAction })">
+                <option value="ask">每次询问</option>
+                <option value="background">后台运行</option>
+                <option value="quit">退出 FTCS</option>
+              </select>
+            </label>
+            <label class="settings-checkbox">
+              <input v-model="form.backgroundMascotEnabled" type="checkbox" :disabled="backgroundSaving"
+                @change="saveBackground({ backgroundMascotEnabled: form.backgroundMascotEnabled })" />
+              后台运行时显示贸贸
+            </label>
+            <p class="hint-line">后台运行时邮箱继续同步，定时任务照常执行。点击贸贸或双击托盘图标可回到工作区。</p>
+          </template>
+          <template v-else>
+            <p class="hint-line">
+              <Icon name="info" :size="12" />
+              开启后，点窗口「×」会隐藏到系统托盘（进程继续跑，便于定时任务）；完全退出请用托盘菜单「退出」。默认关闭；需要定时任务时可在线索页一键开启。勾选后立即生效。
+            </p>
+            <label class="settings-checkbox">
+              <input
+                v-model="form.closeToTrayEnabled"
+                type="checkbox"
+                @change="onCloseToTrayChange"
+              />
+              <span>关闭窗口时最小化到托盘</span>
+            </label>
+          </template>
         </section>
 
         <hr class="settings-divider" />

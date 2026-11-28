@@ -1,3 +1,4 @@
+import type { BackgroundUpdate, StartupPreferences } from '../shared/background-preferences'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
 import type { CloudflareState, CloudflareAction } from './cloudflare/cloudflare-auth'
@@ -443,8 +444,15 @@ const api = {
     ipcRenderer.invoke(IPC.SETTINGS_SAVE, input),
   setOpenAtLogin: (
     enabled: boolean,
-  ): Promise<{ ok: boolean; openAtLogin: boolean }> =>
+  ): Promise<{ ok: boolean; openAtLogin: boolean; message?: string }> =>
     ipcRenderer.invoke(IPC.SETTINGS_SET_OPEN_AT_LOGIN, enabled),
+  setBackgroundPreferences: (patch: BackgroundUpdate): Promise<StartupPreferences> =>
+    ipcRenderer.invoke(IPC.SETTINGS_SET_BACKGROUND, patch),
+  onBackgroundPreferences: (callback: (value: StartupPreferences) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, value: StartupPreferences) => callback(value)
+    ipcRenderer.on(IPC.BACKGROUND_CHANGED, handler)
+    return () => ipcRenderer.removeListener(IPC.BACKGROUND_CHANGED, handler)
+  },
   setCloseToTray: (
     enabled: boolean,
   ): Promise<{ ok: boolean; closeToTrayEnabled: boolean }> =>

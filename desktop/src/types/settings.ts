@@ -1,3 +1,4 @@
+import type { BackgroundPreferences } from '../../shared/background-preferences'
 export type ChannelMode = 'official' | 'custom'
 
 export type OfficialModelsSource = 'gateway' | 'fallback' | 'none'
@@ -25,7 +26,7 @@ export interface OfficialUsageSnapshot {
 
 export type GoogleProxyMode = 'off' | 'system' | 'manual'
 
-export interface SettingsSnapshot {
+export interface SettingsSnapshot extends BackgroundPreferences {
   workspaceRoot: string
   channelMode: ChannelMode
   /** 是否已配置网关 sk（G1-02 写入） */

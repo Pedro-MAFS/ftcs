@@ -212,6 +212,9 @@ import {
   installDownloadedUpdate,
   retryUpdateDownload,
 } from './update/update-download'
+import { backgroundPreferences, backgroundUpdate, shouldShowBackgroundMascot, validBackgroundUpdate, type BackgroundUpdate } from '../shared/background-preferences'
+import { BackgroundController } from './tray/background-controller'
+import { MascotWindow } from './tray/mascot-window'
 import { createAppTray, destroyAppTray, showMainWindow } from './tray/app-tray'
 import {
   applyCloseToTrayEnabled,
@@ -219,6 +222,7 @@ import {
 } from './tray/close-to-tray'
 import {
   applyOpenAtLogin,
+  currentOpenAtLogin,
   shouldStartHidden,
   syncOpenAtLoginFromPrefs,
 } from './login/login-item'
@@ -335,6 +339,55 @@ let isCleaningUp = false
 let isQuitting = false
 /** 登录自启 / --hidden：创建后不强制 show */
 let startHidden = false
+const windowsBackground = process.platform === 'win32'
+const mascot = new MascotWindow({
+  open: () => showMainWindow(mainWindow),
+  hide: () => {
+    try { saveBackground({ backgroundMascotEnabled: false }) }
+    catch { dialog.showErrorBox('设置未保存', '无法保存贸贸的显示偏好，请重试。') }
+  },
+  quit: () => app.quit(),
+})
+
+function syncMascot() {
+  if (!windowsBackground || background.state !== 'background' || !mainWindow || mainWindow.isDestroyed() || !shouldShowBackgroundMascot(readUserPrefs())) {
+    mascot.dismiss()
+    return
+  }
+  try { mascot.show(mainWindow) }
+  catch (error) { mascot.dismiss(); console.warn('[mascot] 无法创建悬浮窗', error) }
+}
+
+function notifyBackgroundPreferences() {
+  const prefs = { ...backgroundPreferences(readUserPrefs()), openAtLogin: currentOpenAtLogin() }
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(IPC.BACKGROUND_CHANGED, prefs)
+  return prefs
+}
+
+function saveBackground(update: BackgroundUpdate, entering = false) {
+  const patch = backgroundUpdate(readUserPrefs(), update, entering)
+  if (Object.keys(patch).length) writeUserPrefs(patch)
+  syncMascot()
+  return notifyBackgroundPreferences()
+}
+
+const background = new BackgroundController({
+  closeAction: () => backgroundPreferences(readUserPrefs()).closeAction,
+  prompt: async signal => {
+    const { response, checkboxChecked } = await dialog.showMessageBox(mainWindow!, {
+      type: 'question', title: '关闭 FTCS', message: '关闭 FTCS 后，是否继续在后台运行？',
+      detail: '后台运行时，邮箱会继续同步，定时任务会按计划执行。',
+      buttons: ['后台运行', '退出 FTCS', '取消'], defaultId: 0, cancelId: 2, noLink: true,
+      checkboxLabel: '记住我的选择', checkboxChecked: false, signal,
+    })
+    return { action: response === 0 ? 'background' : response === 1 ? 'quit' : 'cancel', remember: checkboxChecked }
+  },
+  save: saveBackground,
+  enter: () => { mainWindow?.hide(); syncMascot() },
+  dismissMascot: () => mascot.dismiss(),
+  quit: () => app.quit(),
+  error: () => dialog.showErrorBox('关窗操作失败', '请检查设置后重试。'),
+})
 
 async function reloadOpenCodeRuntime(): Promise<void> {
   if (!runtime) runtime = new OpenCodeRuntime({ taskReceiver: getAgentRunner })
@@ -462,7 +515,7 @@ async function createWindow(): Promise<void> {
   let shown = false
   const showOnce = (reason: string): void => {
     if (shown || win.isDestroyed()) return
-    if (startHidden) {
+    if (startHidden || (windowsBackground && background.state !== 'foreground')) {
       shown = true
       console.log('[window] keep hidden (tray / login)', reason)
       return
@@ -498,9 +551,19 @@ async function createWindow(): Promise<void> {
     onMainWindowBackgrounded()
   })
 
+  if (windowsBackground) {
+    win.on('show', () => background.foreground())
+    win.on('restore', () => background.foreground())
+    syncMascot()
+  }
   let closingAfterSave = false
   win.on('close', (event) => {
     if (isQuitting) return
+    if (windowsBackground) {
+      event.preventDefault()
+      void background.close()
+      return
+    }
     if (isCloseToTrayEnabled()) {
       event.preventDefault()
       win.hide()
@@ -548,7 +611,7 @@ function forceWin32WindowPaint(win: BrowserWindow): void {
     setTimeout(() => {
       if (!win.isDestroyed()) {
         win.setOpacity(prev > 0 ? prev : 1)
-        win.focus()
+        if (win.isVisible() && !win.isMinimized()) win.focus()
       }
     }, 32)
   } catch (err) {
@@ -678,7 +741,7 @@ function broadcastAuthChanged(): void {
 
 function broadcastToWindows(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue
+    if (win.isDestroyed() || mascot.owns(win)) continue
     try {
       win.webContents.send(channel, payload)
     } catch {
@@ -1152,11 +1215,29 @@ function registerIpcHandlers(): void {
     const saved = writeUserPrefs({ mainViewLayout: next })
     return storedMainViewLayout(saved.mainViewLayout)
   })
-  ipcMain.handle(IPC.SETTINGS_SET_OPEN_AT_LOGIN, (_event, enabled: boolean) => {
-    applyOpenAtLogin(Boolean(enabled))
-    return { ok: true as const, openAtLogin: Boolean(enabled) }
+  function checkSettingsSender(event: Electron.IpcMainInvokeEvent) {
+    if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame)
+      throw new Error('请从 FTCS 主窗口修改后台设置。')
+  }
+  ipcMain.handle(IPC.SETTINGS_SET_OPEN_AT_LOGIN, (event, enabled: unknown) => {
+    checkSettingsSender(event)
+    if (typeof enabled !== 'boolean') throw new Error('无效的开机自启设置。')
+    try {
+      applyOpenAtLogin(enabled)
+      notifyBackgroundPreferences()
+      return { ok: true, openAtLogin: enabled }
+    } catch (error) {
+      return { ok: false, openAtLogin: currentOpenAtLogin(), message: error instanceof Error ? error.message : '无法更新开机自启。' }
+    }
   })
-  ipcMain.handle(IPC.SETTINGS_SET_CLOSE_TO_TRAY, (_event, enabled: boolean) => {
+  ipcMain.handle(IPC.SETTINGS_SET_BACKGROUND, (event, patch: unknown) => {
+    checkSettingsSender(event)
+    if (!windowsBackground || !validBackgroundUpdate(patch)) throw new Error('无效的后台运行设置。')
+    return saveBackground(patch)
+  })
+  ipcMain.handle(IPC.SETTINGS_SET_CLOSE_TO_TRAY, (event, enabled: boolean) => {
+    checkSettingsSender(event)
+    if (windowsBackground) throw new Error('请使用新版关闭窗口设置。')
     applyCloseToTrayEnabled(Boolean(enabled))
     return { ok: true as const, closeToTrayEnabled: Boolean(enabled) }
   })
@@ -2291,15 +2372,13 @@ app.whenReady().then(async () => {
   mailbox.start()
 
   startHidden = shouldStartHidden()
+  if (startHidden && windowsBackground) background.state = 'background'
   syncOpenAtLoginFromPrefs()
 
   createAppTray(
     {
       onShow: () => showMainWindow(mainWindow),
-      onQuit: () => {
-        isQuitting = true
-        app.quit()
-      },
+      onQuit: () => app.quit(),
     },
     getAppIconPath(),
   )
@@ -2318,8 +2397,9 @@ app.whenReady().then(async () => {
   })
 
   app.on('activate', async () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
       startHidden = false
+      background.foreground()
       await createWindow()
     } else {
       showMainWindow(mainWindow)
@@ -2342,15 +2422,18 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   if (isCleaningUp) return
   isCleaningUp = true
+  background.beginQuit()
 
   void (async () => {
     try {
       await flushMailDrafts()
-    } catch {
+      background.savedDrafts()
+    } catch (error) {
+      background.cancelQuit()
       isCleaningUp = false
       isQuitting = false
       showMainWindow(mainWindow)
-      dialog.showErrorBox('草稿保存失败', '请在邮箱中处理草稿保存错误后重新退出。')
+      dialog.showErrorBox('无法退出 FTCS', `保存草稿或关窗设置失败，请处理后重试。\n${error instanceof Error ? error.message : ''}`)
       return
     }
     isQuitting = true

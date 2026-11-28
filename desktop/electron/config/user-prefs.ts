@@ -3,8 +3,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { BusinessGuideState, OnboardingState } from '../ipc/types'
 import type { MainViewLayout } from './main-view-layout'
+import type { CloseAction } from '../../shared/background-preferences'
 
 interface UserPrefs {
+  closeAction?: CloseAction
+  backgroundMascotEnabled?: boolean
+  mascotPosition?: { x: number; y: number }
   workspaceRoot?: string
   /** 一键准备的 Node.js 可执行文件绝对路径 */
   nodePath?: string

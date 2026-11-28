@@ -11,6 +11,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
+    "test:background": "node --test tests/background.test.ts",
     "test:site": "node --test electron/site/site-project.test.ts electron/site/site-runtime.test.ts electron/site/site-agent-actions.test.ts electron/tasks/site-bridge.test.ts electron/site/site-node-resolution.test.ts electron/browser-runtime/cdp-filter.test.ts",
     "test:github": "node --test electron/github/github-auth.test.ts electron/github/github-repositories.test.ts",
     "test:publish": "node --test electron/site/site-release-flow.test.ts electron/site/site-publish.test.ts electron/github/github-repositories.test.ts electron/cloudflare/cloudflare-pages.test.ts",
@@ -70,6 +71,12 @@
       "package.json"
     ],
     "extraResources": [
+      { "from": "resources/mascot", "to": "mascot" },
+      {
+        "from": "../ftcs-mascot-icons/sprites",
+        "to": "mascot/sprites",
+        "filter": ["ftcs-mascot-idle.png", "ftcs-mascot-blink.png"]
+      },
       {
         "from": "site-template",
         "to": "site-template",
