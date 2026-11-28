@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { backgroundPreferences, validBackgroundUpdate } from '../shared/background-preferences.ts'
 import { BackgroundController } from '../electron/tray/background-controller.ts'
+import { ClosePrompt } from '../electron/tray/close-prompt.ts'
 import { mascotBounds, placeMascot } from '../electron/tray/mascot-position.ts'
 
 test('mascot defaults on independently of legacy and current close actions; an explicit opt-out persists', () => {
@@ -19,6 +20,26 @@ test('mascot defaults on independently of legacy and current close actions; an e
   const prefs = { closeAction: 'ask', closeToTrayEnabled: true, backgroundMascotEnabled: true }
   assert.deepEqual(backgroundPreferences(prefs), { closeAction: 'ask', backgroundMascotEnabled: true })
   assert.deepEqual(backgroundPreferences({ closeAction: 'invalid', backgroundMascotEnabled: 1 }), backgroundPreferences({}))
+})
+
+test('only the active close prompt accepts a choice and abort dismisses the renderer dialog', async () => {
+  const prompt = new ClosePrompt()
+  const seen: Array<number | null> = []
+  const notify = () => seen.push(prompt.id)
+  const abort = new AbortController()
+  const first = prompt.request(abort.signal, notify)
+  const stale = prompt.id
+  abort.abort()
+  assert.deepEqual(await first, { action: 'cancel', remember: false })
+  const next = prompt.request(new AbortController().signal, notify)
+  const current = prompt.id
+  prompt.reply(stale, 'quit', true)
+  prompt.reply(current, 'other', true)
+  prompt.reply(current, 'background', 'yes')
+  assert.equal(prompt.id, current)
+  prompt.reply(current, 'background', true)
+  assert.deepEqual(await next, { action: 'background', remember: true })
+  assert.deepEqual(seen, [stale, null, current, null])
 })
 
 test('only explicit supported preference fields are accepted', () => {

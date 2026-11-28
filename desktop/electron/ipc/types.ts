@@ -42,6 +42,8 @@ export const IPC = {
   SETTINGS_SET_OPEN_AT_LOGIN: 'settings:set-open-at-login',
   SETTINGS_SET_BACKGROUND: 'settings:set-background',
   BACKGROUND_CHANGED: 'settings:background-changed',
+  CLOSE_PROMPT: 'app:close-prompt',
+  CLOSE_PROMPT_REPLY: 'app:close-prompt-reply',
   SETTINGS_SET_CLOSE_TO_TRAY: 'settings:set-close-to-tray',
   SETTINGS_SET_UI_THEME: 'settings:set-ui-theme',
   SETTINGS_SET_EXPLORE_INTENSITY: 'settings:set-explore-intensity',

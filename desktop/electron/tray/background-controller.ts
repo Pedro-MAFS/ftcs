@@ -1,6 +1,5 @@
-import type { BackgroundUpdate, CloseAction } from '../../shared/background-preferences'
+import type { BackgroundUpdate, CloseAction, CloseChoice } from '../../shared/background-preferences'
 
-interface CloseChoice { action: 'background' | 'quit' | 'cancel'; remember: boolean }
 interface BackgroundHooks {
   closeAction(): CloseAction
   prompt(signal: AbortSignal): Promise<CloseChoice>

@@ -215,6 +215,7 @@ import {
 import { backgroundPreferences, validBackgroundUpdate, type BackgroundUpdate } from '../shared/background-preferences'
 import { BackgroundController } from './tray/background-controller'
 import { MascotWindow } from './tray/mascot-window'
+import { ClosePrompt } from './tray/close-prompt'
 import { createAppTray, destroyAppTray, showMainWindow } from './tray/app-tray'
 import {
   applyCloseToTrayEnabled,
@@ -370,16 +371,22 @@ function saveBackground(update: BackgroundUpdate) {
   return notifyBackgroundPreferences()
 }
 
+const closePrompt = new ClosePrompt()
+
+function notifyClosePrompt() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const contents = mainWindow.webContents
+  if (!contents.isDestroyed() && !contents.isCrashed()) {
+    contents.send(IPC.CLOSE_PROMPT, closePrompt.id)
+  }
+}
+
 const background = new BackgroundController({
   closeAction: () => backgroundPreferences(readUserPrefs()).closeAction,
-  prompt: async signal => {
-    const { response, checkboxChecked } = await dialog.showMessageBox(mainWindow!, {
-      type: 'question', title: '关闭 FTCS', message: '关闭 FTCS 后，是否继续在后台运行？',
-      detail: '后台运行时，邮箱会继续同步，定时任务会按计划执行。',
-      buttons: ['后台运行', '退出 FTCS', '取消'], defaultId: 0, cancelId: 2, noLink: true,
-      checkboxLabel: '记住我的选择', checkboxChecked: false, signal,
-    })
-    return { action: response === 0 ? 'background' : response === 1 ? 'quit' : 'cancel', remember: checkboxChecked }
+  prompt: signal => {
+    showMainWindow(mainWindow)
+    if (mainWindow?.webContents.isCrashed()) mainWindow.webContents.reload()
+    return closePrompt.request(signal, notifyClosePrompt)
   },
   save: saveBackground,
   enter: () => { mainWindow?.hide(); syncMascot() },
@@ -551,6 +558,15 @@ async function createWindow(): Promise<void> {
   })
 
   if (windowsBackground) {
+    win.webContents.ipc.on(IPC.CLOSE_PROMPT, event => {
+      if (win === mainWindow && event.senderFrame === win.webContents.mainFrame) notifyClosePrompt()
+    })
+    win.webContents.ipc.on(IPC.CLOSE_PROMPT_REPLY, (event, id, action, remember) => {
+      if (win === mainWindow && event.senderFrame === win.webContents.mainFrame) closePrompt.reply(id, action, remember)
+    })
+    const cancelPrompt = () => closePrompt.reply(closePrompt.id, 'cancel', false)
+    win.webContents.on('render-process-gone', cancelPrompt)
+    win.once('closed', cancelPrompt)
     win.on('hide', () => background.windowVisibilityChanged(false))
     win.on('minimize', () => background.windowVisibilityChanged(false))
     win.on('show', () => background.windowVisibilityChanged(!win.isMinimized()))
@@ -562,6 +578,10 @@ async function createWindow(): Promise<void> {
     if (isQuitting) return
     if (windowsBackground) {
       event.preventDefault()
+      if (background.state === 'prompting') {
+        showMainWindow(win)
+        return
+      }
       void background.close()
       return
     }

@@ -7,6 +7,7 @@ import { useBusinessGuide } from './composables/useBusinessGuide'
 import InboxToast from './components/inbox/InboxToast.vue'
 import AppToast from './components/shared/AppToast.vue'
 import ConfirmDialog from './components/shared/ConfirmDialog.vue'
+import CloseWindowDialog from './components/layout/CloseWindowDialog.vue'
 import { useAuth } from './composables/useAuth'
 import { useInbox } from './composables/useInbox'
 import { useScheduleRunner } from './composables/useScheduleRunner'
@@ -46,6 +47,7 @@ onMounted(async () => {
     <BusinessGuideOverlay />
     <AppToast />
     <InboxToast />
+    <CloseWindowDialog />
     <ConfirmDialog
       :open="gatewayResetPromptOpen"
       title="检测到账号已切换"

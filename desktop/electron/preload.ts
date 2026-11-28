@@ -1,4 +1,4 @@
-import type { BackgroundUpdate, StartupPreferences } from '../shared/background-preferences'
+import type { BackgroundUpdate, CloseChoice, StartupPreferences } from '../shared/background-preferences'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC } from './ipc/types'
 import type { CloudflareState, CloudflareAction } from './cloudflare/cloudflare-auth'
@@ -453,6 +453,14 @@ const api = {
     ipcRenderer.on(IPC.BACKGROUND_CHANGED, handler)
     return () => ipcRenderer.removeListener(IPC.BACKGROUND_CHANGED, handler)
   },
+  onClosePrompt: (callback: (id: number | null) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, id: number | null) => callback(id)
+    ipcRenderer.on(IPC.CLOSE_PROMPT, handler)
+    ipcRenderer.send(IPC.CLOSE_PROMPT)
+    return () => ipcRenderer.removeListener(IPC.CLOSE_PROMPT, handler)
+  },
+  answerClosePrompt: (id: number, action: CloseChoice['action'], remember: boolean) =>
+    ipcRenderer.send(IPC.CLOSE_PROMPT_REPLY, id, action, remember),
   setCloseToTray: (
     enabled: boolean,
   ): Promise<{ ok: boolean; closeToTrayEnabled: boolean }> =>

@@ -1,4 +1,5 @@
 export type CloseAction = 'ask' | 'background' | 'quit'
+export interface CloseChoice { action: 'background' | 'quit' | 'cancel'; remember: boolean }
 
 export interface BackgroundPreferences {
   closeAction: CloseAction
