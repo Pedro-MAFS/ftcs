@@ -1796,7 +1796,7 @@ async function onCheckUpdate(): Promise<void> {
             <label class="settings-checkbox">
               <input v-model="form.backgroundMascotEnabled" type="checkbox" :disabled="backgroundSaving"
                 @change="saveBackground({ backgroundMascotEnabled: form.backgroundMascotEnabled })" />
-              后台运行时显示贸贸
+              主窗口最小化或隐藏时显示贸贸
             </label>
             <p class="hint-line">后台运行时邮箱继续同步，定时任务照常执行。点击贸贸或双击托盘图标可回到工作区。</p>
           </template>

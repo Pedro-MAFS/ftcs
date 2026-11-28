@@ -75,7 +75,7 @@
       {
         "from": "../ftcs-mascot-icons/sprites",
         "to": "mascot/sprites",
-        "filter": ["ftcs-mascot-idle.png", "ftcs-mascot-blink.png"]
+        "filter": ["ftcs-mascot-idle.png", "ftcs-mascot-blink.png", "ftcs-mascot-talk.png"]
       },
       {
         "from": "site-template",

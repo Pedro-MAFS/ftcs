@@ -212,7 +212,7 @@ import {
   installDownloadedUpdate,
   retryUpdateDownload,
 } from './update/update-download'
-import { backgroundPreferences, backgroundUpdate, shouldShowBackgroundMascot, validBackgroundUpdate, type BackgroundUpdate } from '../shared/background-preferences'
+import { backgroundPreferences, validBackgroundUpdate, type BackgroundUpdate } from '../shared/background-preferences'
 import { BackgroundController } from './tray/background-controller'
 import { MascotWindow } from './tray/mascot-window'
 import { createAppTray, destroyAppTray, showMainWindow } from './tray/app-tray'
@@ -350,7 +350,7 @@ const mascot = new MascotWindow({
 })
 
 function syncMascot() {
-  if (!windowsBackground || background.state !== 'background' || !mainWindow || mainWindow.isDestroyed() || !shouldShowBackgroundMascot(readUserPrefs())) {
+  if (!windowsBackground || !background.canShowMascot || !mainWindow || mainWindow.isDestroyed() || !backgroundPreferences(readUserPrefs()).backgroundMascotEnabled) {
     mascot.dismiss()
     return
   }
@@ -364,9 +364,8 @@ function notifyBackgroundPreferences() {
   return prefs
 }
 
-function saveBackground(update: BackgroundUpdate, entering = false) {
-  const patch = backgroundUpdate(readUserPrefs(), update, entering)
-  if (Object.keys(patch).length) writeUserPrefs(patch)
+function saveBackground(update: BackgroundUpdate) {
+  writeUserPrefs(update)
   syncMascot()
   return notifyBackgroundPreferences()
 }
@@ -384,7 +383,7 @@ const background = new BackgroundController({
   },
   save: saveBackground,
   enter: () => { mainWindow?.hide(); syncMascot() },
-  dismissMascot: () => mascot.dismiss(),
+  syncMascot,
   quit: () => app.quit(),
   error: () => dialog.showErrorBox('关窗操作失败', '请检查设置后重试。'),
 })
@@ -552,8 +551,10 @@ async function createWindow(): Promise<void> {
   })
 
   if (windowsBackground) {
-    win.on('show', () => background.foreground())
-    win.on('restore', () => background.foreground())
+    win.on('hide', () => background.windowVisibilityChanged(false))
+    win.on('minimize', () => background.windowVisibilityChanged(false))
+    win.on('show', () => background.windowVisibilityChanged(!win.isMinimized()))
+    win.on('restore', () => background.windowVisibilityChanged(win.isVisible()))
     syncMascot()
   }
   let closingAfterSave = false
@@ -2399,7 +2400,7 @@ app.whenReady().then(async () => {
   app.on('activate', async () => {
     if (!mainWindow || mainWindow.isDestroyed()) {
       startHidden = false
-      background.foreground()
+      background.windowVisibilityChanged(true)
       await createWindow()
     } else {
       showMainWindow(mainWindow)

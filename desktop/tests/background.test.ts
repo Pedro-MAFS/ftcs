@@ -1,21 +1,23 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { backgroundPreferences, backgroundUpdate, shouldShowBackgroundMascot, validBackgroundUpdate } from '../shared/background-preferences.ts'
+import { backgroundPreferences, validBackgroundUpdate } from '../shared/background-preferences.ts'
 import { BackgroundController } from '../electron/tray/background-controller.ts'
-import { placeMascot } from '../electron/tray/mascot-position.ts'
+import { mascotBounds, placeMascot } from '../electron/tray/mascot-position.ts'
 
-test('migration keeps old tray users quiet and treats a saved false as undecided', () => {
+test('mascot defaults on independently of legacy and current close actions; an explicit opt-out persists', () => {
   for (const legacy of [undefined, false, true]) {
     const stored = { closeToTrayEnabled: legacy }
     assert.equal(backgroundPreferences(stored).closeAction, legacy ? 'background' : 'ask')
-    assert.equal(shouldShowBackgroundMascot(stored), false)
-    const afterVisit = { ...stored, ...backgroundUpdate(stored, {}, true) }
-    assert.equal(shouldShowBackgroundMascot(afterVisit), !legacy)
-    assert.equal(backgroundPreferences(afterVisit).closeAction, legacy ? 'background' : 'ask')
+    assert.equal(backgroundPreferences(stored).backgroundMascotEnabled, true)
+    for (const closeAction of ['ask', 'background', 'quit']) {
+      for (const enabled of [undefined, false, true]) {
+        const raw = { ...stored, closeAction, backgroundMascotEnabled: enabled }
+        assert.deepEqual(backgroundPreferences(raw), { closeAction, backgroundMascotEnabled: enabled ?? true })
+      }
+    }
   }
   const prefs = { closeAction: 'ask', closeToTrayEnabled: true, backgroundMascotEnabled: true }
   assert.deepEqual(backgroundPreferences(prefs), { closeAction: 'ask', backgroundMascotEnabled: true })
-  assert.deepEqual(backgroundUpdate({ backgroundMascotEnabled: false }, { closeAction: 'background' }), { closeAction: 'background' })
   assert.deepEqual(backgroundPreferences({ closeAction: 'invalid', backgroundMascotEnabled: 1 }), backgroundPreferences({}))
 })
 
@@ -40,9 +42,9 @@ function fixture() {
       prompts.push('dialog')
       return new Promise(resolve => { decide = resolve })
     },
-    save: (patch, entering) => calls.push('save:' + JSON.stringify(patch) + (entering ? ':entering' : '')),
+    save: patch => calls.push('save:' + JSON.stringify(patch)),
     enter: () => calls.push('background'),
-    dismissMascot: () => calls.push('dismiss'),
+    syncMascot: () => calls.push('syncMascot'),
     quit: () => calls.push('quit'),
     error: () => calls.push('error'),
   }
@@ -61,24 +63,43 @@ test('repeated close opens one prompt; Cancel ignores the checkbox, background c
   f.decide({ action: 'background', remember: false })
   await second
   assert.equal(f.control.state, 'background')
-  assert.deepEqual(f.calls, ['save:{}:entering', 'background'])
-  f.control.foreground()
+  assert.deepEqual(f.calls, ['background'])
+  f.control.windowVisibilityChanged(true)
   assert.equal(f.control.state, 'foreground')
   const third = f.control.close()
   f.decide({ action: 'background', remember: true })
   await third
-  assert.deepEqual(f.calls.slice(-2), ['save:{"closeAction":"background"}:entering', 'background'])
+  assert.deepEqual(f.calls.slice(-2), ['save:{"closeAction":"background"}', 'background'])
+})
+
+test('minimizing shows the mascot and restoring dismisses it without changing close behavior', async () => {
+  const f = fixture()
+  assert.equal(f.control.canShowMascot, false)
+  f.control.windowVisibilityChanged(false)
+  assert.equal(f.control.canShowMascot, true)
+  assert.equal(f.control.state, 'foreground')
+  f.control.windowVisibilityChanged(true)
+  assert.equal(f.control.canShowMascot, false)
+  assert.deepEqual(f.calls, ['syncMascot', 'syncMascot'])
+  f.control.windowVisibilityChanged(false)
+  const close = f.control.close()
+  assert.deepEqual(f.prompts, ['dialog'])
+  f.decide({ action: 'cancel', remember: false })
+  await close
+  f.control.beginQuit()
+  f.control.windowVisibilityChanged(false)
+  assert.equal(f.control.canShowMascot, false)
 })
 
 test('remembered background and exit go straight to their respective actions', async () => {
   const f = fixture()
   f.hooks.closeAction = () => 'background'
   await f.control.close()
-  f.control.foreground()
+  f.control.windowVisibilityChanged(true)
   f.hooks.closeAction = () => 'quit'
   await f.control.close()
   assert.equal(f.prompts.length, 0)
-  assert.deepEqual(f.calls, ['save:{}:entering', 'background', 'dismiss', 'quit'])
+  assert.deepEqual(f.calls, ['background', 'syncMascot', 'quit'])
 })
 
 test('explicit quit aborts the prompt; a late choice cannot hide the main window', async () => {
@@ -90,7 +111,7 @@ test('explicit quit aborts the prompt; a late choice cannot hide the main window
   f.decide({ action: 'background', remember: true })
   await visit
   assert.equal(f.control.state, 'foreground')
-  assert.deepEqual(f.calls, ['dismiss'])
+  assert.deepEqual(f.calls, ['syncMascot'])
 })
 
 test('remember exit only after drafts have flushed; failed flush leaves choice pending next time', async () => {
@@ -104,7 +125,7 @@ test('remember exit only after drafts have flushed; failed flush leaves choice p
     if (saved) f.control.savedDrafts()
     else f.control.cancelQuit()
   }
-  assert.deepEqual(f.calls, ['quit', 'dismiss', 'quit', 'dismiss', 'save:{"closeAction":"quit"}'])
+  assert.deepEqual(f.calls, ['quit', 'syncMascot', 'quit', 'syncMascot', 'save:{"closeAction":"quit"}'])
 })
 
 test('preference write failure keeps the work area visible', async () => {
@@ -125,5 +146,12 @@ test('mascot uses logical desktop coordinates and returns to reachable bounds', 
   assert.deepEqual(placeMascot({ x: -60, y: 0 }, [main, left], main), { x: -72, y: 0 })
   for (const point of [{ x: -800, y: 150 }, { x: NaN, y: 7 }]) {
     assert.deepEqual(placeMascot(point, [main], main), { x: 912, y: 712 })
+  }
+})
+
+test('moving the mascot always supplies its design size, even after reading rounded window bounds', () => {
+  for (const x of [101, 102, 103, -130]) {
+    const previousBounds = { x, y: 51, width: 73, height: 74 }
+    assert.deepEqual(mascotBounds(previousBounds), { x, y: 51, width: 72, height: 72 })
   }
 })

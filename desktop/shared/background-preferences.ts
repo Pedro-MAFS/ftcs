@@ -29,19 +29,6 @@ export function backgroundPreferences(raw: StoredPreferences): BackgroundPrefere
   const legacyTray = raw.closeToTrayEnabled === true
   return {
     closeAction: validAction(raw.closeAction) ? raw.closeAction : legacyTray ? 'background' : 'ask',
-    backgroundMascotEnabled: typeof raw.backgroundMascotEnabled === 'boolean' ? raw.backgroundMascotEnabled : !legacyTray,
+    backgroundMascotEnabled: raw.backgroundMascotEnabled !== false,
   }
-}
-
-export function shouldShowBackgroundMascot(raw: StoredPreferences): boolean {
-  if (typeof raw.backgroundMascotEnabled === 'boolean') return raw.backgroundMascotEnabled
-  return raw.closeAction === 'background' && backgroundPreferences(raw).backgroundMascotEnabled
-}
-
-/** A single background visit initializes the mascot preference independently of remembering closeAction. */
-export function backgroundUpdate(raw: StoredPreferences, patch: BackgroundUpdate, entering = false): BackgroundUpdate {
-  if (typeof raw.backgroundMascotEnabled !== 'boolean' && (entering || patch.closeAction === 'background')) {
-    return { backgroundMascotEnabled: backgroundPreferences(raw).backgroundMascotEnabled, ...patch }
-  }
-  return patch
 }

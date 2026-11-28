@@ -4,9 +4,9 @@ interface CloseChoice { action: 'background' | 'quit' | 'cancel'; remember: bool
 interface BackgroundHooks {
   closeAction(): CloseAction
   prompt(signal: AbortSignal): Promise<CloseChoice>
-  save(update: BackgroundUpdate, entering?: boolean): void
+  save(update: BackgroundUpdate): void
   enter(): void
-  dismissMascot(): void
+  syncMascot(): void
   quit(): void
   error(error: unknown): void
 }
@@ -15,14 +15,19 @@ export class BackgroundController {
   state: 'foreground' | 'prompting' | 'background' | 'quitting' = 'foreground'
   private prompt?: AbortController
   private rememberExit = false
+  private mainWindowHiddenOrMinimized = false
 
   private readonly hooks: BackgroundHooks
   constructor(hooks: BackgroundHooks) { this.hooks = hooks }
 
-  foreground() {
-    if (this.state === 'quitting') return
-    if (this.state === 'background') this.state = 'foreground'
-    this.hooks.dismissMascot()
+  get canShowMascot() {
+    return this.state !== 'quitting' && (this.state === 'background' || this.mainWindowHiddenOrMinimized)
+  }
+
+  windowVisibilityChanged(visible: boolean) {
+    this.mainWindowHiddenOrMinimized = !visible
+    if (visible && this.state === 'background') this.state = 'foreground'
+    this.hooks.syncMascot()
   }
 
   async close() {
@@ -39,7 +44,7 @@ export class BackgroundController {
       this.prompt = undefined
       this.state = 'foreground'
       if (choice.action === 'background') {
-        this.hooks.save(choice.remember ? { closeAction: 'background' } : {}, true)
+        if (choice.remember) this.hooks.save({ closeAction: 'background' })
         this.state = 'background'
         this.hooks.enter()
       } else if (choice.action === 'quit') {
@@ -58,7 +63,7 @@ export class BackgroundController {
     this.state = 'quitting'
     this.prompt?.abort()
     this.prompt = undefined
-    this.hooks.dismissMascot()
+    this.hooks.syncMascot()
   }
   savedDrafts() {
     if (this.rememberExit) this.hooks.save({ closeAction: 'quit' })

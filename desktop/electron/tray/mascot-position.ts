@@ -2,6 +2,10 @@ import type { Point, Rectangle } from 'electron'
 
 export const mascotSize = 72
 
+export function mascotBounds({ x, y }: Point): Rectangle {
+  return { x, y, width: mascotSize, height: mascotSize }
+}
+
 export function placeMascot(position: Point | undefined, areas: Rectangle[], fallback: Rectangle): Point {
   let area: Rectangle | undefined
   let bestOverlap = 0

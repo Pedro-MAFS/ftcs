@@ -1,10 +1,12 @@
-html, body, button { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
-button { display: block; position: relative; padding: 0; border: 0; cursor: pointer; touch-action: none; user-select: none; }
-img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-#blink { opacity: 0; }
+html, body { margin: 0; overflow: hidden; background: transparent; }
+button { display: block; position: relative; width: 72px; height: 72px; padding: 0; border: 0; background: transparent; cursor: pointer; touch-action: none; user-select: none; }
+img { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; visibility: hidden; }
+button[data-face="idle"] #idle,
+button[data-face="blink"] #blink,
+button[data-face="talk"] #talk { visibility: visible; }
 @media (prefers-reduced-motion: no-preference) {
-  #blink { animation: blink 5s step-end infinite; }
-  #idle { animation: idle 5s step-end infinite; }
+  button[data-side="left"] { --tilt: -4deg; }
+  button[data-side="right"] { --tilt: 4deg; }
+  button[data-face="talk"] #talk { animation: greet 160ms ease-out forwards; }
+  @keyframes greet { from { transform: rotate(0deg); } to { transform: rotate(var(--tilt)); } }
 }
-@keyframes blink { 0%, 100% { opacity: 0; } 96% { opacity: 1; } }
-@keyframes idle { 0%, 100% { opacity: 1; } 96% { opacity: 0; } }

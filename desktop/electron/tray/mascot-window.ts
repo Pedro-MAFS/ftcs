@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { allowCreatedWebContentsDuring } from '../browser-runtime/builtin-browser-window'
 import { getRepoRoot } from '../config/paths'
 import { readUserPrefs, writeUserPrefs } from '../config/user-prefs'
-import { mascotSize, placeMascot } from './mascot-position'
+import { mascotBounds, placeMascot } from './mascot-position'
 
 export class MascotWindow {
   private window: BrowserWindow | null = null
@@ -28,7 +28,7 @@ export class MascotWindow {
     const fallback = saved ? screen.getPrimaryDisplay() : screen.getDisplayMatching(main.getBounds())
     const position = placeMascot(saved, screen.getAllDisplays().map(d => d.workArea), fallback.workArea)
     const win = allowCreatedWebContentsDuring(() => new BrowserWindow({
-      ...position, width: mascotSize, height: mascotSize, show: false, transparent: true,
+      ...mascotBounds(position), show: false, transparent: true,
       frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
       skipTaskbar: true, alwaysOnTop: true, hasShadow: false, autoHideMenuBar: true,
       webPreferences: { preload: path.join(dir, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false },
@@ -38,7 +38,7 @@ export class MascotWindow {
     const constrain = () => {
       if (!this.owns(win)) return
       const p = placeMascot(win.getBounds(), screen.getAllDisplays().map(d => d.workArea), screen.getPrimaryDisplay().workArea)
-      win.setPosition(p.x, p.y)
+      win.setBounds(mascotBounds(p))
     }
     screen.on('display-removed', constrain)
     screen.on('display-metrics-changed', constrain)
@@ -65,7 +65,10 @@ export class MascotWindow {
     win.webContents.ipc.on('mascot:action', (event, action: unknown) => {
       if (!this.owns(win) || event.senderFrame !== win.webContents.mainFrame) return
       switch (action) {
-        case 'ready': win.showInactive(); return
+        case 'ready':
+          win.showInactive()
+          win.webContents.send('mascot:shown')
+          return
         case 'failed': failed('无法显示动画素材'); return
         case 'open': this.actions.open(); return
         case 'menu': gesture = undefined; menu.popup({ window: win }); return
@@ -80,7 +83,7 @@ export class MascotWindow {
           const dx = cursor.x - gesture.cursor.x
           const dy = cursor.y - gesture.cursor.y
           if (Math.hypot(dx, dy) >= 5) gesture.dragged = true
-          if (gesture.dragged) win.setPosition(gesture.origin.x + dx, gesture.origin.y + dy)
+          if (gesture.dragged) win.setBounds(mascotBounds({ x: gesture.origin.x + dx, y: gesture.origin.y + dy }))
           if (action === 'up') {
             const dragged = gesture.dragged
             gesture = undefined
