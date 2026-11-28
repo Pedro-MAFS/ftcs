@@ -15,17 +15,28 @@ export class BackgroundController {
   private prompt?: AbortController
   private rememberExit = false
   private mainWindowHiddenOrMinimized = false
+  private mascotTemporarilyHidden = false
 
   private readonly hooks: BackgroundHooks
   constructor(hooks: BackgroundHooks) { this.hooks = hooks }
 
   get canShowMascot() {
-    return this.state !== 'quitting' && (this.state === 'background' || this.mainWindowHiddenOrMinimized)
+    return !this.mascotTemporarilyHidden && this.state !== 'quitting' &&
+      (this.state === 'background' || this.mainWindowHiddenOrMinimized)
+  }
+
+  temporarilyHideMascot() {
+    if (!this.canShowMascot) return
+    this.mascotTemporarilyHidden = true
+    this.hooks.syncMascot()
   }
 
   windowVisibilityChanged(visible: boolean) {
     this.mainWindowHiddenOrMinimized = !visible
-    if (visible && this.state === 'background') this.state = 'foreground'
+    if (visible) {
+      this.mascotTemporarilyHidden = false
+      if (this.state === 'background') this.state = 'foreground'
+    }
     this.hooks.syncMascot()
   }
 

@@ -343,10 +343,7 @@ let startHidden = false
 const windowsBackground = process.platform === 'win32'
 const mascot = new MascotWindow({
   open: () => showMainWindow(mainWindow),
-  hide: () => {
-    try { saveBackground({ backgroundMascotEnabled: false }) }
-    catch { dialog.showErrorBox('设置未保存', '无法保存贸贸的显示偏好，请重试。') }
-  },
+  hide: () => background.temporarilyHideMascot(),
   quit: () => app.quit(),
 })
 

@@ -58,7 +58,7 @@ export class MascotWindow {
     win.webContents.on('will-navigate', event => event.preventDefault())
     const menu = Menu.buildFromTemplate([
       { label: '打开工作区', click: this.actions.open },
-      { label: '隐藏贸贸', click: this.actions.hide },
+      { label: '暂时隐藏贸贸', click: this.actions.hide },
       { type: 'separator' },
       { label: '退出 FTCS', click: this.actions.quit },
     ])

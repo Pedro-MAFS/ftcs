@@ -112,6 +112,24 @@ test('minimizing shows the mascot and restoring dismisses it without changing cl
   assert.equal(f.control.canShowMascot, false)
 })
 
+test('temporarily hiding the mascot lasts until the main window is visible again', async () => {
+  const f = fixture()
+  f.hooks.closeAction = () => 'background'
+  for (const enter of [() => f.control.close(), () => f.control.windowVisibilityChanged(false)]) {
+    await enter()
+    assert.equal(f.control.canShowMascot, true)
+    f.control.temporarilyHideMascot()
+    assert.equal(f.control.canShowMascot, false)
+    f.control.windowVisibilityChanged(false)
+    assert.equal(f.control.canShowMascot, false)
+    f.control.windowVisibilityChanged(true)
+    assert.equal(f.control.canShowMascot, false)
+  }
+  await f.control.close()
+  assert.equal(f.control.canShowMascot, true)
+  assert.ok(!f.calls.some(call => call.startsWith('save:')))
+})
+
 test('remembered background and exit go straight to their respective actions', async () => {
   const f = fixture()
   f.hooks.closeAction = () => 'background'
