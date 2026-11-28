@@ -1548,38 +1548,45 @@ button:focus-visible {
   padding: 16px;
 }
 
+.home-view {
+  container-type: inline-size;
+  overflow-y: auto;
+  gap: 24px;
+  padding: 20px;
+}
+.home-view > section { flex: 0 0 auto; min-width: 0; }
+.home-view > .schedule-panel { margin: 0; background: var(--bg-panel); }
+.home-view h2 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
 .home-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  align-content: start;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
-
 .home-card {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  padding: 16px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  font-size: 13px;
   text-align: left;
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
 }
-
-.home-card:hover {
-  background: var(--bg-hover);
+.home-card .ui-icon { color: var(--accent); }
+.home-card:hover { background: var(--bg-hover); border-color: var(--border-focus); }
+.home-suggestions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
 }
-
-.home-card__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.home-card__detail {
-  font-size: 12px;
-  color: var(--text-muted);
+.home-suggestions .ui-icon, .home-suggestions p { color: var(--text-secondary); }
+.home-suggestions h2 { margin: 0; }
+.home-suggestions p { margin: 2px 0 0; font-size: 12px; }
+@container (max-width: 500px) {
+  .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .empty-view {

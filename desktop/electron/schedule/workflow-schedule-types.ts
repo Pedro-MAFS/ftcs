@@ -98,3 +98,19 @@ export function slotKey(scheduleId: string, due: Date): string {
   const mm = String(due.getMinutes()).padStart(2, '0')
   return `${scheduleId}|${y}-${m}-${d}|${hh}:${mm}`
 }
+
+/** 下一次计划时间，按本地日历计算，含尚未执行的当前分钟。 */
+export function nextScheduledAt(schedule: WorkflowSchedule, now: Date): Date | null {
+  if (!schedule.enabled || !isValidTimeLocal(schedule.timeLocal)) return null
+  const [hours, minutes] = schedule.timeLocal.split(':').map(Number)
+  const minuteStart = new Date(now).setSeconds(0, 0)
+  const lastRun = Date.parse(schedule.lastRunAt ?? '')
+  for (let offset = 0; offset <= 7; offset++) {
+    const date = new Date(now)
+    date.setDate(date.getDate() + offset)
+    if (schedule.recurrence === 'weekly' && date.getDay() !== schedule.weekday) continue
+    date.setHours(hours, minutes, 0, 0)
+    if (date.getTime() >= minuteStart && !(lastRun >= date.getTime())) return date
+  }
+  return null
+}

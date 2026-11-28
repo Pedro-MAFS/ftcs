@@ -4,10 +4,19 @@ import {
   computeLastDueAt,
   isDueNow,
   isValidTimeLocal,
+  nextScheduledAt,
   slotKey,
 } from './workflow-schedule-types.ts'
 
 describe('workflow-schedule-types', () => {
+  it('shows the next local daily or weekly slot, including Sunday and year rollover', () => {
+    const now = new Date(2026, 11, 31, 9, 0, 30)
+    const task = { id: 's', planId: 'plan', productId: 'p', enabled: true, recurrence: 'daily' as const, timeLocal: '09:00', createdAt: '', updatedAt: '' }
+    assert.deepEqual(nextScheduledAt(task, now), new Date(2026, 11, 31, 9))
+    assert.deepEqual(nextScheduledAt({ ...task, lastRunAt: now.toISOString() }, now), new Date(2027, 0, 1, 9))
+    assert.deepEqual(nextScheduledAt({ ...task, recurrence: 'weekly', weekday: 0 }, now), new Date(2027, 0, 3, 9))
+    assert.equal(nextScheduledAt({ ...task, enabled: false }, now), null)
+  })
   it('validates timeLocal', () => {
     assert.equal(isValidTimeLocal('09:00'), true)
     assert.equal(isValidTimeLocal('23:59'), true)

@@ -98,6 +98,7 @@ export function saveWorkflowSchedule(
   const now = new Date().toISOString()
   const existingId = input.id?.trim()
   const existing = existingId ? all.find((s) => s.id === existingId) : undefined
+  if (existingId && !existing) return { ok: false, message: '这条定时任务已删除，请取消编辑后重新新建。' }
 
   if (!existing && all.length >= WORKFLOW_SCHEDULE_MAX) {
     return { ok: false, message: `最多 ${WORKFLOW_SCHEDULE_MAX} 条定时任务` }

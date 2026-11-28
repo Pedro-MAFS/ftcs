@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import type {
   WorkflowPlan,
   WorkflowSchedule,
   WorkflowScheduleRecurrence,
 } from '../../types/electron'
 import { useWorkspace } from '../../composables/useWorkspace'
+import { useWorkflowSchedules } from '../../composables/useWorkflowSchedules'
+import { nextScheduledAt } from '../../../electron/schedule/workflow-schedule-types'
+import ConfirmDialog from '../shared/ConfirmDialog.vue'
 import Icon from '../shared/Icon.vue'
 
 const props = defineProps<{
@@ -15,8 +18,10 @@ const props = defineProps<{
 const { products, activeProductId } = useWorkspace()
 
 const windowsBackground = window.ftcs?.platform === 'win32'
-const schedules = ref<WorkflowSchedule[]>([])
-const loading = ref(false)
+const { schedules, loading, listError, reloadSchedules } = useWorkflowSchedules()
+const now = ref(new Date())
+const openMenu = ref<string | null>(null)
+const deleteTarget = ref<WorkflowSchedule | null>(null)
 const saving = ref(false)
 const enablingBackground = ref(false)
 const openAtLogin = ref(false)
@@ -49,7 +54,7 @@ const canAdd = computed(() => schedules.value.length < 5)
 const hasEnabledSchedule = computed(() => schedules.value.some((s) => s.enabled))
 /** 定时需要：开机自启 + 关闭进托盘，缺任一则引导 */
 const showBackgroundHint = computed(
-  () => !openAtLogin.value || !closeToTrayEnabled.value,
+  () => hasEnabledSchedule.value && (!openAtLogin.value || !closeToTrayEnabled.value),
 )
 
 const planNameById = computed(() => {
@@ -64,14 +69,22 @@ const productNameById = computed(() => {
   return map
 })
 
-function describeSchedule(s: WorkflowSchedule): string {
-  const product = productNameById.value.get(s.productId) || s.productId
-  const plan = planNameById.value.get(s.planId) || s.planId
-  if (s.recurrence === 'weekly') {
-    const day = WEEKDAYS.find((d) => d.value === s.weekday)?.label || '每周'
-    return `${product} · ${plan} · 每${day} ${s.timeLocal}`
-  }
-  return `${product} · ${plan} · 每日 ${s.timeLocal}`
+function scheduleName(s: WorkflowSchedule): string {
+  return [productNameById.value.get(s.productId) || s.productId, planNameById.value.get(s.planId) || s.planId].join(' · ')
+}
+
+function frequency(s: WorkflowSchedule): string {
+  return s.recurrence === 'daily' ? '每日' : '每' + WEEKDAYS[s.weekday ?? 0].label
+}
+
+const rows = computed(() => schedules.value.map(task => ({ task, next: nextScheduledAt(task, now.value) }))
+  .sort((a, b) => (a.next?.getTime() ?? Infinity) - (b.next?.getTime() ?? Infinity)))
+
+function dayLabel(date: Date): string {
+  if (date.toDateString() === now.value.toDateString()) return '今天'
+  const tomorrow = new Date(now.value)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  return date.toDateString() === tomorrow.toDateString() ? '明天' : `${date.getMonth() + 1}/${date.getDate()}`
 }
 
 async function reloadBackgroundPrefs(): Promise<void> {
@@ -82,20 +95,6 @@ async function reloadBackgroundPrefs(): Promise<void> {
     closeToTrayEnabled.value = windowsBackground ? data.closeAction === 'background' : data.closeToTrayEnabled === true
   } catch {
     // ignore
-  }
-}
-
-async function reload(): Promise<void> {
-  if (!window.ftcs?.listWorkflowSchedules) return
-  loading.value = true
-  error.value = ''
-  try {
-    const res = await window.ftcs.listWorkflowSchedules()
-    schedules.value = res.ok ? res.schedules : []
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    loading.value = false
   }
 }
 
@@ -144,6 +143,7 @@ function openCreate(): void {
 }
 
 function openEdit(s: WorkflowSchedule): void {
+  openMenu.value = null
   editingId.value = s.id
   form.productId = s.productId
   form.planId = s.planId
@@ -157,7 +157,7 @@ function openEdit(s: WorkflowSchedule): void {
 }
 
 async function onSave(): Promise<void> {
-  if (!window.ftcs?.saveWorkflowSchedule) return
+  if (saving.value || !window.ftcs?.saveWorkflowSchedule) return
   saving.value = true
   error.value = ''
   message.value = ''
@@ -182,11 +182,8 @@ async function onSave(): Promise<void> {
     }
     editorOpen.value = false
     message.value = '已保存定时任务'
-    await reload()
-    if (form.enabled && showBackgroundHint.value) {
-      message.value =
-        '已保存定时任务。定时需要应用在后台运行：请开启开机自启与关窗后台运行。'
-    }
+    await reloadSchedules()
+
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -195,34 +192,60 @@ async function onSave(): Promise<void> {
 }
 
 async function onToggle(s: WorkflowSchedule): Promise<void> {
-  if (!window.ftcs?.saveWorkflowSchedule) return
-  const res = await window.ftcs.saveWorkflowSchedule({
-    id: s.id,
-    productId: s.productId,
-    planId: s.planId,
-    enabled: !s.enabled,
-    recurrence: s.recurrence,
-    weekday: s.weekday,
-    timeLocal: s.timeLocal,
-  })
-  if (!res.ok) {
-    error.value = res.message
-    return
-  }
-  await reload()
+  if (saving.value || !window.ftcs?.saveWorkflowSchedule) return
+  saving.value = true
+  error.value = ''
+  message.value = ''
+  try {
+    const { id, productId, planId, recurrence, weekday, timeLocal } = s
+    const res = await window.ftcs.saveWorkflowSchedule({ id, productId, planId, recurrence, weekday, timeLocal, enabled: !s.enabled })
+    if (!res.ok) throw new Error(res.message)
+    await reloadSchedules()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally { saving.value = false }
 }
 
-async function onDelete(s: WorkflowSchedule): Promise<void> {
-  if (!window.ftcs?.deleteWorkflowSchedule) return
-  if (!window.confirm(`删除定时任务「${describeSchedule(s)}」？`)) return
-  const res = await window.ftcs.deleteWorkflowSchedule(s.id)
-  if (!res.ok) {
-    error.value = res.message
-    return
-  }
-  message.value = '已删除'
-  await reload()
+function leaveMenu(event: FocusEvent) {
+  if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) openMenu.value = null
 }
+
+async function onDelete() {
+  const target = deleteTarget.value
+  if (!target || saving.value || !window.ftcs?.deleteWorkflowSchedule) return
+  saving.value = true
+  error.value = ''
+  try {
+    const res = await window.ftcs.deleteWorkflowSchedule(target.id)
+    if (!res.ok) throw new Error(res.message)
+    if (editingId.value === target.id) editorOpen.value = false
+    message.value = '已删除定时任务'
+    await reloadSchedules()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    saving.value = false
+    deleteTarget.value = null
+  }
+}
+
+let clock: number | undefined
+function activate() {
+  if (clock !== undefined) return
+  now.value = new Date()
+  clock = window.setInterval(() => { now.value = new Date() }, 30_000)
+  void reloadSchedules()
+  void reloadBackgroundPrefs()
+}
+function deactivate() {
+  window.clearInterval(clock)
+  clock = undefined
+  openMenu.value = null
+  deleteTarget.value = null
+}
+onActivated(activate)
+onDeactivated(deactivate)
+onUnmounted(deactivate)
 
 let removeBackgroundListener: (() => void) | undefined
 onUnmounted(() => removeBackgroundListener?.())
@@ -231,8 +254,7 @@ onMounted(() => {
     openAtLogin.value = prefs.openAtLogin
     closeToTrayEnabled.value = prefs.closeAction === 'background'
   })
-  void reload()
-  void reloadBackgroundPrefs()
+  activate()
 })
 
 watch(
@@ -246,63 +268,54 @@ watch(
 <template>
   <section class="schedule-panel">
     <div class="schedule-panel__head">
-      <h3>定时运行</h3>
-      <button
-        type="button"
-        class="btn-secondary"
-        :disabled="!canAdd"
-        :title="canAdd ? '新建定时任务' : '最多 5 条'"
-        @click="openCreate"
-      >
-        新建
+      <h3>定时任务</h3>
+      <span v-if="!rows.length && !listError" class="schedule-empty">{{ loading ? '加载中…' : '暂无定时任务' }}</span>
+      <button type="button" class="btn-primary" :disabled="!canAdd || saving || loading || !!listError"
+        :title="canAdd ? '新建定时任务' : '最多 5 条'" @click="openCreate">
+        <Icon name="plus" :size="14" />新建任务
       </button>
     </div>
-    <p class="muted schedule-panel__hint">
-      <Icon name="info" :size="12" />
-      绑定产品与方案，按每日/每周本地时刻自动执行。建议开启「启动与托盘」中的开机自启与关窗后台运行。最多 5 条。
-    </p>
-    <div v-if="showBackgroundHint" class="schedule-login-hint">
-      <p>
-        <strong>定时任务需要后台常驻。</strong>
-        若要按时执行，建议开启以下两项。
-        <em>开机自启</em>保证重启后仍能拉起；
-        <em>关窗后台运行</em>保证点「×」后进程还在，到点才能执行。
-        <template v-if="hasEnabledSchedule">你已有启用中的定时任务，建议现在开启。</template>
-      </p>
-      <button
-        type="button"
-        class="btn-primary"
-        :disabled="enablingBackground"
-        @click="enableScheduleBackground"
-      >
-        {{ enablingBackground ? '开启中…' : '一键开启自启与后台运行' }}
-      </button>
-    </div>
-    <p v-if="error" class="schedule-panel__err">{{ error }}</p>
-    <p v-else-if="message" class="muted">{{ message }}</p>
-    <p v-if="loading" class="muted">加载中…</p>
-    <ul v-else-if="schedules.length" class="schedule-list">
-      <li v-for="s in schedules" :key="s.id" class="schedule-item">
-        <div class="schedule-item__info">
-          <strong>{{ describeSchedule(s) }}</strong>
-          <span class="muted">{{ s.enabled ? '已启用' : '已关闭' }}</span>
+    <p v-if="listError" role="alert" class="schedule-panel__err">{{ listError }} <button type="button" @click="reloadSchedules">重试</button></p>
+    <p v-if="error" role="alert" class="schedule-panel__err">{{ error }}</p>
+    <p v-else-if="message" role="status" class="muted">{{ message }}</p>
+    <ul v-if="rows.length" class="schedule-list">
+      <li v-for="{ task, next } in rows" :key="task.id" class="schedule-item">
+        <div class="schedule-item__time">
+          <strong>{{ task.timeLocal }}</strong>
+          <span>{{ next ? dayLabel(next) : '已停用' }}</span>
         </div>
-        <div class="schedule-item__actions">
-          <button type="button" class="btn-ghost" @click="onToggle(s)">
-            {{ s.enabled ? '关闭' : '启用' }}
-          </button>
-          <button type="button" class="btn-ghost" @click="openEdit(s)">编辑</button>
-          <button type="button" class="btn-ghost" @click="onDelete(s)">删除</button>
+        <div class="schedule-item__info">
+          <strong>{{ scheduleName(task) }}</strong>
+          <span class="muted">{{ frequency(task) }} {{ task.timeLocal }}</span>
+        </div>
+        <button type="button" class="schedule-switch" role="switch" :aria-checked="task.enabled"
+          :aria-label="scheduleName(task) + '，启用定时任务'" :title="task.enabled ? '停用' : '启用'"
+          :disabled="saving" @click="onToggle(task)"><span /></button>
+        <div class="schedule-menu" @focusout="leaveMenu" @keydown.esc.stop="openMenu = null">
+          <button type="button" class="btn-ghost" aria-label="更多操作" :aria-expanded="openMenu === task.id"
+            :disabled="saving" @click="openMenu = openMenu === task.id ? null : task.id">•••</button>
+          <div v-if="openMenu === task.id" class="schedule-menu__items">
+            <button type="button" @click="openEdit(task)">编辑</button>
+            <button type="button" @click="deleteTarget = task; openMenu = null">删除</button>
+          </div>
         </div>
       </li>
     </ul>
-    <p v-else class="muted">暂无定时任务</p>
-
+    <div v-if="showBackgroundHint" class="schedule-login-hint">
+      <p>开启开机自启与关窗后台运行，让定时任务按计划执行。</p>
+      <button type="button" class="btn-secondary" :disabled="enablingBackground" @click="enableScheduleBackground">
+        {{ enablingBackground ? '开启中…' : '一键开启' }}
+      </button>
+    </div>
+    <ConfirmDialog :open="!!deleteTarget" title="删除定时任务"
+      :message="deleteTarget ? '确定删除「' + scheduleName(deleteTarget) + ' · ' + frequency(deleteTarget) + ' ' + deleteTarget.timeLocal + '」？' : ''"
+      confirm-label="删除" danger :busy="saving" @confirm="onDelete" @cancel="deleteTarget = null" />
     <div v-if="editorOpen" class="schedule-editor">
       <h4>{{ editingId ? '编辑定时任务' : '新建定时任务' }}</h4>
       <label class="field">
         <span>产品</span>
         <select v-model="form.productId" class="text-input">
+          <option v-if="!products.length" disabled value="">请先创建产品画像</option>
           <option v-for="p in products" :key="p.id" :value="p.id">
             {{ p.name || p.id }}
           </option>
@@ -343,7 +356,7 @@ watch(
         <button type="button" class="btn-secondary" @click="editorOpen = false">
           取消
         </button>
-        <button type="button" class="btn-primary" :disabled="saving" @click="onSave">
+        <button type="button" class="btn-primary" :disabled="saving || !form.productId || !form.planId" @click="onSave">
           {{ saving ? '保存中…' : '保存' }}
         </button>
       </div>
@@ -368,13 +381,6 @@ watch(
   margin: 0;
   font-size: 14px;
 }
-.schedule-panel__hint {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 8px 0;
-  font-size: 12px;
-}
 .schedule-login-hint {
   display: flex;
   flex-wrap: wrap;
@@ -397,31 +403,21 @@ watch(
   color: #f87171;
   font-size: 12px;
 }
-.schedule-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.schedule-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.schedule-item__info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 13px;
-}
-.schedule-item__actions {
-  display: flex;
-  gap: 4px;
-}
+.schedule-list { list-style: none; margin: 10px 0 0; padding: 0; }
+.schedule-item { display: grid; grid-template-columns: 62px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border-subtle); }
+.schedule-item__time, .schedule-item__info { display: grid; gap: 2px; }
+.schedule-item__time strong { font-size: 17px; font-variant-numeric: tabular-nums; }
+.schedule-item__time span, .schedule-item__info span { font-size: 12px; color: var(--text-secondary); }
+.schedule-item__info strong { overflow-wrap: anywhere; }
+.schedule-switch { width: 30px; height: 18px; border: 1px solid var(--border); padding: 2px; border-radius: 12px; background: var(--bg-active); }
+.schedule-switch span { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--text-secondary); }
+.schedule-switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.schedule-switch[aria-checked="true"] span { background: white; transform: translateX(12px); }
+.schedule-menu { position: relative; }
+.schedule-menu__items { position: absolute; z-index: 3; top: 100%; right: 0; min-width: 76px; padding: 4px; display: grid; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: 0 4px 14px rgb(0 0 0 / 18%); }
+.schedule-menu__items button { text-align: left; white-space: nowrap; }
+.schedule-menu__items button:hover { background: var(--bg-hover); }
+.schedule-empty { flex: 1; font-size: 12px; color: var(--text-secondary); }
 .schedule-editor {
   margin-top: 12px;
   padding-top: 12px;
